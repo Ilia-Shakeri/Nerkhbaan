@@ -1,26 +1,21 @@
 import React from 'react';
-import { RouterProvider } from 'react-router';
+import { HashRouter } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { useAppContext } from './context/AppContext';
-import { router } from './router';
-import { AuthView } from './views/AuthView';
+import { AppRoutes } from './routes';
 
 function App() {
-  const { isAuthenticated, language } = useAppContext();
+  const { language } = useAppContext();
 
   return (
-    <>
-      {!isAuthenticated ? (
-        <AuthView />
-      ) : (
-        <RouterProvider router={router} />
-      )}
+    <HashRouter>
+      <AppRoutes />
       <Toaster 
         position={language === 'fa' ? 'top-left' : 'top-right'}
         dir={language === 'fa' ? 'rtl' : 'ltr'}
         richColors
       />
-    </>
+    </HashRouter>
   );
 }
 
