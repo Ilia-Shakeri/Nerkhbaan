@@ -62,11 +62,11 @@ export function DesktopLayout() {
 
   const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
     <>
-      <div className="flex h-20 items-center justify-center border-b border-[#D4AF37]/15 shrink-0">
+      <div className="flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
         <img
           src={logo}
           alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhban logo'}
-          className={collapsed ? 'h-12 w-12 object-contain' : 'h-16 w-16 object-contain'}
+          className={`object-contain transition-all duration-300 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
         />
       </div>
 
@@ -87,7 +87,18 @@ export function DesktopLayout() {
             }
           >
             <item.icon size={18} />
-            {!collapsed && <span>{item.label[language]}</span>}
+            <motion.span
+              initial={false}
+              animate={
+                collapsed
+                  ? { opacity: 0, width: 0, x: -6 }
+                  : { opacity: 1, width: 'auto', x: 0 }
+              }
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              className="overflow-hidden whitespace-nowrap"
+            >
+              {item.label[language]}
+            </motion.span>
           </NavLink>
         ))}
       </nav>
@@ -100,7 +111,18 @@ export function DesktopLayout() {
           } ${collapsed ? 'justify-center px-2' : 'gap-3'}`}
         >
           <LogOut size={18} />
-          {!collapsed && <span>{language === 'fa' ? 'خروج از حساب' : 'Logout'}</span>}
+          <motion.span
+            initial={false}
+            animate={
+              collapsed
+                ? { opacity: 0, width: 0, x: -6 }
+                : { opacity: 1, width: 'auto', x: 0 }
+            }
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden whitespace-nowrap"
+          >
+            {language === 'fa' ? 'خروج از حساب' : 'Logout'}
+          </motion.span>
         </button>
       </div>
     </>
@@ -117,13 +139,16 @@ export function DesktopLayout() {
       </div>
       
       {/* Desktop Sidebar */}
-      <aside
-        className={`mt-10 hidden flex-col border-e border-[#D4AF37]/15 transition-all duration-500 lg:flex ${
+      <motion.aside
+        initial={false}
+        animate={{ width: isSidebarCollapsed ? 80 : 256 }}
+        transition={{ type: 'spring', stiffness: 260, damping: 30, mass: 0.8 }}
+        className={`mt-10 hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
           isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
-        } ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}
+        }`}
       >
         <SidebarContent collapsed={isSidebarCollapsed} />
-      </aside>
+      </motion.aside>
 
       {/* Mobile Drawer Overlay */}
       <AnimatePresence>

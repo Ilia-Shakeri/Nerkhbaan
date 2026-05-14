@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   LineChart,
@@ -16,7 +16,8 @@ import {
   DollarSign,
   Coins,
   CircleDollarSign,
-  Gem
+  Gem,
+  GripVertical
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -92,11 +93,40 @@ const ASSETS: Asset[] = [
   }
 ];
 
+const CHART_ORDER_STORAGE_KEY = 'dashboard-chart-order-v1';
+const DEFAULT_ASSET_ORDER = ASSETS.map((asset) => asset.id);
+
+const getInitialAssetOrder = () => {
+  if (typeof window === 'undefined') {
+    return DEFAULT_ASSET_ORDER;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(CHART_ORDER_STORAGE_KEY);
+    if (!rawValue) {
+      return DEFAULT_ASSET_ORDER;
+    }
+
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) {
+      return DEFAULT_ASSET_ORDER;
+    }
+
+    const validIds = new Set(DEFAULT_ASSET_ORDER);
+    const savedIds = parsed.filter((value): value is string => typeof value === 'string' && validIds.has(value));
+    const missingIds = DEFAULT_ASSET_ORDER.filter((id) => !savedIds.includes(id));
+    return [...savedIds, ...missingIds];
+  } catch {
+    return DEFAULT_ASSET_ORDER;
+  }
+};
+
 export function DashboardView() {
   const { language } = useAppContext();
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
-  const [assetOrder, setAssetOrder] = useState<string[]>(ASSETS.map((asset) => asset.id));
+  const [assetOrder, setAssetOrder] = useState<string[]>(getInitialAssetOrder);
   const [draggedAssetId, setDraggedAssetId] = useState<string | null>(null);
+  const [dragOverAssetId, setDragOverAssetId] = useState<string | null>(null);
   const [activePointIndexByAsset, setActivePointIndexByAsset] = useState<Record<string, number>>({});
   const [isScrubbingByAsset, setIsScrubbingByAsset] = useState<Record<string, boolean>>({});
 
@@ -106,6 +136,14 @@ export function DashboardView() {
   );
 
   const closeAlertModal = () => setSelectedAsset(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CHART_ORDER_STORAGE_KEY, JSON.stringify(assetOrder));
+    } catch {
+      // Ignore storage errors (private mode, full storage, etc.)
+    }
+  }, [assetOrder]);
 
   const t = {
     quickAlert: { fa: 'هشدار سریع', en: 'Quick Alert' },
@@ -164,31 +202,66 @@ export function DashboardView() {
         return (
           <motion.div
             key={asset.id}
+            layout
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: idx * 0.05, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-            draggable
-            onDragStart={() => setDraggedAssetId(asset.id)}
+            transition={{
+              delay: idx * 0.05,
+              duration: 0.35,
+              ease: [0.22, 1, 0.36, 1],
+              layout: { type: 'spring', damping: 30, stiffness: 360 }
+            }}
             onDragOver={(event) => event.preventDefault()}
+            onDragEnter={() => {
+              if (draggedAssetId && draggedAssetId !== asset.id) {
+                setDragOverAssetId(asset.id);
+              }
+            }}
             onDrop={() => {
               if (draggedAssetId) {
                 reorderAssets(draggedAssetId, asset.id);
                 setDraggedAssetId(null);
+                setDragOverAssetId(null);
               }
             }}
-            onDragEnd={() => setDraggedAssetId(null)}
-            className="cursor-grab active:cursor-grabbing"
+            onDragEnd={() => {
+              setDraggedAssetId(null);
+              setDragOverAssetId(null);
+            }}
           >
-            <Card className="relative overflow-hidden border-[#D4AF37]/20 bg-[#0E0E0E]/95 shadow-[0_12px_36px_rgba(0,0,0,0.35)]">
+            <Card
+              className={`relative overflow-hidden border-[#D4AF37]/20 bg-[#0E0E0E]/95 shadow-[0_12px_36px_rgba(0,0,0,0.35)] transition-all duration-200 ${
+                dragOverAssetId === asset.id ? 'ring-1 ring-[#D4AF37]/45 shadow-[0_0_0_1px_rgba(212,175,55,0.18),0_12px_36px_rgba(0,0,0,0.35)]' : ''
+              }`}
+            >
               <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2 text-base font-semibold text-[#E8D9AE]">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#D4AF37] text-[#0A0A0A]">
-                      <asset.icon size={18} />
-                    </div>
-                    {asset.name[language]}
-                  </CardTitle>
-                  <p className="mt-1 text-xs text-[#A89668]">{t.dragToReorder[language]}</p>
+                <div className="flex items-start gap-2">
+                  <button
+                    type="button"
+                    draggable
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = 'move';
+                      setDraggedAssetId(asset.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggedAssetId(null);
+                      setDragOverAssetId(null);
+                    }}
+                    className="mt-1 inline-flex h-8 w-8 shrink-0 cursor-grab items-center justify-center rounded-md border border-[#D4AF37]/30 text-[#D4AF37] transition hover:bg-[#D4AF37]/10 active:cursor-grabbing"
+                    aria-label={t.dragToReorder[language]}
+                    title={t.dragToReorder[language]}
+                  >
+                    <GripVertical size={16} />
+                  </button>
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-base font-semibold text-[#E8D9AE]">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#D4AF37] text-[#0A0A0A]">
+                        <asset.icon size={18} />
+                      </div>
+                      {asset.name[language]}
+                    </CardTitle>
+                    <p className="mt-1 text-xs text-[#A89668]">{t.dragToReorder[language]}</p>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-3">
