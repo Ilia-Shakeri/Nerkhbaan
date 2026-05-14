@@ -8,8 +8,8 @@ Nerkhban is a bilingual (Persian/English) desktop interface for monitoring marke
 ## Overview
 
 This repository currently represents a **frontend-first desktop MVP**:
-- Demo authentication (local token)
-- Mocked market data and charting
+- FastAPI backend with JWT authentication and PostgreSQL persistence
+- Live pricing endpoint with dual-currency (USD/Toman) payloads
 - Alert management UI
 - Theme and language preferences persisted in local storage
 
@@ -18,8 +18,8 @@ It is well-suited for UI validation, desktop integration testing, and future bac
 ## Key Features
 
 - Electron desktop window with custom title bar controls
-- Route protection using local auth token state
-- Dashboard with interactive price charts
+- Route protection using API-issued JWT tokens
+- Dashboard with live gold/silver prices (USD + Toman toggle)
 - Alert list management (toggle and delete)
 - Settings for theme, language, and notification preferences
 - Persian (RTL) and English (LTR) support
@@ -29,6 +29,8 @@ It is well-suited for UI validation, desktop integration testing, and future bac
 
 - **Desktop shell:** Electron
 - **Frontend:** React 18, TypeScript, Vite
+- **Backend API:** FastAPI, SQLAlchemy, Pydantic
+- **Database:** PostgreSQL 16
 - **Styling:** Tailwind CSS + component primitives (Radix UI)
 - **Charts:** Recharts
 - **Animation:** Motion
@@ -38,6 +40,15 @@ It is well-suited for UI validation, desktop integration testing, and future bac
 
 ```text
 Nerkhban-app/
+├── backend/
+│   ├── app/
+│   │   ├── routers/            # Auth and pricing endpoints
+│   │   ├── services/           # External API integrations + price aggregation
+│   │   ├── main.py             # FastAPI app entrypoint
+│   │   ├── models.py           # SQLAlchemy ORM models
+│   │   └── ...
+│   ├── requirements.txt
+│   └── .env.example
 ├── electron/
 │   ├── main.cjs              # Electron main process
 │   └── preload.js            # Secure API bridge (contextBridge)
@@ -53,7 +64,8 @@ Nerkhban-app/
 │   │   └── main.tsx
 │   ├── package.json
 │   └── vite.config.ts
-├── package.json              # Root scripts for Electron + frontend orchestration
+├── docker-compose.yaml       # Local PostgreSQL setup
+├── package.json              # Root scripts for backend + frontend + Electron orchestration
 ├── README.md                # Short marketing overview for GitHub visitors
 └── README.developer.md      # Detailed developer documentation
 ```
@@ -62,6 +74,8 @@ Nerkhban-app/
 
 - Node.js **18+**
 - npm **9+** (recommended)
+- Python **3.11+**
+- Docker / Docker Compose (for PostgreSQL)
 - Windows environment with Electron executable available at:
   - `C:\electron\electron.exe`
 
@@ -69,13 +83,33 @@ Nerkhban-app/
 
 ## Installation
 
-Install dependencies for both root and frontend workspaces:
+Install dependencies for root, frontend, and backend:
 
 ```bash
 npm install
 cd frontend
 npm install
 cd ..
+
+cd backend
+python -m venv .venv
+# Windows: .venv\\Scripts\\activate
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+cd ..
+```
+
+Start PostgreSQL:
+
+```bash
+docker compose up -d postgres
+```
+
+Start backend + PostgreSQL via Compose:
+
+```bash
+docker compose up -d postgres backend
 ```
 
 ## Development
@@ -89,6 +123,16 @@ npm run dev
 This command starts:
 1. Vite dev server at `http://localhost:5173`
 2. Electron window after the frontend is reachable
+
+> Note: `npm run dev` does not launch Python automatically. Start backend separately (or use `npm run dev:full` once backend dependencies are installed and `uvicorn` is available).
+
+### Run backend API only
+
+```bash
+npm run backend
+```
+
+API base URL: `http://localhost:8000`
 
 ### Run frontend only (browser)
 
@@ -110,10 +154,26 @@ Output is generated in `frontend/dist/`.
 ## Available Root Scripts
 
 - `npm run dev` - Run frontend and Electron together
+- `npm run backend` - Start FastAPI backend
+- `npm run dev:full` - Run backend + frontend + Electron together
 - `npm run frontend` - Start frontend dev server
 - `npm run electron` - Start Electron shell
 - `npm run build:frontend` - Build frontend for production
 - `npm start` - Alias for `npm run dev`
+
+## Smoke Test
+
+A lightweight end-to-end API smoke test is available:
+
+```bash
+python backend/scripts/integration_smoke_test.py
+```
+
+It verifies:
+- Backend health endpoint
+- User signup
+- User signin
+- Live price payload from `/api/prices` (gold + silver)
 
 ## Security Notes
 
@@ -124,10 +184,15 @@ Electron is configured with secure defaults in this project:
 
 The exposed renderer API is intentionally minimal (window controls + runtime metadata).
 
+Backend security defaults:
+- Password hashing with bcrypt (`passlib`)
+- JWT access tokens (`python-jose`)
+- Input validation through Pydantic schemas
+- SQLAlchemy parameterized queries (ORM)
+
 ## Current Scope and Limitations
 
-- Authentication is demo-only (no backend identity provider)
-- Market prices are mocked, not live API data
+- External API providers may enforce rate limits or API keys
 - Alert channels (SMS/Email/Telegram) are UI-level toggles only
 - No automated test suite is configured at the root level yet
 

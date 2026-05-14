@@ -23,9 +23,35 @@ Docs: [Project Overview](README.md) | [Developer Guide](README.developer.md)
 ## Quick Start
 
 ```bash
+# 1) Database
+docker compose up -d postgres
+
+# 2) Backend
+cd backend
+python -m venv .venv
+# Windows: .venv\\Scripts\\activate
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 3) Frontend + Electron (new terminal)
+cd ..
 npm install
 cd frontend && npm install && cd ..
 npm run dev
+```
+
+Or start backend + database with Docker Compose:
+
+```bash
+docker compose up -d postgres backend
+```
+
+Run API smoke test (signup/signin/prices):
+
+```bash
+python backend/scripts/integration_smoke_test.py
 ```
 
 ## Developer Docs

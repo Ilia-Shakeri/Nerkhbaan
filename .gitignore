@@ -43,6 +43,14 @@ coverage/
 # ESLint
 .eslintcache
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
 # Firebase (if used)
 .firebase/
 

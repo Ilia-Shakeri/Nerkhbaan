@@ -10,6 +10,7 @@ import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
 import logo from '../../logo/logo.png';
+import { signin, signup } from '../services/api';
 
 export function AuthView() {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ export function AuthView() {
   const [fullName, setFullName] = useState('');
   const [emailOrPhone, setEmailOrPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const t = {
     brandName: { fa: 'نرخ‌بان', en: 'Nerkhban' },
@@ -40,10 +42,11 @@ export function AuthView() {
     languageToggle: { fa: 'English', en: 'فارسی' },
     fillFields: { fa: 'لطفا همه فیلدها را کامل کنید', en: 'Please fill in all fields' },
     success: { fa: 'با موفقیت وارد شدید', en: 'Logged in successfully' },
+    created: { fa: 'حساب کاربری با موفقیت ساخته شد', en: 'Account created successfully' },
     failed: { fa: 'ورود ناموفق بود', en: 'Login failed' }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!emailOrPhone || !password || (!isLogin && !fullName)) {
@@ -51,14 +54,29 @@ export function AuthView() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
-      const token = 'demo-token-12345';
-      login(token);
-      toast.success(t.success[language]);
+      if (isLogin) {
+        const response = await signin({ email: emailOrPhone.trim(), password });
+        login(response.access_token);
+        toast.success(t.success[language]);
+      } else {
+        const response = await signup({
+          full_name: fullName.trim(),
+          email: emailOrPhone.trim(),
+          password
+        });
+        login(response.access_token);
+        toast.success(t.created[language]);
+      }
+
       navigate('/');
     } catch (error) {
-      console.error(error);
-      toast.error(t.failed[language]);
+      console.error('Auth error:', error);
+      const message = error instanceof Error ? error.message : t.failed[language];
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -243,9 +261,16 @@ export function AuthView() {
 
             <Button
               type="submit"
+              disabled={isSubmitting}
               className="mt-1 h-11 w-full rounded-xl bg-[#D4AF37] text-sm font-semibold text-[#0A0A0A] transition-all duration-300 hover:bg-[#C49D2B] hover:shadow-[0_8px_22px_rgba(212,175,55,0.35)]"
             >
-              {isLogin ? t.signIn[language] : t.createAccount[language]}
+              {isSubmitting
+                ? language === 'fa'
+                  ? 'در حال پردازش...'
+                  : 'Processing...'
+                : isLogin
+                  ? t.signIn[language]
+                  : t.createAccount[language]}
             </Button>
           </form>
         </motion.div>
