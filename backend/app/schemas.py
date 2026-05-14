@@ -32,19 +32,26 @@ class AuthResponse(BaseModel):
 
 class PricePoint(BaseModel):
     timestamp: str
-    value_usd: float
-    value_toman: float
+    value_usd: float | None
+    value_toman: float | None
 
 
 class AssetPrice(BaseModel):
     asset: str
     label_fa: str
     label_en: str
-    price_usd: float
-    price_toman: float
+    price_usd: float | None
+    price_toman: float | None
     change_percent: float
     trend: str
     history: list[PricePoint]
+    source_usd: str
+    source_toman: str
+    usd_status: str
+    toman_status: str
+    stale_minutes: int | None = None
+    chart_error: bool
+    chart_error_message: dict[str, str]
 
 
 class PricesResponse(BaseModel):

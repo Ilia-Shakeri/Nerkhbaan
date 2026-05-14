@@ -12,17 +12,27 @@ export type AuthResponse = {
 };
 
 export type PriceAsset = {
-  asset: 'gold' | 'silver';
+  asset: 'gold' | 'silver' | 'usdt' | 'btc';
   label_fa: string;
   label_en: string;
-  price_usd: number;
-  price_toman: number;
+  price_usd: number | null;
+  price_toman: number | null;
   change_percent: number;
   trend: 'up' | 'down';
+  source_usd: string;
+  source_toman: string;
+  usd_status: 'live' | 'cached' | 'unavailable';
+  toman_status: 'live' | 'cached' | 'unavailable';
+  stale_minutes: number | null;
+  chart_error: boolean;
+  chart_error_message: {
+    fa: string;
+    en: string;
+  };
   history: Array<{
     timestamp: string;
-    value_usd: number;
-    value_toman: number;
+    value_usd: number | null;
+    value_toman: number | null;
   }>;
 };
 
@@ -86,9 +96,17 @@ export function getPrices(): Promise<PricesResponse> {
   return request<PricesResponse>('/api/prices');
 }
 
-export function formatPrice(value: number, currency: CurrencyMode, language: 'fa' | 'en'): string {
+export function formatPrice(
+  value: number | null | undefined,
+  currency: CurrencyMode,
+  language: 'fa' | 'en'
+): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return '--';
+  }
+
   const locale = language === 'fa' ? 'fa-IR' : 'en-US';
-  const roundedValue = Number.isFinite(value) ? value : 0;
+  const roundedValue = value;
 
   if (currency === 'usd') {
     return new Intl.NumberFormat(locale, {

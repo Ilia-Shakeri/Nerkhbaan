@@ -1,25 +1,35 @@
 # Pricing API Sources
 
-Nerkhban backend aggregates market prices from two external sources:
+Nerkhban backend now uses per-asset provider chains with regional separation:
 
-1. **International USD source:** Gold-API (`https://api.gold-api.com`)
-   - Endpoints used:
-     - `GET /price/XAU` (Gold spot price in USD)
-     - `GET /price/XAG` (Silver spot price in USD)
+- **Iran chain** (`price_toman`) and **international chain** (`price_usd`) run independently.
+- Each chain uses priority fallback (primary -> backup).
+- If both providers in a chain fail, backend serves the chain's **last known value** from `backend/price_cache.json`.
+- If cache is missing too, value is returned as `null` and frontend renders `--`.
 
-2. **Persian Toman source:** Alanchand API (`https://api.alanchand.com`)
-   - Endpoint used:
-     - `GET /?type=gold` with `Authorization: Bearer <token>`
-   - Backend attempts to extract both gold and silver Toman quotes from the response payload.
+## Assets and chains
 
-## Fallback strategy
+- `gold` (Iran: TGJU -> Bonbast, International: Metals.dev -> GoldAPI)
+- `silver` (Iran: TGJU -> Tetherland, International: Metals.dev -> GoldAPI)
+- `usdt` (Iran: Nobitex -> Tetherland, International: CoinGecko -> CoinCap)
+- `btc` (Iran: Nobitex -> Tetherland, International: CoinGecko -> CoinCap)
 
-If Alanchand is unavailable or the token is not configured, backend falls back to:
-- USD prices from Gold-API +
-- USD/IRR exchange rate from `https://open.er-api.com/v6/latest/USD`
+## Error behavior
 
-Then it derives Toman as:
+- Price cards remain visible even during provider outages.
+- Chain-level failures mark the asset as `cached` or `unavailable` without blocking the other region.
+- Chart error text is returned in both languages:
+  - `fa`: `امکان دریافت اطلاعات وجود ندارد`
+  - `en`: `Unable to fetch data`
 
-`Toman = (USD * IRR) / 10`
+## Full provider registry metadata
 
-This keeps the UI live even when the Persian provider is temporarily unavailable.
+`GET /api/providers` exposes catalog metadata from:
+
+- `backend/app/services/api_registry.py`
+
+`GET /api/prices/health` exposes chain health details:
+
+- per-asset regional status (`live`, `cached`, `unavailable`)
+- provider source used for each chain
+- cache age metadata and startup env-key checks

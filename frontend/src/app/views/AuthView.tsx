@@ -15,6 +15,9 @@ import { signin, signup } from '../services/api';
 export function AuthView() {
   const navigate = useNavigate();
   const { login, language, theme, toggleTheme, toggleLanguage } = useAppContext();
+  const isProductionBuild =
+    import.meta.env.PROD || import.meta.env.MODE === 'production';
+  const allowDemoLogin = !isProductionBuild && import.meta.env.VITE_ENABLE_DEMO_LOGIN !== 'false';
 
   const [isLogin, setIsLogin] = useState(true);
   const [fullName, setFullName] = useState('');
@@ -43,7 +46,12 @@ export function AuthView() {
     fillFields: { fa: 'لطفا همه فیلدها را کامل کنید', en: 'Please fill in all fields' },
     success: { fa: 'با موفقیت وارد شدید', en: 'Logged in successfully' },
     created: { fa: 'حساب کاربری با موفقیت ساخته شد', en: 'Account created successfully' },
-    failed: { fa: 'ورود ناموفق بود', en: 'Login failed' }
+    failed: { fa: 'ورود ناموفق بود', en: 'Login failed' },
+    enterDemo: { fa: 'ورود نمایشی', en: 'Enter Demo' },
+    demoHint: {
+      fa: 'اگر دیتابیس یا بک اند آماده نیست، از ورود نمایشی استفاده کنید',
+      en: 'Use demo access when backend/database is not ready'
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -81,6 +89,12 @@ export function AuthView() {
   };
 
   const isDark = theme === 'dark';
+  const handleDemoLogin = () => {
+    login('demo-local-token');
+    localStorage.setItem('demoMode', 'true');
+    toast.success(language === 'fa' ? 'با حساب نمایشی وارد شدید' : 'Entered with demo account');
+    navigate('/');
+  };
 
   return (
     <div
@@ -272,12 +286,31 @@ export function AuthView() {
                   ? t.signIn[language]
                   : t.createAccount[language]}
             </Button>
+
+            {allowDemoLogin && (
+              <button
+                type="button"
+                onClick={handleDemoLogin}
+                className={`h-10 w-full rounded-xl border text-sm font-semibold transition ${
+                  isDark
+                    ? 'border-[#D4AF37]/30 bg-[#171717] text-[#D9BE66] hover:bg-[#1F1F1F]'
+                    : 'border-[#C8A347]/45 bg-[#FDF7EA] text-[#805F14] hover:bg-[#F3E5C4]'
+                }`}
+              >
+                {t.enterDemo[language]}
+              </button>
+            )}
           </form>
         </motion.div>
 
         <p className={`mt-3 text-center text-xs ${isDark ? 'text-[#B79F66]' : 'text-[#8C7028]'}`}>
           {t.terms[language]}
         </p>
+        {allowDemoLogin && (
+          <p className={`mt-1 text-center text-[11px] ${isDark ? 'text-[#9A8653]' : 'text-[#9C7C34]'}`}>
+            {t.demoHint[language]}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -161,6 +161,16 @@ Output is generated in `frontend/dist/`.
 - `npm run build:frontend` - Build frontend for production
 - `npm start` - Alias for `npm run dev`
 
+## Provider Catalog
+
+Backend now includes a provider catalog endpoint at:
+
+```bash
+GET /api/providers
+```
+
+This returns the configured Iran/international market API list (TGJU, Nobitex, Tetherland, Bonbast, CoinGecko, CoinCap, Metals.dev, ExchangeRate-API, Frankfurter) for centralized backend reference.
+
 ## Smoke Test
 
 A lightweight end-to-end API smoke test is available:
@@ -189,6 +199,14 @@ Backend security defaults:
 - JWT access tokens (`python-jose`)
 - Input validation through Pydantic schemas
 - SQLAlchemy parameterized queries (ORM)
+
+## Demo Access (Temporary)
+
+For local demos without backend/database readiness, frontend includes a temporary **Enter Demo** button in the auth screen.
+
+- Controlled by `VITE_ENABLE_DEMO_LOGIN` (default `true` in `frontend/.env.example`)
+- Intended for non-production use only
+- Set `VITE_ENABLE_DEMO_LOGIN=false` before deployment
 
 ## Current Scope and Limitations
 

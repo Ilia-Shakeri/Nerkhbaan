@@ -54,6 +54,8 @@ Run API smoke test (signup/signin/prices):
 python backend/scripts/integration_smoke_test.py
 ```
 
+Temporary demo-only login is available from the auth page (disable for production with `VITE_ENABLE_DEMO_LOGIN=false`).
+
 ## Developer Docs
 
 For full setup, scripts, architecture, constraints, and roadmap details, see:

@@ -94,7 +94,7 @@ export function DesktopLayout() {
                   ? { opacity: 0, width: 0, x: -6 }
                   : { opacity: 1, width: 'auto', x: 0 }
               }
-              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
               className="overflow-hidden whitespace-nowrap"
             >
               {item.label[language]}
@@ -118,7 +118,7 @@ export function DesktopLayout() {
                 ? { opacity: 0, width: 0, x: -6 }
                 : { opacity: 1, width: 'auto', x: 0 }
             }
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden whitespace-nowrap"
           >
             {language === 'fa' ? 'خروج از حساب' : 'Logout'}
@@ -142,10 +142,10 @@ export function DesktopLayout() {
       <motion.aside
         initial={false}
         animate={{ width: isSidebarCollapsed ? 80 : 256 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 30, mass: 0.8 }}
+        transition={{ type: 'spring', stiffness: 170, damping: 26, mass: 1.05 }}
         className={`mt-10 hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
           isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
-        }`}
+        } will-change-[width]`}
       >
         <SidebarContent collapsed={isSidebarCollapsed} />
       </motion.aside>
@@ -170,7 +170,7 @@ export function DesktopLayout() {
             initial={{ x: language === 'fa' ? '100%' : '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: language === 'fa' ? '100%' : '-100%' }}
-            transition={{ type: 'spring', bounce: 0.1, duration: 0.45 }}
+            transition={{ type: 'spring', bounce: 0.08, duration: 0.56 }}
             className={`fixed bottom-0 top-10 z-50 flex w-72 flex-col ${
               isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
             } lg:hidden ${

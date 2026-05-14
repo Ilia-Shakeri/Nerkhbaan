@@ -6,8 +6,10 @@ from .db import Base, engine
 from .deps import get_current_user
 from .models import User
 from .routers.auth import router as auth_router
+from .routers.providers import router as providers_router
 from .routers.prices import router as prices_router
 from .schemas import UserResponse
+from .services.pricing import pricing_service
 
 app = FastAPI(title="Nerkhban API", version="1.0.0")
 
@@ -22,11 +24,13 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(prices_router)
+app.include_router(providers_router)
 
 
 @app.on_event("startup")
 def on_startup() -> None:
     Base.metadata.create_all(bind=engine)
+    pricing_service.refresh_startup_checks()
 
 
 @app.get("/health")
