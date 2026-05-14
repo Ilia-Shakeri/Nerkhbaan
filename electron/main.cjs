@@ -7,29 +7,19 @@ let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 768,
-    backgroundColor: '#0A0A0A',
-    show: false,
-    icon: path.join(__dirname, '../frontend/public/icon.png'),
+    width: 1200,
+    height: 800,
     webPreferences: {
-      contextIsolation: true,
       nodeIntegration: false,
-      preload: path.join(__dirname, 'preload.js'),
-      webSecurity: true,
-      allowRunningInsecureContent: false
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
     }
-  });
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
   });
 
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173').catch(err => {
       console.error('Failed to load dev server:', err);
+      console.log('Make sure the Vite dev server is running on port 5173');
     });
     mainWindow.webContents.openDevTools();
   } else {
@@ -41,33 +31,18 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
-
-  if (!isDev) {
-    mainWindow.setMenu(null);
-  }
 }
 
-app.whenReady().then(() => {
-  try {
-    createWindow();
-  } catch (err) {
-    console.error('Failed to create window:', err);
-    app.quit();
-  }
+app.whenReady().then(createWindow);
 
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
-
-app.on('window-all-closed', function () {
+app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught exception:', error);
+app.on('activate', () => {
+  if (mainWindow === null) {
+    createWindow();
+  }
 });
