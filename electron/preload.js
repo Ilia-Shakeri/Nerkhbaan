@@ -8,17 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     electron: process.versions.electron
   },
   
-  send: (channel, data) => {
-    const validChannels = ['app-ready', 'window-minimize', 'window-maximize', 'window-close'];
-    if (validChannels.includes(channel)) {
-      ipcRenderer.send(channel, data);
-    }
-  },
-  
-  receive: (channel, func) => {
-    const validChannels = ['app-update', 'notification'];
-    if (validChannels.includes(channel)) {
-      ipcRenderer.on(channel, (event, ...args) => func(...args));
-    }
-  }
+  minimizeWindow: () => ipcRenderer.send('window-minimize'),
+  toggleMaximizeWindow: () => ipcRenderer.send('window-maximize-toggle'),
+  closeWindow: () => ipcRenderer.send('window-close'),
+  isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized')
 });

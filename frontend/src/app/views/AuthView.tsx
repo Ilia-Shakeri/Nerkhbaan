@@ -5,11 +5,11 @@ import { motion } from 'motion/react';
 import { Moon, Sun, User, Mail, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import { WindowTitleBar } from '../components/WindowTitleBar';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { toast } from 'sonner';
-import mainLogo from '../../logo/main-logo.png';
-import fallbackLogo from '../../logo/logo.png';
+import logo from '../../logo/logo.png';
 
 export function AuthView() {
   const navigate = useNavigate();
@@ -21,7 +21,7 @@ export function AuthView() {
   const [password, setPassword] = useState('');
 
   const t = {
-    brandName: { fa: 'نرخ‌بان', en: 'Alerta' },
+    brandName: { fa: 'نرخ‌بان', en: 'Nerkhban' },
     brandTagline: { fa: 'ردیابی و هشدار هوشمند قیمت', en: 'Smart price tracking & alerts' },
     login: { fa: 'ورود', en: 'Login' },
     signup: { fa: 'ثبت نام', en: 'Sign Up' },
@@ -62,53 +62,83 @@ export function AuthView() {
     }
   };
 
-  return (
-    <div className="relative min-h-screen overflow-hidden bg-[#060606] text-[#F7F2E3]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.18),transparent_58%)]" />
+  const isDark = theme === 'dark';
 
-      <div className="absolute end-6 top-6 z-20 flex items-center gap-3">
+  return (
+    <div
+      className={`relative min-h-screen overflow-hidden ${
+        isDark ? 'bg-[#060606] text-[#F7F2E3]' : 'bg-[#FAF3E2] text-[#3B2E13]'
+      }`}
+    >
+      <WindowTitleBar theme={theme} />
+      <div
+        className={`pointer-events-none absolute inset-0 ${
+          isDark
+            ? 'bg-[radial-gradient(circle_at_top,rgba(212,175,55,0.18),transparent_58%)]'
+            : 'bg-[radial-gradient(circle_at_top,rgba(190,149,34,0.16),transparent_62%)]'
+        }`}
+      />
+
+      <div className="titlebar-no-drag absolute end-6 top-14 z-20 flex items-center gap-3">
         <button
           type="button"
           aria-label={t.languageToggle[language]}
           onClick={toggleLanguage}
-          className="rounded-full border border-[#D4AF37]/35 bg-[#121212] px-3 py-1.5 text-[#D9BE66] transition hover:bg-[#1A1A1A]"
+          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+            isDark
+              ? 'border-[#D4AF37]/35 bg-[#121212] text-[#D9BE66] hover:bg-[#1A1A1A]'
+              : 'border-[#C8A347]/45 bg-[#FDF7EA] text-[#805F14] hover:bg-[#F3E5C4]'
+          }`}
         >
-          <span className="text-xs font-semibold">{t.languageToggle[language]}</span>
+          <span>{t.languageToggle[language]}</span>
         </button>
         <button
           type="button"
           aria-label={t.themeToggle[language]}
           onClick={toggleTheme}
-          className="rounded-full border border-[#D4AF37]/35 bg-[#121212] p-2 text-[#D9BE66] transition hover:bg-[#1A1A1A]"
+          className={`rounded-full border p-2 transition ${
+            isDark
+              ? 'border-[#D4AF37]/35 bg-[#121212] text-[#D9BE66] hover:bg-[#1A1A1A]'
+              : 'border-[#C8A347]/45 bg-[#FDF7EA] text-[#805F14] hover:bg-[#F3E5C4]'
+          }`}
         >
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
 
-      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col px-6 pb-10 pt-10">
+      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col px-6 pb-10 pt-16">
         <div className="mb-8 flex flex-col items-center text-center">
           <img
-            src={mainLogo}
+            src={logo}
             alt={t.brandName[language]}
-            className="mb-2 h-[118px] w-[118px] object-contain md:h-[138px] md:w-[138px]"
-            onError={(event) => {
-              event.currentTarget.src = fallbackLogo;
-            }}
+            className="mb-2 h-[150px] w-[150px] object-contain md:h-[180px] md:w-[180px]"
           />
         </div>
 
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="mx-auto w-full max-w-xl rounded-3xl border border-[#D4AF37]/25 bg-[#111111]/96 p-5 shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          className={`mx-auto w-full max-w-xl rounded-3xl border p-5 shadow-[0_24px_60px_rgba(0,0,0,0.25)] ${
+            isDark
+              ? 'border-[#D4AF37]/25 bg-[#111111]/96'
+              : 'border-[#D2B061]/45 bg-[#FFF9ED]/96'
+          }`}
         >
-          <div className="mb-5 grid grid-cols-2 rounded-xl bg-[#171717] p-1">
+          <div
+            className={`mb-5 grid grid-cols-2 rounded-xl p-1 ${
+              isDark ? 'bg-[#171717]' : 'bg-[#F4E7C7]'
+            }`}
+          >
             <button
               type="button"
               onClick={() => setIsLogin(true)}
-              className={`h-10 rounded-lg text-sm font-semibold transition ${
-                isLogin ? 'bg-[#D4AF37] text-[#0A0A0A]' : 'text-[#B9A46A]'
+              className={`h-10 rounded-lg text-sm font-semibold transition-all duration-300 ${
+                isLogin
+                  ? 'bg-[#D4AF37] text-[#0A0A0A] shadow-[0_4px_14px_rgba(212,175,55,0.35)]'
+                  : isDark
+                    ? 'text-[#B9A46A]'
+                    : 'text-[#7F641C]'
               }`}
             >
               {t.login[language]}
@@ -116,8 +146,12 @@ export function AuthView() {
             <button
               type="button"
               onClick={() => setIsLogin(false)}
-              className={`h-10 rounded-lg text-sm font-semibold transition ${
-                !isLogin ? 'bg-[#D4AF37] text-[#0A0A0A]' : 'text-[#B9A46A]'
+              className={`h-10 rounded-lg text-sm font-semibold transition-all duration-300 ${
+                !isLogin
+                  ? 'bg-[#D4AF37] text-[#0A0A0A] shadow-[0_4px_14px_rgba(212,175,55,0.35)]'
+                  : isDark
+                    ? 'text-[#B9A46A]'
+                    : 'text-[#7F641C]'
               }`}
             >
               {t.signup[language]}
@@ -126,55 +160,78 @@ export function AuthView() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {!isLogin && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-[#E9D49A]">{t.fullName[language]}</label>
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                className="space-y-2"
+              >
+                <label className={`text-sm font-medium ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>
+                  {t.fullName[language]}
+                </label>
                 <div className="relative">
-                  <User size={18} className="pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 text-[#CDB879]/55" />
+                  <User size={18} className={`pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                   <Input
                     type="text"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     placeholder="John Doe"
                     dir="ltr"
-                    className="h-11 rounded-xl border-[#D4AF37]/18 bg-[#1B1B1B] ps-11 text-sm text-[#F7F2E3] placeholder:text-[#CDB879]/35"
+                    className={`h-11 rounded-xl ps-11 text-sm ${
+                      isDark
+                        ? 'border-[#D4AF37]/18 bg-[#1B1B1B] text-[#F7F2E3] placeholder:text-[#CDB879]/35'
+                        : 'border-[#D4AF37]/30 bg-[#FFFDF6] text-[#3B2E13] placeholder:text-[#B49549]/45'
+                    }`}
                   />
                 </div>
-              </div>
+              </motion.div>
             )}
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-[#E9D49A]">{t.email[language]}</label>
+              <label className={`text-sm font-medium ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>
+                {t.email[language]}
+              </label>
               <div className="relative">
-                <Mail size={18} className="pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 text-[#CDB879]/55" />
+                <Mail size={18} className={`pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                 <Input
                   type="text"
                   value={emailOrPhone}
                   onChange={(e) => setEmailOrPhone(e.target.value)}
                   placeholder="you@example.com"
                   dir="ltr"
-                  className="h-11 rounded-xl border-[#D4AF37]/18 bg-[#1B1B1B] ps-11 text-sm text-[#F7F2E3] placeholder:text-[#CDB879]/35"
+                  className={`h-11 rounded-xl ps-11 text-sm ${
+                    isDark
+                      ? 'border-[#D4AF37]/18 bg-[#1B1B1B] text-[#F7F2E3] placeholder:text-[#CDB879]/35'
+                      : 'border-[#D4AF37]/30 bg-[#FFFDF6] text-[#3B2E13] placeholder:text-[#B49549]/45'
+                  }`}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-[#E9D49A]">{t.password[language]}</label>
+              <label className={`text-sm font-medium ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>
+                {t.password[language]}
+              </label>
               <div className="relative">
-                <Lock size={18} className="pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 text-[#CDB879]/55" />
+                <Lock size={18} className={`pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                 <Input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   dir="ltr"
-                  className="h-11 rounded-xl border-[#D4AF37]/18 bg-[#1B1B1B] ps-11 text-sm text-[#F7F2E3] placeholder:text-[#CDB879]/35"
+                  className={`h-11 rounded-xl ps-11 text-sm ${
+                    isDark
+                      ? 'border-[#D4AF37]/18 bg-[#1B1B1B] text-[#F7F2E3] placeholder:text-[#CDB879]/35'
+                      : 'border-[#D4AF37]/30 bg-[#FFFDF6] text-[#3B2E13] placeholder:text-[#B49549]/45'
+                  }`}
                 />
               </div>
             </div>
 
             {isLogin && (
               <div className="flex items-center justify-between px-1 text-xs">
-                <label className="flex cursor-pointer items-center gap-2 font-medium text-[#D4C9A9]">
+                <label className={`flex cursor-pointer items-center gap-2 font-medium ${isDark ? 'text-[#D4C9A9]' : 'text-[#765A18]'}`}>
                   <input type="checkbox" className="h-4 w-4 rounded border border-[#D4AF37]/40 bg-transparent accent-[#D4AF37]" />
                   <span>{t.remember[language]}</span>
                 </label>
@@ -186,14 +243,16 @@ export function AuthView() {
 
             <Button
               type="submit"
-              className="mt-1 h-11 w-full rounded-xl bg-[#D4AF37] text-sm font-semibold text-[#0A0A0A] hover:bg-[#C49D2B]"
+              className="mt-1 h-11 w-full rounded-xl bg-[#D4AF37] text-sm font-semibold text-[#0A0A0A] transition-all duration-300 hover:bg-[#C49D2B] hover:shadow-[0_8px_22px_rgba(212,175,55,0.35)]"
             >
               {isLogin ? t.signIn[language] : t.createAccount[language]}
             </Button>
           </form>
         </motion.div>
 
-        <p className="mt-5 text-center text-xs text-[#B79F66]">{t.terms[language]}</p>
+        <p className={`mt-5 text-center text-xs ${isDark ? 'text-[#B79F66]' : 'text-[#8C7028]'}`}>
+          {t.terms[language]}
+        </p>
       </div>
     </div>
   );
