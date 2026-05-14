@@ -66,7 +66,7 @@ export function AuthView() {
 
   return (
     <div
-      className={`relative min-h-screen overflow-hidden ${
+      className={`relative h-screen overflow-hidden ${
         isDark ? 'bg-[#060606] text-[#F7F2E3]' : 'bg-[#FAF3E2] text-[#3B2E13]'
       }`}
     >
@@ -106,12 +106,12 @@ export function AuthView() {
         </button>
       </div>
 
-      <div className="relative z-10 mx-auto flex w-full max-w-5xl flex-col px-6 pb-10 pt-16">
-        <div className="mb-8 flex flex-col items-center text-center">
+      <div className="relative z-10 mx-auto flex h-[calc(100vh-2.5rem)] w-full max-w-5xl -translate-y-4 flex-col items-center justify-center px-6 pt-4">
+        <div className="mb-5 flex flex-col items-center text-center">
           <img
             src={logo}
             alt={t.brandName[language]}
-            className="mb-2 h-[150px] w-[150px] object-contain md:h-[180px] md:w-[180px]"
+            className="mb-1 h-[120px] w-[120px] object-contain md:h-[145px] md:w-[145px]"
           />
         </div>
 
@@ -119,14 +119,14 @@ export function AuthView() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-          className={`mx-auto w-full max-w-xl rounded-3xl border p-5 shadow-[0_24px_60px_rgba(0,0,0,0.25)] ${
+          className={`mx-auto w-full max-w-xl rounded-3xl border p-4 shadow-[0_24px_60px_rgba(0,0,0,0.25)] ${
             isDark
               ? 'border-[#D4AF37]/25 bg-[#111111]/96'
               : 'border-[#D2B061]/45 bg-[#FFF9ED]/96'
           }`}
         >
           <div
-            className={`mb-5 grid grid-cols-2 rounded-xl p-1 ${
+            className={`mb-4 grid grid-cols-2 rounded-xl p-1 ${
               isDark ? 'bg-[#171717]' : 'bg-[#F4E7C7]'
             }`}
           >
@@ -158,7 +158,7 @@ export function AuthView() {
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-3">
             {!isLogin && (
               <motion.div
                 initial={{ opacity: 0, y: -8 }}
@@ -250,7 +250,7 @@ export function AuthView() {
           </form>
         </motion.div>
 
-        <p className={`mt-5 text-center text-xs ${isDark ? 'text-[#B79F66]' : 'text-[#8C7028]'}`}>
+        <p className={`mt-3 text-center text-xs ${isDark ? 'text-[#B79F66]' : 'text-[#8C7028]'}`}>
           {t.terms[language]}
         </p>
       </div>

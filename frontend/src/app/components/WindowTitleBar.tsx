@@ -43,7 +43,10 @@ export function WindowTitleBar({ theme }: WindowTitleBarProps) {
           : 'border-[#A8872A]/20 bg-[#FFF7DE] text-[#5F4A16]'
       }`}
     >
-      <div className="titlebar-no-drag absolute right-3 top-1/2 flex -translate-y-1/2 items-center gap-1">
+      <div
+        dir="ltr"
+        className="titlebar-no-drag absolute right-3 top-1/2 flex -translate-y-1/2 flex-row items-center gap-1"
+      >
         <button
           type="button"
           onClick={() => window.electronAPI?.minimizeWindow?.()}

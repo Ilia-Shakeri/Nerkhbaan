@@ -10,7 +10,12 @@ import {
   ChevronDown,
   UserCircle2,
   Menu,
-  X
+  X,
+  Sun,
+  Moon,
+  Languages,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { WindowTitleBar } from '../components/WindowTitleBar';
@@ -23,7 +28,7 @@ const NAV_ITEMS = [
 ];
 
 export function DesktopLayout() {
-  const { language, theme, logout } = useAppContext();
+  const { language, theme, logout, toggleTheme, toggleLanguage } = useAppContext();
   const { isAuthenticated } = useAppContext();
   const isDark = theme === 'dark';
   
@@ -32,6 +37,7 @@ export function DesktopLayout() {
   }
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const notifications = [
     {
@@ -54,13 +60,13 @@ export function DesktopLayout() {
     }
   ];
 
-  const SidebarContent = () => (
+  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
     <>
       <div className="flex h-20 items-center justify-center border-b border-[#D4AF37]/15 shrink-0">
         <img
           src={logo}
           alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhban logo'}
-          className="h-16 w-16 object-contain"
+          className={collapsed ? 'h-12 w-12 object-contain' : 'h-16 w-16 object-contain'}
         />
       </div>
 
@@ -71,17 +77,17 @@ export function DesktopLayout() {
             to={item.path}
             onClick={() => setIsSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+              `flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-all ${
                 isActive
                   ? 'bg-[#D4AF37] text-[#0A0A0A] shadow-[0_4px_20px_rgba(212,175,55,0.25)]'
                   : isDark
                     ? 'text-[#CFBE91] hover:bg-[#191919] hover:text-[#F6E8C2]'
                     : 'text-[#8A6B20] hover:bg-[#F6EBD0] hover:text-[#5D4614]'
-              }`
+              } ${collapsed ? 'justify-center px-2' : 'gap-3'}`
             }
           >
             <item.icon size={18} />
-            <span>{item.label[language]}</span>
+            {!collapsed && <span>{item.label[language]}</span>}
           </NavLink>
         ))}
       </nav>
@@ -89,12 +95,12 @@ export function DesktopLayout() {
       <div className="shrink-0 border-t border-[#D4AF37]/15 p-4">
         <button
           onClick={logout}
-          className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+          className={`flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
             isDark ? 'text-[#E6C977] hover:bg-[#1B1B1B]' : 'text-[#86631A] hover:bg-[#F6EBD0]'
-          }`}
+          } ${collapsed ? 'justify-center px-2' : 'gap-3'}`}
         >
           <LogOut size={18} />
-          <span>{language === 'fa' ? 'خروج از حساب' : 'Logout'}</span>
+          {!collapsed && <span>{language === 'fa' ? 'خروج از حساب' : 'Logout'}</span>}
         </button>
       </div>
     </>
@@ -112,11 +118,11 @@ export function DesktopLayout() {
       
       {/* Desktop Sidebar */}
       <aside
-        className={`mt-10 hidden w-64 flex-col border-e border-[#D4AF37]/15 transition-colors duration-500 lg:flex ${
+        className={`mt-10 hidden flex-col border-e border-[#D4AF37]/15 transition-all duration-500 lg:flex ${
           isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
-        }`}
+        } ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}
       >
-        <SidebarContent />
+        <SidebarContent collapsed={isSidebarCollapsed} />
       </aside>
 
       {/* Mobile Drawer Overlay */}
@@ -165,6 +171,19 @@ export function DesktopLayout() {
             isDark ? 'bg-[#0B0B0B]/95' : 'bg-[#FFF3D8]/95'
           }`}
         >
+          <div className="hidden lg:flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+              className={`rounded-lg p-2 transition-colors ${
+                isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
+              }`}
+              aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
+          </div>
+
           <div className="flex items-center gap-4 lg:hidden">
              <button 
                 onClick={() => setIsSidebarOpen(true)}
@@ -190,6 +209,29 @@ export function DesktopLayout() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={toggleLanguage}
+              className={`flex h-10 items-center justify-center rounded-xl px-3 text-xs font-semibold transition-colors ${
+                isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
+              }`}
+              aria-label={language === 'fa' ? 'Switch to English' : 'Switch to Persian'}
+            >
+              <Languages size={15} className="me-1" />
+              {language === 'fa' ? 'EN' : 'فا'}
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+                isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
+              }`}
+              aria-label="Toggle color theme"
+            >
+              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+            </button>
+
             {/* Notification Bell */}
             <div className="relative">
               <button
