@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from ..schemas import PricesResponse
+from ..schemas import PricesHealthResponse, PricesResponse
 from ..services.pricing import pricing_service
 
 router = APIRouter(prefix="/api/prices", tags=["prices"])
@@ -16,8 +16,8 @@ async def get_prices() -> PricesResponse:
     return PricesResponse.model_validate(payload)
 
 
-@router.get("/health")
-async def get_prices_health() -> dict:
+@router.get("/health", response_model=PricesHealthResponse)
+async def get_prices_health() -> PricesHealthResponse:
     try:
         if not pricing_service.has_refreshed():
             await pricing_service.get_prices()
@@ -25,4 +25,4 @@ async def get_prices_health() -> dict:
         # Health should remain available even if upstream providers fail.
         pass
 
-    return pricing_service.get_chain_health()
+    return PricesHealthResponse.model_validate(pricing_service.get_chain_health())

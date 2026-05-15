@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import tempfile
+import types
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
+import sys
+from typing import Any
 from unittest.mock import patch
 
-import httpx
+# Allow running these tests in minimal environments where backend deps are not installed.
+if 'httpx' not in sys.modules:
+    sys.modules['httpx'] = types.SimpleNamespace(AsyncClient=object)
 
 from app.services.pricing import PricingService
 
@@ -31,7 +36,7 @@ class PricingServiceFallbackTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_chain_uses_backup_when_primary_fails(self) -> None:
         async def fake_call_provider(
-            _client: httpx.AsyncClient,
+            _client: Any,
             _asset_id: str,
             _region: str,
             provider: dict,
@@ -42,9 +47,8 @@ class PricingServiceFallbackTests(unittest.IsolatedAsyncioTestCase):
                 return 12_345_678.0
             raise AssertionError(f"Unexpected provider: {provider['id']}")
 
-        with patch.object(self.service, '_call_provider', side_effect=fake_call_provider):
-            async with httpx.AsyncClient() as client:
-                result = await self.service._fetch_chain(client, 'gold', 'iran')
+        with patch.object(self.service.fetcher, '_call_provider', side_effect=fake_call_provider):
+            result = await self.service._fetch_chain(object(), 'gold', 'iran')
 
         self.assertEqual(result.status, 'live')
         self.assertEqual(result.source, 'bonbast_gold')
@@ -70,9 +74,8 @@ class PricingServiceFallbackTests(unittest.IsolatedAsyncioTestCase):
         async def always_fail(*_args, **_kwargs) -> float:
             raise RuntimeError('provider down')
 
-        with patch.object(self.service, '_call_provider', side_effect=always_fail):
-            async with httpx.AsyncClient() as client:
-                result = await self.service._fetch_chain(client, 'btc', 'international')
+        with patch.object(self.service.fetcher, '_call_provider', side_effect=always_fail):
+            result = await self.service._fetch_chain(object(), 'btc', 'international')
 
         self.assertEqual(result.status, 'cached')
         self.assertEqual(result.value, 100_001.25)

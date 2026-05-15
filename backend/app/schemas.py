@@ -58,3 +58,30 @@ class PricesResponse(BaseModel):
     refreshed_at: str
     source: dict[str, str]
     assets: list[AssetPrice]
+
+
+class PriceChainHealth(BaseModel):
+    status: str
+    source: str
+    updated_at: str | None = None
+    error: str | None = None
+
+
+class PriceAssetHealth(BaseModel):
+    iran: PriceChainHealth
+    international: PriceChainHealth
+
+
+class PricingStartupChecks(BaseModel):
+    checked_at: str
+    required_env_keys: list[str]
+    missing_env_keys: list[str]
+    strict_mode: bool
+    ok: bool
+
+
+class PricesHealthResponse(BaseModel):
+    checked_at: str
+    last_refresh_at: str | None = None
+    startup: PricingStartupChecks
+    chains: dict[str, PriceAssetHealth]

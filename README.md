@@ -1,35 +1,24 @@
 # Nerkhban
 
-Nerkhban is a bilingual (Persian/English) desktop app prototype for market monitoring and alert management.
+Nerkhban is a desktop app (Electron + React) for tracking market prices and managing alerts in Persian and English.
 
-Built with Electron + React, it focuses on a fast desktop UX, clear charting, and a localized interface (RTL/LTR).
+## What is in the repo today
 
-Docs: [Project Overview](README.md) | [Developer Guide](README.developer.md)
+- Desktop shell with a custom title bar
+- React frontend with RTL/LTR language support
+- FastAPI backend with JWT auth and PostgreSQL
+- Live pricing endpoint with provider fallback + cache
 
-## Why It Is Interesting
-
-- Desktop-first experience for fintech workflows
-- Bilingual UI with direction-aware layouts
-- Clean dashboard and alert-management flow
-- Secure Electron defaults with a minimal preload bridge
-
-## Current MVP Includes
-
-- Demo sign-in flow
-- Mock market data and interactive charts
-- Alert list management (enable/disable, delete)
-- Theme/language/notification preferences saved locally
-
-## Quick Start
+## Quick start
 
 ```bash
-# 1) Database
+# 1) Start Postgres
 docker compose up -d postgres
 
 # 2) Backend
 cd backend
 python -m venv .venv
-# Windows: .venv\\Scripts\\activate
+# Windows: .venv\Scripts\activate
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
@@ -42,22 +31,13 @@ cd frontend && npm install && cd ..
 npm run dev
 ```
 
-Or start backend + database with Docker Compose:
+## Useful endpoints
 
-```bash
-docker compose up -d postgres backend
-```
+- `GET /health`
+- `GET /api/prices`
+- `GET /api/prices/health`
+- `GET /api/providers`
 
-Run API smoke test (signup/signin/prices):
+## Developer docs
 
-```bash
-python backend/scripts/integration_smoke_test.py
-```
-
-Temporary demo-only login is available from the auth page (disable for production with `VITE_ENABLE_DEMO_LOGIN=false`).
-
-## Developer Docs
-
-For full setup, scripts, architecture, constraints, and roadmap details, see:
-
-- `README.developer.md`
+See `README.developer.md` for project structure, scripts, and backend/frontend details.
