@@ -28,10 +28,18 @@ def build_startup_checks(settings: Any, registry: dict[str, dict[str, dict[str, 
         for key_name in required_keys
         if not getattr(settings, key_name, None)
     )
+    optional_keys = ["alanchand_api_token"]
+    missing_optional = sorted(
+        key_name
+        for key_name in optional_keys
+        if not getattr(settings, key_name, None)
+    )
     return {
         "checked_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "required_env_keys": required_keys,
         "missing_env_keys": missing_keys,
+        "optional_env_keys": optional_keys,
+        "missing_optional_env_keys": missing_optional,
         "strict_mode": settings.pricing_require_provider_keys,
         "ok": len(missing_keys) == 0,
     }

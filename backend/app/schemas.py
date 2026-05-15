@@ -60,11 +60,20 @@ class PricesResponse(BaseModel):
     assets: list[AssetPrice]
 
 
+class ProviderHealthStatus(BaseModel):
+    provider_id: str
+    provider_name: str
+    status: str
+    last_success_time: str | None = None
+    has_api_key: bool
+
+
 class PriceChainHealth(BaseModel):
     status: str
     source: str
     updated_at: str | None = None
     error: str | None = None
+    providers: list[ProviderHealthStatus] = []
 
 
 class PriceAssetHealth(BaseModel):
@@ -76,6 +85,8 @@ class PricingStartupChecks(BaseModel):
     checked_at: str
     required_env_keys: list[str]
     missing_env_keys: list[str]
+    optional_env_keys: list[str]
+    missing_optional_env_keys: list[str]
     strict_mode: bool
     ok: bool
 

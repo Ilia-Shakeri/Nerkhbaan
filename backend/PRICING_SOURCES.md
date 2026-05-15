@@ -33,3 +33,4 @@ Nerkhban backend now uses per-asset provider chains with regional separation:
 - per-asset regional status (`live`, `cached`, `unavailable`)
 - provider source used for each chain
 - cache age metadata and startup env-key checks
+- per-provider rows include `provider_name`, `status`, `last_success_time`, `has_api_key`

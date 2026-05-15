@@ -6,55 +6,49 @@ import unittest
 from datetime import UTC, datetime
 from pathlib import Path
 import sys
-from typing import Any
+from types import SimpleNamespace
 from unittest.mock import patch
 
-# Allow running these tests in minimal environments where backend deps are not installed.
 if 'httpx' not in sys.modules:
     sys.modules['httpx'] = types.SimpleNamespace(AsyncClient=object)
 
-from app.services.pricing import PricingService
-
-
-class TempPricingService(PricingService):
-    def __init__(self, cache_file: Path) -> None:
-        self._test_cache_file = cache_file
-        super().__init__()
-
-    def _resolve_cache_file(self) -> Path:
-        return self._test_cache_file
+from app.services.pricing_cache import PricingCacheStore
+from app.services.pricing_fetcher import PricingFetcher
+from app.services.pricing_registry import PRICE_REGISTRY
 
 
 class PricingServiceFallbackTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         cache_file = Path(self.temp_dir.name) / 'price_cache.json'
-        self.service = TempPricingService(cache_file=cache_file)
+        self.cache = PricingCacheStore(cache_file)
+        self.fetcher = PricingFetcher(
+            settings=SimpleNamespace(metals_dev_api_key=None, goldapi_api_key=None),
+            cache=self.cache,
+            registry=PRICE_REGISTRY,
+            timeout_seconds=8,
+            retry_attempts=1,
+        )
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
     async def test_chain_uses_backup_when_primary_fails(self) -> None:
-        async def fake_call_provider(
-            _client: Any,
-            _asset_id: str,
-            _region: str,
-            provider: dict,
-        ) -> float:
+        async def fake_call_provider(_client, _asset_id, _region, provider):
             if provider['id'] == 'tgju_gold':
                 raise RuntimeError('primary unavailable')
             if provider['id'] == 'bonbast_gold':
                 return 12_345_678.0
             raise AssertionError(f"Unexpected provider: {provider['id']}")
 
-        with patch.object(self.service.fetcher, '_call_provider', side_effect=fake_call_provider):
-            result = await self.service._fetch_chain(object(), 'gold', 'iran')
+        with patch.object(self.fetcher, '_call_provider', side_effect=fake_call_provider):
+            result = await self.fetcher.fetch_chain(object(), 'gold', 'iran')
 
         self.assertEqual(result.status, 'live')
         self.assertEqual(result.source, 'bonbast_gold')
         self.assertEqual(result.value, 12_345_678.0)
 
-        cached = self.service._get_cached_value('gold', 'iran')
+        cached = self.cache.get_chain('gold', 'iran')
         self.assertIsNotNone(cached)
         if cached is None:
             return
@@ -63,7 +57,7 @@ class PricingServiceFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cached_source, 'bonbast_gold')
 
     async def test_chain_returns_cached_value_when_all_providers_fail(self) -> None:
-        self.service._set_cached_value(
+        self.cache.set_chain(
             asset_id='btc',
             region='international',
             value=100_001.25,
@@ -71,11 +65,11 @@ class PricingServiceFallbackTests(unittest.IsolatedAsyncioTestCase):
             updated_at=datetime.now(UTC),
         )
 
-        async def always_fail(*_args, **_kwargs) -> float:
+        async def always_fail(*_args, **_kwargs):
             raise RuntimeError('provider down')
 
-        with patch.object(self.service.fetcher, '_call_provider', side_effect=always_fail):
-            result = await self.service._fetch_chain(object(), 'btc', 'international')
+        with patch.object(self.fetcher, '_call_provider', side_effect=always_fail):
+            result = await self.fetcher.fetch_chain(object(), 'btc', 'international')
 
         self.assertEqual(result.status, 'cached')
         self.assertEqual(result.value, 100_001.25)

@@ -59,3 +59,4 @@ venv/
 backend/price_cache.json
 
 full_project_code.txt
+code_dumper.py

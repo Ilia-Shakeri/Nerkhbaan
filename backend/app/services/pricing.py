@@ -92,8 +92,8 @@ class PricingService:
         )
 
         self._chain_health[asset_id] = {
-            "iran": chain_result_payload(iran_chain),
-            "international": chain_result_payload(intl_chain),
+            "iran": self._build_chain_health(asset_id, "iran", iran_chain),
+            "international": self._build_chain_health(asset_id, "international", intl_chain),
         }
 
         if iran_chain.status == "live" or intl_chain.status == "live":
@@ -126,6 +126,68 @@ class PricingService:
 
     async def _fetch_chain(self, client: httpx.AsyncClient, asset_id: str, region: str) -> ChainResult:
         return await self.fetcher.fetch_chain(client, asset_id, region)
+
+    def _build_chain_health(self, asset_id: str, region: str, chain: ChainResult) -> dict[str, Any]:
+        payload = chain_result_payload(chain)
+        payload["providers"] = self._provider_statuses(asset_id, region, chain)
+        return payload
+
+    def _provider_statuses(self, asset_id: str, region: str, chain: ChainResult) -> list[dict[str, Any]]:
+        providers = sorted(PRICE_REGISTRY[asset_id][region]["providers"], key=lambda provider: provider.get("priority", 99))
+        selected_source = self._extract_source_id(chain.source)
+
+        source_priority: int | None = None
+        for provider in providers:
+            if provider["id"] == selected_source:
+                source_priority = int(provider.get("priority", 99))
+                break
+
+        provider_statuses: list[dict[str, Any]] = []
+        for provider in providers:
+            provider_id = str(provider["id"])
+            status = "unavailable"
+            last_success_time: str | None = None
+
+            if chain.status == "live":
+                if provider_id == selected_source:
+                    status = "connected"
+                    last_success_time = (
+                        chain.updated_at.replace(microsecond=0).isoformat()
+                        if chain.updated_at
+                        else None
+                    )
+                elif source_priority is not None and int(provider.get("priority", 99)) < source_priority:
+                    status = "fallback"
+            elif chain.status == "cached":
+                if provider_id == selected_source:
+                    status = "cache"
+                    last_success_time = (
+                        chain.updated_at.replace(microsecond=0).isoformat()
+                        if chain.updated_at
+                        else None
+                    )
+                else:
+                    status = "fallback"
+
+            key_source = (provider.get("auth") or {}).get("key_source")
+            has_api_key = bool(getattr(settings, key_source, None)) if key_source else True
+
+            provider_statuses.append(
+                {
+                    "provider_id": provider_id,
+                    "provider_name": provider_id,
+                    "status": status,
+                    "last_success_time": last_success_time,
+                    "has_api_key": has_api_key,
+                }
+            )
+
+        return provider_statuses
+
+    def _extract_source_id(self, source: str) -> str:
+        if source.startswith("cache (") and source.endswith(")"):
+            return source[len("cache (") : -1]
+        return source
 
     def _append_history(self, asset_id: str, price_usd: float | None, price_toman: float | None) -> None:
         now = datetime.now(UTC).replace(microsecond=0).isoformat()
@@ -214,6 +276,11 @@ class PricingService:
             if checks["strict_mode"]:
                 raise RuntimeError(message)
             logger.warning("%s. Falling back to backup/cached chains when needed.", message)
+        if checks["missing_optional_env_keys"]:
+            logger.warning(
+                "Optional pricing keys are not set: %s",
+                ", ".join(checks["missing_optional_env_keys"]),
+            )
         return checks
 
     def startup_checks(self) -> dict[str, Any]:

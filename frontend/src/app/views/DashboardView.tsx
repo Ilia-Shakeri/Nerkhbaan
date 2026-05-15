@@ -308,7 +308,11 @@ export function DashboardView() {
     live: { fa: 'زنده', en: 'Live' },
     cached: { fa: 'کش', en: 'Cached' },
     unavailable: { fa: 'ناموجود', en: 'Unavailable' },
-    chartUnavailable: { fa: 'نمودار در دسترس نیست', en: 'Chart data unavailable' }
+    chartUnavailable: { fa: 'نمودار در دسترس نیست', en: 'Chart data unavailable' },
+    degradedNotice: {
+      fa: 'استفاده از داده کش - دریافت زنده ممکن است در دسترس نباشد',
+      en: 'Using cached prices - live updates may be unavailable'
+    }
   };
 
   const cardMap: Record<AssetId, AssetCard> = useMemo(() => {
@@ -381,6 +385,10 @@ export function DashboardView() {
     return t.unavailable[language];
   };
 
+  const hasDegradedSources = orderedAssets.some(
+    (asset) => asset.usdStatus !== 'live' || asset.tomanStatus !== 'live'
+  );
+
   return (
     <div className="space-y-6">
       <div
@@ -433,6 +441,18 @@ export function DashboardView() {
           {loadError ? ` | ${loadError}` : ''}
         </div>
       </div>
+
+      {hasDegradedSources ? (
+        <div
+          className={`rounded-xl border px-3 py-2 text-xs ${
+            isDark
+              ? 'border-amber-500/35 bg-amber-500/10 text-amber-200'
+              : 'border-amber-400/50 bg-amber-100/90 text-amber-800'
+          }`}
+        >
+          {t.degradedNotice[language]}
+        </div>
+      ) : null}
 
       {orderedAssets.map((asset, idx) => {
         const fallbackValue =
@@ -552,6 +572,7 @@ export function DashboardView() {
                         className={`rounded-full px-2 py-0.5 font-semibold ${
                           isDark ? STATUS_COLORS[asset.usdStatus].dark : STATUS_COLORS[asset.usdStatus].light
                         }`}
+                        title={`USD: ${asset.sourceUsd}`}
                       >
                         USD {statusLabel(asset.usdStatus)}
                       </span>
@@ -559,6 +580,7 @@ export function DashboardView() {
                         className={`rounded-full px-2 py-0.5 font-semibold ${
                           isDark ? STATUS_COLORS[asset.tomanStatus].dark : STATUS_COLORS[asset.tomanStatus].light
                         }`}
+                        title={`Toman: ${asset.sourceToman}`}
                       >
                         Toman {statusLabel(asset.tomanStatus)}
                       </span>
@@ -607,7 +629,11 @@ export function DashboardView() {
                 <div className={`mb-1 text-3xl font-bold tracking-tight ${isDark ? 'text-[#F5EBCD]' : 'text-[#5A4315]'}`} dir="ltr">
                   {formatPrice(currencyMode === 'usd' ? asset.priceUsd : asset.priceToman, currencyMode, language)}
                 </div>
-                <div className={`mb-3 text-[11px] ${isDark ? 'text-[#9F8C5D]' : 'text-[#8A6A25]'}`} dir="ltr">
+                <div
+                  className={`mb-3 text-[11px] ${isDark ? 'text-[#9F8C5D]' : 'text-[#8A6A25]'}`}
+                  dir="ltr"
+                  title={`USD source: ${asset.sourceUsd}\nToman source: ${asset.sourceToman}`}
+                >
                   USD: {asset.sourceUsd} | Toman: {asset.sourceToman}
                 </div>
 
