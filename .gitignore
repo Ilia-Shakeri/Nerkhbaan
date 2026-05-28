@@ -51,12 +51,15 @@ __pycache__/
 .venv/
 venv/
 
-# Firebase (if used)
-.firebase/
+# Dependencies
+vendor/
+vendor
 
 # Misc
 *.cache
 backend/price_cache.json
 
+
 full_project_code.txt
 code_dumper.py
+full_Nerkhban_project_code.txt

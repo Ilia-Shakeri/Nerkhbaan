@@ -6,7 +6,7 @@
   "scripts": {
     "backend": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
     "frontend": "cd frontend && npm run dev",
-    "electron": "C:\\electron\\electron.exe .",
+    "electron": ".\\vendor\\electron\\win32-x64\\electron.exe --disable-gpu --disable-extensions --user-data-dir=C:\\Temp\\nerkhban-electron .",
     "dev": "concurrently \"npm run frontend\" \"wait-on http://localhost:5173 && npm run electron\"",
     "dev:full": "concurrently \"npm run backend\" \"npm run frontend\" \"wait-on http://localhost:5173 http://localhost:8000/health && npm run electron\"",
     "start": "npm run dev",
@@ -14,10 +14,10 @@
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "wait-on": "^7.2.0",
-    "vite-tsconfig-paths": "^6.1.1"
+    "electron": "^42.2.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "wait-on": "^7.2.0"
   },
-  "dependencies": {},
   "engines": {
     "node": ">=18.0.0"
   }

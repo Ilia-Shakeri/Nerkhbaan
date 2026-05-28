@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -128,7 +129,7 @@ class PricingFetcher:
         attempts = 1 + self.retry_attempts
         last_error: Exception | None = None
 
-        for _ in range(attempts):
+        for attempt in range(attempts):
             try:
                 response = await client.request(
                     method=method,
@@ -146,6 +147,9 @@ class PricingFetcher:
                 return self._normalize_chain_value(asset_id, region, provider, raw_value)
             except Exception as exc:
                 last_error = exc
+                if attempt < attempts - 1:
+                    # Exponential backoff (1s, 1.5s, 2.25s) to recover from rate limiting
+                    await asyncio.sleep(1.5 ** attempt)
 
         raise RuntimeError(str(last_error) if last_error else "provider failed")
 

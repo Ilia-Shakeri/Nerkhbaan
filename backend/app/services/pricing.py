@@ -54,13 +54,29 @@ class PricingService:
         )
         self._load_history_from_cache()
         self._startup_checks = self._build_startup_checks()
+        
+        self._refresh_lock: asyncio.Lock | None = None
 
     async def get_prices(self) -> dict:
+        if self._refresh_lock is None:
+            self._refresh_lock = asyncio.Lock()
+
         if self._should_refresh():
-            await self._refresh_prices()
+            async with self._refresh_lock:
+                if self._should_refresh():
+                    try:
+                        await self._refresh_prices()
+                    except Exception as exc:
+                        logger.error(f"Pricing API fetch entirely failed: {exc}")
+                        # Synthesize a payload from disk cache on catastrophic API failure
+                        if not self._latest:
+                            self._build_fallback_latest()
 
         if not self._latest:
-            raise RuntimeError("Price cache is not initialized")
+            self._build_fallback_latest()
+
+        if not self._latest:
+            raise RuntimeError("Price cache is not initialized and fallback failed.")
 
         return self._latest.payload
 
@@ -83,7 +99,46 @@ class PricingService:
 
         self._latest = LivePrices(payload=payload)
         self._last_refresh = datetime.now(UTC)
-        self._cache.persist_if_dirty()
+        await asyncio.to_thread(self._cache.persist_if_dirty)
+
+    def _build_fallback_latest(self) -> None:
+        """
+        Graceful Degradation: If external APIs are unresponsive during startup, 
+        construct the response payload purely from the last known disk cache state.
+        """
+        self._cache._sync_from_disk()
+        snapshots = []
+        for asset_id in ASSET_LABELS:
+            iran_cached = self._cache.get_chain(asset_id, "iran")
+            intl_cached = self._cache.get_chain(asset_id, "international")
+            
+            iran_val = iran_cached[0] if iran_cached else None
+            intl_val = intl_cached[0] if intl_cached else None
+            
+            snapshots.append({
+                "asset": asset_id,
+                "label_fa": ASSET_LABELS[asset_id]["fa"],
+                "label_en": ASSET_LABELS[asset_id]["en"],
+                "price_usd": intl_val,
+                "price_toman": iran_val,
+                "change_percent": self._calc_change_percent(asset_id),
+                "trend": "up" if self._calc_change_percent(asset_id) >= 0 else "down",
+                "history": self._history_points(asset_id),
+                "source_usd": f"cache ({intl_cached[1]})" if intl_cached else "unavailable",
+                "source_toman": f"cache ({iran_cached[1]})" if iran_cached else "unavailable",
+                "usd_status": "cached" if intl_cached else "unavailable",
+                "toman_status": "cached" if iran_cached else "unavailable",
+                "stale_minutes": None,
+                "chart_error": True,
+                "chart_error_message": CHART_ERROR_MESSAGE,
+            })
+            
+        payload = {
+            "refreshed_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+            "source": {"usd": "cache-fallback", "toman": "cache-fallback"},
+            "assets": snapshots,
+        }
+        self._latest = LivePrices(payload=payload)
 
     async def _build_asset_snapshot(self, client: httpx.AsyncClient, asset_id: str) -> dict[str, Any]:
         iran_chain, intl_chain = await asyncio.gather(
@@ -306,7 +361,6 @@ class PricingService:
     def _to_float(self, value: object) -> float | None:
         return self.fetcher.to_float(value)
 
-    # Compatibility helpers used in tests.
     def _set_cached_value(
         self,
         asset_id: str,

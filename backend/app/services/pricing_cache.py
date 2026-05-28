@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -10,23 +11,31 @@ class PricingCacheStore:
     def __init__(self, cache_file: Path) -> None:
         self.cache_file = cache_file
         self._dirty = False
-        self._data = self._load()
+        self._data: dict[str, Any] = {"chains": {}, "history": {}}
+        self._last_mtime = 0.0
+        self._sync_from_disk()
 
-    def _load(self) -> dict[str, Any]:
+    def _sync_from_disk(self) -> None:
+        """
+        Multi-worker safety check: Reloads the cache into memory if another 
+        process or Uvicorn worker has modified the file on disk.
+        """
         if not self.cache_file.exists():
-            return {"chains": {}, "history": {}}
+            return
 
         try:
-            payload = json.loads(self.cache_file.read_text(encoding="utf-8"))
+            current_mtime = os.stat(self.cache_file).st_mtime
+            if current_mtime > self._last_mtime:
+                payload = json.loads(self.cache_file.read_text(encoding="utf-8"))
+                if isinstance(payload, dict):
+                    self._data = payload
+                    self._data.setdefault("chains", {})
+                    self._data.setdefault("history", {})
+                    self._last_mtime = current_mtime
         except Exception:
-            return {"chains": {}, "history": {}}
-
-        if not isinstance(payload, dict):
-            return {"chains": {}, "history": {}}
-
-        payload.setdefault("chains", {})
-        payload.setdefault("history", {})
-        return payload
+            # Fail silently to preserve the current memory state if the file 
+            # is temporarily locked or corrupted during a concurrent write.
+            pass
 
     def persist_if_dirty(self) -> None:
         if not self._dirty:
@@ -34,14 +43,23 @@ class PricingCacheStore:
 
         self.cache_file.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.cache_file.with_suffix(".tmp")
-        tmp_path.write_text(
-            json.dumps(self._data, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        tmp_path.replace(self.cache_file)
-        self._dirty = False
+        try:
+            tmp_path.write_text(
+                json.dumps(self._data, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            # Atomic replacement to prevent read errors from concurrent workers
+            tmp_path.replace(self.cache_file)
+            self._last_mtime = os.stat(self.cache_file).st_mtime
+            self._dirty = False
+        except Exception:
+            # Safely catch file locking exceptions common in Windows development
+            # or concurrent Docker volume access scenarios.
+            pass
 
     def get_chain(self, asset_id: str, region: str) -> tuple[float, str, datetime] | None:
+        self._sync_from_disk()
+        
         chain_payload = self._data.get("chains", {}).get(asset_id, {}).get(region, {})
         if not isinstance(chain_payload, dict):
             return None
@@ -79,6 +97,7 @@ class PricingCacheStore:
         self._dirty = True
 
     def get_history(self, asset_id: str) -> list[dict[str, Any]]:
+        self._sync_from_disk()
         history = self._data.get("history", {}).get(asset_id, [])
         if not isinstance(history, list):
             return []

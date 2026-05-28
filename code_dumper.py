@@ -24,11 +24,11 @@ def generate_tree(startpath, exclude_dirs, exclude_files, exclude_exts):
                 tree_str += f"{sub_indent}{f}\n"
     return tree_str
 
-def merge_project_files(output_filename="full_project_code.txt"):
+def merge_project_files(output_filename="full_Nerkhban_project_code.txt"):
     # Configuration
     EXCLUDE_DIRS = {
         'node_modules', '.git', '.idea', '__pycache__', 
-        'venv', 'env', '.vscode', 'dist', 'build', '.terraform'
+        'venv', 'env', '.vscode', 'dist', 'build', '.terraform', 'vendor', '.venv'
     }
     
     EXCLUDE_EXTENSIONS = {
