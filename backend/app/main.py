@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from .config import settings
 from .db import Base, engine
@@ -13,6 +14,9 @@ from .services.pricing import pricing_service
 
 app = FastAPI(title="Nerkhban API", version="1.0.0")
 
+# Compress large payloads (like pricing history arrays) to reduce network lag
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 origins = [origin.strip() for origin in settings.allowed_origins.split(",") if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
@@ -20,6 +24,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=86400, # Cache CORS preflight options for 24 hours to cut latency in half
 )
 
 app.include_router(auth_router)

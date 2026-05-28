@@ -45,34 +45,88 @@ export type PricesResponse = {
   assets: PriceAsset[];
 };
 
+// Use the Vite environment variable, fallback to localhost for development
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000';
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {})
-    }
-  });
+interface RequestOptions extends RequestInit {
+  timeout?: number;
+}
 
-  if (!response.ok) {
-    let message = `HTTP ${response.status}`;
+/**
+ * Core API request handler.
+ * Implements AbortController for timeouts, automatic JWT token injection,
+ * and global 401 Unauthorized handling.
+ */
+async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  // Set default timeout to 8 seconds to prevent indefinite UI hangs on bad connections
+  const { timeout = 8000, headers, ...rest } = options;
 
-    try {
-      const body = await response.json();
-      if (body?.detail && typeof body.detail === 'string') {
-        message = body.detail;
-      }
-    } catch {
-      // Ignore body parsing errors.
-    }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-    throw new Error(message);
+  // Retrieve JWT auth token from local storage
+  const token = localStorage.getItem('authToken');
+
+  const defaultHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
+
+  // Inject token globally if it exists
+  if (token) {
+    defaultHeaders['Authorization'] = `Bearer ${token}`;
   }
 
-  return (await response.json()) as T;
+  try {
+    const response = await fetch(`${API_BASE_URL}${path}`, {
+      ...rest,
+      headers: {
+        ...defaultHeaders,
+        ...headers,
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      // Global interceptor for expired or invalid tokens
+      if (response.status === 401) {
+        localStorage.removeItem('authToken');
+        // Dispatch an event so your React router can catch it and redirect to /login
+        window.dispatchEvent(new Event('auth-expired'));
+      }
+
+      let message = `HTTP ${response.status}`;
+      try {
+        const body = await response.json();
+        if (body?.detail && typeof body.detail === 'string') {
+          message = body.detail;
+        }
+      } catch {
+        // Ignore JSON parsing errors for error bodies, fallback to HTTP status
+      }
+
+      throw new Error(message);
+    }
+
+    // Parse the response text first to handle cases where the server returns an empty body safely
+    const text = await response.text();
+    return text ? JSON.parse(text) : ({} as T);
+
+  } catch (error: any) {
+    clearTimeout(timeoutId);
+    
+    // Catch the specific abort event and return a user-friendly error
+    if (error.name === 'AbortError') {
+      throw new Error('Request timed out. Please check your network connection.');
+    }
+    
+    throw error;
+  }
 }
+
+// --- API Endpoints ---
 
 export function signup(payload: {
   full_name: string;
@@ -95,6 +149,8 @@ export function signin(payload: { email: string; password: string }): Promise<Au
 export function getPrices(): Promise<PricesResponse> {
   return request<PricesResponse>('/api/prices');
 }
+
+// --- Utilities ---
 
 export function formatPrice(
   value: number | null | undefined,

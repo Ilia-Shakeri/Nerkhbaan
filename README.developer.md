@@ -1,90 +1,100 @@
-# Nerkhban Developer Guide
+# 🛠️ Nerkhban Developer Guide
 
-This is the day-to-day setup guide for local development.
+Welcome to the Nerkhban internal documentation. This guide covers local environment setup, architecture patterns, and testing protocols required for contributing to the codebase.
 
-## Stack
+## 💻 Tech Stack
+- **Desktop Wrapper:** Electron (Main/Preload processes)
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS
+- **Backend:** Python 3.11+, FastAPI, Pydantic, SQLAlchemy
+- **Database:** PostgreSQL 16
+- **Containerization:** Docker & Docker Compose
 
-- Desktop: Electron
-- Frontend: React 18 + TypeScript + Vite
-- Backend: FastAPI + SQLAlchemy + Pydantic
-- DB: PostgreSQL
-
-## Repo layout
-
+## 📂 Repository Structure
 ```text
-backend/      FastAPI app, auth, pricing services
-frontend/     React app
-electron/     Electron main/preload
-docker-compose.yaml
+Nerkhban/
+├── backend/            # FastAPI microservice, async fetchers, pricing logic
+├── frontend/           # React SPA, state management, UI components
+├── electron/           # Electron main thread, IPC bridges
+├── docker-compose.yaml # Infrastructure orchestration
+└── README.developer.md # This file
 ```
 
-## Prerequisites
+## ⚙️ Local Development Setup
 
-- Node.js 18+
-- npm 9+
-- Python 3.11+
-- Docker
+### 1. Prerequisites
 
-## Install
+Ensure you have the following installed on your machine:
+
+* [Node.js 18+](https://nodejs.org/) & npm 9+
+* [Python 3.11+](https://www.python.org/)
+* [Docker Engine](https://docs.docker.com/get-docker/)
+
+### 2. Environment Configuration
+
+Duplicate the example environment file and populate it with your local keys:
 
 ```bash
-npm install
-cd frontend && npm install && cd ..
-
 cd backend
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-source .venv/bin/activate
-pip install -r requirements.txt
 cp .env.example .env
-cd ..
 ```
 
-## Run
+*Note: The system checks `PRICING_REQUIRE_PROVIDER_KEYS` on startup. If set to `false`, the app boots successfully without API keys and utilizes the cache/fallback logic.*
 
-Start Postgres:
+### 3. Initialize the Database
+
+Spin up the local PostgreSQL container:
 
 ```bash
 docker compose up -d postgres
 ```
 
-Start backend:
+### 4. Start the Backend
+
+Navigate to the `backend` directory, initialize the virtual environment, and run Uvicorn:
 
 ```bash
-npm run backend
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Start frontend + Electron:
+### 5. Start the Frontend & Electron Shell
+
+In a new terminal window at the project root:
 
 ```bash
+# Install root, frontend, and electron dependencies
+npm install
+cd frontend && npm install && cd ..
+
+# Launch the dev environment
 npm run dev
 ```
 
-## Main backend endpoints
+## 🧠 System Behavior: The Pricing Engine
 
-- `GET /health`
-- `GET /api/auth/me`
-- `GET /api/prices`
-- `GET /api/prices/health`
-- `GET /api/providers`
+The core value of Nerkhban relies on its zero-downtime pricing fetcher. The logic flows as follows:
 
-## Pricing behavior (current)
+1. **Chain Execution:** Assets (`gold`, `silver`, `usdt`, `btc`) are fetched via isolated provider chains. Iranian and International markets execute concurrently.
+2. **Fallback Mechanism:** The primary API is polled. On timeout or 5xx error, the system instantly routes the request to the secondary provider.
+3. **Last-Resort Cache:** If the entire chain fails (e.g., global network outage), the system reads the last known valid state from `backend/price_cache.json`.
+4. **Transparency:** API responses always attach a health status flag: `live`, `cached`, or `unavailable`.
 
-- Per-asset provider chains (`gold`, `silver`, `usdt`, `btc`)
-- Iran and international chains run independently
-- Primary provider falls back to backup on failure
-- If both fail, last value is read from `backend/price_cache.json`
-- Asset responses include chain status: `live`, `cached`, or `unavailable`
+## 🧪 Testing
 
-## Smoke test
+### Smoke Tests
+
+Before pushing commits, verify the integration points of the pricing engine:
 
 ```bash
 python backend/scripts/integration_smoke_test.py
 ```
 
-## Notes
+### Core API Endpoints
 
-- Some providers need API keys (`METALS_DEV_API_KEY`, `GOLDAPI_API_KEY`)
-- Startup checks read `PRICING_REQUIRE_PROVIDER_KEYS`:
-  - `false` (default): app starts and uses backup/cache when keys are missing
-  - `true`: app fails fast if required keys are missing
+* `GET /health` - System health check
+* `GET /api/prices` - Fetch unified market data
+* `GET /api/prices/health` - Check provider latency and status
+* `GET /api/providers` - List active fallback chains
