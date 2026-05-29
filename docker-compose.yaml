@@ -4,14 +4,14 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: nerkhban-backend
+    container_name: nerkhbaan-backend
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       # Use the internal docker network routing for the database
-      DATABASE_URL: postgresql+psycopg://nerkhban:${POSTGRES_PASSWORD:-nerkhban}@postgres:5432/nerkhban
+      DATABASE_URL: postgresql+psycopg://nerkhbaan:${POSTGRES_PASSWORD:-nerkhbaan}@postgres:5432/nerkhbaan
       API_HOST: 0.0.0.0
       API_PORT: 8000
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
@@ -22,7 +22,7 @@ services:
 
   proxy:
     image: nginx:alpine
-    container_name: nerkhban-proxy
+    container_name: nerkhbaan-proxy
     restart: unless-stopped
     depends_on:
       - backend
@@ -33,19 +33,19 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    container_name: nerkhban-postgres
+    container_name: nerkhbaan-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: nerkhban
-      POSTGRES_USER: nerkhban
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nerkhban}
+      POSTGRES_DB: nerkhbaan
+      POSTGRES_USER: nerkhbaan
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nerkhbaan}
     # SECURITY FIX: Bound strictly to localhost to prevent external brute-force attacks
     ports:
       - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U nerkhban -d nerkhban']
+      test: ['CMD-SHELL', 'pg_isready -U nerkhbaan -d nerkhbaan']
       interval: 10s
       timeout: 5s
       retries: 5

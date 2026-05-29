@@ -65,7 +65,7 @@ export function DesktopLayout() {
       <div className="flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
         <img
           src={logo}
-          alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhban logo'}
+          alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
           className={`object-contain transition-all duration-300 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
         />
       </div>
@@ -219,7 +219,7 @@ export function DesktopLayout() {
              <div className="flex items-center gap-2">
                <img
                  src={logo}
-                 alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhban logo'}
+                 alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
                  className="h-8 w-8 object-contain"
                />
              </div>
@@ -228,7 +228,7 @@ export function DesktopLayout() {
           <div className="hidden lg:block">
             <img
               src={logo}
-              alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhban logo'}
+              alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
               className="h-10 w-10 object-contain"
             />
           </div>

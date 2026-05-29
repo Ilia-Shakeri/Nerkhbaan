@@ -1,11 +1,11 @@
-# 📈 Nerkhban (نرخ‌بان)
+# 📈 Nerkhbaan (نرخ‌بان)
 
 ![Electron](https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=58C4DC)
 ![React](https://img.shields.io/badge/React-191970?style=for-the-badge&logo=react&logoColor=58C4DC)
 ![FastAPI](https://img.shields.io/badge/FastAPI-191970?style=for-the-badge&logo=fastapi&logoColor=009688)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-191970?style=for-the-badge&logo=postgresql&logoColor=white)
 
-Nerkhban is a highly resilient, cross-platform desktop application designed for real-time market price tracking and alert management. Built with a focus on zero-downtime data delivery, it tracks precious metals, cryptocurrencies, and fiat currencies in both Toman and USD.
+Nerkhbaan is a highly resilient, cross-platform desktop application designed for real-time market price tracking and alert management. Built with a focus on zero-downtime data delivery, it tracks precious metals, cryptocurrencies, and fiat currencies in both Toman and USD.
 
 ## ✨ Core Features
 - **Bilingual Interface:** Full RTL (Persian) and LTR (English) support.
@@ -15,18 +15,18 @@ Nerkhban is a highly resilient, cross-platform desktop application designed for 
 - **Modern Desktop Shell:** Custom, clean UI wrapper powered by Electron and React 18.
 
 ## 🏗️ Architecture Overview
-Nerkhban separates concerns into three distinct layers:
+Nerkhbaan separates concerns into three distinct layers:
 1. **Desktop Client:** Electron container managing OS-level interactions.
 2. **Frontend UI:** React application utilizing Tailwind CSS and Shadcn UI.
 3. **Backend Service:** FastAPI with asynchronous data fetching, backed by PostgreSQL and SQLAlchemy connection pooling.
 
 ## 🚀 Production Deployment (Quick Start)
-For production environments, Nerkhban utilizes Docker to ensure isolated, reproducible builds.
+For production environments, Nerkhbaan utilizes Docker to ensure isolated, reproducible builds.
 
 1. **Clone & Configure:**
    ```bash
-   git clone [https://github.com/your-username/nerkhban.git](https://github.com/Ilia-Shakeri/Nerkhban.git)
-   cd nerkhban
+   git clone [https://github.com/your-username/nerkhbaan.git](https://github.com/Ilia-Shakeri/Nerkhbaan.git)
+   cd nerkhbaan
    cp backend/.env.example backend/.env
    # Edit .env with your secure production credentials
 ```

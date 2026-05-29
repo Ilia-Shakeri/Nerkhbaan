@@ -26,7 +26,7 @@ export function AuthView() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const t = {
-    brandName: { fa: 'نرخ‌بان', en: 'Nerkhban' },
+    brandName: { fa: 'نرخ‌بان', en: 'Nerkhbaan' },
     brandTagline: { fa: 'ردیابی و هشدار هوشمند قیمت', en: 'Smart price tracking & alerts' },
     login: { fa: 'ورود', en: 'Login' },
     signup: { fa: 'ثبت نام', en: 'Sign Up' },

@@ -12,7 +12,7 @@ from .routers.prices import router as prices_router
 from .schemas import UserResponse
 from .services.pricing import pricing_service
 
-app = FastAPI(title="Nerkhban API", version="1.0.0")
+app = FastAPI(title="Nerkhbaan API", version="1.0.0")
 
 # Compress large payloads (like pricing history arrays) to reduce network lag
 app.add_middleware(GZipMiddleware, minimum_size=1000)
