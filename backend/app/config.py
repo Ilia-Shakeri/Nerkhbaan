@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     debug: bool = True
 
     database_url: str = Field(
-        default="postgresql+psycopg://nerkhban:nerkhban@localhost:5432/nerkhban"
+        default="postgresql+psycopg://nerkhbaan:nerkhbaan@localhost:5432/nerkhbaan"
     )
 
     jwt_secret_key: str = "change-me-in-production"

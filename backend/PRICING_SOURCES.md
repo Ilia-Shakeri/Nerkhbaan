@@ -1,6 +1,6 @@
 # Pricing API Sources
 
-Nerkhban backend now uses per-asset provider chains with regional separation:
+Nerkhbaan backend now uses per-asset provider chains with regional separation:
 
 - **Iran chain** (`price_toman`) and **international chain** (`price_usd`) run independently.
 - Each chain uses priority fallback (primary -> backup).

@@ -3,7 +3,7 @@
 ## Running the Application
 
 ```bash
-cd /mnt/c/dev/Nerkhban-app/frontend
+cd /mnt/c/dev/Nerkhbaan-app/frontend
 npm install  # if not already installed
 npm run dev
 ```

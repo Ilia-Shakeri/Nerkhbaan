@@ -5,7 +5,7 @@ const isDev = !app.isPackaged;
 
 let mainWindow = null;
 
-app.setName('Nerkhban');
+app.setName('Nerkhbaan');
 
 function createWindow() {
   mainWindow = new BrowserWindow({

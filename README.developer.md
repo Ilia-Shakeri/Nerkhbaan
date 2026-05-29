@@ -1,6 +1,6 @@
-# 🛠️ Nerkhban Developer Guide
+# 🛠️ Nerkhbaan Developer Guide
 
-Welcome to the Nerkhban internal documentation. This guide covers local environment setup, architecture patterns, and testing protocols required for contributing to the codebase.
+Welcome to the Nerkhbaan internal documentation. This guide covers local environment setup, architecture patterns, and testing protocols required for contributing to the codebase.
 
 ## 💻 Tech Stack
 - **Desktop Wrapper:** Electron (Main/Preload processes)
@@ -11,7 +11,7 @@ Welcome to the Nerkhban internal documentation. This guide covers local environm
 
 ## 📂 Repository Structure
 ```text
-Nerkhban/
+Nerkhbaan/
 ├── backend/            # FastAPI microservice, async fetchers, pricing logic
 ├── frontend/           # React SPA, state management, UI components
 ├── electron/           # Electron main thread, IPC bridges
@@ -75,7 +75,7 @@ npm run dev
 
 ## 🧠 System Behavior: The Pricing Engine
 
-The core value of Nerkhban relies on its zero-downtime pricing fetcher. The logic flows as follows:
+The core value of Nerkhbaan relies on its zero-downtime pricing fetcher. The logic flows as follows:
 
 1. **Chain Execution:** Assets (`gold`, `silver`, `usdt`, `btc`) are fetched via isolated provider chains. Iranian and International markets execute concurrently.
 2. **Fallback Mechanism:** The primary API is polled. On timeout or 5xx error, the system instantly routes the request to the secondary provider.
