@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Moon, Sun, Languages, Bell, Smartphone, Mail, Send, Activity, ShieldCheck, LifeBuoy } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Switch } from '../components/ui/switch';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { useAppContext } from '../context/AppContext';
 
 export function SettingsView() {

@@ -18,7 +18,7 @@ import {
   PanelLeftOpen
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { WindowTitleBar } from '../components/WindowTitleBar';
+import { WindowTitleBar } from '@/app/components/WindowTitleBar';
 import logo from '../../logo/logo.png';
 
 const NAV_ITEMS = [

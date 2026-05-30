@@ -20,12 +20,12 @@ import {
   CircleDollarSign
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Button } from '../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { useAppContext } from '../context/AppContext';
-import { Modal } from '../components/ui/Modal';
-import { Input } from '../components/ui/input';
-import { Switch } from '../components/ui/switch';
+import { Modal } from '@/components/ui/Modal';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { formatPrice, getPrices, type CurrencyMode, type PriceAsset } from '../services/api';
 
