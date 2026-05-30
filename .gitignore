@@ -1,0 +1,67 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Node
+node_modules/
+.pnp/
+.pnp.js
+
+# Build outputs
+dist/
+build/
+out/
+
+# Vite
+.vite/
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# TypeScript
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# ESLint
+.eslintcache
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Dependencies
+vendor/
+vendor
+
+# Misc
+*.cache
+backend/price_cache.json
+
+
+full_project_code.txt
+code_dumper.py
+full_Nerkhbaan-web_project_code.txt
+
+The Source electron app (design refrence)
