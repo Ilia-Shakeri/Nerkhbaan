@@ -1,6 +1,19 @@
-version: '3.9'
+# /opt/Nerkhbaan/docker-compose.yaml
 
 services:
+  frontend:
+    image: nerkhbaan-frontend
+    build:
+      context: ../Nerkhbaan-web
+      dockerfile: Dockerfile
+    container_name: nerkhbaan-frontend
+    # Map port 80 inside the container to port 3000 on the host loopback interface
+    ports:
+      - "127.0.0.1:3000:80"
+    restart: unless-stopped
+    depends_on:
+      - backend
+
   backend:
     build:
       context: ./backend
@@ -13,9 +26,10 @@ services:
       DATABASE_URL: postgresql+psycopg://nerkhbaan:${POSTGRES_PASSWORD:-nerkhbaan}@postgres:5432/nerkhbaan
       API_HOST: 0.0.0.0
       API_PORT: 8000
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      # Ensure your production domain is allowed for CORS
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,https://nerkhbaan.ir}
       ALANCHAND_API_TOKEN: ${ALANCHAND_API_TOKEN:-}
-    # Map port 8000 to localhost to allow host Nginx to proxy it
+    # Map port 8000 inside the container to port 8000 on the host loopback interface
     ports:
       - "127.0.0.1:8000:8000"
 
