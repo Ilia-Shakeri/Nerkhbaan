@@ -1,5 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* src/styles/tailwind.css */
 
-@import 'tw-animate-css';
+/* This file is intentionally left empty. */
+/* All Tailwind directives are now managed in src/styles/index.css to prevent build errors. */

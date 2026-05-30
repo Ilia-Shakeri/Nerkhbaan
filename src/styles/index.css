@@ -1,6 +1,18 @@
+/* src/styles/index.css */
+
+/* 1. All external libraries and fonts must be imported at the very top */
+@import 'tw-animate-css';
+@import './fonts.css';
+
+/* 2. Load Tailwind core directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* 3. Load your specific theme and layer overrides */
+/* By importing the theme here, PostCSS merges it correctly with the Tailwind base */
+@import './theme.css';
+
 
 @font-face {
   font-family: 'Vazir';
