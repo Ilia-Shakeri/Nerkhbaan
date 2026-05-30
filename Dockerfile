@@ -10,11 +10,10 @@ ENV PYTHONUNBUFFERED=1
 
 COPY requirements.txt ./requirements.txt
 
-# PIP FALLBACK CHAIN: 
-# 1. Primary: Runflare (Iranian)
-# 2. Fallback: Tsinghua Tuna (Highly reliable global mirror, ignores US sanctions)
-# 3. Fallback: Official PyPI (Direct access)
-RUN pip install --no-cache-dir -r requirements.txt \
+# Mount the pip cache to significantly speed up rebuilds
+# PIP FALLBACK CHAIN: Runflare -> Tsinghua -> PyPI
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir -r requirements.txt \
     -i https://mirror-pypi.runflare.com/simple/ \
     --extra-index-url https://pypi.tuna.tsinghua.edu.cn/simple/ \
     --extra-index-url https://pypi.org/simple/
