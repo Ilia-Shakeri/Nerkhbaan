@@ -2,7 +2,6 @@ import { Bell, LayoutDashboard, LogOut, Menu, Settings, ShieldAlert } from "luci
 import { NavLink, Outlet } from "react-router-dom";
 import { useState } from "react";
 import { useAuthStore } from "@/app/store/authStore";
-import { WindowTitleBar } from "@/app/components/WindowTitleBar";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -15,13 +14,13 @@ export function AppShell() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const logout = useAuthStore((state) => state.logout);
 
+  // Layout boundaries adjusted to fit viewport seamlessly without the topbar
   return (
     <div className="relative flex min-h-screen flex-col bg-grid">
-      <WindowTitleBar />
       <div className="flex flex-1">
         <aside
           className={cn(
-            "fixed inset-y-10 left-0 z-40 w-72 border-r border-cyan-300/15 bg-slate-950/70 p-4 backdrop-blur-xl transition-transform lg:static lg:translate-x-0",
+            "fixed inset-y-0 left-0 z-40 w-72 border-r border-cyan-300/15 bg-slate-950/70 p-4 backdrop-blur-xl transition-transform lg:static lg:translate-x-0",
             sidebarOpen ? "translate-x-0" : "-translate-x-full"
           )}
         >
@@ -69,7 +68,7 @@ export function AppShell() {
         )}
 
         <div className="relative flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-10 z-20 flex h-16 items-center justify-between border-b border-cyan-300/15 bg-slate-950/70 px-4 backdrop-blur-xl lg:px-8">
+          <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-cyan-300/15 bg-slate-950/70 px-4 backdrop-blur-xl lg:px-8">
             <button
               onClick={() => setSidebarOpen((value) => !value)}
               className="rounded-lg border border-cyan-300/25 bg-slate-900/70 p-2 text-cyan-200 lg:hidden"

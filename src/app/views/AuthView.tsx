@@ -1,22 +1,19 @@
 // frontend/src/app/views/AuthView.tsx
-
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Moon, Sun, User, Mail, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAppContext } from '../context/AppContext';
-import { WindowTitleBar } from '@/app/components/WindowTitleBar';
+import { useAppContext } from '@/app/context/AppContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import logo from '../../logo/logo.png';
-import { signin, signup } from '../services/api';
+import logo from '@/logo/logo.png';
+import { signin, signup } from '@/app/services/api';
 
 export function AuthView() {
   const navigate = useNavigate();
   const { login, language, theme, toggleTheme, toggleLanguage } = useAppContext();
-  const isProductionBuild =
-    import.meta.env.PROD || import.meta.env.MODE === 'production';
+  const isProductionBuild = import.meta.env.PROD || import.meta.env.MODE === 'production';
   const allowDemoLogin = !isProductionBuild && import.meta.env.VITE_ENABLE_DEMO_LOGIN !== 'false';
 
   const [isLogin, setIsLogin] = useState(true);
@@ -56,7 +53,6 @@ export function AuthView() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!emailOrPhone || !password || (!isLogin && !fullName)) {
       toast.error(t.fillFields[language]);
       return;
@@ -96,13 +92,13 @@ export function AuthView() {
     navigate('/');
   };
 
+  // Removed WindowTitleBar and changed offsets for correct screen alignment
   return (
     <div
       className={`relative h-screen overflow-hidden ${
         isDark ? 'bg-[#060606] text-[#F7F2E3]' : 'bg-[#FAF3E2] text-[#3B2E13]'
       }`}
     >
-      <WindowTitleBar theme={theme} />
       <div
         className={`pointer-events-none absolute inset-0 ${
           isDark
@@ -111,7 +107,7 @@ export function AuthView() {
         }`}
       />
 
-      <div className="titlebar-no-drag absolute end-6 top-14 z-20 flex items-center gap-3">
+      <div className="absolute end-6 top-6 z-20 flex items-center gap-3">
         <button
           type="button"
           aria-label={t.languageToggle[language]}
@@ -138,7 +134,7 @@ export function AuthView() {
         </button>
       </div>
 
-      <div className="relative z-10 mx-auto flex h-[calc(100vh-2.5rem)] w-full max-w-5xl -translate-y-4 flex-col items-center justify-center px-6 pt-4">
+      <div className="relative z-10 mx-auto flex h-screen w-full max-w-5xl flex-col items-center justify-center px-6 pt-4">
         <div className="mb-5 flex flex-col items-center text-center">
           <img
             src={logo}

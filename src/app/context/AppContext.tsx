@@ -20,7 +20,6 @@ interface AppContextType {
 
   login: (token: string) => void;
   logout: () => void;
-
   toggleTheme: () => void;
   toggleLanguage: () => void;
 }
@@ -72,6 +71,7 @@ export function AppProvider({
 
   const logout = () => {
     localStorage.removeItem('authToken');
+    localStorage.removeItem('demoMode'); // Clears out the demo state accurately 
     setToken(null);
   };
 

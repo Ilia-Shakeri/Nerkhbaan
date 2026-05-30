@@ -18,7 +18,6 @@ import {
   PanelLeftOpen
 } from 'lucide-react';
 import { useAppContext } from '@/app/context/AppContext';
-import { WindowTitleBar } from '@/app/components/WindowTitleBar';
 import logo from '@/logo/logo.png';
 
 const NAV_ITEMS = [
@@ -27,17 +26,101 @@ const NAV_ITEMS = [
   { path: '/settings', label: { fa: 'تنظیمات', en: 'Settings' }, icon: Settings },
 ];
 
+// Extracted to prevent remounting on every state change and to keep animations smooth
+const SidebarContent = ({ 
+  collapsed = false, 
+  language, 
+  isDark, 
+  logout, 
+  setIsSidebarOpen 
+}: { 
+  collapsed?: boolean; 
+  language: 'fa' | 'en'; 
+  isDark: boolean; 
+  logout: () => void; 
+  setIsSidebarOpen: (val: boolean) => void;
+}) => (
+  <>
+    <div className="flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
+      <img
+        src={logo}
+        alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
+        className={`object-contain transition-all duration-300 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
+      />
+    </div>
+
+    <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
+      {NAV_ITEMS.map((item) => (
+        <NavLink
+          key={item.path}
+          to={item.path}
+          onClick={() => setIsSidebarOpen(false)}
+          className={({ isActive }) =>
+            `flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+              isActive
+                ? 'bg-[#D4AF37] text-[#0A0A0A] shadow-[0_4px_20px_rgba(212,175,55,0.25)]'
+                : isDark
+                  ? 'text-[#CFBE91] hover:bg-[#191919] hover:text-[#F6E8C2]'
+                  : 'text-[#8A6B20] hover:bg-[#F6EBD0] hover:text-[#5D4614]'
+            } ${collapsed ? 'justify-center px-2' : 'gap-3'}`
+          }
+        >
+          <item.icon size={18} />
+          <motion.span
+            initial={false}
+            animate={
+              collapsed
+                ? { opacity: 0, width: 0, x: -6 }
+                : { opacity: 1, width: 'auto', x: 0 }
+            }
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden whitespace-nowrap"
+          >
+            {item.label[language]}
+          </motion.span>
+        </NavLink>
+      ))}
+    </nav>
+
+    <div className="shrink-0 border-t border-[#D4AF37]/15 p-4">
+      <button
+        onClick={logout}
+        className={`flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+          isDark ? 'text-[#E6C977] hover:bg-[#1B1B1B]' : 'text-[#86631A] hover:bg-[#F6EBD0]'
+        } ${collapsed ? 'justify-center px-2' : 'gap-3'}`}
+      >
+        <LogOut size={18} />
+        <motion.span
+          initial={false}
+          animate={
+            collapsed
+              ? { opacity: 0, width: 0, x: -6 }
+              : { opacity: 1, width: 'auto', x: 0 }
+          }
+          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+          className="overflow-hidden whitespace-nowrap"
+        >
+          {language === 'fa' ? 'خروج از حساب' : 'Logout'}
+        </motion.span>
+      </button>
+    </div>
+  </>
+);
+
 export function DesktopLayout() {
-  const { language, theme, logout, toggleTheme, toggleLanguage } = useAppContext();
-  const { isAuthenticated } = useAppContext();
+  // Merged the duplicate useAppContext calls
+  const { language, theme, logout, toggleTheme, toggleLanguage, isAuthenticated } = useAppContext();
   const isDark = theme === 'dark';
-  
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
+
+  // Moved hooks above the early return to fix React Hooks violation
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Early return redirecting to /login instead of missing /auth route
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   const notifications = [
     {
@@ -60,96 +143,29 @@ export function DesktopLayout() {
     }
   ];
 
-  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
-    <>
-      <div className="flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
-        <img
-          src={logo}
-          alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
-          className={`object-contain transition-all duration-300 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
-        />
-      </div>
-
-      <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
-        {NAV_ITEMS.map((item) => (
-          <NavLink
-            key={item.path}
-            to={item.path}
-            onClick={() => setIsSidebarOpen(false)}
-            className={({ isActive }) =>
-              `flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-all ${
-                isActive
-                  ? 'bg-[#D4AF37] text-[#0A0A0A] shadow-[0_4px_20px_rgba(212,175,55,0.25)]'
-                  : isDark
-                    ? 'text-[#CFBE91] hover:bg-[#191919] hover:text-[#F6E8C2]'
-                    : 'text-[#8A6B20] hover:bg-[#F6EBD0] hover:text-[#5D4614]'
-              } ${collapsed ? 'justify-center px-2' : 'gap-3'}`
-            }
-          >
-            <item.icon size={18} />
-            <motion.span
-              initial={false}
-              animate={
-                collapsed
-                  ? { opacity: 0, width: 0, x: -6 }
-                  : { opacity: 1, width: 'auto', x: 0 }
-              }
-              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-              className="overflow-hidden whitespace-nowrap"
-            >
-              {item.label[language]}
-            </motion.span>
-          </NavLink>
-        ))}
-      </nav>
-
-      <div className="shrink-0 border-t border-[#D4AF37]/15 p-4">
-        <button
-          onClick={logout}
-          className={`flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-            isDark ? 'text-[#E6C977] hover:bg-[#1B1B1B]' : 'text-[#86631A] hover:bg-[#F6EBD0]'
-          } ${collapsed ? 'justify-center px-2' : 'gap-3'}`}
-        >
-          <LogOut size={18} />
-          <motion.span
-            initial={false}
-            animate={
-              collapsed
-                ? { opacity: 0, width: 0, x: -6 }
-                : { opacity: 1, width: 'auto', x: 0 }
-            }
-            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden whitespace-nowrap"
-          >
-            {language === 'fa' ? 'خروج از حساب' : 'Logout'}
-          </motion.span>
-        </button>
-      </div>
-    </>
-  );
-
+  // Removed WindowTitleBar and reset top margins to 0
   return (
     <div
       className={`flex h-screen w-full overflow-hidden transition-colors duration-500 ${
         isDark ? 'bg-[#050505] text-[#F2E8CC]' : 'bg-[#FFF8E8] text-[#4A3913]'
       }`}
     >
-      <div className="fixed inset-x-0 top-0 z-[70]">
-        {typeof window !== 'undefined' && window.electronAPI && (
-          <WindowTitleBar theme={theme} />
-        )}
-      </div>
-      
       {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
         animate={{ width: isSidebarCollapsed ? 80 : 256 }}
         transition={{ type: 'spring', stiffness: 170, damping: 26, mass: 1.05 }}
-        className={`mt-10 hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
+        className={`hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
           isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
         } will-change-[width]`}
       >
-        <SidebarContent collapsed={isSidebarCollapsed} />
+        <SidebarContent 
+          collapsed={isSidebarCollapsed} 
+          language={language}
+          isDark={isDark}
+          logout={logout}
+          setIsSidebarOpen={setIsSidebarOpen}
+        />
       </motion.aside>
 
       {/* Mobile Drawer Overlay */}
@@ -173,7 +189,7 @@ export function DesktopLayout() {
             animate={{ x: 0 }}
             exit={{ x: language === 'fa' ? '100%' : '-100%' }}
             transition={{ type: 'spring', bounce: 0.08, duration: 0.56 }}
-            className={`fixed bottom-0 top-10 z-50 flex w-72 flex-col ${
+            className={`fixed bottom-0 top-0 z-50 flex w-72 flex-col ${
               isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
             } lg:hidden ${
               language === 'fa' ? 'right-0 border-l border-[#D4AF37]/15' : 'left-0 border-r border-[#D4AF37]/15'
@@ -185,13 +201,18 @@ export function DesktopLayout() {
             >
               <X size={20} />
             </button>
-            <SidebarContent />
+            <SidebarContent 
+              language={language}
+              isDark={isDark}
+              logout={logout}
+              setIsSidebarOpen={setIsSidebarOpen}
+            />
           </motion.aside>
         )}
       </AnimatePresence>
 
       {/* Main Content */}
-      <div className="relative mt-10 flex flex-1 flex-col overflow-hidden">
+      <div className="relative flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}
         <header
           className={`z-10 flex h-16 shrink-0 items-center justify-between border-b border-[#D4AF37]/12 px-6 backdrop-blur-md transition-colors duration-500 ${
@@ -302,7 +323,7 @@ export function DesktopLayout() {
                             }`}
                           >
                             {!notif.read && (
-                               <div className="absolute top-4 start-1.5 h-1.5 w-1.5 rounded-full bg-[#10B981]" />
+                              <div className="absolute top-4 start-1.5 h-1.5 w-1.5 rounded-full bg-[#10B981]" />
                             )}
                             <span className={`ps-2 ${isDark ? 'text-[#E8DBB5]' : 'text-[#5D4614]'} ${!notif.read ? 'font-medium' : ''}`}>
                               {notif.title[language]}
