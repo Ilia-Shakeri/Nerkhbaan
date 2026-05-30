@@ -33,7 +33,7 @@ export function DesktopLayout() {
   const isDark = theme === 'dark';
   
   if (!isAuthenticated) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/login" replace />;
   }
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);

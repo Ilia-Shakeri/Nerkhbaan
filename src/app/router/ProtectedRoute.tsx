@@ -1,8 +1,8 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useAuthStore } from "@/app/store/authStore";
+import { useAppContext } from "@/app/context/AppContext";
 
 export function ProtectedRoute() {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { isAuthenticated } = useAppContext();
   const location = useLocation();
 
   if (!isAuthenticated) {

@@ -1,11 +1,11 @@
-import { useEffect } from "react";
 import { BrowserRouter, useNavigate } from "react-router-dom";
 import { AppRouter } from "@/app/router/AppRouter";
-import { AUTH_UNAUTHORIZED_EVENT } from "@/lib/auth";
-import { useAuthStore } from "@/app/store/authStore";
+import { AppProvider, useAppContext } from "@/app/context/AppContext";
+import { Toaster } from "sonner";
+import { useEffect } from "react";
 
 function AuthEventsBridge() {
-  const logout = useAuthStore((state) => state.logout);
+  const { logout } = useAppContext();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -14,8 +14,8 @@ function AuthEventsBridge() {
       navigate("/login", { replace: true });
     };
 
-    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
-    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, onUnauthorized);
+    window.addEventListener("auth-expired", onUnauthorized);
+    return () => window.removeEventListener("auth-expired", onUnauthorized);
   }, [logout, navigate]);
 
   return null;
@@ -23,9 +23,12 @@ function AuthEventsBridge() {
 
 export function App() {
   return (
-    <BrowserRouter>
-      <AuthEventsBridge />
-      <AppRouter />
-    </BrowserRouter>
+    <AppProvider>
+      <BrowserRouter>
+        <AuthEventsBridge />
+        <AppRouter />
+        <Toaster position="top-center" richColors />
+      </BrowserRouter>
+    </AppProvider>
   );
 }
