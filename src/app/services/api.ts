@@ -100,8 +100,17 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       let message = `HTTP ${response.status}`;
       try {
         const body = await response.json();
-        if (body?.detail && typeof body.detail === 'string') {
-          message = body.detail;
+        
+        // Handle FastAPI string errors and array-based Pydantic validation errors
+        if (body?.detail) {
+          if (typeof body.detail === 'string') {
+            message = body.detail;
+          } else if (Array.isArray(body.detail)) {
+            // Extract the exact FastAPI missing fields
+            message = body.detail.map((err: any) => 
+              `${err.loc[err.loc.length - 1]}: ${err.msg}`
+            ).join(', ');
+          }
         }
       } catch {
         // Ignore JSON parsing errors for error bodies, fallback to HTTP status
@@ -116,12 +125,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 
   } catch (error: any) {
     clearTimeout(timeoutId);
-    
+
     // Catch the specific abort event and return a user-friendly error
     if (error.name === 'AbortError') {
       throw new Error('Request timed out. Please check your network connection.');
     }
-    
+
     throw error;
   }
 }
