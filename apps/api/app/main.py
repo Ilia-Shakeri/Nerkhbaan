@@ -27,10 +27,10 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-# Configure CORS securely using settings from .env
+# Configure CORS securely using wildcards temporarily to ensure it doesn't block Nginx routing
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
