@@ -63,6 +63,7 @@ def main() -> int:
 
     base_url = args.base_url.rstrip("/")
     nonce = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    username = f"smoke_user_{nonce}"
     email = f"smoke.{nonce}@example.com"
     password = "TestPass123!"
     full_name = "Smoke Test User"
@@ -74,7 +75,7 @@ def main() -> int:
     signup = request_json(
         "POST",
         f"{base_url}/api/auth/signup",
-        payload={"full_name": full_name, "email": email, "password": password},
+        payload={"username": username, "full_name": full_name, "email": email, "password": password},
     )
     signup_token = signup.get("access_token")
     if not signup_token:
@@ -84,7 +85,7 @@ def main() -> int:
     signin = request_json(
         "POST",
         f"{base_url}/api/auth/signin",
-        payload={"email": email, "password": password},
+        payload={"username_or_email": email, "password": password},
     )
     signin_token = signin.get("access_token")
     if not signin_token:
@@ -102,7 +103,7 @@ def main() -> int:
         raise RuntimeError(f"Prices response missing assets: {sorted(missing)}")
 
     print("\nSmoke test passed.")
-    print(f"- User: {email}")
+    print(f"- User: {email} / {username}")
     print(f"- Assets: {sorted(symbols)}")
     print(f"- Sources: {prices.get('source')}")
     return 0
