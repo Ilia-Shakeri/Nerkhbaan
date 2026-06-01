@@ -4,7 +4,7 @@ services:
   frontend:
     image: nerkhbaan-frontend
     build:
-      context: ../Nerkhbaan-web
+      context: ./apps/web
       dockerfile: Dockerfile
     container_name: nerkhbaan-frontend
     # Map port 80 inside the container to port 3000 on the host loopback interface
@@ -16,7 +16,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ./apps/api
     container_name: nerkhbaan-backend
     restart: unless-stopped
     depends_on:

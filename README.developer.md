@@ -1,22 +1,24 @@
 # 🛠️ Nerkhbaan Developer Guide
 
-Welcome to the Nerkhbaan internal documentation. This guide covers local environment setup, architecture patterns, and testing protocols required for contributing to the codebase.
+Welcome to the Nerkhbaan internal documentation. This guide covers local environment setup, our monorepo architecture patterns, and the testing protocols required for contributing to the codebase.
 
 ## 💻 Tech Stack
-- **Desktop Wrapper:** Electron (Main/Preload processes)
-- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS
-- **Backend:** Python 3.11+, FastAPI, Pydantic, SQLAlchemy
-- **Database:** PostgreSQL 16
-- **Containerization:** Docker & Docker Compose
+- **Workspace Management:** NPM Workspaces
+- **Backend (`apps/api`):** Python 3.11+, FastAPI, Pydantic, SQLAlchemy, PostgreSQL 16
+- **Web (`apps/web`):** React 18, TypeScript, Vite, Tailwind CSS
+- **Desktop (`apps/desktop`):** Electron, React 18, TypeScript, Vite
 
 ## 📂 Repository Structure
 ```text
 Nerkhbaan/
-├── backend/            # FastAPI microservice, async fetchers, pricing logic
-├── frontend/           # React SPA, state management, UI components
-├── electron/           # Electron main thread, IPC bridges
-├── docker-compose.yaml # Infrastructure orchestration
-└── README.developer.md # This file
+├── apps/
+│   ├── api/             # FastAPI microservice and pricing fetchers
+│   ├── desktop/         # Electron wrapper and React desktop UI
+│   └── web/             # Web application frontend
+├── docker-compose.yaml  # Infrastructure orchestration for production
+├── package.json         # Root workspace configuration and scripts
+├── README.md            # Public repository documentation
+└── README.developer.md  # This file
 ```
 
 ## ⚙️ Local Development Setup
@@ -31,70 +33,65 @@ Ensure you have the following installed on your machine:
 
 ### 2. Environment Configuration
 
-Duplicate the example environment file and populate it with your local keys:
+Duplicate the example environment file for the backend and populate it with your local keys:
 
 ```bash
-cd backend
+cd apps/api
 cp .env.example .env
+cd ../..
 ```
 
-*Note: The system checks `PRICING_REQUIRE_PROVIDER_KEYS` on startup. If set to `false`, the app boots successfully without API keys and utilizes the cache/fallback logic.*
+*Note: The system checks `PRICING_REQUIRE_PROVIDER_KEYS` on startup. If set to `false`, the API boots successfully without external keys and intelligently utilizes the cache/fallback logic.*
 
 ### 3. Initialize the Database
 
-Spin up the local PostgreSQL container:
+Spin up the local PostgreSQL container from the root directory:
 
 ```bash
 docker compose up -d postgres
 ```
 
-### 4. Start the Backend
+### 4. Install Dependencies
 
-Navigate to the `backend` directory, initialize the virtual environment, and run Uvicorn:
+Install all Node modules across the monorepo workspaces:
 
 ```bash
+npm install
+```
+
+Set up the Python virtual environment for the backend:
+
+```bash
+cd apps/api
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+cd ../..
 ```
 
-### 5. Start the Frontend & Electron Shell
+### 5. Running the Ecosystem
 
-In a new terminal window at the project root:
+The root `package.json` contains unified scripts to start any part of the stack.
 
-```bash
-# Install root, frontend, and electron dependencies
-npm install
-cd frontend && npm install && cd ..
-
-# Launch the dev environment
-npm run dev
-```
+* **Start Backend API:** `npm run dev:api`
+* **Start Web App:** `npm run dev:web`
+* **Start Desktop App:** `npm run dev:desktop`
 
 ## 🧠 System Behavior: The Pricing Engine
 
-The core value of Nerkhbaan relies on its zero-downtime pricing fetcher. The logic flows as follows:
+The core value of Nerkhbaan relies on a highly resilient, zero-downtime pricing engine located in `apps/api/app/services`. The logic flows as follows:
 
 1. **Chain Execution:** Assets (`gold`, `silver`, `usdt`, `btc`) are fetched via isolated provider chains. Iranian and International markets execute concurrently.
-2. **Fallback Mechanism:** The primary API is polled. On timeout or 5xx error, the system instantly routes the request to the secondary provider.
-3. **Last-Resort Cache:** If the entire chain fails (e.g., global network outage), the system reads the last known valid state from `backend/price_cache.json`.
+2. **Fallback Mechanism:** The primary API is polled. On timeout or a 5xx error, the system instantly routes the request to the secondary provider.
+3. **Last-Resort Cache:** If the entire chain fails (e.g., a global network outage), the system reads the last known valid state from `price_cache.json`.
 4. **Transparency:** API responses always attach a health status flag: `live`, `cached`, or `unavailable`.
 
 ## 🧪 Testing
 
 ### Smoke Tests
 
-Before pushing commits, verify the integration points of the pricing engine:
+Before pushing commits, verify the integration points of the pricing engine. Ensure your backend server is running locally, then execute:
 
 ```bash
-python backend/scripts/integration_smoke_test.py
+python apps/api/scripts/integration_smoke_test.py --base-url [http://127.0.0.1:8000](http://127.0.0.1:8000)
 ```
-
-### Core API Endpoints
-
-* `GET /health` - System health check
-* `GET /api/prices` - Fetch unified market data
-* `GET /api/prices/health` - Check provider latency and status
-* `GET /api/providers` - List active fallback chains

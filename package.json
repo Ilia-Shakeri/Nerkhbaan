@@ -1,24 +1,15 @@
 {
-  "name": "nerkhbaan-desktop",
-  "version": "1.0.0",
+  "name": "nerkhbaan-monorepo",
   "private": true,
-  "main": "electron/main.cjs",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "backend": "cd backend && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
-    "frontend": "cd frontend && npm run dev",
-    "electron": ".\\vendor\\electron\\win32-x64\\electron.exe --disable-gpu --disable-extensions --user-data-dir=C:\\Temp\\nerkhbaan-electron .",
-    "dev": "concurrently \"npm run frontend\" \"wait-on http://localhost:5173 && npm run electron\"",
-    "dev:full": "concurrently \"npm run backend\" \"npm run frontend\" \"wait-on http://localhost:5173 http://localhost:8000/health && npm run electron\"",
-    "start": "npm run dev",
-    "build:frontend": "cd frontend && npm run build"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2",
-    "electron": "^42.2.0",
-    "vite-tsconfig-paths": "^6.1.1",
-    "wait-on": "^7.2.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "dev:api": "cd apps/api && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:desktop": "cd apps/desktop && npm run dev",
+    "build:web": "cd apps/web && npm run build",
+    "build:desktop": "cd apps/desktop && npm run build"
   }
 }
