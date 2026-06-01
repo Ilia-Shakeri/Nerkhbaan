@@ -148,7 +148,7 @@ class PricingFetcher:
             except Exception as exc:
                 last_error = exc
                 if attempt < attempts - 1:
-                    # Exponential backoff (1s, 1.5s, 2.25s) to recover from rate limiting
+                    # Exponential backoff to recover from rate limiting anomalies
                     await asyncio.sleep(1.5 ** attempt)
 
         raise RuntimeError(str(last_error) if last_error else "provider failed")
@@ -254,19 +254,20 @@ class PricingFetcher:
         if not isinstance(record, dict):
             return None
 
-        for key in ("price", "value", "last", "rate", "buy", "sell", "close"):
-            if key in record:
-                number = self.to_float(record.get(key))
-                if number is not None:
-                    return number
+        # UPGRADE: Explicitly include 'lastTradePrice' for Nobitex strings 
+        # and shortened variants like 'p' / 'l' typical for TGJU JSON schemas
+        target_keys = ("lasttradeprice", "price", "value", "last", "rate", "buy", "sell", "close", "p", "l")
+        for target in target_keys:
+            for key in record.keys():
+                if str(key).lower() == target or target in str(key).lower():
+                    number = self.to_float(record.get(key))
+                    if number is not None:
+                        return number
 
         for value in record.values():
-            if isinstance(value, (int, float)):
-                return float(value)
-            if isinstance(value, str):
-                number = self.to_float(value)
-                if number is not None:
-                    return number
+            number = self.to_float(value)
+            if number is not None:
+                return number
 
         return None
 

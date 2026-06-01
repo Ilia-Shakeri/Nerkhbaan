@@ -32,6 +32,7 @@ services:
     # Map port 8000 inside the container to port 8000 on the host loopback interface
     ports:
       - "127.0.0.1:8000:8000"
+    network_mode: host
 
   postgres:
     image: postgres:16-alpine
