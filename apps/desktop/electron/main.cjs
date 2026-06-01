@@ -17,7 +17,7 @@ function createWindow() {
     titleBarStyle: 'hidden',
     autoHideMenuBar: true,
     backgroundColor: '#060606',
-    icon: path.join(__dirname, '../frontend/src/logo/logo.png'),
+    icon: path.join(__dirname, '../src/logo/logo.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -31,7 +31,7 @@ function createWindow() {
       console.log('Make sure the Vite dev server is running on port 5173');
     });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../frontend/dist/index.html')).catch(err => {
+    mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(err => {
       console.error('Failed to load production build:', err);
     });
   }
