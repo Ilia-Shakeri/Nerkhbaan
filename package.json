@@ -1,0 +1,14 @@
+{
+  "name": "nerkhbaan-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "cd apps/api && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:desktop": "cd apps/desktop && npm run dev",
+    "desktop:electron": "cd apps/desktop && .\\vendor\\electron\\win32-x64\\electron.exe --disable-gpu --disable-extensions --user-data-dir=C:\\Temp\\nerkhbaan-electron ."
+  }
+}
