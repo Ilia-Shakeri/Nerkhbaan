@@ -1,48 +1,52 @@
-from fastapi import Depends, FastAPI
+import logging
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
 
-from .config import settings
-from .db import Base, engine
-from .deps import get_current_user
-from .models import User
-from .routers.auth import router as auth_router
-from .routers.providers import router as providers_router
-from .routers.prices import router as prices_router
-from .schemas import UserResponse
-from .services.pricing import pricing_service
+from app.config import settings
+from app.routers import auth, prices, providers
+from app.db import init_db
 
-app = FastAPI(title="Nerkhbaan API", version="1.0.0")
+# Initialize logger
+logger = logging.getLogger(__name__)
 
-# Compress large payloads (like pricing history arrays) to reduce network lag
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle manager for startup and shutdown events."""
+    logger.info("Starting up API and initializing database...")
+    await init_db()
+    yield
+    logger.info("Shutting down API...")
 
-origins = [origin.strip() for origin in settings.allowed_origins.split(",") if origin.strip()]
+app = FastAPI(
+    title="Nerkhbaan API",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
+    redoc_url="/api/redoc"
+)
+
+# Configure CORS securely using settings from .env
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    max_age=86400, # Cache CORS preflight options for 24 hours to cut latency in half
 )
 
-app.include_router(auth_router)
-app.include_router(prices_router)
-app.include_router(providers_router)
+# Mount standard routers with the correct /api prefixes
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(prices.router, prefix="/api/prices", tags=["Prices"])
+app.include_router(providers.router, prefix="/api/providers", tags=["Providers"])
 
-
-@app.on_event("startup")
-def on_startup() -> None:
-    Base.metadata.create_all(bind=engine)
-    pricing_service.refresh_startup_checks()
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/api/auth/me", response_model=UserResponse)
-def get_me(current_user: User = Depends(get_current_user)) -> UserResponse:
-    return UserResponse.model_validate(current_user)
+@app.get("/api/health", tags=["System"])
+@app.get("/health", tags=["System"])
+async def health_check():
+    """
+    Health check endpoint.
+    Mapped to both /health and /api/health to accommodate internal Docker routing
+    as well as external Nginx reverse proxies.
+    """
+    return {"status": "ok", "version": "1.0.0"}
