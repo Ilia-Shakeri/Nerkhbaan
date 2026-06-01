@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 219 69% 8%;
+  --foreground: 190 95% 90%;
+  --card: 219 56% 14%;
+  --primary: 187 100% 57%;
+  --muted: 216 32% 20%;
+  --ring: 187 100% 57%;
+}
+
+* {
+  border-color: hsl(187 71% 35% / 0.24);
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  color: hsl(var(--foreground));
+  background:
+    radial-gradient(circle at 12% 16%, rgba(34, 211, 238, 0.17), transparent 28%),
+    radial-gradient(circle at 80% 18%, rgba(16, 185, 129, 0.09), transparent 26%),
+    linear-gradient(135deg, #020817 0%, #0a1630 40%, #071224 100%);
+  font-family: "JetBrains Mono", "SF Mono", "Fira Code", ui-monospace, Menlo, Monaco, Consolas, monospace;
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(34, 211, 238, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 211, 238, 0.05) 1px, transparent 1px);
+  background-size: 36px 36px;
+}
+
+.titlebar-drag {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.titlebar-no-drag,
+.titlebar-no-drag * {
+  -webkit-app-region: no-drag;
+}
