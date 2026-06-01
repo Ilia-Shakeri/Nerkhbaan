@@ -1,0 +1,10 @@
+/* src/styles/index.css */
+
+/* 1. All external libraries and custom themes MUST be imported first */
+@import 'tw-animate-css';
+@import './theme.css';
+
+/* 2. Load Tailwind core directives after standard imports */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
