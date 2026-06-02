@@ -1,12 +1,14 @@
 ﻿import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.routers import auth, prices, providers
-from app.db import engine, Base
+from app.db import engine, Base, get_db
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 # CRITICAL FIX: We MUST import models here before create_all() 
 # so SQLAlchemy knows which tables to build in the database.
@@ -62,11 +64,23 @@ app.include_router(providers.router, tags=["Providers"])
 
 @app.get("/api/health", tags=["System"])
 @app.get("/health", tags=["System"])
-async def health_check():
+async def health_check(db: Session = Depends(get_db)):
     """
-    Health check endpoint mapped to both /health and /api/health.
+    Health check endpoint that verifies database connectivity.
     """
-    return {"status": "operational", "version": "1.0.0", "message": "Nerkhbaan API is fully responsive."}
+    try:
+        # Execute a lightweight query to ensure the database is responsive
+        db.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as e:
+        logger.error(f"Health check database failure: {e}")
+        db_status = "disconnected"
+        
+    return {
+        "status": "operational" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "version": "1.0.0"
+    }
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -76,3 +90,4 @@ async def global_exception_handler(request: Request, exc: Exception):
         status_code=500,
         content={"error": "Internal Server Error", "detail": str(exc), "path": request.url.path}
     )
+

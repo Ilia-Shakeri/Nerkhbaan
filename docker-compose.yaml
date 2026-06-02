@@ -23,11 +23,11 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+psycopg://nerkhbaan:${POSTGRES_PASSWORD:-nerkhbaan}@postgres:5432/nerkhbaan
+      DATABASE_URL: postgresql+psycopg://nerkhbaan:${POSTGRES_PASSWORD}@postgres:5432/nerkhbaan
       API_HOST: 0.0.0.0
       API_PORT: 8000
       # Ensure your production domain is allowed for CORS
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,https://nerkhbaan.ir}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       ALANCHAND_API_TOKEN: ${ALANCHAND_API_TOKEN:-}
     # Map port 8000 inside the container to port 8000 on the host loopback interface
     ports:
@@ -39,7 +39,7 @@ services:
     environment:
       POSTGRES_DB: nerkhbaan
       POSTGRES_USER: nerkhbaan
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nerkhbaan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - '127.0.0.1:5432:5432'
     volumes:
@@ -52,3 +52,4 @@ services:
 
 volumes:
   postgres_data:
+
