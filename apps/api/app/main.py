@@ -1,4 +1,4 @@
-import logging
+﻿import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -45,7 +45,7 @@ app = FastAPI(
 # Configure CORS securely (fallback to allow all for dev)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=settings.allowed_origins.split(','), # Bound to secure configs to prevent CORS crashes, 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

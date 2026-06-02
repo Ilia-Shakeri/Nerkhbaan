@@ -117,7 +117,8 @@ export const formatPrice = (value: number | null | undefined, mode: CurrencyMode
     const formatted = new Intl.NumberFormat(locale, {
       maximumFractionDigits: 0
     }).format(value);
-    return language === 'fa' ? formatted + ' ØªÙˆÙ…Ø§Ù†' : 'Toman ' + formatted;
+    return language === 'fa' ? formatted + ' تومان' : 'Toman ' + formatted;
   }
 };
+
 
