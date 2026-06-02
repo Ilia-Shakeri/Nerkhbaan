@@ -21,7 +21,8 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src')
+      '@': path.resolve(__dirname, './src'),
+      '@nerkhbaan/ui': path.resolve(__dirname, '../../packages/ui/src')
     }
   },
   assetsInclude: ['**/*.svg', '**/*.csv'],

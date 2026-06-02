@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft } from 'lucide-react';
-import { Input } from '../components/ui/input';
-import { Button } from '../components/ui/button';
+import { Input } from '@nerkhbaan/ui/app/components/ui/input';
+import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { api } from '../services/api';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';

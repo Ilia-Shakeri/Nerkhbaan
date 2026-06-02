@@ -1,4 +1,4 @@
-import { AUTH_TOKEN_KEY } from "@/lib/auth";
+import { AUTH_TOKEN_KEY } from '@nerkhbaan/ui/lib/auth';
 
 function base64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);

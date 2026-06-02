@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { AUTH_TOKEN_KEY } from "@/lib/auth";
+import { AUTH_TOKEN_KEY } from '@nerkhbaan/ui/lib/auth';
 
 type AuthState = {
   token: string | null;

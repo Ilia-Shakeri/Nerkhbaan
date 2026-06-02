@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { BellRing, BellOff, Pencil, Trash2, ArrowUpRight, ArrowDownRight, Search } from 'lucide-react';
-import { Card } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Switch } from '../components/ui/switch';
-import { Input } from '../components/ui/input';
+import { Card } from '@nerkhbaan/ui/app/components/ui/card';
+import { Button } from '@nerkhbaan/ui/app/components/ui/button';
+import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
+import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { useAppContext } from '../context/AppContext';
 
 type Alert = {

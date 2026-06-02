@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 
 // Ensure the base URL correctly points to the API gateway
 const baseURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
@@ -73,3 +73,51 @@ export const api = {
     }
   }
 };
+// Added missing types and formatting functions for the pricing dashboard
+export type CurrencyMode = 'usd' | 'toman';
+
+export type PriceAsset = {
+  asset: string;
+  label_fa: string;
+  label_en: string;
+  price_usd: number | null;
+  price_toman: number | null;
+  change_percent: number;
+  trend: 'up' | 'down';
+  history: any[];
+  source_usd: string;
+  source_toman: string;
+  usd_status: 'live' | 'cached' | 'unavailable';
+  toman_status: 'live' | 'cached' | 'unavailable';
+  stale_minutes: number | null;
+  chart_error: boolean;
+  chart_error_message: { fa: string; en: string };
+};
+
+// Fetch real-time market prices from the backend
+export const getPrices = async () => {
+  const { data } = await apiInstance.get('/prices');
+  return data;
+};
+
+// Utility to format prices based on the selected currency and language
+export const formatPrice = (value: number | null | undefined, mode: CurrencyMode, language: 'en' | 'fa'): string => {
+  if (value === null || value === undefined) return '--';
+  const locale = language === 'fa' ? 'fa-IR' : 'en-US';
+  
+  if (mode === 'usd') {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(value);
+  } else {
+    // Format Toman without fractional digits
+    const formatted = new Intl.NumberFormat(locale, {
+      maximumFractionDigits: 0
+    }).format(value);
+    return language === 'fa' ? formatted + ' ØªÙˆÙ…Ø§Ù†' : 'Toman ' + formatted;
+  }
+};
+

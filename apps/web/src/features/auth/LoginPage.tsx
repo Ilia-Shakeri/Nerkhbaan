@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect, FormEvent } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { KeyRound } from "lucide-react";
-import { authApi } from "@/lib/api/auth";
+import { authApi } from '@nerkhbaan/ui/lib/api/auth';
 import { useAuthStore } from "@/store/authStore";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
+import { Input } from '@nerkhbaan/ui/app/components/ui/input';
+import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 
 export function LoginPage() {
   const navigate = useNavigate();

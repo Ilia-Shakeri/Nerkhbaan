@@ -2,7 +2,7 @@ import { Bell, LayoutDashboard, LogOut, Menu, Settings, ShieldAlert } from "luci
 import { NavLink, Outlet } from "react-router-dom";
 import { useState } from "react";
 import { useAuthStore } from "@/app/store/authStore";
-import { cn } from "@/lib/utils";
+import { cn } from '@nerkhbaan/ui/lib/utils';
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },

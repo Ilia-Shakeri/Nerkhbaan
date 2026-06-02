@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
-import { fetchPrices, type PriceAsset } from "@/lib/api/prices";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchPrices, type PriceAsset } from '@nerkhbaan/ui/lib/api/prices';
+import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 
 export function DashboardPage() {
   const [assets, setAssets] = useState<PriceAsset[]>([]);

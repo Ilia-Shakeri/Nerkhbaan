@@ -7,9 +7,9 @@
   ],
   "scripts": {
     "dev:api": "cd apps/api && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
-    "dev:web": "cd apps/web && npm run dev",
-    "dev:desktop": "cd apps/desktop && npm run dev",
-    "build:web": "cd apps/web && npm run build",
-    "build:desktop": "cd apps/desktop && npm run build"
+    "dev:web": "npm run dev --workspace=nerkhbaan-web",
+    "dev:desktop": "npm run dev --workspace=nerkhbaan-desktop",
+    "build:web": "npm run build --workspace=nerkhbaan-web",
+    "build:desktop": "npm run build --workspace=nerkhbaan-desktop"
   }
 }
