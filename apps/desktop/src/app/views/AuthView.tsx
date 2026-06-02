@@ -1,3 +1,4 @@
+// apps/desktop/src/app/views/AuthView.tsx
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Activity } from 'lucide-react';
@@ -31,17 +32,32 @@ export function AuthView() {
     email: { fa: 'ایمیل', en: 'Email' },
     identifier: { fa: 'نام کاربری یا ایمیل', en: 'Username or Email' },
     password: { fa: 'رمز عبور', en: 'Password' },
-    forgot: { fa: 'فراموشی رمز عبور؟', en: 'Forgot password?' },
+    forgot: { fa: 'رمز عبور خود را فراموش کرده‌اید؟ بازیابی رمز', en: 'Forgot your password? Reset it here' },
     signIn: { fa: 'ورود به حساب', en: 'Sign In' },
     createAccount: { fa: 'ایجاد حساب', en: 'Create Account' },
-    terms: { fa: 'با ادامه، شما با شرایط استفاده موافقید', en: 'By continuing, you agree to our Terms' },
+    terms: { fa: 'با ادامه، شما با شرایط استفاده موافقت میکنید', en: 'By continuing, you agree to our Terms' },
     success: { fa: 'با موفقیت وارد شدید', en: 'Logged in successfully' },
     created: { fa: 'حساب کاربری ساخته شد', en: 'Account created' },
-    failed: { fa: 'خطا در انجام عملیات', en: 'Operation failed' }
+    failed: { fa: 'خطا در انجام عملیات', en: 'Operation failed' },
+    pwdUpper: { fa: 'حروف بزرگ', en: 'Uppercase letter' },
+    pwdLower: { fa: 'حروف کوچک', en: 'Lowercase letter' },
+    pwdNumSym: { fa: 'عدد یا نماد', en: 'Number or Symbol' },
+    pwdLength: { fa: 'حداقل ۸ کاراکتر', en: 'At least 8 characters' }
   };
+
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumSym = /[0-9!@#$%^&*(),.?":{}|<>]/.test(password);
+  const hasLength = password.length >= 8;
+  const isPasswordValid = hasUpper && hasLower && hasNumSym && hasLength;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isLogin && !isPasswordValid) {
+      toast.error(language === 'fa' ? 'رمز عبور شرایط لازم را ندارد' : 'Password does not meet requirements');
+      return;
+    }
+    
     setIsSubmitting(true);
     try {
       if (isLogin) {
@@ -86,23 +102,45 @@ export function AuthView() {
           {isLogin && (
             <div className="space-y-2">
               <Input placeholder={t.identifier[language]} value={identifier} onChange={(e) => setIdentifier(e.target.value)} />
-              <div className="flex justify-end">
-                <Link to="/forgot-password" className="text-xs text-[#D4AF37] hover:underline">
-                  {t.forgot[language]}
-                </Link>
-              </div>
             </div>
           )}
 
-          <Input type="password" placeholder={t.password[language]} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <div className="space-y-2">
+            <Input type="password" placeholder={t.password[language]} value={password} onChange={(e) => setPassword(e.target.value)} />
+            
+            {!isLogin && password.length > 0 && (
+              <div className="text-xs space-y-1 mt-2 p-2 rounded bg-black/5 dark:bg-white/5">
+                <p className={hasUpper ? "text-green-500" : "text-red-500"}>
+                  {hasUpper ? '✓' : '✗'} {t.pwdUpper[language]}
+                </p>
+                <p className={hasLower ? "text-green-500" : "text-red-500"}>
+                  {hasLower ? '✓' : '✗'} {t.pwdLower[language]}
+                </p>
+                <p className={hasNumSym ? "text-green-500" : "text-red-500"}>
+                  {hasNumSym ? '✓' : '✗'} {t.pwdNumSym[language]}
+                </p>
+                <p className={hasLength ? "text-green-500" : "text-red-500"}>
+                  {hasLength ? '✓' : '✗'} {t.pwdLength[language]}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {isLogin && (
+            <div className="flex justify-end pt-1">
+              <Link to="/forgot-password" className="text-sm font-medium text-[#D4AF37] hover:underline transition-all">
+                {t.forgot[language]}
+              </Link>
+            </div>
+          )}
           
-          <Button type="submit" disabled={isSubmitting} className="w-full">
+          <Button type="submit" disabled={isSubmitting || (!isLogin && !isPasswordValid)} className="w-full">
             {isSubmitting ? '...' : (isLogin ? t.signIn[language] : t.createAccount[language])}
           </Button>
         </form>
 
-        <button onClick={() => setIsLogin(!isLogin)} className="mt-4 w-full text-sm text-center opacity-70 hover:opacity-100">
-          {isLogin ? 'Don\'t have an account? Sign Up' : 'Already have an account? Login'}
+        <button onClick={() => setIsLogin(!isLogin)} className="mt-4 w-full text-sm text-center opacity-70 hover:opacity-100 transition-opacity">
+          {isLogin ? "Don't have an account? Sign Up" : 'Already have an account? Login'}
         </button>
       </motion.div>
     </div>
