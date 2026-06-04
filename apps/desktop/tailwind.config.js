@@ -43,12 +43,13 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
       },
+      // Increased radius for a professional, modern look
       borderRadius: {
-        sm: "var(--radius-sm)",
-        md: "var(--radius-md)",
-        lg: "var(--radius-lg)",
-        xl: "var(--radius-xl)",
-        "2xl": "var(--radius-2xl)",
+        sm: "0.5rem",
+        md: "0.75rem",
+        lg: "1rem",
+        xl: "1.5rem",
+        "2xl": "2rem",
       },
       fontFamily: {
         sans: ['Vazir', 'sans-serif'],

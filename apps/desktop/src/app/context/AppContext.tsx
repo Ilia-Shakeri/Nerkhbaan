@@ -50,12 +50,6 @@ export function AppProvider({
   const isAuthenticated = !!token;
 
   useEffect(() => {
-    localStorage.setItem('language', language);
-    document.documentElement.dir = language === 'fa' ? 'rtl' : 'ltr';
-    document.documentElement.lang = language;
-  }, [language]);
-
-  useEffect(() => {
     localStorage.setItem('theme', theme);
 
     if (theme === 'dark') {
@@ -64,6 +58,16 @@ export function AppProvider({
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
+
+  // Bind listener to intercept API authorization expiration events
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      logout();
+    };
+    
+    window.addEventListener('auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('auth-expired', handleAuthExpired);
+  }, []);
 
   const login = (newToken: string) => {
     localStorage.setItem('authToken', newToken);

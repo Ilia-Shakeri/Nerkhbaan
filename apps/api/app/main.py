@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import settings
 from app.routers import auth, prices, providers
 from app.db import engine, Base, get_db
@@ -91,3 +91,19 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"error": "Internal Server Error", "detail": str(exc), "path": request.url.path}
     )
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global catch-all to prevent silent failures."""
+    
+    # Allow standard HTTP exceptions to pass through to FastAPI's native handler
+    if isinstance(exc, StarletteHTTPException):
+        return JSONResponse(
+            status_code=exc.status_code, 
+            content={"detail": exc.detail}
+        )
+        
+    logger.error(f"Unhandled system error on {request.url.path}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"error": "Internal Server Error", "detail": str(exc), "path": request.url.path}
+    )

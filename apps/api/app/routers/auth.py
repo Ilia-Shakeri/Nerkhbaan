@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from pydantic import BaseModel, EmailStr
 
 from ..db import get_db
 from ..models import User
@@ -60,3 +61,12 @@ def forgot_password(email: str):
     # This is a stub for the password recovery flow
     # In a production environment, implement SMTP or SES email sending here
     return {"message": f"Password reset instructions sent to {email}"}
+
+class ForgotPasswordPayload(BaseModel):
+    email: EmailStr
+
+@router.post("/forgot-password")
+def forgot_password(payload: ForgotPasswordPayload):
+    # This is a stub for the password recovery flow
+    # In a production environment, implement SMTP or SES email sending here
+    return {"message": f"Password reset instructions sent to {payload.email}"}

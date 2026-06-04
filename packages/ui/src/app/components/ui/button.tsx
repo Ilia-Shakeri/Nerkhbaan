@@ -1,49 +1,54 @@
-import React from 'react';
-import { cn } from '../../../lib/utils';
-// @ts-ignore
-import { motion, HTMLMotionProps } from 'motion/react';
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+import { cn } from "./utils"
 
-export const buttonVariants = (props?: { variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger', size?: 'sm' | 'md' | 'lg' | 'icon', className?: string }) => {
-  const variant = props?.variant || 'primary';
-  const size = props?.size || 'md';
-  const variants: Record<string, string> = {
-    primary: 'bg-[#D4AF37] text-[#0A0A0A] hover:bg-[#C29D29] font-medium shadow-[0_4px_14px_0_rgba(212,175,55,0.39)]',
-    secondary: 'bg-[#0B1F3A] text-white hover:bg-[#0B1F3A]/90 dark:bg-white/10 dark:text-white dark:hover:bg-white/15',
-    outline: 'border border-gray-200 bg-transparent hover:bg-gray-100 text-gray-900 dark:border-white/10 dark:text-gray-100 dark:hover:bg-white/5',
-    ghost: 'bg-transparent hover:bg-gray-100 text-gray-700 dark:text-gray-300 dark:hover:bg-white/10',
-    danger: 'bg-[#EF4444] text-white hover:bg-red-600 shadow-[0_4px_14px_0_rgba(239,68,68,0.39)]',
-  };
+// Added glassmorphism effects, larger border radius, and smooth hover translations
+const buttonVariants = cva(
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl text-sm font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 backdrop-blur-md border border-white/10 dark:border-white/5 active:scale-95",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary/90 text-primary-foreground shadow-lg hover:bg-primary/100 hover:shadow-xl hover:-translate-y-0.5",
+        destructive: "bg-destructive/90 text-destructive-foreground shadow-md hover:bg-destructive/100 hover:shadow-lg hover:-translate-y-0.5",
+        outline: "border border-input bg-background/50 shadow-sm hover:bg-accent hover:text-accent-foreground",
+        secondary: "bg-secondary/80 text-secondary-foreground shadow-md hover:bg-secondary/100 hover:shadow-lg hover:-translate-y-0.5",
+        ghost: "hover:bg-accent/50 hover:text-accent-foreground border-transparent",
+        link: "text-primary underline-offset-4 hover:underline border-transparent",
+        primary: "bg-gradient-to-br from-[#D4AF37]/90 to-[#F3E2AB]/90 dark:from-[#D4AF37]/80 dark:to-[#B5952F]/80 text-black shadow-[0_4px_15px_rgba(212,175,55,0.2)] hover:shadow-[0_6px_20px_rgba(212,175,55,0.3)] hover:-translate-y-0.5",
+      },
+      size: {
+        default: "h-11 px-6 py-2",
+        sm: "h-9 rounded-xl px-4 text-xs",
+        lg: "h-12 rounded-2xl px-10 text-base",
+        icon: "h-11 w-11",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
 
-  const sizes: Record<string, string> = {
-    sm: 'h-8 px-3 text-xs rounded-lg',
-    md: 'h-10 px-4 py-2 text-sm rounded-xl',
-    lg: 'h-12 px-8 text-base rounded-2xl',
-    icon: 'h-10 w-10 flex items-center justify-center rounded-xl',
-  };
-
-  return cn(
-    "inline-flex items-center justify-center whitespace-nowrap transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]",
-    variants[variant],
-    sizes[size],
-    props?.className
-  );
-};
-
-export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg' | 'icon';
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
 }
 
-export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'primary', size = 'md', ...props }, ref) => {
-    
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
     return (
-      <button
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
-        className={buttonVariants({ variant, size, className })}
         {...props}
       />
-    );
+    )
   }
-);
-Button.displayName = "Button";
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }

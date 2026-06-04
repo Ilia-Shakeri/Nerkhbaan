@@ -5,7 +5,7 @@
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && .\\vendor\\electron\\win32-x64\\electron.exe --disable-gpu --disable-extensions --user-data-dir=C:\\Temp\\nerkhbaan-electron .\"",
+    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
