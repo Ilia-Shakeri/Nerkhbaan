@@ -243,8 +243,8 @@ export function AuthView() {
                   (!isLogin && !isPasswordValid) ? 'opacity-50 cursor-not-allowed' : ''
                 } ${
                   isDark 
-                    ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB] text-black shadow-[0_8px_32px_0_rgba(212,175,55,0.25)] hover:shadow-[0_8px_32px_0_rgba(212,175,55,0.4)] hover:scale-[1.02]' 
-                    : 'bg-gradient-to-r from-[#3B2E13] to-[#1F180A] text-white shadow-[0_8px_32px_0_rgba(59,46,19,0.25)] hover:shadow-[0_8px_32px_0_rgba(59,46,19,0.4)] hover:scale-[1.02]'
+                    ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB] text-black hover:shadow-[0_8px_32px_0_rgba(212,175,55,0.4)] hover:scale-[1.02]' 
+                    : 'bg-gradient-to-r from-[#3B2E13] to-[#1F180A] text-white hover:shadow-[0_8px_32px_0_rgba(59,46,19,0.4)] hover:scale-[1.02]'
                 }`}
               >
                 {isSubmitting ? (
