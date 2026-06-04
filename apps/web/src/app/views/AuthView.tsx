@@ -103,7 +103,7 @@ export function AuthView() {
 
   return (
     <div className={`flex min-h-screen flex-col items-center justify-center p-6 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`}>
-      <div className="absolute top-6 end-6 flex items-center gap-3">
+      <div className="absolute top-6 left-6 flex items-center gap-3">
         <button onClick={toggleLanguage} className={`flex h-10 items-center justify-center rounded-2xl px-4 text-xs font-bold shadow-sm transition-all hover:scale-105 ${isDark ? 'bg-white/5 text-[#E8D9AE] hover:bg-white/10' : 'bg-black/5 text-[#6B4E16] hover:bg-black/10'}`}>
           <Languages size={16} className="me-2" />
           {language === 'fa' ? 'English' : 'فارسی'}
@@ -133,7 +133,10 @@ export function AuthView() {
               </div>
               
               {/* Added pb-2 and px-1 to prevent the gradient clipping the edges of the Persian font */}
-              <h1 className={`text-4xl font-black tracking-tight pb-2 px-1 ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}>
+              <h1 
+                className={`tracking-tight pb-2 px-1 ${isRtl ? 'text-5xl font-normal' : 'text-4xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
+                style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
+              >
                 {t.brandName[language]}
               </h1>
               
@@ -146,7 +149,7 @@ export function AuthView() {
               {!isLogin && (
                 <>
                   <label className="block space-y-2">
-                    <span className={`text-sm font-bold ms-1 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.fullName[language]}</span>
+                    <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.fullName[language]}</span>
                     <div className="relative">
                       <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                       <Input
@@ -157,7 +160,7 @@ export function AuthView() {
                     </div>
                   </label>
                   <label className="block space-y-2">
-                    <span className={`text-sm font-bold ms-1 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.username[language]}</span>
+                    <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.username[language]}</span>
                     <div className="relative">
                       <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                       <Input
@@ -168,7 +171,7 @@ export function AuthView() {
                     </div>
                   </label>
                   <label className="block space-y-2">
-                    <span className={`text-sm font-bold ms-1 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.email[language]}</span>
+                    <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.email[language]}</span>
                     <div className="relative">
                       <Mail size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                       <Input
@@ -183,7 +186,7 @@ export function AuthView() {
 
               {isLogin && (
                 <label className="block space-y-2">
-                  <span className={`text-sm font-bold ms-1 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.identifierLabel[language]}</span>
+                  <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.identifierLabel[language]}</span>
                   <div className="relative">
                     <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                     <Input
@@ -196,7 +199,7 @@ export function AuthView() {
               )}
 
               <label className="block space-y-2">
-                <span className={`text-sm font-bold ms-1 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.password[language]}</span>
+                <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.password[language]}</span>
                 <div className="relative">
                   <Lock size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                   <Input
@@ -208,8 +211,8 @@ export function AuthView() {
               </label>
 
               {isLogin && (
-                <div className={`flex w-full mt-2 justify-end`}>
-                  <Link to="/forgot-password" className={`text-sm font-bold transition-colors hover:underline ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
+                <div className={`flex w-full mt-2 justify-start`}>
+                  <Link to="/forgot-password" className={`text-sm font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
                     {t.forgotPass[language]}
                   </Link>
                 </div>
@@ -262,7 +265,7 @@ export function AuthView() {
                     setIsLogin(!isLogin);
                     setPassword('');
                   }}
-                  className={`font-bold transition-colors hover:underline ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}
+                  className={`font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}
                 >
                   {isLogin ? t.signup[language] : t.login[language]}
                 </button>

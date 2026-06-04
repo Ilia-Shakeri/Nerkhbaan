@@ -79,7 +79,7 @@ export function ForgotPasswordView() {
     <div className={`flex min-h-screen flex-col items-center justify-center p-6 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`}>
       <div className="w-full max-w-md perspective-1000">
         <div className="mb-6 flex justify-start">
-            <Link to="/auth" className={`flex items-center gap-2 text-sm font-bold transition-colors hover:underline ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
+            <Link to="/auth" className={`flex items-center gap-2 text-sm font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
                 {isRtl ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
                 {t.backToLogin[language]}
             </Link>
@@ -106,7 +106,10 @@ export function ForgotPasswordView() {
               {step === 1 && (
                 <>
                   {/* Professional luxury gradient title */}
-                  <h1 className={`text-3xl font-black tracking-tight ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#8A6A23] via-[#5E4714] to-[#8A6A23] bg-clip-text text-transparent'}`}>
+                  <h1 
+                    className={`tracking-tight ${isRtl ? 'text-4xl font-normal' : 'text-3xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#8A6A23] via-[#5E4714] to-[#8A6A23] bg-clip-text text-transparent'}`}
+                    style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
+                  >
                     {t.title1[language]}
                   </h1>
                   <p className={`mt-2 text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{t.desc1[language]}</p>
@@ -114,13 +117,23 @@ export function ForgotPasswordView() {
               )}
               {step === 2 && (
                 <>
-                  <h1 className="text-3xl font-black tracking-tight">{t.title2[language]}</h1>
+                  <h1 
+                    className={`tracking-tight ${isRtl ? 'text-4xl font-normal' : 'text-3xl font-black'}`}
+                    style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
+                  >
+                    {t.title2[language]}
+                  </h1>
                   <p className={`mt-2 text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{t.desc2[language]}</p>
                 </>
               )}
               {step === 3 && (
                 <>
-                  <h1 className="text-3xl font-black tracking-tight text-emerald-500">{t.title3[language]}</h1>
+                  <h1 
+                    className={`tracking-tight text-emerald-500 ${isRtl ? 'text-4xl font-normal' : 'text-3xl font-black'}`}
+                    style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
+                  >
+                    {t.title3[language]}
+                  </h1>
                   <p className={`mt-2 text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{t.desc3[language]}</p>
                 </>
               )}
@@ -129,7 +142,7 @@ export function ForgotPasswordView() {
             {step === 1 && (
                 <form onSubmit={handleSendCode} className="space-y-5">
                     <label className="block space-y-2">
-                        <span className={`text-sm font-bold ms-1 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.emailLabel[language]}</span>
+                        <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.emailLabel[language]}</span>
                         <div className="relative">
                             <Mail size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                             <Input
@@ -155,7 +168,7 @@ export function ForgotPasswordView() {
             {step === 2 && (
                 <form onSubmit={handleResetPassword} className="space-y-5">
                     <label className="block space-y-2">
-                        <span className={`text-sm font-bold ms-1 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.codeLabel[language]}</span>
+                        <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.codeLabel[language]}</span>
                         <div className="relative">
                             <KeyRound size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                             <Input
@@ -166,7 +179,7 @@ export function ForgotPasswordView() {
                         </div>
                     </label>
                     <label className="block space-y-2">
-                        <span className={`text-sm font-bold ms-1 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.newPassLabel[language]}</span>
+                        <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.newPassLabel[language]}</span>
                         <div className="relative">
                             <KeyRound size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                             <Input
