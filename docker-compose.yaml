@@ -1,11 +1,11 @@
-﻿# /opt/Nerkhbaan/docker-compose.yaml
+﻿# docker-compose.yaml
 
 services:
   frontend:
     image: nerkhbaan-frontend
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
     container_name: nerkhbaan-frontend
     # Map port 80 inside the container to port 3000 on the host loopback interface
     ports:
@@ -32,6 +32,7 @@ services:
     # Map port 8000 inside the container to port 8000 on the host loopback interface
     ports:
       - "127.0.0.1:8000:8000"
+      
   postgres:
     image: postgres:16-alpine
     container_name: nerkhbaan-postgres
