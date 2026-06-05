@@ -1,13 +1,10 @@
-﻿# docker-compose.yaml
-
-services:
+﻿services:
   frontend:
     image: nerkhbaan-frontend
     build:
       context: .
       dockerfile: apps/web/Dockerfile
     container_name: nerkhbaan-frontend
-    # Map port 80 inside the container to port 3000 on the host loopback interface
     ports:
       - "127.0.0.1:3000:80"
     restart: unless-stopped
@@ -22,14 +19,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    env_file:
+      - ./apps/api/.env
     environment:
       DATABASE_URL: postgresql+psycopg://nerkhbaan:${POSTGRES_PASSWORD}@postgres:5432/nerkhbaan
       API_HOST: 0.0.0.0
       API_PORT: 8000
-      # Ensure your production domain is allowed for CORS
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       ALANCHAND_API_TOKEN: ${ALANCHAND_API_TOKEN:-}
-    # Map port 8000 inside the container to port 8000 on the host loopback interface
     ports:
       - "127.0.0.1:8000:8000"
       
@@ -53,4 +50,3 @@ services:
 
 volumes:
   postgres_data:
-

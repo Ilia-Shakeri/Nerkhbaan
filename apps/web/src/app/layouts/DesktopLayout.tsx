@@ -279,7 +279,7 @@ export function DesktopLayout() {
                        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                        onClick={() => setIsNotificationsOpen(false)}
                        className="fixed inset-0 z-10" 
-                     />
+                    />
                     <motion.div
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -301,14 +301,14 @@ export function DesktopLayout() {
                             }`}
                           >
                             {!notif.read && (
-                              <div className="absolute top-4 start-1.5 h-1.5 w-1.5 rounded-full bg-[#10B981]" />
+                              <span className="absolute start-1.5 top-3.5 h-1.5 w-1.5 rounded-full bg-[#EF4444]" />
                             )}
-                            <span className={`ps-2 ${isDark ? 'text-[#E8DBB5]' : 'text-[#5D4614]'} ${!notif.read ? 'font-medium' : ''}`}>
+                            <div className={`font-medium ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'} ${!notif.read ? 'ps-3' : ''}`}>
                               {notif.title[language]}
-                            </span>
-                            <span className={`ps-2 text-xs ${isDark ? 'text-[#A89668]' : 'text-[#8A6B20]'}`}>
+                            </div>
+                            <div className={`text-xs ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'} ${!notif.read ? 'ps-3' : ''}`}>
                               {notif.time[language]}
-                            </span>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -318,17 +318,14 @@ export function DesktopLayout() {
               </AnimatePresence>
             </div>
 
-            {/* User Profile Mini */}
-            <div
-              className={`flex cursor-pointer items-center gap-2 rounded-xl border border-[#D4AF37]/18 p-1.5 pe-3 transition-colors ${
-                isDark ? 'hover:bg-[#171717]' : 'hover:bg-[#F2E4BC]'
-              }`}
-            >
+            <div className="mx-1 h-6 w-px bg-[#D4AF37]/20" />
+
+            <div className="flex items-center gap-2 pe-1 cursor-pointer transition-opacity hover:opacity-80">
               <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#D4AF37] text-[#0A0A0A]">
                 <UserCircle2 size={16} />
               </div>
               <span className={`hidden text-sm font-medium sm:block ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
-                {language === 'fa' ? 'کاربر دمو' : 'Demo User'}
+                {language === 'fa' ? 'کاربر' : 'User'}
               </span>
               <ChevronDown size={14} className={`hidden sm:block ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'}`} />
             </div>
@@ -337,10 +334,10 @@ export function DesktopLayout() {
 
         {/* Page Content Wrapped in Glassmorphism Container */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col">
-          <div className={`flex-1 relative overflow-hidden rounded-[2rem] border p-6 sm:p-8 shadow-2xl backdrop-blur-xl transition-all duration-500 ${
+          <div className={`flex-1 relative overflow-hidden rounded-[2.5rem] border p-6 sm:p-8 shadow-2xl backdrop-blur-2xl transition-all duration-500 ${
             isDark 
-              ? 'border-white/10 bg-[#0E0E0E]/80 shadow-black/50' 
-              : 'border-black/5 bg-white/80 shadow-[#D4AF37]/10'
+              ? 'border-white/5 bg-[#0E0E0E]/60 shadow-black/50' 
+              : 'border-black/5 bg-white/60 shadow-[#D4AF37]/20'
           }`}>
             <Outlet />
           </div>
