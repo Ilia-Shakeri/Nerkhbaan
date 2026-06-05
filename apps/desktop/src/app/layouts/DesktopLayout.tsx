@@ -28,13 +28,14 @@ const NAV_ITEMS = [
 ];
 
 export function DesktopLayout() {
-  const { language, theme, logout, toggleTheme, toggleLanguage } = useAppContext();
+  const { language, theme, logout, toggleTheme, toggleLanguage } = useAppContext() as any;
   const { isAuthenticated } = useAppContext();
   const isDark = theme === 'dark';
-  
+
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
+
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -188,7 +189,7 @@ export function DesktopLayout() {
         )}
       </AnimatePresence>
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <div className="relative mt-10 flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}
         <header
@@ -278,7 +279,7 @@ export function DesktopLayout() {
                        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                        onClick={() => setIsNotificationsOpen(false)}
                        className="fixed inset-0 z-10" 
-                    />
+                     />
                     <motion.div
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -300,7 +301,7 @@ export function DesktopLayout() {
                             }`}
                           >
                             {!notif.read && (
-                               <div className="absolute top-4 start-1.5 h-1.5 w-1.5 rounded-full bg-[#10B981]" />
+                              <div className="absolute top-4 start-1.5 h-1.5 w-1.5 rounded-full bg-[#10B981]" />
                             )}
                             <span className={`ps-2 ${isDark ? 'text-[#E8DBB5]' : 'text-[#5D4614]'} ${!notif.read ? 'font-medium' : ''}`}>
                               {notif.title[language]}
@@ -334,9 +335,15 @@ export function DesktopLayout() {
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className={`flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 ${isDark ? 'bg-[#050505]' : 'bg-[#FFF8E8]'}`}>
-          <Outlet />
+        {/* Page Content Wrapped in Glassmorphism Container */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col">
+          <div className={`flex-1 relative overflow-hidden rounded-[2rem] border p-6 sm:p-8 shadow-2xl backdrop-blur-xl transition-all duration-500 ${
+            isDark 
+              ? 'border-white/10 bg-[#0E0E0E]/80 shadow-black/50' 
+              : 'border-black/5 bg-white/80 shadow-[#D4AF37]/10'
+          }`}>
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

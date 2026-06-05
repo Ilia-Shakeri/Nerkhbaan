@@ -1,7 +1,10 @@
 ﻿import axios from 'axios';
 
-// Ensure the base URL correctly points to the API gateway
-const baseURL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
+// Ensure the base URL correctly points to the API gateway and appends /api to prevent 404 and CORS fetch errors
+const envApiUrl = import.meta.env.VITE_API_URL;
+const baseURL = envApiUrl 
+  ? (envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl}/api`) 
+  : 'http://127.0.0.1:8000/api';
 
 export const apiInstance = axios.create({
   baseURL,
@@ -21,7 +24,6 @@ apiInstance.interceptors.request.use((config) => {
 apiInstance.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // Enhanced error logging to help debug 'failed to fetch'
     console.error('API Error:', error.response?.data || error.message);
     
     let message = error.message || 'An unexpected error occurred.';
@@ -39,7 +41,7 @@ apiInstance.interceptors.response.use(
           }
         }
       } catch {
-        // Fallback to error message
+        // Keep default message if parsing fails
       }
     }
     throw new Error(message);
@@ -73,7 +75,7 @@ export const api = {
     }
   }
 };
-// Added missing types and formatting functions for the pricing dashboard
+
 export type CurrencyMode = 'usd' | 'toman';
 
 export type PriceAsset = {
@@ -94,15 +96,14 @@ export type PriceAsset = {
   chart_error_message: { fa: string; en: string };
 };
 
-// Fetch real-time market prices from the backend
 export const getPrices = async () => {
   const { data } = await apiInstance.get('/prices');
   return data;
 };
 
-// Utility to format prices based on the selected currency and language
 export const formatPrice = (value: number | null | undefined, mode: CurrencyMode, language: 'en' | 'fa'): string => {
   if (value === null || value === undefined) return '--';
+  
   const locale = language === 'fa' ? 'fa-IR' : 'en-US';
   
   if (mode === 'usd') {
@@ -120,5 +121,3 @@ export const formatPrice = (value: number | null | undefined, mode: CurrencyMode
     return language === 'fa' ? formatted + ' تومان' : 'Toman ' + formatted;
   }
 };
-
-

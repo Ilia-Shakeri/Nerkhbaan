@@ -17,8 +17,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen
 } from 'lucide-react';
-import { useAppContext } from '@/app/context/AppContext';
-import logo from '@/logo/logo.png';
+import { useAppContext } from '../context/AppContext';
+import { WindowTitleBar } from '@nerkhbaan/ui/app/components/WindowTitleBar';
+import logo from '../../logo/logo.png';
 
 const NAV_ITEMS = [
   { path: '/', label: { fa: 'داشبورد', en: 'Dashboard' }, icon: LayoutDashboard },
@@ -26,101 +27,18 @@ const NAV_ITEMS = [
   { path: '/settings', label: { fa: 'تنظیمات', en: 'Settings' }, icon: Settings },
 ];
 
-// Extracted to prevent remounting on every state change and to keep animations smooth
-const SidebarContent = ({ 
-  collapsed = false, 
-  language, 
-  isDark, 
-  logout, 
-  setIsSidebarOpen 
-}: { 
-  collapsed?: boolean; 
-  language: 'fa' | 'en'; 
-  isDark: boolean; 
-  logout: () => void; 
-  setIsSidebarOpen: (val: boolean) => void;
-}) => (
-  <>
-    <div className="flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
-      <img
-        src={logo}
-        alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
-        className={`object-contain transition-all duration-300 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
-      />
-    </div>
-
-    <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
-      {NAV_ITEMS.map((item) => (
-        <NavLink
-          key={item.path}
-          to={item.path}
-          onClick={() => setIsSidebarOpen(false)}
-          className={({ isActive }) =>
-            `flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-all ${
-              isActive
-                ? 'bg-[#D4AF37] text-[#0A0A0A] shadow-[0_4px_20px_rgba(212,175,55,0.25)]'
-                : isDark
-                  ? 'text-[#CFBE91] hover:bg-[#191919] hover:text-[#F6E8C2]'
-                  : 'text-[#8A6B20] hover:bg-[#F6EBD0] hover:text-[#5D4614]'
-            } ${collapsed ? 'justify-center px-2' : 'gap-3'}`
-          }
-        >
-          <item.icon size={18} />
-          <motion.span
-            initial={false}
-            animate={
-              collapsed
-                ? { opacity: 0, width: 0, x: -6 }
-                : { opacity: 1, width: 'auto', x: 0 }
-            }
-            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden whitespace-nowrap"
-          >
-            {item.label[language]}
-          </motion.span>
-        </NavLink>
-      ))}
-    </nav>
-
-    <div className="shrink-0 border-t border-[#D4AF37]/15 p-4">
-      <button
-        onClick={logout}
-        className={`flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-          isDark ? 'text-[#E6C977] hover:bg-[#1B1B1B]' : 'text-[#86631A] hover:bg-[#F6EBD0]'
-        } ${collapsed ? 'justify-center px-2' : 'gap-3'}`}
-      >
-        <LogOut size={18} />
-        <motion.span
-          initial={false}
-          animate={
-            collapsed
-              ? { opacity: 0, width: 0, x: -6 }
-              : { opacity: 1, width: 'auto', x: 0 }
-          }
-          transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-          className="overflow-hidden whitespace-nowrap"
-        >
-          {language === 'fa' ? 'خروج از حساب' : 'Logout'}
-        </motion.span>
-      </button>
-    </div>
-  </>
-);
-
 export function DesktopLayout() {
-  // Merged the duplicate useAppContext calls
-  const { language, theme, logout, toggleTheme, toggleLanguage, isAuthenticated } = useAppContext();
+  const { language, theme, logout, toggleTheme, toggleLanguage } = useAppContext() as any;
+  const { isAuthenticated } = useAppContext();
   const isDark = theme === 'dark';
 
-  // Moved hooks above the early return to fix React Hooks violation
+  if (!isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
+
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
-  // Early return redirecting to /login instead of missing /auth route
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
 
   const notifications = [
     {
@@ -143,29 +61,94 @@ export function DesktopLayout() {
     }
   ];
 
-  // Removed WindowTitleBar and reset top margins to 0
+  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
+    <>
+      <div className="flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
+        <img
+          src={logo}
+          alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
+          className={`object-contain transition-all duration-300 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
+        />
+      </div>
+
+      <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
+        {NAV_ITEMS.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            onClick={() => setIsSidebarOpen(false)}
+            className={({ isActive }) =>
+              `flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+                isActive
+                  ? 'bg-[#D4AF37] text-[#0A0A0A] shadow-[0_4px_20px_rgba(212,175,55,0.25)]'
+                  : isDark
+                    ? 'text-[#CFBE91] hover:bg-[#191919] hover:text-[#F6E8C2]'
+                    : 'text-[#8A6B20] hover:bg-[#F6EBD0] hover:text-[#5D4614]'
+              } ${collapsed ? 'justify-center px-2' : 'gap-3'}`
+            }
+          >
+            <item.icon size={18} />
+            <motion.span
+              initial={false}
+              animate={
+                collapsed
+                  ? { opacity: 0, width: 0, x: -6 }
+                  : { opacity: 1, width: 'auto', x: 0 }
+              }
+              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+              className="overflow-hidden whitespace-nowrap"
+            >
+              {item.label[language]}
+            </motion.span>
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="shrink-0 border-t border-[#D4AF37]/15 p-4">
+        <button
+          onClick={logout}
+          className={`flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
+            isDark ? 'text-[#E6C977] hover:bg-[#1B1B1B]' : 'text-[#86631A] hover:bg-[#F6EBD0]'
+          } ${collapsed ? 'justify-center px-2' : 'gap-3'}`}
+        >
+          <LogOut size={18} />
+          <motion.span
+            initial={false}
+            animate={
+              collapsed
+                ? { opacity: 0, width: 0, x: -6 }
+                : { opacity: 1, width: 'auto', x: 0 }
+            }
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden whitespace-nowrap"
+          >
+            {language === 'fa' ? 'خروج از حساب' : 'Logout'}
+          </motion.span>
+        </button>
+      </div>
+    </>
+  );
+
   return (
     <div
       className={`flex h-screen w-full overflow-hidden transition-colors duration-500 ${
         isDark ? 'bg-[#050505] text-[#F2E8CC]' : 'bg-[#FFF8E8] text-[#4A3913]'
       }`}
     >
+      <div className="fixed inset-x-0 top-0 z-[70]">
+        <WindowTitleBar theme={theme} />
+      </div>
+      
       {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
         animate={{ width: isSidebarCollapsed ? 80 : 256 }}
         transition={{ type: 'spring', stiffness: 170, damping: 26, mass: 1.05 }}
-        className={`hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
+        className={`mt-10 hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
           isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
         } will-change-[width]`}
       >
-        <SidebarContent 
-          collapsed={isSidebarCollapsed} 
-          language={language}
-          isDark={isDark}
-          logout={logout}
-          setIsSidebarOpen={setIsSidebarOpen}
-        />
+        <SidebarContent collapsed={isSidebarCollapsed} />
       </motion.aside>
 
       {/* Mobile Drawer Overlay */}
@@ -189,7 +172,7 @@ export function DesktopLayout() {
             animate={{ x: 0 }}
             exit={{ x: language === 'fa' ? '100%' : '-100%' }}
             transition={{ type: 'spring', bounce: 0.08, duration: 0.56 }}
-            className={`fixed bottom-0 top-0 z-50 flex w-72 flex-col ${
+            className={`fixed bottom-0 top-10 z-50 flex w-72 flex-col ${
               isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
             } lg:hidden ${
               language === 'fa' ? 'right-0 border-l border-[#D4AF37]/15' : 'left-0 border-r border-[#D4AF37]/15'
@@ -201,18 +184,13 @@ export function DesktopLayout() {
             >
               <X size={20} />
             </button>
-            <SidebarContent 
-              language={language}
-              isDark={isDark}
-              logout={logout}
-              setIsSidebarOpen={setIsSidebarOpen}
-            />
+            <SidebarContent />
           </motion.aside>
         )}
       </AnimatePresence>
 
-      {/* Main Content */}
-      <div className="relative flex flex-1 flex-col overflow-hidden">
+      {/* Main Content Area */}
+      <div className="relative mt-10 flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}
         <header
           className={`z-10 flex h-16 shrink-0 items-center justify-between border-b border-[#D4AF37]/12 px-6 backdrop-blur-md transition-colors duration-500 ${
@@ -301,7 +279,7 @@ export function DesktopLayout() {
                        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                        onClick={() => setIsNotificationsOpen(false)}
                        className="fixed inset-0 z-10" 
-                    />
+                     />
                     <motion.div
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -357,9 +335,15 @@ export function DesktopLayout() {
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className={`flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 ${isDark ? 'bg-[#050505]' : 'bg-[#FFF8E8]'}`}>
-          <Outlet />
+        {/* Page Content Wrapped in Glassmorphism Container */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col">
+          <div className={`flex-1 relative overflow-hidden rounded-[2rem] border p-6 sm:p-8 shadow-2xl backdrop-blur-xl transition-all duration-500 ${
+            isDark 
+              ? 'border-white/10 bg-[#0E0E0E]/80 shadow-black/50' 
+              : 'border-black/5 bg-white/80 shadow-[#D4AF37]/10'
+          }`}>
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

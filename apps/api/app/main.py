@@ -4,17 +4,17 @@ from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from app.config import settings
-from app.routers import auth, prices, providers
-from app.db import engine, Base, get_db
+
+from .config import settings
+from .routers import auth, prices, providers
+from .db import engine, Base, get_db
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-# CRITICAL FIX: We MUST import models here before create_all() 
-# so SQLAlchemy knows which tables to build in the database.
-import app.models  
+# Import models to ensure SQLAlchemy registers the tables before create_all executes
+from . import models  
 
-# Initialize logger
+# Initialize logger for debugging and monitoring
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -44,20 +44,18 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-# Configure CORS securely (fallback to allow all for dev)
+# Safely parse allowed origins to prevent CORS crashes
+origins = [origin.strip() for origin in settings.allowed_origins.split(',') if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins.split(','), # Bound to secure configs to prevent CORS crashes, 
+    allow_origins=origins, 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------
-# Router Inclusion
-# ---------------------------------------------------------
-# CRITICAL FIX: Removed the `prefix=` parameter here because the 
-# routers in app/routers/*.py already define their own prefixes.
+# Include routers without prefix since they define their own in the router files
 app.include_router(auth.router, tags=["Authentication"])
 app.include_router(prices.router, tags=["Prices"])
 app.include_router(providers.router, tags=["Providers"])
@@ -65,11 +63,8 @@ app.include_router(providers.router, tags=["Providers"])
 @app.get("/api/health", tags=["System"])
 @app.get("/health", tags=["System"])
 async def health_check(db: Session = Depends(get_db)):
-    """
-    Health check endpoint that verifies database connectivity.
-    """
+    """Health check endpoint that verifies database connectivity."""
     try:
-        # Execute a lightweight query to ensure the database is responsive
         db.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
@@ -84,18 +79,7 @@ async def health_check(db: Session = Depends(get_db)):
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global catch-all to prevent silent failures."""
-    logger.error(f"Unhandled system error on {request.url.path}: {exc}", exc_info=True)
-    return JSONResponse(
-        status_code=500,
-        content={"error": "Internal Server Error", "detail": str(exc), "path": request.url.path}
-    )
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Global catch-all to prevent silent failures."""
-    
-    # Allow standard HTTP exceptions to pass through to FastAPI's native handler
+    """Global catch-all to prevent silent failures and ensure CORS headers are maintained."""
     if isinstance(exc, StarletteHTTPException):
         return JSONResponse(
             status_code=exc.status_code, 
