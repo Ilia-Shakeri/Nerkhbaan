@@ -164,11 +164,10 @@ const toChartValue = (point: AssetPoint, mode: CurrencyMode, fallbackValue: numb
 };
 
 export function DashboardView() {
-  const { language, theme } = useAppContext();
+  const { language, theme, currencyMode, setCurrencyMode } = useAppContext() as any;
   const isDark = theme === 'dark';
 
   const [assetOrder, setAssetOrder] = useState<AssetId[]>(getInitialAssetOrder);
-  const [currencyMode, setCurrencyMode] = useState<CurrencyMode>('toman');
   const [draggedAssetId, setDraggedAssetId] = useState<AssetId | null>(null);
   const [dragOverAssetId, setDragOverAssetId] = useState<AssetId | null>(null);
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
@@ -303,44 +302,6 @@ export function DashboardView() {
       <div className={`flex flex-wrap items-center justify-between gap-3 rounded-[2.5rem] border p-4 shadow-xl backdrop-blur-2xl transition-all duration-500 ${
         isDark ? 'border-white/5 bg-[#0E0E0E]/60 shadow-black/50' : 'border-black/5 bg-white/60 shadow-[#D4AF37]/15'
       }`} >
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-semibold ${isDark ? 'text-[#CDBB8C]' : 'text-[#6E531A]'}`}>
-            {t.currencyView[language]}
-          </span>
-          <div
-            className={`rounded-[1.5rem] border p-1 ${
-              isDark ? 'border-white/10 bg-[#111111]/80' : 'border-[#D4AF37]/35 bg-[#FFF0CC]/80'
-            }`}
-          >
-            <button
-              type="button"
-              onClick={() => setCurrencyMode('usd')}
-              className={`rounded-2xl px-4 py-1.5 text-xs font-semibold transition ${
-                currencyMode === 'usd'
-                  ? 'bg-[#D4AF37] text-[#0A0A0A]'
-                  : isDark
-                    ? 'text-[#CDBB8C]'
-                    : 'text-[#6E531A]'
-              }`}
-            >
-              {t.usd[language]}
-            </button>
-            <button
-              type="button"
-              onClick={() => setCurrencyMode('toman')}
-              className={`rounded-2xl px-4 py-1.5 text-xs font-semibold transition ${
-                currencyMode === 'toman'
-                  ? 'bg-[#D4AF37] text-[#0A0A0A]'
-                  : isDark
-                    ? 'text-[#CDBB8C]'
-                    : 'text-[#6E531A]'
-              }`}
-            >
-              {t.toman[language]}
-            </button>
-          </div>
-        </div>
-
         <div className={`text-xs ${isDark ? 'text-[#A89668]' : 'text-[#765D27]'}`} dir="ltr">
           {t.source[language]}: USD={sourceLabel.usd} | Toman={sourceLabel.toman}
           {lastRefreshAt ? ` | ${t.updatedAt[language]}: ${new Date(lastRefreshAt).toLocaleTimeString()}` : ''}
@@ -349,15 +310,7 @@ export function DashboardView() {
         </div>
       </div>
 
-      {hasDegradedSources ? (
-        <div className={`rounded-[2rem] border px-4 py-3 text-sm backdrop-blur-xl ${
-          isDark ? 'border-amber-500/35 bg-amber-500/10 text-amber-200' : 'border-amber-400/50 bg-amber-100/90 text-amber-800'
-        }`} >
-          {t.degradedNotice[language]}
-        </div>
-      ) : null}
-
-      {orderedAssets.map((asset, idx) => {
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">{orderedAssets.map((asset, idx) => {
         const fallbackValue = currencyMode === 'usd' 
           ? (asset.priceUsd ?? (asset.priceToman ? asset.priceToman / usdToTomanRate : 0)) 
           : (asset.priceToman ?? (asset.priceUsd ? asset.priceUsd * usdToTomanRate : 0));
@@ -608,7 +561,7 @@ export function DashboardView() {
             </Card>
           </motion.div>
         );
-      })}
+      })}</div>
 
       <Modal isOpen={isAlertModalOpen} onClose={() => setIsAlertModalOpen(false)} title={t.createAlert[language]}>
         <div className="space-y-6 pt-4">

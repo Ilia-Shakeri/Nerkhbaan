@@ -5,6 +5,7 @@ import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
+import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { useAppContext } from '../context/AppContext';
 
 type Alert = {
@@ -25,6 +26,7 @@ const INITIAL_ALERTS: Alert[] = [
 export function AlertsView() {
   const { language } = useAppContext();
   const [alerts, setAlerts] = useState<Alert[]>(INITIAL_ALERTS);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const t = {
     search: { fa: 'جستجوی هشدار...', en: 'Search alerts...' },
@@ -61,7 +63,7 @@ export function AlertsView() {
           />
         </div>
         
-        <Button variant="primary" className="gap-2 shrink-0">
+        <Button variant="primary" className="gap-2 shrink-0" onClick={() => setIsModalOpen(true)}>
           <BellRing size={18} />
           {t.newAlert[language]}
         </Button>
@@ -155,6 +157,48 @@ export function AlertsView() {
           ))}
         </AnimatePresence>
       </div>
+
+      {/* New Alert Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={t.newAlert[language]}
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+              {t.asset[language]}
+            </label>
+            <Input placeholder={language === 'fa' ? 'مثال: طلا، دلار، بیت‌کوین' : 'e.g., Gold, USD, Bitcoin'} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+              {t.condition[language]}
+            </label>
+            <select className="w-full rounded-lg border border-gray-300 dark:border-white/10 bg-white dark:bg-[#1A1A1A] px-3 py-2 text-sm text-gray-900 dark:text-white">
+              <option value="above">{t.above[language]}</option>
+              <option value="below">{t.below[language]}</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+              {t.target[language]}
+            </label>
+            <Input placeholder={language === 'fa' ? 'قیمت هدف' : 'Target price'} />
+          </div>
+
+          <div className="flex gap-3 pt-4">
+            <Button variant="primary" className="flex-1">
+              {language === 'fa' ? 'ایجاد هشدار' : 'Create Alert'}
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setIsModalOpen(false)}>
+              {language === 'fa' ? 'لغو' : 'Cancel'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
     </div>
   );

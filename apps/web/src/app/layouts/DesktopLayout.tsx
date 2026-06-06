@@ -2,12 +2,9 @@ import React, { useState } from 'react';
 import { NavLink, Outlet, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  Bell,
   Settings,
   LayoutDashboard,
   BellRing,
-  LogOut,
-  ChevronDown,
   UserCircle2,
   Menu,
   X,
@@ -15,10 +12,16 @@ import {
   Moon,
   Languages,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Bell,
+  ChevronDown,
+  LogOut,
+  User,
+  KeyRound
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { WindowTitleBar } from '@nerkhbaan/ui/app/components/WindowTitleBar';
+import { UserInfoModal } from '../components/UserInfoModal';
+import { ChangePasswordModal } from '../components/ChangePasswordModal';
 import logo from '../../logo/logo.png';
 
 const NAV_ITEMS = [
@@ -30,6 +33,7 @@ const NAV_ITEMS = [
 export function DesktopLayout() {
   const { language, theme, logout, toggleTheme, toggleLanguage } = useAppContext() as any;
   const { isAuthenticated } = useAppContext();
+  const { currencyMode, setCurrencyMode } = useAppContext() as any;
   const isDark = theme === 'dark';
 
   if (!isAuthenticated) {
@@ -39,6 +43,9 @@ export function DesktopLayout() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
 
   const notifications = [
     {
@@ -60,6 +67,8 @@ export function DesktopLayout() {
       read: true
     }
   ];
+
+  const hasDegradedSources = false;
 
   const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
     <>
@@ -105,26 +114,29 @@ export function DesktopLayout() {
       </nav>
 
       <div className="shrink-0 border-t border-[#D4AF37]/15 p-4">
-        <button
-          onClick={logout}
-          className={`flex w-full items-center rounded-xl px-4 py-3 text-sm font-medium transition-colors ${
-            isDark ? 'text-[#E6C977] hover:bg-[#1B1B1B]' : 'text-[#86631A] hover:bg-[#F6EBD0]'
-          } ${collapsed ? 'justify-center px-2' : 'gap-3'}`}
-        >
-          <LogOut size={18} />
-          <motion.span
-            initial={false}
-            animate={
-              collapsed
-                ? { opacity: 0, width: 0, x: -6 }
-                : { opacity: 1, width: 'auto', x: 0 }
-            }
-            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden whitespace-nowrap"
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+              isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
+            }`}
+            aria-label="Toggle theme"
           >
-            {language === 'fa' ? 'خروج از حساب' : 'Logout'}
-          </motion.span>
-        </button>
+            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+              isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
+            }`}
+            aria-label="Toggle language"
+          >
+            <Languages size={18} />
+          </button>
+        </div>
       </div>
     </>
   );
@@ -135,10 +147,6 @@ export function DesktopLayout() {
         isDark ? 'bg-[#050505] text-[#F2E8CC]' : 'bg-[#FFF8E8] text-[#4A3913]'
       }`}
     >
-      <div className="fixed inset-x-0 top-0 z-[70]">
-        <WindowTitleBar theme={theme} />
-      </div>
-      
       {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
@@ -220,35 +228,19 @@ export function DesktopLayout() {
           </div>
           
           <div className="hidden lg:block">
-            <img
-              src={logo}
-              alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
-              className="h-10 w-10 object-contain"
-            />
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
-              onClick={toggleLanguage}
-              className={`flex h-10 items-center justify-center rounded-xl px-3 text-xs font-semibold transition-colors ${
-                isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
+              onClick={() => setCurrencyMode(currencyMode === 'toman' ? 'usd' : 'toman')}
+              className={`flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-medium transition-colors ${
+                isDark
+                  ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40 text-[#CFBE91] hover:bg-[#0E0E0E]/60'
+                  : 'border-[#D4AF37]/30 bg-white/60 text-[#8A6B20] hover:bg-white/80'
               }`}
-              aria-label={language === 'fa' ? 'Switch to English' : 'Switch to Persian'}
             >
-              <Languages size={15} className="me-1" />
-              {language === 'fa' ? 'EN' : 'فا'}
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
-                isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
-              }`}
-              aria-label="Toggle color theme"
-            >
-              {isDark ? <Sun size={18} /> : <Moon size={18} />}
+              <span>{currencyMode === 'toman' ? (language === 'fa' ? 'تومان' : 'Toman') : 'USD'}</span>
             </button>
 
             {/* Notification Bell */}
@@ -285,6 +277,15 @@ export function DesktopLayout() {
                       <div className={`mb-2 px-3 pt-2 text-sm font-semibold ${isDark ? 'text-[#F5EBCD]' : 'text-[#5D4614]'}`}>
                         {language === 'fa' ? 'اعلان‌ها' : 'Notifications'}
                       </div>
+
+                      {hasDegradedSources && (
+                        <div className={`mx-2 mb-3 rounded-xl border px-3 py-2 text-xs ${
+                          isDark ? 'border-amber-500/35 bg-amber-500/10 text-amber-200' : 'border-amber-400/50 bg-amber-100/90 text-amber-800'
+                        }`}>
+                          {language === 'fa' ? '⚠️ برخی از منابع تامین قیمت در دسترس نیستند.' : '⚠️ Some pricing providers are down.'}
+                        </div>
+                      )}
+
                       <div className="space-y-1">
                         {notifications.map((notif) => (
                           <div
@@ -313,21 +314,98 @@ export function DesktopLayout() {
 
             <div className="mx-1 h-6 w-px bg-[#D4AF37]/20" />
 
-            <div className="flex items-center gap-2 pe-1 cursor-pointer transition-opacity hover:opacity-80">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#D4AF37] text-[#0A0A0A]">
-                <UserCircle2 size={16} />
-              </div>
-              <span className={`hidden text-sm font-medium sm:block ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
-                {language === 'fa' ? 'کاربر' : 'User'}
-              </span>
-              <ChevronDown size={14} className={`hidden sm:block ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'}`} />
+            {/* User Dropdown Menu */}
+            <div className="relative">
+              <button
+                onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                className="flex items-center gap-2 pe-1 cursor-pointer transition-opacity hover:opacity-80"
+              >
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#D4AF37] text-[#0A0A0A]">
+                  <UserCircle2 size={16} />
+                </div>
+                <span className={`hidden text-sm font-medium sm:block ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
+                  {language === 'fa' ? 'کاربر' : 'User'}
+                </span>
+                <ChevronDown size={14} className={`hidden sm:block ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'}`} />
+              </button>
+
+              <AnimatePresence>
+                {isUserMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.15 }}
+                      className={`absolute ${language === 'fa' ? 'left-0' : 'right-0'} top-full mt-2 z-40 w-48 overflow-hidden rounded-xl border shadow-xl ${
+                        isDark
+                          ? 'border-white/10 bg-[#1A1A1A]'
+                          : 'border-black/10 bg-white'
+                      }`}
+                    >
+                      <div className="p-1">
+                        <button
+                          onClick={() => {
+                            setIsUserMenuOpen(false);
+                            setIsUserInfoOpen(true);
+                          }}
+                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                            isDark
+                              ? 'text-[#E2D3AA] hover:bg-[#252525]'
+                              : 'text-[#6E5317] hover:bg-[#F6EBD0]'
+                          }`}
+                        >
+                          <User size={16} />
+                          <span>{language === 'fa' ? 'اطلاعات کاربری' : 'User Info'}</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setIsUserMenuOpen(false);
+                            setIsChangePasswordOpen(true);
+                          }}
+                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                            isDark
+                              ? 'text-[#E2D3AA] hover:bg-[#252525]'
+                              : 'text-[#6E5317] hover:bg-[#F6EBD0]'
+                          }`}
+                        >
+                          <KeyRound size={16} />
+                          <span>{language === 'fa' ? 'تغییر رمز عبور' : 'Change Password'}</span>
+                        </button>
+
+                        <div className="my-1 h-px bg-[#D4AF37]/15" />
+
+                        <button
+                          onClick={() => {
+                            setIsUserMenuOpen(false);
+                            logout();
+                          }}
+                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                            isDark
+                              ? 'text-red-400 hover:bg-red-500/10'
+                              : 'text-red-600 hover:bg-red-50'
+                          }`}
+                        >
+                          <LogOut size={16} />
+                          <span>{language === 'fa' ? 'خروج از حساب' : 'Logout'}</span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </header>
 
         {/* Page Content Wrapped in Glassmorphism Container */}
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col">
-          <div className={`flex-1 relative overflow-hidden rounded-[2.5rem] border p-6 sm:p-8 shadow-2xl backdrop-blur-2xl transition-all duration-500 ${
+          <div className={`flex-1 relative overflow-y-auto rounded-[2.5rem] border p-6 sm:p-8 shadow-2xl backdrop-blur-2xl transition-all duration-500 ${
             isDark 
               ? 'border-white/5 bg-[#0E0E0E]/60 shadow-black/50' 
               : 'border-black/5 bg-white/60 shadow-[#D4AF37]/20'
@@ -336,6 +414,20 @@ export function DesktopLayout() {
           </div>
         </main>
       </div>
+
+      <UserInfoModal
+        isOpen={isUserInfoOpen}
+        onClose={() => setIsUserInfoOpen(false)}
+        language={language}
+        isDark={isDark}
+      />
+
+      <ChangePasswordModal
+        isOpen={isChangePasswordOpen}
+        onClose={() => setIsChangePasswordOpen(false)}
+        language={language}
+        isDark={isDark}
+      />
     </div>
   );
 }
