@@ -217,13 +217,6 @@ export function DesktopLayout() {
              >
                 <Menu size={20} />
              </button>
-             <div className="flex items-center gap-2">
-               <img
-                 src={logo}
-                 alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
-                 className="h-8 w-8 object-contain"
-               />
-             </div>
           </div>
           
           <div className="hidden lg:block">
