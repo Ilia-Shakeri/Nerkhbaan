@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { Moon, Sun, Languages, Bell, Smartphone, Mail, Send, Activity, ShieldCheck, LifeBuoy } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
@@ -6,6 +7,7 @@ import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { useAppContext } from '../context/AppContext';
 
 export function SettingsView() {
+  const navigate = useNavigate();
   const { language, theme, toggleTheme, toggleLanguage } = useAppContext();
 
   const t = {
@@ -152,13 +154,13 @@ export function SettingsView() {
           {t.support[language]}
         </h2>
         <Card className="divide-y divide-slate-100 dark:divide-white/5">
-          <button className="flex w-full items-center gap-4 p-5 text-start transition-colors hover:bg-slate-50 dark:hover:bg-white/5">
+          <button onClick={() => navigate('/contact')} className="flex w-full items-center gap-4 p-5 text-start transition-colors hover:bg-slate-50 dark:hover:bg-white/5">
              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300">
                 <LifeBuoy size={20} />
              </div>
              <span className="font-semibold text-slate-900 dark:text-white">{t.contact[language]}</span>
           </button>
-          <button className="flex w-full items-center gap-4 p-5 text-start transition-colors hover:bg-slate-50 dark:hover:bg-white/5">
+          <button onClick={() => navigate('/privacy')} className="flex w-full items-center gap-4 p-5 text-start transition-colors hover:bg-slate-50 dark:hover:bg-white/5">
              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300">
                 <ShieldCheck size={20} />
              </div>

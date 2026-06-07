@@ -237,7 +237,7 @@ export function DesktopLayout() {
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
-              onClick={() => setCurrencyMode(currencyMode === 'toman' ? 'usd' : 'toman')}
+              onClick={() => setCurrencyMode?.(currencyMode === 'toman' ? 'usd' : 'toman')}
               className={`flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-medium transition-colors ${
                 isDark
                   ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40 text-[#CFBE91] hover:bg-[#0E0E0E]/60'

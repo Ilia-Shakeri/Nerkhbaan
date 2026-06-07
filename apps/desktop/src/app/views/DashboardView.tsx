@@ -299,18 +299,9 @@ export function DashboardView() {
 
   return (
     <div className="space-y-6">
-      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-[2.5rem] border p-4 shadow-xl backdrop-blur-2xl transition-all duration-500 ${
-        isDark ? 'border-white/5 bg-[#0E0E0E]/60 shadow-black/50' : 'border-black/5 bg-white/60 shadow-[#D4AF37]/15'
-      }`} >
-        <div className={`text-xs ${isDark ? 'text-[#A89668]' : 'text-[#765D27]'}`} dir="ltr">
-          {t.source[language]}: USD={sourceLabel.usd} | Toman={sourceLabel.toman}
-          {lastRefreshAt ? ` | ${t.updatedAt[language]}: ${new Date(lastRefreshAt).toLocaleTimeString()}` : ''}
-          {isLoading ? ` | ${t.loading[language]}` : ''}
-          {loadError ? ` | ${loadError}` : ''}
-        </div>
-      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">{orderedAssets.map((asset, idx) => {
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {orderedAssets.map((asset, idx) => {
         const fallbackValue = currencyMode === 'usd' 
           ? (asset.priceUsd ?? (asset.priceToman ? asset.priceToman / usdToTomanRate : 0)) 
           : (asset.priceToman ?? (asset.priceUsd ? asset.priceUsd * usdToTomanRate : 0));
@@ -399,8 +390,8 @@ export function DashboardView() {
                         ? 'border-white/10 text-[#D4AF37] hover:bg-white/5'
                         : 'border-black/10 text-[#9D7A20] hover:bg-black/5'
                     }`}
-                    aria-label={t.dragToReorder[language]}
-                    title={t.dragToReorder[language]}
+                    aria-label="Reorder"
+                    title="Reorder"
                   >
                     <GripVertical size={18} />
                   </button>
@@ -412,9 +403,7 @@ export function DashboardView() {
                       </div>
                       {asset.label[language]}
                     </CardTitle>
-                    <p className={`mt-1 text-xs ${isDark ? 'text-[#A89668]' : 'text-[#8A6B26]'}`}>
-                      {t.dragToReorder[language]}
-                    </p>
+
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
                       <span
                         className={`rounded-full px-2 py-0.5 font-semibold ${

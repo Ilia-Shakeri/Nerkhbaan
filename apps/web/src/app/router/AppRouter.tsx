@@ -5,6 +5,8 @@ import { DesktopLayout } from '../layouts/DesktopLayout';
 import { DashboardView } from '../views/DashboardView';
 import { AlertsView } from '../views/AlertsView';
 import { SettingsView } from '../views/SettingsView';
+import { ContactView } from '../views/ContactView';
+import { PrivacyView } from '../views/PrivacyView';
 import { AuthView } from '../views/AuthView';
 import { ForgotPasswordView } from '../views/ForgotPasswordView';
 
@@ -36,6 +38,8 @@ export const AppRouter = () => {
         <Route index element={<DashboardView />} />
         <Route path="alerts" element={<AlertsView />} />
         <Route path="settings" element={<SettingsView />} />
+        <Route path="contact" element={<ContactView />} />
+        <Route path="privacy" element={<PrivacyView />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />
