@@ -10,6 +10,7 @@ import React, {
 
 type Language = 'fa' | 'en';
 type Theme = 'dark' | 'light';
+type CurrencyMode = 'usd' | 'toman';
 
 interface AppContextType {
   isAuthenticated: boolean;
@@ -17,11 +18,13 @@ interface AppContextType {
 
   language: Language;
   theme: Theme;
+  currencyMode: CurrencyMode;
 
   login: (token: string) => void;
   logout: () => void;
   toggleTheme: () => void;
   toggleLanguage: () => void;
+  setCurrencyMode: (mode: CurrencyMode) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -46,6 +49,11 @@ export function AppProvider({
     return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
   });
 
+  const [currencyMode, setCurrencyMode] = useState<CurrencyMode>(() => {
+    const saved = localStorage.getItem('currencyMode');
+    return saved === 'usd' || saved === 'toman' ? saved : 'usd';
+  });
+
   const isAuthenticated = !!token;
 
   useEffect(() => {
@@ -64,6 +72,10 @@ export function AppProvider({
     }
   }, [theme]);
 
+  useEffect(() => {
+    localStorage.setItem('currencyMode', currencyMode);
+  }, [currencyMode]);
+
   const login = (newToken: string) => {
     localStorage.setItem('authToken', newToken);
     setToken(newToken);
@@ -71,7 +83,6 @@ export function AppProvider({
 
   const logout = () => {
     localStorage.removeItem('authToken');
-    localStorage.removeItem('demoMode'); // Clears out the demo state accurately 
     setToken(null);
   };
 
@@ -90,14 +101,16 @@ export function AppProvider({
 
       language,
       theme,
+      currencyMode,
 
       login,
       logout,
 
       toggleTheme,
-      toggleLanguage
+      toggleLanguage,
+      setCurrencyMode
     }),
-    [isAuthenticated, token, language, theme]
+    [isAuthenticated, token, language, theme, currencyMode]
   );
 
   return (

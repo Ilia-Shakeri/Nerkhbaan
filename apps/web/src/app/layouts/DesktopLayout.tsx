@@ -23,10 +23,12 @@ import { useAppContext } from '../context/AppContext';
 import { UserInfoModal } from '../components/UserInfoModal';
 import { ChangePasswordModal } from '../components/ChangePasswordModal';
 import logo from '../../logo/logo.png';
+import { BarChart3 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { path: '/', label: { fa: 'داشبورد', en: 'Dashboard' }, icon: LayoutDashboard },
   { path: '/alerts', label: { fa: 'هشدارها', en: 'Alerts' }, icon: BellRing },
+  { path: '/advanced-report', label: { fa: 'گزارش پیشرفته', en: 'Advanced Report' }, icon: BarChart3 },
   { path: '/settings', label: { fa: 'تنظیمات', en: 'Settings' }, icon: Settings },
 ];
 

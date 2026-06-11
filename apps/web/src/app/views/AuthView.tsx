@@ -69,15 +69,6 @@ export function AuthView() {
 
     try {
       if (isLogin) {
-        // Check for built-in admin account
-        if (identifier.trim() === 'admin' && password === 'Ili@1382') {
-          login('admin-builtin-token');
-          toast.success(t.success[language]);
-          navigate('/');
-          setIsSubmitting(false);
-          return;
-        }
-
         const response = await api.auth.signin({
           username_or_email: identifier.trim(),
           password
@@ -141,15 +132,15 @@ export function AuthView() {
                 <img src="/icons/logo.png" alt="Nerkhbaan Logo" className="h-28 w-28 object-contain drop-shadow-2xl" />
               </div>
               
-              {/* Added pb-2 and px-1 to prevent the gradient clipping the edges of the Persian font */}
-              <h1 
-                className={`tracking-tight pb-2 px-1 ${isRtl ? 'text-5xl font-normal' : 'text-4xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
+              <h1
+                className={`tracking-tight pb-2 px-1 ${isRtl ? 'text-6xl font-black' : 'text-5xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
+                style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}
                 style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
               >
                 {t.brandName[language]}
               </h1>
               
-              <p className={`mt-0 text-sm font-medium ${isDark ? 'text-[#CDB879]' : 'text-[#8A6A23]'}`}>
+              <p className={`mt-0 text-base font-semibold ${isDark ? 'text-[#CDB879]' : 'text-[#8A6A23]'}`} style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}>
                 {t.brandTagline[language]}
               </p>
             </div>

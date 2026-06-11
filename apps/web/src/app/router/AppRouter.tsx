@@ -9,6 +9,7 @@ import { ContactView } from '../views/ContactView';
 import { PrivacyView } from '../views/PrivacyView';
 import { AuthView } from '../views/AuthView';
 import { ForgotPasswordView } from '../views/ForgotPasswordView';
+import { AdvancedReportView } from '../views/AdvancedReportView';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAppContext();
@@ -37,6 +38,7 @@ export const AppRouter = () => {
       >
         <Route index element={<DashboardView />} />
         <Route path="alerts" element={<AlertsView />} />
+        <Route path="advanced-report" element={<AdvancedReportView />} />
         <Route path="settings" element={<SettingsView />} />
         <Route path="contact" element={<ContactView />} />
         <Route path="privacy" element={<PrivacyView />} />
