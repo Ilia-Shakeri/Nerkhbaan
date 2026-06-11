@@ -11,9 +11,9 @@ function AuthEventsBridge() {
 
   useEffect(() => {
     const onUnauthorized = () => {
-      logout();
-      navigate("/login", { replace: true });
-    };
+  logout();
+  navigate("/auth", { replace: true });
+};
 
     window.addEventListener("auth-expired", onUnauthorized);
     return () => window.removeEventListener("auth-expired", onUnauthorized);

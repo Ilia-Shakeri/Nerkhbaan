@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { TrendingUp, AlertCircle } from 'lucide-react';
@@ -7,6 +7,9 @@ export function AdvancedReportView() {
   const { language, theme } = useAppContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const isDark = theme === 'dark';
+  
+  // State to manage the chart loading overlay visibility
+  const [isChartLoaded, setIsChartLoaded] = useState(false);
 
   const t = {
     title: { fa: 'گزارش پیشرفته', en: 'Advanced Report' },
@@ -16,6 +19,9 @@ export function AdvancedReportView() {
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    // Reset state when dependencies change to ensure overlay logic remains accurate
+    setIsChartLoaded(false);
 
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/tv.js';
@@ -41,14 +47,20 @@ export function AdvancedReportView() {
           ],
           supported_resolutions: ['1', '5', '15', '60', 'D', 'W', 'M'],
         });
+        // Chart has successfully initialized, hide the overlay
+        setIsChartLoaded(true);
       }
     };
     document.head.appendChild(script);
 
+    // Cleanup function to prevent multiple widget instances from stacking
     return () => {
+      const container = document.getElementById('tradingview_widget');
+      if (container) container.innerHTML = '';
       if (script.parentNode) {
         script.parentNode.removeChild(script);
       }
+      setIsChartLoaded(false);
     };
   }, [isDark, language]);
 
@@ -71,14 +83,18 @@ export function AdvancedReportView() {
       <Card className="p-0 overflow-hidden">
         <div ref={containerRef} className="relative" style={{ height: '80vh', minHeight: '600px' }}>
           <div id="tradingview_widget" className="h-full w-full"></div>
-          <div className={`absolute inset-0 flex items-center justify-center pointer-events-none ${isDark ? 'bg-[#0E0E0E]/80' : 'bg-white/80'}`}>
-            <div className="flex items-center gap-2">
-              <AlertCircle className={isDark ? 'text-gray-400' : 'text-gray-600'} size={18} />
-              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                {t.loading[language]}
-              </span>
+          
+          {/* Conditionally render the loading overlay */}
+          {!isChartLoaded && (
+            <div className={`absolute inset-0 flex items-center justify-center pointer-events-none ${isDark ? 'bg-[#0E0E0E]/80' : 'bg-white/80'}`}>
+              <div className="flex items-center gap-2">
+                <AlertCircle className={isDark ? 'text-gray-400' : 'text-gray-600'} size={18} />
+                <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {t.loading[language]}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </Card>
     </div>

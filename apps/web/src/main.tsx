@@ -1,15 +1,23 @@
-// src/main.tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { App } from './app/App';
-
-// Consolidate all styles into a single import to prevent PostCSS splitting errors
-// Ensure there are no direct imports to tailwind.css or theme.css here
+import App from './app/App';
+import { AppProvider } from './app/context/AppContext';
+import { registerServiceWorker } from './pwa/registerServiceWorker';
 import './styles/index.css';
 
-// Render the main application structure
-ReactDOM.createRoot(document.getElementById('root')!).render(
+const rootElement = document.getElementById('root');
+
+if (!rootElement) {
+  throw new Error("Failed to find the root element. Ensure there is a <div id='root'></div> in your index.html.");
+}
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <AppProvider>
+      <App />
+    </AppProvider>
   </React.StrictMode>
 );
+
+// Initialize service worker for PWA functionality
+registerServiceWorker();

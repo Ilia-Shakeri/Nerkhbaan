@@ -460,7 +460,7 @@ export function DashboardView() {
               <CardContent>
                 <div className="mb-6 flex items-baseline gap-2">
                   <div className={`text-4xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-[#3B2E13]'}`} dir="ltr">
-                    {formatPrice(toChartValue(selectedPoint, currencyMode, fallbackValue), currencyMode)}
+                    {formatPrice(toChartValue(selectedPoint, currencyMode, fallbackValue), currencyMode, language)}
                   </div>
                   <span className={`text-sm font-medium ${isDark ? 'text-[#CDBB8C]' : 'text-[#8A6B26]'}`}>
                     {activeCurrencyLabel}
@@ -537,7 +537,7 @@ export function DashboardView() {
                           }}
                         >
                           <span className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
-                            {formatPrice(selectedChartPoint.value, currencyMode)}
+                            {formatPrice(selectedChartPoint.value, currencyMode, language)}
                           </span>
                           <span className={`text-[10px] ${isDark ? 'text-[#A89668]' : 'text-[#8A6A25]'}`}>
                             {selectedChartPoint.time}

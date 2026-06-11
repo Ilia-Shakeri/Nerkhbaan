@@ -5,6 +5,7 @@ import { Moon, Sun, Languages, Bell, Smartphone, Mail, Send, Activity, ShieldChe
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { useAppContext } from '../context/AppContext';
+import { toast } from 'sonner';
 
 export function SettingsView() {
   const navigate = useNavigate();

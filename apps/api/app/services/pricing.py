@@ -175,7 +175,7 @@ class PricingService:
             "usd_status": intl_chain.status,
             "toman_status": iran_chain.status,
             "stale_minutes": stale_minutes,
-            "chart_error": iran_chain.status != "live" or intl_chain.status != "live",
+            "chart_error": iran_chain.status == "unavailable" and intl_chain.status == "unavailable",
             "chart_error_message": CHART_ERROR_MESSAGE,
         }
 

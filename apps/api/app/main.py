@@ -1,4 +1,5 @@
 ﻿import logging
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -30,26 +31,30 @@ async def lifespan(app: FastAPI):
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified/created successfully.")
         
-        # Seed hardcoded admin account if it doesn't exist
+        # Seed admin account securely via environment variables
         from .models import User
         from .security import hash_password
         from .db import SessionLocal
         
         db = SessionLocal()
         try:
-            admin = db.query(User).filter(User.username == 'admin').first()
-            if not admin:
-                admin_user = User(
-                    username='admin',
-                    full_name='Administrator',
-                    email='admin@nerkhbaan.local',
-                    password_hash=hash_password('Ili@1382')
-                )
-                db.add(admin_user)
-                db.commit()
-                logger.info("Admin account seeded successfully.")
+            admin_password = os.environ.get("ADMIN_INITIAL_PASSWORD")
+            if not admin_password:
+                logger.warning("ADMIN_INITIAL_PASSWORD not set — skipping admin seed.")
             else:
-                logger.info("Admin account already exists.")
+                admin = db.query(User).filter(User.username == 'admin').first()
+                if not admin:
+                    admin_user = User(
+                        username='admin',
+                        full_name='Administrator',
+                        email='admin@nerkhbaan.local',
+                        password_hash=hash_password(admin_password)
+                    )
+                    db.add(admin_user)
+                    db.commit()
+                    logger.info("Admin account seeded successfully.")
+                else:
+                    logger.info("Admin account already exists.")
         finally:
             db.close()
         

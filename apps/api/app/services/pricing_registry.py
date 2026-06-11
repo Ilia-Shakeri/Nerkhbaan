@@ -88,6 +88,14 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                     "method": "GET",
                     "response_path": "data.currencies.SILVER.price",
                     "unit": "toman",
+                },
+                {
+                    "id": "tgju_silver_fallback",
+                    "priority": 2,
+                    "url": "https://api.tgju.org/v1/market/indicator/summary-table-data/silver",
+                    "method": "GET",
+                    "response_path": "silver",
+                    "unit": "toman",
                 }
             ],
         },

@@ -5,7 +5,7 @@ import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { api } from '../services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
 
 export function AuthView() {
@@ -13,6 +13,9 @@ export function AuthView() {
   const isDark = theme === 'dark';
   const isRtl = language === 'fa';
   const navigate = useNavigate();
+
+  // Feature flag check for public registration capabilities
+  const registrationEnabled = import.meta.env.VITE_ENABLE_REGISTRATION !== 'false';
 
   const [isLogin, setIsLogin] = useState(true);
   const [identifier, setIdentifier] = useState('');
@@ -135,7 +138,6 @@ export function AuthView() {
               <h1
                 className={`tracking-tight pb-2 px-1 ${isRtl ? 'text-6xl font-black' : 'text-5xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
                 style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}
-                style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
               >
                 {t.brandName[language]}
               </h1>
@@ -254,22 +256,25 @@ export function AuthView() {
                   isLogin ? t.submitLogin[language] : t.submitSignup[language]
                 )}
               </Button>
-
-              <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium">
-                <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>
-                  {isLogin ? t.noAccount[language] : t.hasAccount[language]}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsLogin(!isLogin);
-                    setPassword('');
-                  }}
-                  className={`font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}
-                >
-                  {isLogin ? t.signup[language] : t.login[language]}
-                </button>
-              </div>
+              
+              {/* Conditional rendering for the registration toggle based on environment variable */}
+              {registrationEnabled && (
+                <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium">
+                  <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+                    {isLogin ? t.noAccount[language] : t.hasAccount[language]}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLogin(!isLogin);
+                      setPassword('');
+                    }}
+                    className={`font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}
+                  >
+                    {isLogin ? t.signup[language] : t.login[language]}
+                  </button>
+                </div>
+              )}
             </form>
           </motion.div>
         </AnimatePresence>
