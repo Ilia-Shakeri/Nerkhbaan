@@ -1,5 +1,3 @@
-import { AUTH_TOKEN_KEY } from '@nerkhbaan/ui/lib/auth';
-
 function base64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -30,7 +28,7 @@ export async function registerPushNotifications(registration: ServiceWorkerRegis
       applicationServerKey: base64ToUint8Array(vapidPublicKey)
     }));
 
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  const token = localStorage.getItem('authToken');
 
   await fetch("/api/push/subscribe", {
     method: "POST",
