@@ -1,4 +1,4 @@
-# 📈 Nerkhbaan (نرخ‌بان) Monorepo
+# 📈 Nerkhbaan (نرخ‌بان)
 
 ![Electron](https://img.shields.io/badge/Electron-191970?style=for-the-badge&logo=Electron&logoColor=58C4DC)
 ![React](https://img.shields.io/badge/React-191970?style=for-the-badge&logo=react&logoColor=58C4DC)
@@ -29,20 +29,14 @@ For production environments, Nerkhbaan uses Docker Compose to reliably orchestra
    cd Nerkhbaan
    cp apps/api/.env.example apps/api/.env
    # Edit .env with your secure production credentials
-```
-
 2. **Deploy via Docker Compose:**
-```bash
-docker compose up -d --build
-```
-
-
+   ```bash
+   docker compose up -d --build
+   ```
 3. **Verify Health:**
-```bash
-curl http://localhost:8000/health
-```
-
-
+   ```bash
+   curl http://localhost:8000/health
+   ```
 
 ## 📚 Documentation
 
