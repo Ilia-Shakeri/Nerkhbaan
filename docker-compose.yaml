@@ -29,7 +29,7 @@
       ALANCHAND_API_TOKEN: ${ALANCHAND_API_TOKEN:-}
     ports:
       - "127.0.0.1:8000:8000"
-      
+
   postgres:
     image: postgres:16-alpine
     container_name: nerkhbaan-postgres
@@ -47,6 +47,51 @@
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # CI/CD Services
+  gitea:
+    image: gitea/gitea:1.21.11
+    container_name: nerkhbaan-gitea
+    restart: unless-stopped
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=sqlite3
+      - GITEA__server__DOMAIN=git.nerkhbaan.ir
+      - GITEA__server__SSH_DOMAIN=git.nerkhbaan.ir
+      - GITEA__server__ROOT_URL=https://git.nerkhbaan.ir/
+    ports:
+      - "127.0.0.1:3001:3000"
+      - "127.0.0.1:2222:22"
+    volumes:
+      - ./gitea_data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  gitea-runner:
+    image: gitea/act_runner:nightly
+    container_name: nerkhbaan-gitea-runner
+    restart: unless-stopped
+    depends_on:
+      - gitea
+    volumes:
+      - ./gitea_runner_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - GITEA_INSTANCE_URL=http://gitea:3000
+      # The registration token will be added later from Gitea UI
+      - GITEA_RUNNER_REGISTRATION_TOKEN=
+      - GITEA_RUNNER_NAME=nerkhbaan-local-runner
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1024M
 
 volumes:
   postgres_data:

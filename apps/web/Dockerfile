@@ -3,6 +3,9 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Limit Node.js memory usage to prevent OOM Killer during build
+ENV NODE_OPTIONS="--max-old-space-size=1024"
+
 # Copy root and workspace package files first to leverage Docker layer caching
 COPY package.json package-lock.json* ./
 COPY packages/ui/package.json ./packages/ui/
