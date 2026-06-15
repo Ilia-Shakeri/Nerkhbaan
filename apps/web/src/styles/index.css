@@ -1,10 +1,93 @@
-/* src/styles/index.css */
-
-/* 1. All external libraries and custom themes MUST be imported first */
+/* apps/web/src/styles/index.css */
 @import 'tw-animate-css';
 @import './theme.css';
 
-/* 2. Load Tailwind core directives after standard imports */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  @font-face {
+    font-family: 'Vazirmatn';
+    src: url('/fonts/Vazir-Black.woff2') format('woff2'),
+         url('/fonts/Vazir-Black.woff') format('woff');
+    font-weight: 900;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Vazirmatn';
+    src: url('/fonts/Vazir-Bold.woff2') format('woff2'),
+         url('/fonts/Vazir-Bold.woff') format('woff');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Vazirmatn';
+    src: url('/fonts/Vazir-Regular.woff2') format('woff2'),
+         url('/fonts/Vazir-Regular.woff') format('woff');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Noto Nastaliq Urdu';
+    src: url('/fonts/Noto_Nastaliq_Urdu/NotoNastaliqUrdu-VariableFont_wght.ttf') format('truetype');
+    font-weight: 400 700;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  :root {
+    --scrollbar-bg: #FFF8E8;
+    --scrollbar-thumb: #D4AF37;
+    --scrollbar-thumb-hover: #B8941F;
+  }
+
+  .dark {
+    --scrollbar-bg: #0A0A0A;
+    --scrollbar-thumb: #4A3913;
+    --scrollbar-thumb-hover: #6A5517;
+  }
+
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(212, 175, 55, 0.2);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    backdrop-filter: blur(10px);
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(212, 175, 55, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.05);
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 175, 55, 0.35);
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 175, 55, 0.25);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
+  }
+}

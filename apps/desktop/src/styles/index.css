@@ -1,58 +1,117 @@
+/* apps/desktop/src/styles/index.css */
+@import 'tw-animate-css';
+@import './theme.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@font-face {
-  font-family: 'Vazir';
-  src: url('/fonts/Vazir-Thin.woff2') format('woff2');
-  font-weight: 100;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Vazir';
-  src: url('/fonts/Vazir-Light.woff2') format('woff2');
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Vazir';
-  src: url('/fonts/Vazir-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Vazir';
-  src: url('/fonts/Vazir-Medium.woff2') format('woff2');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Vazir';
-  src: url('/fonts/Vazir-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: 'Vazir';
-  src: url('/fonts/Vazir-Black.woff2') format('woff2');
-  font-weight: 900;
-  font-style: normal;
-  font-display: swap;
-}
-
 @layer base {
+  @font-face {
+    font-family: 'Noto Nastaliq Urdu';
+    src: url('/fonts/Noto_Nastaliq_Urdu/NotoNastaliqUrdu-VariableFont_wght.ttf') format('truetype');
+    font-weight: 400 700;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  @font-face {
+    font-family: 'Vazir';
+    src: url('/fonts/Vazir-Thin.woff2') format('woff2');
+    font-weight: 100;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('/fonts/Vazir-Light.woff2') format('woff2');
+    font-weight: 300;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('/fonts/Vazir-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('/fonts/Vazir-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('/fonts/Vazir-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'Vazir';
+    src: url('/fonts/Vazir-Black.woff2') format('woff2');
+    font-weight: 900;
+    font-style: normal;
+    font-display: swap;
+  }
+
   * {
     @apply border-border;
+  }
+
+  :root {
+    --scrollbar-bg: #FFF8E8;
+    --scrollbar-thumb: #D4AF37;
+    --scrollbar-thumb-hover: #B8941F;
+  }
+  
+  .dark {
+    --scrollbar-bg: #0A0A0A;
+    --scrollbar-thumb: #4A3913;
+    --scrollbar-thumb-hover: #6A5517;
+  }
+
+  ::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(212, 175, 55, 0.2);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    backdrop-filter: blur(10px);
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(212, 175, 55, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.05);
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 175, 55, 0.35);
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(212, 175, 55, 0.25);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
   }
 }
 
@@ -68,7 +127,6 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Smooth transitions for theme changes */
 * {
   transition-property: background-color, border-color, color;
   transition-duration: 280ms;
@@ -83,22 +141,4 @@ body {
 .titlebar-no-drag,
 .titlebar-no-drag * {
   -webkit-app-region: no-drag;
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-slate-300 dark:bg-slate-700 rounded-full;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  @apply bg-slate-400 dark:bg-slate-600;
 }
