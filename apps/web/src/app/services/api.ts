@@ -2,9 +2,14 @@
 
 // Ensure the base URL correctly points to the API gateway and appends /api to prevent 404 and CORS fetch errors
 const envApiUrl = import.meta.env.VITE_API_URL;
-const baseURL = envApiUrl 
+let baseURL = envApiUrl 
   ? (envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl}/api`) 
   : 'http://127.0.0.1:8000/api';
+
+// Append trailing slash to ensure Axios resolves relative paths correctly against the base URL
+if (!baseURL.endsWith('/')) {
+  baseURL += '/';
+}
 
 export const apiInstance = axios.create({
   baseURL,
@@ -63,15 +68,18 @@ export type AuthResponse = {
 export const api = {
   auth: {
     async signin(credentials: { username_or_email: string; password: string }): Promise<AuthResponse> {
-      const { data } = await apiInstance.post<AuthResponse>('/auth/signin', credentials);
+      // Use relative path to prevent Axios from stripping the /api base path
+      const { data } = await apiInstance.post<AuthResponse>('auth/signin', credentials);
       return data;
     },
     async signup(userData: { username: string; full_name: string; email: string; password: string }): Promise<AuthResponse> {
-      const { data } = await apiInstance.post<AuthResponse>('/auth/signup', userData);
+      // Use relative path to prevent Axios from stripping the /api base path
+      const { data } = await apiInstance.post<AuthResponse>('auth/signup', userData);
       return data;
     },
     async forgotPassword(email: string): Promise<void> {
-        await apiInstance.post('/auth/forgot-password', { email });
+        // Use relative path to prevent Axios from stripping the /api base path
+        await apiInstance.post('auth/forgot-password', { email });
     }
   }
 };
@@ -97,7 +105,8 @@ export type PriceAsset = {
 };
 
 export const getPrices = async () => {
-  const { data } = await apiInstance.get('/prices');
+  // Use relative path to prevent Axios from stripping the /api base path
+  const { data } = await apiInstance.get('prices');
   return data;
 };
 
@@ -107,17 +116,17 @@ export const formatPrice = (value: number | null | undefined, mode: CurrencyMode
   const locale = language === 'fa' ? 'fa-IR' : 'en-US';
   
   if (mode === 'usd') {
+    // Return raw formatted number without currency symbol. The UI will render the correct symbol.
     return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency: 'USD',
+      style: 'decimal',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value);
   } else {
-    // Format Toman without fractional digits
-    const formatted = new Intl.NumberFormat(locale, {
+    // Return raw formatted number without Toman string. The UI will render the correct symbol.
+    return new Intl.NumberFormat(locale, {
+      style: 'decimal',
       maximumFractionDigits: 0
     }).format(value);
-    return language === 'fa' ? formatted + ' تومان' : 'Toman ' + formatted;
   }
 };
