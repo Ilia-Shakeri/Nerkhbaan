@@ -154,7 +154,7 @@ export function DesktopLayout() {
         initial={false}
         animate={{ width: isSidebarCollapsed ? 80 : 256 }}
         transition={{ type: 'spring', stiffness: 170, damping: 26, mass: 1.05 }}
-        className={`mt-10 hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
+        className={`hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
           isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
         } will-change-[width]`}
       >

@@ -307,9 +307,18 @@ export function DashboardView() {
           ? (asset.priceUsd ?? (asset.priceToman ? asset.priceToman / usdToTomanRate : 0)) 
           : (asset.priceToman ?? (asset.priceUsd ? asset.priceUsd * usdToTomanRate : 0));
 
-        const resolvedHistory = asset.history.length ? asset.history : [
+        const safeHistory = Array.isArray(asset.history) ? asset.history : [];
+        const resolvedHistory = safeHistory.length > 0 ? [...safeHistory] : [
           { timestamp: new Date().toISOString(), value_usd: asset.priceUsd, value_toman: asset.priceToman }
         ];
+
+        // Recharts requires at least 2 points to draw a line. If only 1, duplicate it to show a flat line.
+        if (resolvedHistory.length === 1) {
+            resolvedHistory.unshift({
+                ...resolvedHistory[0],
+                timestamp: new Date(new Date(resolvedHistory[0].timestamp).getTime() - 60000).toISOString()
+            });
+        }
 
         const activeIndex = Math.min(
           activePointIndexByAsset[asset.id] ?? Math.max(resolvedHistory.length - 1, 0),
@@ -330,6 +339,12 @@ export function DashboardView() {
         const selectedChartPoint = chartData[activeIndex] ?? chartData[chartData.length - 1];
         const chartColor = isDark ? CHART_COLORS[asset.id].dark : CHART_COLORS[asset.id].light;
         const tooltipPosition = tooltipPositionByAsset[asset.id];
+
+        const chartErrorMsg = typeof asset.chartErrorMessage === 'string' 
+            ? asset.chartErrorMessage 
+            : (asset.chartErrorMessage?.[language] || 'امکان دریافت اطلاعات نمودار وجود ندارد');
+
+        const showChartError = asset.chartError && safeHistory.length === 0 && asset.priceUsd === null && asset.priceToman === null;
 
         return (
           <motion.div
@@ -467,12 +482,12 @@ export function DashboardView() {
                   </span>
                 </div>
                 
-                {asset.chartError ? (
+                {showChartError ? (
                   <div className={`flex h-[260px] w-full flex-col items-center justify-center rounded-[1.5rem] border backdrop-blur-md ${
                     isDark ? 'border-red-500/20 bg-[#1A0B0B]/50' : 'border-red-200 bg-[#FFF0F0]/50'
                   }`}>
                     <div className={`text-sm font-semibold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                      {asset.chartErrorMessage[language]}
+                      {chartErrorMsg}
                     </div>
                   </div>
                 ) : (
