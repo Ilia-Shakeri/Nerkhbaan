@@ -105,7 +105,7 @@ export function AuthView() {
   };
 
   return (
-    <div className={`flex min-h-screen flex-col items-center justify-center p-6 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`}>
+    <div className={`flex h-screen overflow-hidden flex-col items-center justify-center p-4 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`}>
       <div className="absolute top-6 left-6 flex items-center gap-3">
         <button onClick={toggleLanguage} className={`flex h-10 items-center justify-center rounded-2xl px-4 text-xs font-bold shadow-sm transition-all hover:scale-105 ${isDark ? 'bg-white/5 text-[#E8D9AE] hover:bg-white/10' : 'bg-black/5 text-[#6B4E16] hover:bg-black/10'}`}>
           <Languages size={16} className="me-2" />
@@ -124,20 +124,18 @@ export function AuthView() {
             initial="initial"
             animate="animate"
             exit="exit"
-            className={`relative overflow-hidden rounded-[2rem] border p-8 shadow-2xl backdrop-blur-xl ${
+            className={`relative overflow-hidden rounded-[2rem] border p-6 shadow-2xl backdrop-blur-xl ${
               isDark ? 'border-white/10 bg-[#0E0E0E]/80 shadow-black/50' : 'border-black/5 bg-white/80 shadow-[#D4AF37]/10'
             }`}
           >
-            <div className="mb-8 flex flex-col items-center justify-center text-center">
-              {/* Reduced mb-6 to mb-2 to tighten the space between logo and text */}
-              <div className="mb-2 flex items-center justify-center">
-                {/* Note: use src="/icons/logo.png" for Web, and src={logo} for Desktop based on your setup */}
-                <img src="/icons/logo.png" alt="Nerkhbaan Logo" className="h-28 w-28 object-contain drop-shadow-2xl" />
+            <div className="auth-brand-wrap mb-4 flex flex-col items-center justify-center text-center">
+              <div className="auth-brand-logo-wrap mb-1 flex items-center justify-center">
+                <img src="/icons/logo.png" alt="Nerkhbaan Logo" className="auth-brand-logo h-24 w-24 object-contain drop-shadow-2xl" />
               </div>
               
               <h1
-                className={`tracking-tight pb-2 px-1 ${isRtl ? 'text-6xl font-black' : 'text-5xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
-                style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}
+                className={`auth-brand-title tracking-tight pb-1 px-1 ${isRtl ? 'text-5xl font-normal' : 'text-4xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
+                style={isRtl ? { fontFamily: 'Noto_Nastaliq_Urdu, Noto Nastaliq Urdu, serif' } : undefined}
               >
                 {t.brandName[language]}
               </h1>
@@ -147,7 +145,7 @@ export function AuthView() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4">
               {!isLogin && (
                 <>
                   <label className="block space-y-2">

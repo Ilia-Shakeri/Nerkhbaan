@@ -14,6 +14,22 @@
     font-style: normal;
     font-display: swap;
   }
+  @font-face {
+    font-family: 'Noto_Nastaliq_Urdu';
+    src: url('/fonts/Noto_Nastaliq_Urdu/NotoNastaliqUrdu-VariableFont_wght.ttf') format('truetype');
+    font-weight: 400 700;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  .auth-brand-logo {
+    height: 5.5rem;
+    width: 5.5rem;
+  }
+
+  .auth-brand-title {
+    line-height: 1.05;
+  }
 
   @font-face {
     font-family: 'Vazir';
