@@ -34,7 +34,6 @@ export function AuthView() {
 
   const t = {
     brandName: { fa: 'نرخ‌بان', en: 'Nerkhbaan' },
-    // Replaced the simple tagline with a descriptive footer message
     footerText: { 
       fa: 'نرخ‌بان یک کیف پول نیست؛ بلکه پلتفرمی تخصصی برای ردیابی و هشدار هوشمند قیمت‌هاست.', 
       en: 'Nerkhbaan is not a wallet; it is a specialized platform for smart price tracking and alerts.' 
@@ -110,6 +109,8 @@ export function AuthView() {
 
   return (
     <div className={`flex h-screen overflow-hidden flex-col items-center justify-center p-4 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`}>
+      
+      {/* Header Controls */}
       <div className="absolute top-6 left-6 flex items-center gap-3">
         <button onClick={toggleLanguage} className={`flex h-10 items-center justify-center rounded-2xl px-4 text-xs font-bold shadow-sm transition-all hover:scale-105 ${isDark ? 'bg-white/5 text-[#E8D9AE] hover:bg-white/10' : 'bg-black/5 text-[#6B4E16] hover:bg-black/10'}`}>
           <Languages size={16} className="me-2" />
@@ -128,58 +129,63 @@ export function AuthView() {
             initial="initial"
             animate="animate"
             exit="exit"
-            className={`relative overflow-hidden rounded-[2rem] border p-6 shadow-2xl backdrop-blur-xl ${
+            className={`relative overflow-hidden rounded-[2rem] border shadow-2xl backdrop-blur-xl transition-all duration-300 ${
+              isLogin ? 'p-6' : 'px-6 py-4'
+            } ${
               isDark ? 'border-white/10 bg-[#0E0E0E]/80 shadow-black/50' : 'border-black/5 bg-white/80 shadow-[#D4AF37]/10'
             }`}
           >
-            <div className="auth-brand-wrap mb-4 flex flex-col items-center justify-center text-center">
-              {/* Increased size to h-28 w-28 and added z-10 to stay above the title */}
+            {/* Dynamically scale logo and text margins based on state to prevent viewport overflow */}
+            <div className={`auth-brand-wrap flex flex-col items-center justify-center text-center transition-all duration-300 ${isLogin ? 'mb-4' : 'mb-2'}`}>
               <div className="auth-brand-logo-wrap relative z-10 mb-0 flex items-center justify-center">
-                <img src="/icons/logo.png" alt="Nerkhbaan Logo" className="auth-brand-logo h-28 w-28 object-contain drop-shadow-2xl" />
+                <img 
+                  src="/icons/logo.png" 
+                  alt="Nerkhbaan Logo" 
+                  className={`auth-brand-logo object-contain drop-shadow-2xl transition-all duration-300 ${isLogin ? 'h-28 w-28' : 'h-16 w-16'}`} 
+                />
               </div>
-              
-              {/* Negative top margin (-mt-3) brings it close, z-0 pushes it safely under the logo container */}
               <h1
-                className={`auth-brand-title relative z-0 -mt-3 px-1 pb-3 pt-0 ${isRtl ? 'text-5xl font-normal leading-[1.8]' : 'text-4xl font-black tracking-tight'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
+                className={`auth-brand-title relative z-0 px-1 pt-0 transition-all duration-300 ${isLogin ? '-mt-3 pb-3' : '-mt-1 pb-1'} ${isRtl ? 'text-5xl font-normal leading-[1.8]' : 'text-4xl font-black tracking-tight'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
                 style={isRtl ? { fontFamily: 'Noto_Nastaliq_Urdu, Noto Nastaliq Urdu, serif' } : undefined}
               >
                 {t.brandName[language]}
               </h1>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Dynamically adjust vertical gap spacing for inputs */}
+            <form onSubmit={handleSubmit} className={`transition-all duration-300 ${isLogin ? 'space-y-4' : 'space-y-2'}`}>
               {!isLogin && (
                 <>
-                  <label className="block space-y-2">
+                  <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.fullName[language]}</span>
                     <div className="relative">
                       <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                       <Input
                         type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
                         placeholder={t.fullNamePlaceholder[language]} required
-                        className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                        className={`h-11 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>
                   </label>
-                  <label className="block space-y-2">
+                  <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.username[language]}</span>
                     <div className="relative">
                       <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                       <Input
                         type="text" value={username} onChange={(e) => setUsername(e.target.value)}
                         placeholder={t.usernamePlaceholder[language]} required dir="ltr"
-                        className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                        className={`h-11 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>
                   </label>
-                  <label className="block space-y-2">
+                  <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.email[language]}</span>
                     <div className="relative">
                       <Mail size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                       <Input
                         type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                         placeholder={t.emailPlaceholder[language]} required dir="ltr"
-                        className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                        className={`h-11 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>
                   </label>
@@ -200,40 +206,41 @@ export function AuthView() {
                 </label>
               )}
 
-              <label className="block space-y-2">
+              <label className={`block ${isLogin ? 'space-y-2' : 'space-y-1'}`}>
                 <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.password[language]}</span>
                 <div className="relative">
                   <Lock size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
                   <Input
                     type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                     required dir="ltr" placeholder={t.passwordPlaceholder[language]}
-                    className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                    className={`${isLogin ? 'h-12' : 'h-11'} rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                   />
                 </div>
               </label>
 
               {isLogin && (
-                <div className={`flex w-full mt-2 justify-start`}>
+                <div className="flex w-full mt-2 justify-start">
                   <Link to="/forgot-password" className={`text-sm font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
                     {t.forgotPass[language]}
                   </Link>
                 </div>
               )}
 
+              {/* Password Validation Matrix - Renders only during registration flow */}
               {!isLogin && password.length > 0 && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="rounded-xl bg-black/5 p-4 dark:bg-white/5">
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className={`flex items-center gap-2 transition-colors ${hasLength ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
-                      {hasLength ? <CheckCircle2 size={16} /> : <XCircle size={16} />} <span>{t.pwdLength[language]}</span>
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="rounded-xl bg-black/5 p-3 dark:bg-white/5">
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className={`flex items-center gap-1.5 transition-colors ${hasLength ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
+                      {hasLength ? <CheckCircle2 size={14} /> : <XCircle size={14} />} <span>{t.pwdLength[language]}</span>
                     </div>
-                    <div className={`flex items-center gap-2 transition-colors ${hasUpper ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
-                      {hasUpper ? <CheckCircle2 size={16} /> : <XCircle size={16} />} <span>{t.pwdUpper[language]}</span>
+                    <div className={`flex items-center gap-1.5 transition-colors ${hasUpper ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
+                      {hasUpper ? <CheckCircle2 size={14} /> : <XCircle size={14} />} <span>{t.pwdUpper[language]}</span>
                     </div>
-                    <div className={`flex items-center gap-2 transition-colors ${hasLower ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
-                      {hasLower ? <CheckCircle2 size={16} /> : <XCircle size={16} />} <span>{t.pwdLower[language]}</span>
+                    <div className={`flex items-center gap-1.5 transition-colors ${hasLower ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
+                      {hasLower ? <CheckCircle2 size={14} /> : <XCircle size={14} />} <span>{t.pwdLower[language]}</span>
                     </div>
-                    <div className={`flex items-center gap-2 transition-colors ${hasNumSym ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
-                      {hasNumSym ? <CheckCircle2 size={16} /> : <XCircle size={16} />} <span>{t.pwdNumSym[language]}</span>
+                    <div className={`flex items-center gap-1.5 transition-colors ${hasNumSym ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
+                      {hasNumSym ? <CheckCircle2 size={14} /> : <XCircle size={14} />} <span>{t.pwdNumSym[language]}</span>
                     </div>
                   </div>
                 </motion.div>
@@ -242,7 +249,7 @@ export function AuthView() {
               <Button
                 type="submit"
                 disabled={isSubmitting || (!isLogin && !isPasswordValid)}
-                className={`mt-6 h-12 w-full rounded-2xl text-sm font-bold transition-all duration-300 ${
+                className={`w-full rounded-2xl text-sm font-bold transition-all duration-300 ${isLogin ? 'mt-6 h-12' : 'mt-4 h-11'} ${
                   (!isLogin && !isPasswordValid) ? 'opacity-50 cursor-not-allowed' : ''
                 } ${
                   isDark 
@@ -251,14 +258,14 @@ export function AuthView() {
                 }`}
               >
                 {isSubmitting ? (
-                  <div className="h-6 w-6 animate-spin rounded-full border-4 border-current border-t-transparent" />
+                  <div className="h-5 w-5 animate-spin rounded-full border-4 border-current border-t-transparent" />
                 ) : (
                   isLogin ? t.submitLogin[language] : t.submitSignup[language]
                 )}
               </Button>
               
               {registrationEnabled && (
-                <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium">
+                <div className={`${isLogin ? 'mt-6' : 'mt-3'} flex items-center justify-center gap-2 text-sm font-medium`}>
                   <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>
                     {isLogin ? t.noAccount[language] : t.hasAccount[language]}
                   </span>
@@ -278,12 +285,14 @@ export function AuthView() {
           </motion.div>
         </AnimatePresence>
 
-        {/* Global Professional Footer */}
-        <div className={`mt-8 flex w-full flex-col items-center justify-center border-t border-black/10 pt-5 dark:border-white/10`}>
-          <p className={`text-center text-[13px] font-medium leading-relaxed transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}>
-            {t.footerText[language]}
-          </p>
-        </div>
+        {/* Global Professional Footer - Rendered strictly on the Login state */}
+        {isLogin && (
+          <div className="mt-8 flex w-full flex-col items-center justify-center border-t border-black/10 pt-5 dark:border-white/10">
+            <p className={`text-center text-[13px] font-medium leading-relaxed transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}>
+              {t.footerText[language]}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
