@@ -32,13 +32,16 @@ export function AuthView() {
 
   const t = {
     brandName: { fa: 'نرخ‌بان', en: 'Nerkhbaan' },
-    brandTagline: { fa: 'ردیابی و هشدار هوشمند قیمت', en: 'Smart price tracking & alerts' },
+    // Replaced the simple tagline with a descriptive footer message
+    footerText: { 
+      fa: 'نرخ‌بان یک کیف پول نیست؛ بلکه پلتفرمی تخصصی برای ردیابی و هشدار هوشمند قیمت‌هاست.', 
+      en: 'Nerkhbaan is not a wallet; it is a specialized platform for smart price tracking and alerts.' 
+    },
     login: { fa: 'ورود', en: 'Login' },
     signup: { fa: 'ثبت نام', en: 'Sign up' },
     submitLogin: { fa: 'ورود به حساب', en: 'Sign In' },
     submitSignup: { fa: 'ایجاد حساب کاربری', en: 'Create Account' },
     identifierLabel: { fa: 'نام کاربری یا ایمیل', en: 'Username or Email' },
-    // Synced desktop placeholders with the web app version
     identifierPlaceholder: { fa: 'username یا name@example.com', en: 'username or name@example.com' },
     username: { fa: 'نام کاربری', en: 'Username' },
     usernamePlaceholder: { fa: 'ali', en: 'john' },
@@ -137,23 +140,18 @@ export function AuthView() {
             }`}
           >
             <div className="mb-8 flex flex-col items-center justify-center text-center">
-              {/* Reduced mb-6 to mb-2 to tighten the space between logo and text */}
-              <div className="mb-2 flex items-center justify-center">
-                {/* Note: use src="/icons/logo.png" for Web, and src={logo} for Desktop based on your setup */}
+              {/* Increased size to h-28 w-28 and added z-10 to stay above the title */}
+              <div className="relative z-10 mb-0 flex items-center justify-center">
                 <img src={logo} alt="Nerkhbaan Logo" className="h-28 w-28 object-contain drop-shadow-2xl" />
               </div>
               
-              {/* Added pb-2 and px-1 to prevent the gradient clipping the edges of the Persian font */}
+              {/* Negative top margin (-mt-3) brings it close, z-0 pushes it safely under the logo container */}
               <h1 
-                className={`tracking-tight pb-2 px-1 ${isRtl ? 'text-5xl font-normal' : 'text-4xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
-                style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
+                className={`auth-brand-title relative z-0 -mt-3 px-1 pb-3 pt-0 ${isRtl ? 'text-5xl font-normal leading-[1.8]' : 'text-4xl font-black tracking-tight'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
+                style={isRtl ? { fontFamily: 'Noto_Nastaliq_Urdu, Noto Nastaliq Urdu, serif' } : undefined}
               >
                 {t.brandName[language]}
               </h1>
-              
-              <p className={`mt-0 text-sm font-medium ${isDark ? 'text-[#CDB879]' : 'text-[#8A6A23]'}`}>
-                {t.brandTagline[language]}
-              </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -284,6 +282,14 @@ export function AuthView() {
             </form>
           </motion.div>
         </AnimatePresence>
+
+        {/* Global Professional Footer */}
+        <div className={`mt-8 flex w-full flex-col items-center justify-center border-t border-black/10 pt-5 dark:border-white/10`}>
+          <p className={`text-center text-[13px] font-medium leading-relaxed transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}>
+            {t.footerText[language]}
+          </p>
+        </div>
+
       </div>
     </div>
   );

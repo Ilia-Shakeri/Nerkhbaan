@@ -21,6 +21,11 @@ export function ForgotPasswordView() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const t = {
+    // Replaced the simple tagline with a descriptive footer message
+    footerText: { 
+      fa: 'نرخ‌بان یک کیف پول نیست؛ بلکه پلتفرمی تخصصی برای ردیابی و هشدار هوشمند قیمت‌هاست.', 
+      en: 'Nerkhbaan is not a wallet; it is a specialized platform for smart price tracking and alerts.' 
+    },
     backToLogin: { fa: 'بازگشت به ورود', en: 'Back to login' },
     title1: { fa: 'بازیابی رمز عبور', en: 'Forgot Password' },
     desc1: { fa: 'ایمیل خود را وارد کنید تا لینک و کد بازیابی برای شما ارسال شود.', en: 'Enter your email address to receive a recovery code.' },
@@ -97,18 +102,17 @@ export function ForgotPasswordView() {
             }`}
           >
             <div className="mb-8 flex flex-col items-center justify-center text-center">
-              {/* Logo container without box styling, increased size */}
-              {/* Logo container with reduced bottom margin for tighter spacing */}
-              <div className="mb-1 flex items-center justify-center">
-                <img src="/icons/logo.png" alt="Nerkhbaan Logo" className="h-24 w-24 object-contain drop-shadow-2xl" />
+              {/* Increased size to h-28 w-28 and added z-10 to stay above the title */}
+              <div className="relative z-10 mb-0 flex items-center justify-center">
+                <img src="/icons/logo.png" alt="Nerkhbaan Logo" className="h-28 w-28 object-contain drop-shadow-2xl" />
               </div>
               
+              {/* Replaced IranNastaliq with the unified Noto Nastaliq font, negative top margin (-mt-3) brings it close */}
               {step === 1 && (
                 <>
-                  {/* Professional luxury gradient title */}
                   <h1 
-                    className={`tracking-tight ${isRtl ? 'text-4xl font-normal' : 'text-3xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#8A6A23] via-[#5E4714] to-[#8A6A23] bg-clip-text text-transparent'}`}
-                    style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
+                    className={`relative z-0 -mt-3 px-1 pb-3 pt-0 ${isRtl ? 'text-4xl font-normal leading-[1.8]' : 'text-3xl font-black tracking-tight'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#8A6A23] via-[#5E4714] to-[#8A6A23] bg-clip-text text-transparent'}`}
+                    style={isRtl ? { fontFamily: 'Noto_Nastaliq_Urdu, Noto Nastaliq Urdu, serif' } : undefined}
                   >
                     {t.title1[language]}
                   </h1>
@@ -118,8 +122,8 @@ export function ForgotPasswordView() {
               {step === 2 && (
                 <>
                   <h1 
-                    className={`tracking-tight ${isRtl ? 'text-4xl font-normal' : 'text-3xl font-black'}`}
-                    style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
+                    className={`relative z-0 -mt-3 px-1 pb-3 pt-0 ${isRtl ? 'text-4xl font-normal leading-[1.8]' : 'text-3xl font-black tracking-tight'}`}
+                    style={isRtl ? { fontFamily: 'Noto_Nastaliq_Urdu, Noto Nastaliq Urdu, serif' } : undefined}
                   >
                     {t.title2[language]}
                   </h1>
@@ -129,8 +133,8 @@ export function ForgotPasswordView() {
               {step === 3 && (
                 <>
                   <h1 
-                    className={`tracking-tight text-emerald-500 ${isRtl ? 'text-4xl font-normal' : 'text-3xl font-black'}`}
-                    style={isRtl ? { fontFamily: 'IranNastaliq' } : undefined}
+                    className={`relative z-0 -mt-3 px-1 pb-3 pt-0 text-emerald-500 ${isRtl ? 'text-4xl font-normal leading-[1.8]' : 'text-3xl font-black tracking-tight'}`}
+                    style={isRtl ? { fontFamily: 'Noto_Nastaliq_Urdu, Noto Nastaliq Urdu, serif' } : undefined}
                   >
                     {t.title3[language]}
                   </h1>
@@ -219,6 +223,14 @@ export function ForgotPasswordView() {
             )}
           </motion.div>
         </AnimatePresence>
+        
+        {/* Global Professional Footer */}
+        <div className={`mt-8 flex w-full flex-col items-center justify-center border-t border-black/10 pt-5 dark:border-white/10`}>
+          <p className={`text-center text-[13px] font-medium leading-relaxed transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}>
+            {t.footerText[language]}
+          </p>
+        </div>
+
       </div>
     </div>
   );

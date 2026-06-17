@@ -34,7 +34,11 @@ export function AuthView() {
 
   const t = {
     brandName: { fa: 'نرخ‌بان', en: 'Nerkhbaan' },
-    brandTagline: { fa: 'ردیابی و هشدار هوشمند قیمت', en: 'Smart price tracking & alerts' },
+    // Replaced the simple tagline with a descriptive footer message
+    footerText: { 
+      fa: 'نرخ‌بان یک کیف پول نیست؛ بلکه پلتفرمی تخصصی برای ردیابی و هشدار هوشمند قیمت‌هاست.', 
+      en: 'Nerkhbaan is not a wallet; it is a specialized platform for smart price tracking and alerts.' 
+    },
     login: { fa: 'ورود', en: 'Login' },
     signup: { fa: 'ثبت نام', en: 'Sign up' },
     submitLogin: { fa: 'ورود به حساب', en: 'Sign In' },
@@ -129,20 +133,18 @@ export function AuthView() {
             }`}
           >
             <div className="auth-brand-wrap mb-4 flex flex-col items-center justify-center text-center">
-              <div className="auth-brand-logo-wrap mb-1 flex items-center justify-center">
-                <img src="/icons/logo.png" alt="Nerkhbaan Logo" className="auth-brand-logo h-24 w-24 object-contain drop-shadow-2xl" />
+              {/* Increased size to h-28 w-28 and added z-10 to stay above the title */}
+              <div className="auth-brand-logo-wrap relative z-10 mb-0 flex items-center justify-center">
+                <img src="/icons/logo.png" alt="Nerkhbaan Logo" className="auth-brand-logo h-28 w-28 object-contain drop-shadow-2xl" />
               </div>
               
+              {/* Negative top margin (-mt-3) brings it close, z-0 pushes it safely under the logo container */}
               <h1
-                className={`auth-brand-title tracking-tight pb-1 px-1 ${isRtl ? 'text-5xl font-normal' : 'text-4xl font-black'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
+                className={`auth-brand-title relative z-0 -mt-3 px-1 pb-3 pt-0 ${isRtl ? 'text-5xl font-normal leading-[1.8]' : 'text-4xl font-black tracking-tight'} ${isDark ? 'bg-gradient-to-r from-[#D4AF37] via-[#F3E2AB] to-[#D4AF37] bg-clip-text text-transparent' : 'bg-gradient-to-r from-[#3B2E13] via-[#8A6A23] to-[#3B2E13] bg-clip-text text-transparent'}`}
                 style={isRtl ? { fontFamily: 'Noto_Nastaliq_Urdu, Noto Nastaliq Urdu, serif' } : undefined}
               >
                 {t.brandName[language]}
               </h1>
-              
-              <p className={`mt-0 text-base font-semibold ${isDark ? 'text-[#CDB879]' : 'text-[#8A6A23]'}`} style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}>
-                {t.brandTagline[language]}
-              </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -255,7 +257,6 @@ export function AuthView() {
                 )}
               </Button>
               
-              {/* Conditional rendering for the registration toggle based on environment variable */}
               {registrationEnabled && (
                 <div className="mt-6 flex items-center justify-center gap-2 text-sm font-medium">
                   <span className={isDark ? 'text-gray-400' : 'text-gray-600'}>
@@ -276,6 +277,13 @@ export function AuthView() {
             </form>
           </motion.div>
         </AnimatePresence>
+
+        {/* Global Professional Footer */}
+        <div className={`mt-8 flex w-full flex-col items-center justify-center border-t border-black/10 pt-5 dark:border-white/10`}>
+          <p className={`text-center text-[13px] font-medium leading-relaxed transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}>
+            {t.footerText[language]}
+          </p>
+        </div>
       </div>
     </div>
   );
