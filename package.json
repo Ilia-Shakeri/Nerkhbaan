@@ -12,5 +12,8 @@
     "dev:all": "concurrently \"npm run dev:api\" \"npm run dev:web\" \"npm run dev:desktop\"",
     "build:web": "npm run build --workspace=nerkhbaan-web",
     "build:desktop": "npm run build --workspace=nerkhbaan-desktop"
+  },
+  "devDependencies": {
+    "electron": "^42.4.1"
   }
 }
