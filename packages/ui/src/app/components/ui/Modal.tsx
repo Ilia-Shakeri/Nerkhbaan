@@ -7,9 +7,10 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  size?: 'default' | 'large';
 }
 
-export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, size = 'default' }: ModalProps) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -35,7 +36,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4"
           >
-            <div className="relative overflow-hidden rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#121212] border border-gray-200 dark:border-white/10">
+            <div className={`relative overflow-hidden rounded-2xl bg-white p-6 shadow-2xl dark:bg-[#121212] border border-gray-200 dark:border-white/10 ${size === 'large' ? 'max-w-3xl w-full' : 'max-w-md w-full'}`}>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
                   {title}

@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:api": "cd apps/api && uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:api": "cd apps/api && (venv/Scripts/uvicorn.exe app.main:app --reload --host 0.0.0.0 --port 8000 || venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000)",
     "dev:web": "npm run dev --workspace=nerkhbaan-web",
     "dev:desktop": "npm run dev --workspace=nerkhbaan-desktop",
     "dev:all": "concurrently \"npm run dev:api\" \"npm run dev:web\" \"npm run dev:desktop\"",

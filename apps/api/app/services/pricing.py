@@ -10,7 +10,8 @@ from typing import Any
 import httpx
 
 from ..config import settings
-from .pricing_cache import PricingCacheStore
+from .pricing_cache import PricingCacheStore as FilePricingCache
+from .redis_cache import RedisPricingCache
 from .pricing_fetcher import ChainResult, PricingFetcher
 from .pricing_health import build_startup_checks, chain_result_payload
 from .pricing_registry import (
@@ -44,7 +45,11 @@ class PricingService:
         self._latest: LivePrices | None = None
         self._chain_health: dict[str, dict[str, dict[str, Any]]] = {}
 
-        self._cache = PricingCacheStore(self._resolve_cache_file())
+        if settings.redis_url:
+            self._cache = RedisPricingCache(settings.redis_url)
+        else:
+            self._cache = FilePricingCache(self._resolve_cache_file())
+        
         self.fetcher = PricingFetcher(
             settings=settings,
             cache=self._cache,

@@ -2,15 +2,22 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import settings
-from .routers import auth, prices, providers
+from .routers import auth, prices, providers, support
 from .db import engine, Base, get_db
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
+
+price_fetches_total = Counter('price_fetches_total', 'Total price fetches', ['asset', 'region', 'status'])
+cache_staleness_seconds = Gauge('cache_staleness_seconds', 'Cache staleness in seconds', ['asset', 'region'])
+price_fetch_duration_seconds = Histogram('price_fetch_duration_seconds', 'Price fetch duration', ['asset'])
 
 # Import models to ensure SQLAlchemy registers the tables before create_all executes
 from . import models  
@@ -31,7 +38,7 @@ async def lifespan(app: FastAPI):
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables verified/created successfully.")
         
-        # Seed admin account securely via environment variables
+# Seed the administrative account securely
         from .models import User
         from .security import hash_password
         from .db import SessionLocal
@@ -40,7 +47,7 @@ async def lifespan(app: FastAPI):
         try:
             admin_password = os.environ.get("ADMIN_INITIAL_PASSWORD")
             if not admin_password:
-                logger.warning("ADMIN_INITIAL_PASSWORD not set — skipping admin seed.")
+                logger.warning("Administrative password not configured. Skipping seeding.")
             else:
                 admin = db.query(User).filter(User.username == 'admin').first()
                 if not admin:
@@ -52,12 +59,17 @@ async def lifespan(app: FastAPI):
                     )
                     db.add(admin_user)
                     db.commit()
-                    logger.info("Admin account seeded successfully.")
+                    logger.info("Administrative account successfully provisioned.")
                 else:
-                    logger.info("Admin account already exists.")
+                    logger.info("Administrative account already exists in the registry.")
+        except Exception as seed_exception:
+            # Trigger a rollback to release locks and prevent database hanging on failure
+            db.rollback()
+            logger.critical(f"Database seeding execution failed: {seed_exception}")
+            raise
         finally:
+            # Guarantee the session is terminated and returned to the pool
             db.close()
-        
     except Exception as e:
         logger.critical(f"Failed to initialize database: {e}")
         raise e
@@ -73,31 +85,44 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )
 
-# Safely parse allowed origins to prevent CORS crashes
+# Extract and format the allowed origins from the environment configuration
 origins = [origin.strip() for origin in settings.allowed_origins.split(',') if origin.strip()]
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins, 
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Dynamically route the CORS middleware based on the presence of a wildcard
+if "*" in origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"], 
+        # Credentials must be strictly disabled when utilizing wildcard origins
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins, 
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Include routers without prefix since they define their own in the router files
 app.include_router(auth.router, tags=["Authentication"])
 app.include_router(prices.router, tags=["Prices"])
 app.include_router(providers.router, tags=["Providers"])
+app.include_router(support.router, tags=["Support"])
 
 @app.get("/api/health", tags=["System"])
 @app.get("/health", tags=["System"])
-async def health_check(db: Session = Depends(get_db)):
-    """Health check endpoint that verifies database connectivity."""
+def health_check(db: Session = Depends(get_db)):
+    """Health validation endpoint mapping database connectivity."""
     try:
+        # Synchronous execution is now safely isolated from the core event loop
         db.execute(text("SELECT 1"))
         db_status = "connected"
     except Exception as e:
-        logger.error(f"Health check database failure: {e}")
+        logger.error(f"Health check execution failure: {e}")
         db_status = "disconnected"
         
     return {
@@ -105,6 +130,11 @@ async def health_check(db: Session = Depends(get_db)):
         "database": db_status,
         "version": "1.0.0"
     }
+
+@app.get("/metrics", tags=["System"])
+async def metrics():
+    """Prometheus metrics endpoint."""
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):

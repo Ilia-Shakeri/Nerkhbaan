@@ -17,7 +17,8 @@ import {
   ChevronDown,
   LogOut,
   User,
-  KeyRound
+  KeyRound,
+  MessageCircle
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { UserInfoModal } from '../components/UserInfoModal';
@@ -75,11 +76,17 @@ export function DesktopLayout() {
   const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
     <>
       <div className="flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
-        <img
+        <NavLink
+          to="/"
+          onClick={() => setIsSidebarOpen(false)}
+          className="transition-opacity hover:opacity-80"
+        >
+          <img
           src={logo}
           alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
           className={`object-contain transition-all duration-300 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
         />
+        </NavLink>
       </div>
 
       <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
@@ -236,13 +243,42 @@ export function DesktopLayout() {
             <button
               type="button"
               onClick={() => setCurrencyMode?.(currencyMode === 'toman' ? 'usd' : 'toman')}
-              className={`flex h-10 items-center gap-2 rounded-xl border px-4 text-sm font-medium transition-colors ${
+              className={`relative flex h-10 items-center rounded-xl border overflow-hidden text-sm font-bold transition-all ${
                 isDark
-                  ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40 text-[#CFBE91] hover:bg-[#0E0E0E]/60'
-                  : 'border-[#D4AF37]/30 bg-white/60 text-[#8A6B20] hover:bg-white/80'
+                  ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40'
+                  : 'border-[#D4AF37]/30 bg-white/60'
               }`}
             >
-              <span>{currencyMode === 'toman' ? (language === 'fa' ? 'تومان' : 'Toman') : 'USD'}</span>
+              <div
+                className={`absolute inset-0 transition-transform duration-300 ease-out ${
+                  isDark
+                    ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB]'
+                    : 'bg-gradient-to-r from-[#3B2E13] to-[#1F180A]'
+                } ${currencyMode === 'usd' ? 'translate-x-0' : 'translate-x-full'}`}
+                style={{ width: '50%' }}
+              />
+              <div className="relative flex w-full">
+                <button
+                  type="button"
+                  className={`flex-1 px-4 py-2 transition-colors duration-300 ${
+                    currencyMode === 'usd'
+                      ? isDark ? 'text-[#0A0A0A]' : 'text-white'
+                      : isDark ? 'text-[#CFBE91]' : 'text-[#8A6B20]'
+                  }`}
+                >
+                  USD
+                </button>
+                <button
+                  type="button"
+                  className={`flex-1 px-4 py-2 transition-colors duration-300 ${
+                    currencyMode === 'toman'
+                      ? isDark ? 'text-[#0A0A0A]' : 'text-white'
+                      : isDark ? 'text-[#CFBE91]' : 'text-[#8A6B20]'
+                  }`}
+                >
+                  {language === 'fa' ? 'تومان' : 'Toman'}
+                </button>
+              </div>
             </button>
 
             {/* Notification Bell */}
@@ -380,6 +416,21 @@ export function DesktopLayout() {
                           <span>{language === 'fa' ? 'تغییر رمز عبور' : 'Change Password'}</span>
                         </button>
 
+                        <button
+                          onClick={() => {
+                            setIsUserMenuOpen(false);
+                            window.location.href = '/support';
+                          }}
+                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                            isDark
+                              ? 'text-[#E2D3AA] hover:bg-[#252525]'
+                              : 'text-[#6E5317] hover:bg-[#F6EBD0]'
+                          }`}
+                        >
+                          <MessageCircle size={16} />
+                          <span>{language === 'fa' ? 'پشتیبانی' : 'Support'}</span>
+                        </button>
+
                         <div className="my-1 h-px bg-[#D4AF37]/15" />
 
                         <button
@@ -406,8 +457,8 @@ export function DesktopLayout() {
         </header>
 
         {/* Page Content Wrapped in Glassmorphism Container */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 flex flex-col">
-          <div className={`flex-1 relative overflow-y-auto rounded-[2.5rem] border p-6 sm:p-8 shadow-2xl backdrop-blur-2xl transition-all duration-500 ${
+        <main className="flex-1 overflow-hidden p-4 sm:p-6 lg:p-8 flex flex-col">
+          <div className={`flex-1 relative overflow-y-auto rounded-[2.5rem] border p-6 sm:p-8 shadow-2xl backdrop-blur-2xl transition-all duration-500 h-full ${
             isDark 
               ? 'border-white/5 bg-[#0E0E0E]/60 shadow-black/50' 
               : 'border-black/5 bg-white/60 shadow-[#D4AF37]/20'

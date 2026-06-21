@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, CartesianGrid, ReferenceLine } from 'recharts';
-import { BellPlus, ArrowUpRight, ArrowDownRight, Gem, Coins, GripVertical, Bitcoin, CircleDollarSign } from 'lucide-react';
+import { BellPlus, ArrowUpRight, ArrowDownRight, Gem, Coins, GripVertical, Bitcoin, CircleDollarSign, Webhook, Mail, Smartphone, AlertTriangle, Maximize2 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
@@ -183,6 +183,7 @@ export function DashboardView() {
   const [activePointIndexByAsset, setActivePointIndexByAsset] = useState<Record<string, number>>({});
   const [isScrubbingByAsset, setIsScrubbingByAsset] = useState<Record<string, boolean>>({});
   const [tooltipPositionByAsset, setTooltipPositionByAsset] = useState<Record<string, TooltipPosition>>({});
+  const [fullscreenAsset, setFullscreenAsset] = useState<AssetId | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem(CHART_ORDER_STORAGE_KEY, JSON.stringify(assetOrder));
@@ -299,9 +300,9 @@ export function DashboardView() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col space-y-6">
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
         {orderedAssets.map((asset, idx) => {
         const fallbackValue = currencyMode === 'usd' 
           ? (asset.priceUsd ?? (asset.priceToman ? asset.priceToman / usdToTomanRate : 0)) 
@@ -499,6 +500,16 @@ export function DashboardView() {
                     </div>
                     <div className={`mb-2 text-xs ${isDark ? 'text-[#A89668]' : 'text-[#8A6A25]'}`}>{t.dragToInspect[language]}</div>
                     <div
+                      className="relative"
+                    >
+                      <button
+                        onClick={() => setFullscreenAsset(asset.id)}
+                        className={`absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${isDark ? 'bg-[#1A1A1A]/80 text-[#D4AF37] hover:bg-[#222222]' : 'bg-white/80 text-[#8A6B20] hover:bg-white'} backdrop-blur-sm`}
+                        title={language === 'fa' ? 'تمام صفحه' : 'Full Screen'}
+                      >
+                        <Maximize2 size={16} />
+                      </button>
+                      <div
                       id={`asset-chart-${asset.id}`}
                       className={`relative h-[260px] w-full rounded-[1.5rem] border p-2 backdrop-blur-md transition-colors ${
                         isDark 
@@ -560,6 +571,7 @@ export function DashboardView() {
                         </div>
                       )}
                     </div>
+                    </div>
                   </>
                 )}
               </CardContent>
@@ -568,8 +580,8 @@ export function DashboardView() {
         );
       })}</div>
 
-      <Modal isOpen={isAlertModalOpen} onClose={() => setIsAlertModalOpen(false)} title={t.createAlert[language]}>
-        <div className="space-y-6 pt-4">
+      <Modal isOpen={isAlertModalOpen} onClose={() => setIsAlertModalOpen(false)} title={t.createAlert[language]} size="large">
+        <div className="space-y-6 pt-4 max-h-[70vh] overflow-y-auto px-1">
           <div className="space-y-2">
             <label className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
               {t.alertFor[language]}
@@ -592,7 +604,8 @@ export function DashboardView() {
               type="number"
               dir="ltr"
               placeholder="0.00"
-              className={`h-12 rounded-2xl text-lg font-bold tracking-wider ${
+              step="0.01"
+              className={`h-14 rounded-2xl text-lg font-bold tracking-wider ${
                 isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3]' : 'border-[#D4AF37]/30 bg-white text-[#3B2E13]'
               }`}
             />
@@ -602,17 +615,81 @@ export function DashboardView() {
             <label className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
               {t.notifyVia[language]}
             </label>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${isDark ? 'text-[#CDBB8C]' : 'text-[#8A6B26]'}`}>{t.appAlert[language]}</span>
+            <div className="space-y-4">
+              <div className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${isDark ? 'border-[#D4AF37]/20 bg-[#0F0F0F] hover:bg-[#141414]' : 'border-[#D4AF37]/30 bg-[#FFFBF0] hover:bg-white'}`}>
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${isDark ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-100 text-blue-700'}`}>
+                  <Smartphone size={18} />
+                </div>
+                <div className="flex-1">
+                  <div className={`font-semibold text-sm mb-1 ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>{t.appAlert[language]}</div>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {language === 'fa' ? 'اعلان فوری در اپلیکیشن' : 'Instant in-app notification'}
+                  </p>
+                </div>
                 <Switch defaultChecked />
               </div>
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${isDark ? 'text-[#CDBB8C]' : 'text-[#8A6B26]'}`}>{t.emailAlert[language]}</span>
-                <Switch />
+
+              <div className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${isDark ? 'border-[#D4AF37]/20 bg-[#0F0F0F] hover:bg-[#141414]' : 'border-[#D4AF37]/30 bg-[#FFFBF0] hover:bg-white'}`}>
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-100 text-emerald-700'}`}>
+                  <Mail size={18} />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className={`font-semibold text-sm mb-1 ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>{t.emailAlert[language]}</div>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {language === 'fa' ? 'ارسال به ایمیل ثبت‌شده' : 'Send to registered email'}
+                      </p>
+                    </div>
+                    <Switch />
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${isDark ? 'text-[#CDBB8C]' : 'text-[#8A6B26]'}`}>{t.smsAlert[language]}</span>
+
+              <div className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${isDark ? 'border-[#D4AF37]/20 bg-[#0F0F0F] hover:bg-[#141414]' : 'border-[#D4AF37]/30 bg-[#FFFBF0] hover:bg-white'}`}>
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400' : 'bg-purple-100 text-purple-700'}`}>
+                  <Webhook size={18} />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className={`font-semibold text-sm mb-1 ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
+                        {language === 'fa' ? 'وب‌هوک' : 'Webhook'}
+                      </div>
+                      <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                        {language === 'fa' ? 'ارسال به آدرس API سفارشی' : 'Send to custom API endpoint'}
+                      </p>
+                    </div>
+                    <Switch />
+                  </div>
+                  <Input
+                    type="url"
+                    placeholder="https://api.example.com/webhook"
+                    className={`h-10 text-xs ${isDark ? 'bg-[#0A0A0A] border-[#D4AF37]/10' : 'bg-white border-[#D4AF37]/20'}`}
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-2">
+            <label className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
+              {language === 'fa' ? 'صف ناموفق‌ها (DLQ)' : 'Dead Letter Queue'}
+            </label>
+            <div className={`rounded-xl border p-4 ${isDark ? 'border-amber-500/20 bg-amber-500/5' : 'border-amber-300 bg-amber-50'}`}>
+              <div className="flex items-start gap-3">
+                <AlertTriangle size={18} className={isDark ? 'text-amber-400 mt-0.5' : 'text-amber-600 mt-0.5'} />
+                <div className="flex-1">
+                  <div className={`text-xs font-medium mb-1 ${isDark ? 'text-amber-300' : 'text-amber-800'}`}>
+                    {language === 'fa' ? 'هشدارهای ارسال‌نشده' : 'Failed Delivery Alerts'}
+                  </div>
+                  <p className={`text-xs ${isDark ? 'text-amber-400/70' : 'text-amber-700/70'}`}>
+                    {language === 'fa' 
+                      ? 'هشدارهایی که به دلیل خطا ارسال نشدند، در صف نگهداری می‌شوند و مجدداً تلاش می‌شود.'
+                      : 'Alerts that fail to deliver will be queued and retried automatically.'}
+                  </p>
+                </div>
                 <Switch />
               </div>
             </div>
@@ -639,6 +716,59 @@ export function DashboardView() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal 
+        isOpen={fullscreenAsset !== null} 
+        onClose={() => setFullscreenAsset(null)} 
+        title={fullscreenAsset ? ASSET_LABELS[fullscreenAsset][language] : ''} 
+        size="large"
+      >
+        {fullscreenAsset && (() => {
+          const asset = orderedAssets.find(a => a.id === fullscreenAsset);
+          if (!asset) return null;
+          
+          const safeHistory = Array.isArray(asset.history) ? asset.history : [];
+          const resolvedHistory = safeHistory.length > 0 ? [...safeHistory] : [
+            { timestamp: new Date().toISOString(), value_usd: asset.priceUsd, value_toman: asset.priceToman }
+          ];
+          const chartData = resolvedHistory.length === 1 
+            ? [resolvedHistory[0], resolvedHistory[0]]
+            : resolvedHistory;
+          
+          const mappedData = chartData.map((point) => ({
+            time: new Date(point.timestamp).toLocaleTimeString(language === 'fa' ? 'fa-IR' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
+            value: currencyMode === 'usd' 
+              ? (point.value_usd ?? (point.value_toman ? point.value_toman / usdToTomanRate : 0))
+              : (point.value_toman ?? (point.value_usd ? point.value_usd * usdToTomanRate : 0))
+          }));
+          
+          const chartColor = CHART_COLORS[asset.id][isDark ? 'dark' : 'light'];
+          
+          return (
+            <div className="space-y-4">
+              <div className={`text-center text-4xl font-bold ${isDark ? 'text-[#D4AF37]' : 'text-[#8A6B20]'}`}>
+                {formatPrice(currencyMode === 'usd' ? asset.priceUsd : asset.priceToman, currencyMode, language)}
+              </div>
+              <div 
+                className={`h-[60vh] w-full rounded-2xl border p-4 ${isDark ? 'border-white/5 bg-[#111111]/40' : 'border-black/5 bg-white/40'}`}
+                dir="ltr"
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={mappedData}>
+                    <CartesianGrid stroke={isDark ? '#D4AF37' : '#B68A2A'} strokeOpacity={isDark ? 0.12 : 0.18} vertical={false} />
+                    <XAxis dataKey="time" tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 12 }} axisLine={false} tickLine={false} />
+                    <YAxis domain={['dataMin', 'dataMax']} tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 12 }} axisLine={false} tickLine={false} width={70} />
+                    <Line type="monotone" dataKey="value" stroke={chartColor} strokeWidth={3} dot={false} activeDot={{ r: 7, fill: chartColor, stroke: isDark ? '#0A0A0A' : '#FFFFFF', strokeWidth: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <div className={`text-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                USD: {asset.sourceUsd} | Toman: {asset.sourceToman}
+              </div>
+            </div>
+          );
+        })()}
       </Modal>
     </div>
   );

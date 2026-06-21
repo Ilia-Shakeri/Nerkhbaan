@@ -4,6 +4,8 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // Force Vite to load environment variables from the monorepo root
+  envDir: '../../',
   plugins: [
     react(),
     VitePWA({

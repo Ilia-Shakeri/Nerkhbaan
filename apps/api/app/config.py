@@ -2,7 +2,7 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file="../../.env", env_file_encoding="utf-8", extra="ignore")
 
     api_host: str = "0.0.0.0"
     api_port: int = 8000
@@ -47,5 +47,8 @@ class Settings(BaseSettings):
 
     # Fallback exchange rate provider (USD -> IRR)
     exchange_rate_api_base_url: str = "https://open.er-api.com/v6/latest"
+    
+    # Redis configuration
+    redis_url: str | None = None
 
 settings = Settings()
