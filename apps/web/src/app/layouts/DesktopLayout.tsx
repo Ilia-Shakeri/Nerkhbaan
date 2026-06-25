@@ -235,33 +235,33 @@ export function DesktopLayout() {
              </button>
           </div>
           
-          <div className="hidden lg:block">
-          </div>
-
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className={`relative flex h-10 overflow-hidden rounded-xl border text-xs font-bold ${
-              isDark ? 'border-[#D4AF37]/25 bg-[#0E0E0E]/40' : 'border-[#D4AF37]/30 bg-[#FFF3D8]'
+            {/* Currency Toggle */}
+            <div className={`relative flex h-9 items-center gap-0.5 rounded-full p-1 ${
+              isDark
+                ? 'bg-[#141414] border border-[#D4AF37]/20'
+                : 'bg-[#F5E9CB] border border-[#D4AF37]/30'
             }`}>
               {(['usd', 'toman'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
                   onClick={() => setCurrencyMode(mode)}
-                  className={`relative flex-1 px-4 py-2 transition-colors duration-150 ${
+                  className={`relative rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-colors duration-150 ${
                     currencyMode === mode
-                      ? 'text-[#0A0A0A] font-bold'
-                      : isDark ? 'text-[#CFBE91]' : 'text-[#8A6B20]'
+                      ? 'text-[#0A0A0A]'
+                      : isDark ? 'text-[#9C8A5D] hover:text-[#CFBE91]' : 'text-[#A07830] hover:text-[#6E5317]'
                   }`}
                 >
                   {currencyMode === mode && (
                     <motion.div
-                      layoutId="currency-indicator"
-                      className={`absolute inset-0 ${isDark ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB]' : 'bg-gradient-to-r from-[#D4AF37] to-[#C9A227]'}`}
-                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                      layoutId="currency-pill"
+                      className="absolute inset-0 rounded-full bg-gradient-to-br from-[#E2C05A] via-[#D4AF37] to-[#B8942A] shadow-[0_1px_6px_rgba(212,175,55,0.45)]"
+                      transition={{ type: 'spring', stiffness: 420, damping: 30 }}
                     />
                   )}
                   <span className="relative z-10">
-                    {mode === 'usd' ? 'USD' : (language === 'fa' ? 'تومان' : 'Toman')}
+                    {mode === 'usd' ? 'USD' : (language === 'fa' ? 'تومان' : 'TMN')}
                   </span>
                 </button>
               ))}
