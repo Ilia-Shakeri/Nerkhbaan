@@ -1,14 +1,15 @@
 ﻿import axios from 'axios';
 
-// Ensure the base URL correctly points to the API gateway and appends /api to prevent 404 and CORS fetch errors
+// Use VITE_API_URL when explicitly provided (e.g. local dev pointing at 127.0.0.1:8000).
+// In production the Docker nginx container proxies /api/* to the backend, so a relative
+// baseURL is correct — the browser resolves it against the current origin automatically.
 const envApiUrl = import.meta.env.VITE_API_URL;
-let baseURL = envApiUrl 
-  ? (envApiUrl.endsWith('/api') ? envApiUrl : `${envApiUrl}/api`) 
-  : 'http://127.0.0.1:8000/api';
-
-// Append trailing slash to ensure Axios resolves relative paths correctly against the base URL
-if (!baseURL.endsWith('/')) {
-  baseURL += '/';
+let baseURL: string;
+if (envApiUrl) {
+  const clean = envApiUrl.replace(/\/api\/?$/, '');
+  baseURL = `${clean}/api/`;
+} else {
+  baseURL = '/api/';
 }
 
 export const apiInstance = axios.create({

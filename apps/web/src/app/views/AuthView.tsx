@@ -62,7 +62,17 @@ export function AuthView() {
     pwdUpper: { fa: 'یک حرف بزرگ', en: 'Uppercase letter' },
     pwdLower: { fa: 'یک حرف کوچک', en: 'Lowercase letter' },
     pwdNumSym: { fa: 'عدد یا نماد', en: 'Number or Symbol' },
-    invalidPwdMsg: { fa: 'رمز عبور ضعیف است', en: 'Password is too weak' }
+    invalidPwdMsg: { fa: 'رمز عبور ضعیف است', en: 'Password is too weak' },
+    networkError:  { fa: 'خطا در ارتباط با سرور. اتصال اینترنت خود را بررسی کنید.', en: 'Cannot reach server. Check your connection.' },
+    badCredentials:{ fa: 'نام کاربری یا رمز عبور اشتباه است', en: 'Invalid username or password' },
+    duplicate:     { fa: 'این ایمیل یا نام کاربری قبلاً ثبت شده است', en: 'Email or username already registered' },
+  };
+
+  const localizeError = (msg: string): string => {
+    if (!msg || msg === 'Network Error' || msg.toLowerCase().startsWith('network')) return t.networkError[language];
+    if (msg.toLowerCase().includes('invalid credentials')) return t.badCredentials[language];
+    if (msg.toLowerCase().includes('already registered')) return t.duplicate[language];
+    return msg;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -93,8 +103,8 @@ export function AuthView() {
       }
       navigate('/');
     } catch (error: any) {
-      const message = error instanceof Error ? error.message : t.failed[language];
-      toast.error(message);
+      const raw = error instanceof Error ? error.message : '';
+      toast.error(localizeError(raw) || t.failed[language]);
     } finally {
       setIsSubmitting(false);
     }
@@ -159,7 +169,7 @@ export function AuthView() {
                   <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.fullName[language]}</span>
                     <div className="relative">
-                      <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
+                      <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                       <Input
                         type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
                         placeholder={t.fullNamePlaceholder[language]} required
@@ -170,7 +180,7 @@ export function AuthView() {
                   <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.username[language]}</span>
                     <div className="relative">
-                      <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
+                      <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                       <Input
                         type="text" value={username} onChange={(e) => setUsername(e.target.value)}
                         placeholder={t.usernamePlaceholder[language]} required dir="ltr"
@@ -181,7 +191,7 @@ export function AuthView() {
                   <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.email[language]}</span>
                     <div className="relative">
-                      <Mail size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
+                      <Mail size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                       <Input
                         type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                         placeholder={t.emailPlaceholder[language]} required dir="ltr"
@@ -196,7 +206,7 @@ export function AuthView() {
                 <label className="block space-y-2">
                   <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.identifierLabel[language]}</span>
                   <div className="relative">
-                    <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
+                    <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                     <Input
                       type="text" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
                       placeholder={t.identifierPlaceholder[language]} required dir="ltr"
@@ -209,7 +219,7 @@ export function AuthView() {
               <label className={`block ${isLogin ? 'space-y-2' : 'space-y-1'}`}>
                 <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.password[language]}</span>
                 <div className="relative">
-                  <Lock size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
+                  <Lock size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                   <Input
                     type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                     required dir="ltr" placeholder={t.passwordPlaceholder[language]}
