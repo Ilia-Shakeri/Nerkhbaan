@@ -11,7 +11,7 @@ import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { toast } from 'sonner';
-import { formatPrice, getPrices, type CurrencyMode, type PriceAsset } from '../services/api';
+import { api, formatPrice, getPrices, type CurrencyMode, type PriceAsset } from '../services/api';
 
 type AssetId = 'gold' | 'silver' | 'usdt' | 'btc';
 
@@ -164,15 +164,21 @@ const toChartValue = (point: AssetPoint, mode: CurrencyMode, fallbackValue: numb
 };
 
 export function DashboardView() {
-  const { language, theme } = useAppContext();
+  const { language, theme, currencyMode, setCurrencyMode } = useAppContext();
   const isDark = theme === 'dark';
-  const { currencyMode, setCurrencyMode } = useAppContext() as any;
 
   const [assetOrder, setAssetOrder] = useState<AssetId[]>(getInitialAssetOrder);
   const [draggedAssetId, setDraggedAssetId] = useState<AssetId | null>(null);
   const [dragOverAssetId, setDragOverAssetId] = useState<AssetId | null>(null);
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [selectedAssetForAlert, setSelectedAssetForAlert] = useState<AssetId>('gold');
+  const [alertTargetPrice, setAlertTargetPrice] = useState('');
+  const [alertNotifyApp, setAlertNotifyApp] = useState(true);
+  const [alertNotifyEmail, setAlertNotifyEmail] = useState(false);
+  const [alertNotifyWebhook, setAlertNotifyWebhook] = useState(false);
+  const [alertWebhookUrl, setAlertWebhookUrl] = useState('');
+  const [alertEnableDlq, setAlertEnableDlq] = useState(false);
+  const [isSavingAlert, setIsSavingAlert] = useState(false);
 
   const [pricesData, setPricesData] = useState<PriceAsset[]>(EMPTY_ASSETS);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
@@ -301,6 +307,45 @@ export function DashboardView() {
 
   return (
     <div className="h-full flex flex-col space-y-6">
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className={`text-xs font-semibold ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>
+            {t.currencyView[language]}
+          </span>
+          <div className={`flex rounded-xl border p-0.5 ${isDark ? 'border-white/10 bg-[#111111]' : 'border-black/10 bg-white'}`}>
+            {(['usd', 'toman'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setCurrencyMode(mode)}
+                className={`px-4 py-1.5 rounded-[10px] text-xs font-semibold transition-all ${
+                  currencyMode === mode
+                    ? isDark
+                      ? 'bg-[#D4AF37] text-black'
+                      : 'bg-[#D4AF37] text-black'
+                    : isDark
+                      ? 'text-[#A89668] hover:text-white'
+                      : 'text-[#7A5E24] hover:text-black'
+                }`}
+              >
+                {mode === 'usd' ? t.usd[language] : t.toman[language]}
+              </button>
+            ))}
+          </div>
+        </div>
+        {lastRefreshAt && (
+          <span className={`text-[11px] ${isDark ? 'text-[#6A5830]' : 'text-[#A8883A]'}`} dir="ltr">
+            {t.updatedAt[language]}: {new Date(lastRefreshAt).toLocaleTimeString(language === 'fa' ? 'fa-IR' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+          </span>
+        )}
+      </div>
+
+      {hasDegradedSources && (
+        <div className={`rounded-2xl border px-4 py-3 text-xs font-medium ${isDark ? 'border-amber-500/20 bg-amber-500/5 text-amber-400' : 'border-amber-300 bg-amber-50 text-amber-700'}`}>
+          {t.degradedNotice[language]}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
         {orderedAssets.map((asset, idx) => {
@@ -498,7 +543,11 @@ export function DashboardView() {
                     >
                       USD: {asset.sourceUsd} | Toman: {asset.sourceToman}
                     </div>
-                    <div className={`mb-2 text-xs ${isDark ? 'text-[#A89668]' : 'text-[#8A6A25]'}`}>{t.dragToInspect[language]}</div>
+                    <div className={`mb-2 text-xs ${isDark ? 'text-[#A89668]' : 'text-[#8A6A25]'}`}>
+                      {safeHistory.length <= 1
+                        ? (language === 'fa' ? '⏳ در حال جمع‌آوری داده‌های نمودار...' : '⏳ Building chart history...')
+                        : t.dragToInspect[language]}
+                    </div>
                     <div
                       className="relative"
                     >
@@ -605,6 +654,8 @@ export function DashboardView() {
               dir="ltr"
               placeholder="0.00"
               step="0.01"
+              value={alertTargetPrice}
+              onChange={(e) => setAlertTargetPrice(e.target.value)}
               className={`h-14 rounded-2xl text-lg font-bold tracking-wider ${
                 isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3]' : 'border-[#D4AF37]/30 bg-white text-[#3B2E13]'
               }`}
@@ -626,7 +677,7 @@ export function DashboardView() {
                     {language === 'fa' ? 'اعلان فوری در اپلیکیشن' : 'Instant in-app notification'}
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch checked={alertNotifyApp} onCheckedChange={setAlertNotifyApp} />
               </div>
 
               <div className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${isDark ? 'border-[#D4AF37]/20 bg-[#0F0F0F] hover:bg-[#141414]' : 'border-[#D4AF37]/30 bg-[#FFFBF0] hover:bg-white'}`}>
@@ -641,7 +692,7 @@ export function DashboardView() {
                         {language === 'fa' ? 'ارسال به ایمیل ثبت‌شده' : 'Send to registered email'}
                       </p>
                     </div>
-                    <Switch />
+                    <Switch checked={alertNotifyEmail} onCheckedChange={setAlertNotifyEmail} />
                   </div>
                 </div>
               </div>
@@ -660,14 +711,18 @@ export function DashboardView() {
                         {language === 'fa' ? 'ارسال به آدرس API سفارشی' : 'Send to custom API endpoint'}
                       </p>
                     </div>
-                    <Switch />
+                    <Switch checked={alertNotifyWebhook} onCheckedChange={setAlertNotifyWebhook} />
                   </div>
-                  <Input
-                    type="url"
-                    placeholder="https://api.example.com/webhook"
-                    className={`h-10 text-xs ${isDark ? 'bg-[#0A0A0A] border-[#D4AF37]/10' : 'bg-white border-[#D4AF37]/20'}`}
-                    dir="ltr"
-                  />
+                  {alertNotifyWebhook && (
+                    <Input
+                      type="url"
+                      placeholder="https://api.example.com/webhook"
+                      value={alertWebhookUrl}
+                      onChange={(e) => setAlertWebhookUrl(e.target.value)}
+                      className={`h-10 text-xs ${isDark ? 'bg-[#0A0A0A] border-[#D4AF37]/10' : 'bg-white border-[#D4AF37]/20'}`}
+                      dir="ltr"
+                    />
+                  )}
                 </div>
               </div>
             </div>
@@ -685,12 +740,12 @@ export function DashboardView() {
                     {language === 'fa' ? 'هشدارهای ارسال‌نشده' : 'Failed Delivery Alerts'}
                   </div>
                   <p className={`text-xs ${isDark ? 'text-amber-400/70' : 'text-amber-700/70'}`}>
-                    {language === 'fa' 
+                    {language === 'fa'
                       ? 'هشدارهایی که به دلیل خطا ارسال نشدند، در صف نگهداری می‌شوند و مجدداً تلاش می‌شود.'
                       : 'Alerts that fail to deliver will be queued and retried automatically.'}
                   </p>
                 </div>
-                <Switch />
+                <Switch checked={alertEnableDlq} onCheckedChange={setAlertEnableDlq} />
               </div>
             </div>
           </div>
@@ -704,15 +759,36 @@ export function DashboardView() {
               {t.cancel[language]}
             </Button>
             <Button
-              className={`h-12 flex-1 rounded-2xl border-0 text-black shadow-lg hover:shadow-xl transition-all ${
+              disabled={isSavingAlert || !alertTargetPrice}
+              className={`h-12 flex-1 rounded-2xl border-0 text-black shadow-lg hover:shadow-xl transition-all disabled:opacity-50 ${
                 isDark ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB]' : 'bg-[#D4AF37] hover:bg-[#E8C45A]'
               }`}
-              onClick={() => {
-                toast.success(t.alertSuccess[language]);
-                setIsAlertModalOpen(false);
+              onClick={async () => {
+                const price = parseFloat(alertTargetPrice);
+                if (!price || isNaN(price)) return;
+                setIsSavingAlert(true);
+                try {
+                  await api.alerts.create({
+                    asset: selectedAssetForAlert,
+                    target_price: price,
+                    currency_mode: currencyMode,
+                    notify_app: alertNotifyApp,
+                    notify_email: alertNotifyEmail,
+                    notify_webhook: alertNotifyWebhook,
+                    webhook_url: alertNotifyWebhook && alertWebhookUrl ? alertWebhookUrl : null,
+                    enable_dlq: alertEnableDlq,
+                  });
+                  toast.success(t.alertSuccess[language]);
+                  setIsAlertModalOpen(false);
+                  setAlertTargetPrice('');
+                } catch {
+                  toast.error(language === 'fa' ? 'خطا در ثبت هشدار' : 'Failed to save alert');
+                } finally {
+                  setIsSavingAlert(false);
+                }
               }}
             >
-              {t.save[language]}
+              {isSavingAlert ? (language === 'fa' ? 'در حال ذخیره...' : 'Saving...') : t.save[language]}
             </Button>
           </div>
         </div>

@@ -120,21 +120,30 @@ class PricingService:
             iran_val = iran_cached[0] if iran_cached else None
             intl_val = intl_cached[0] if intl_cached else None
             
+            usd_status = "cached" if intl_cached else "unavailable"
+            toman_status = "cached" if iran_cached else "unavailable"
+            change = self._calc_change_percent(asset_id)
+            stale_minutes: int | None = None
+            if iran_cached:
+                stale_minutes = self._stale_minutes(iran_cached[2])
+            elif intl_cached:
+                stale_minutes = self._stale_minutes(intl_cached[2])
+
             snapshots.append({
                 "asset": asset_id,
                 "label_fa": ASSET_LABELS[asset_id]["fa"],
                 "label_en": ASSET_LABELS[asset_id]["en"],
                 "price_usd": intl_val,
                 "price_toman": iran_val,
-                "change_percent": self._calc_change_percent(asset_id),
-                "trend": "up" if self._calc_change_percent(asset_id) >= 0 else "down",
+                "change_percent": change,
+                "trend": "up" if change >= 0 else "down",
                 "history": self._history_points(asset_id),
                 "source_usd": f"cache ({intl_cached[1]})" if intl_cached else "unavailable",
                 "source_toman": f"cache ({iran_cached[1]})" if iran_cached else "unavailable",
-                "usd_status": "cached" if intl_cached else "unavailable",
-                "toman_status": "cached" if iran_cached else "unavailable",
-                "stale_minutes": None,
-                "chart_error": True,
+                "usd_status": usd_status,
+                "toman_status": toman_status,
+                "stale_minutes": stale_minutes,
+                "chart_error": usd_status == "unavailable" and toman_status == "unavailable",
                 "chart_error_message": CHART_ERROR_MESSAGE,
             })
             
@@ -250,6 +259,12 @@ class PricingService:
         return source
 
     def _append_history(self, asset_id: str, price_usd: float | None, price_toman: float | None) -> None:
+        # Reload from shared cache before appending so multi-worker deployments
+        # accumulate a single coherent history rather than diverging per-process.
+        cached = self._cache.get_history(asset_id)
+        if cached:
+            self._history[asset_id] = cached[-HISTORY_MAX_POINTS:]
+
         now = datetime.now(UTC).replace(microsecond=0).isoformat()
         self._history[asset_id].append(
             {

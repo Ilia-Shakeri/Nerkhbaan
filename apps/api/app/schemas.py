@@ -97,3 +97,30 @@ class PricesHealthResponse(BaseModel):
     last_refresh_at: str | None = None
     startup: PricingStartupChecks
     chains: dict[str, PriceAssetHealth]
+
+
+class AlertCreate(BaseModel):
+    asset: str
+    target_price: float
+    currency_mode: str = "usd"
+    notify_app: bool = True
+    notify_email: bool = False
+    notify_webhook: bool = False
+    webhook_url: str | None = None
+    enable_dlq: bool = False
+
+
+class AlertResponse(BaseModel):
+    id: int
+    asset: str
+    target_price: float
+    currency_mode: str
+    notify_app: bool
+    notify_email: bool
+    notify_webhook: bool
+    webhook_url: str | None
+    enable_dlq: bool
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

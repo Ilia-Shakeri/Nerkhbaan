@@ -90,7 +90,7 @@ class RedisPricingCache:
             try:
                 self.redis_client.setex(
                     key,
-                    60,
+                    300,
                     json.dumps(payload, ensure_ascii=False)
                 )
             except Exception:
@@ -124,7 +124,7 @@ class RedisPricingCache:
             try:
                 self.redis_client.setex(
                     key,
-                    300,
+                    86400,
                     json.dumps(points, ensure_ascii=False)
                 )
             except Exception:

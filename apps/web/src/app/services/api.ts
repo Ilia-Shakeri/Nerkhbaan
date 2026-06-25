@@ -68,20 +68,55 @@ export type AuthResponse = {
 export const api = {
   auth: {
     async signin(credentials: { username_or_email: string; password: string }): Promise<AuthResponse> {
-      // Use relative path to prevent Axios from stripping the /api base path
       const { data } = await apiInstance.post<AuthResponse>('auth/signin', credentials);
       return data;
     },
     async signup(userData: { username: string; full_name: string; email: string; password: string }): Promise<AuthResponse> {
-      // Use relative path to prevent Axios from stripping the /api base path
       const { data } = await apiInstance.post<AuthResponse>('auth/signup', userData);
       return data;
     },
     async forgotPassword(email: string): Promise<void> {
-        // Use relative path to prevent Axios from stripping the /api base path
-        await apiInstance.post('auth/forgot-password', { email });
-    }
-  }
+      await apiInstance.post('auth/forgot-password', { email });
+    },
+  },
+  alerts: {
+    async create(payload: AlertCreate): Promise<AlertResponse> {
+      const { data } = await apiInstance.post<AlertResponse>('alerts', payload);
+      return data;
+    },
+    async list(): Promise<AlertResponse[]> {
+      const { data } = await apiInstance.get<AlertResponse[]>('alerts');
+      return data;
+    },
+    async remove(alertId: number): Promise<void> {
+      await apiInstance.delete(`alerts/${alertId}`);
+    },
+  },
+};
+
+export type AlertCreate = {
+  asset: string;
+  target_price: number;
+  currency_mode: CurrencyMode;
+  notify_app: boolean;
+  notify_email: boolean;
+  notify_webhook: boolean;
+  webhook_url: string | null;
+  enable_dlq: boolean;
+};
+
+export type AlertResponse = {
+  id: number;
+  asset: string;
+  target_price: number;
+  currency_mode: CurrencyMode;
+  notify_app: boolean;
+  notify_email: boolean;
+  notify_webhook: boolean;
+  webhook_url: string | null;
+  enable_dlq: boolean;
+  is_active: boolean;
+  created_at: string;
 };
 
 export type CurrencyMode = 'usd' | 'toman';

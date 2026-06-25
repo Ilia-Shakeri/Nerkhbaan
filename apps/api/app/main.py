@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import settings
-from .routers import auth, prices, providers, support
+from .routers import alerts, auth, prices, providers, support
 from .db import engine, Base, get_db
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -112,6 +112,7 @@ app.include_router(auth.router, tags=["Authentication"])
 app.include_router(prices.router, tags=["Prices"])
 app.include_router(providers.router, tags=["Providers"])
 app.include_router(support.router, tags=["Support"])
+app.include_router(alerts.router, tags=["Alerts"])
 
 @app.get("/api/health", tags=["System"])
 @app.get("/health", tags=["System"])
