@@ -103,6 +103,7 @@ class AlertCreate(BaseModel):
     asset: str
     target_price: float
     currency_mode: str = "usd"
+    condition: str = "above"
     notify_app: bool = True
     notify_email: bool = False
     notify_webhook: bool = False
@@ -115,6 +116,7 @@ class AlertResponse(BaseModel):
     asset: str
     target_price: float
     currency_mode: str
+    condition: str
     notify_app: bool
     notify_email: bool
     notify_webhook: bool

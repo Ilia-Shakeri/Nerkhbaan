@@ -341,6 +341,12 @@ export function DashboardView() {
         )}
       </div>
 
+      {loadError && (
+        <div className={`rounded-2xl border px-4 py-3 text-xs font-medium ${isDark ? 'border-red-500/20 bg-red-500/5 text-red-400' : 'border-red-300 bg-red-50 text-red-700'}`}>
+          {language === 'fa' ? `خطا در دریافت قیمت‌ها: ${loadError}` : `Failed to load prices: ${loadError}`}
+        </div>
+      )}
+
       {hasDegradedSources && (
         <div className={`rounded-2xl border px-4 py-3 text-xs font-medium ${isDark ? 'border-amber-500/20 bg-amber-500/5 text-amber-400' : 'border-amber-300 bg-amber-50 text-amber-700'}`}>
           {t.degradedNotice[language]}
@@ -772,6 +778,7 @@ export function DashboardView() {
                     asset: selectedAssetForAlert,
                     target_price: price,
                     currency_mode: currencyMode,
+                    condition: 'above',
                     notify_app: alertNotifyApp,
                     notify_email: alertNotifyEmail,
                     notify_webhook: alertNotifyWebhook,

@@ -27,6 +27,7 @@ class Alert(Base):
     asset: Mapped[str] = mapped_column(String(20), nullable=False)
     target_price: Mapped[float] = mapped_column(Float, nullable=False)
     currency_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="usd")
+    condition: Mapped[str] = mapped_column(String(10), nullable=False, default="above")
     notify_app: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notify_email: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notify_webhook: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

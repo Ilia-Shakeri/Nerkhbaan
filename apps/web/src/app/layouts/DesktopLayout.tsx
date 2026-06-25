@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, Outlet, Navigate } from 'react-router-dom';
+import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Settings,
@@ -34,21 +34,20 @@ const NAV_ITEMS = [
 ];
 
 export function DesktopLayout() {
-  const { language, theme, logout, toggleTheme, toggleLanguage } = useAppContext() as any;
-  const { isAuthenticated } = useAppContext();
-  const { currencyMode, setCurrencyMode } = useAppContext() as any;
+  const { language, theme, logout, toggleTheme, toggleLanguage, isAuthenticated, currencyMode, setCurrencyMode } = useAppContext();
   const isDark = theme === 'dark';
 
-  if (!isAuthenticated) {
-    return <Navigate to="/auth" replace />;
-  }
-
+  const navigate = useNavigate();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+
+  if (!isAuthenticated) {
+    return <Navigate to="/auth" replace />;
+  }
 
   const notifications = [
     {
@@ -242,7 +241,7 @@ export function DesktopLayout() {
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
-              onClick={() => setCurrencyMode?.(currencyMode === 'toman' ? 'usd' : 'toman')}
+              onClick={() => setCurrencyMode(currencyMode === 'toman' ? 'usd' : 'toman')}
               className={`relative flex h-10 items-center rounded-xl border overflow-hidden text-sm font-bold transition-all ${
                 isDark
                   ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40'
@@ -419,7 +418,7 @@ export function DesktopLayout() {
                         <button
                           onClick={() => {
                             setIsUserMenuOpen(false);
-                            window.location.href = '/support';
+                            navigate('/support');
                           }}
                           className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                             isDark

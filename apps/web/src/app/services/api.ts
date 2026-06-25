@@ -98,6 +98,7 @@ export type AlertCreate = {
   asset: string;
   target_price: number;
   currency_mode: CurrencyMode;
+  condition: 'above' | 'below';
   notify_app: boolean;
   notify_email: boolean;
   notify_webhook: boolean;
@@ -110,6 +111,7 @@ export type AlertResponse = {
   asset: string;
   target_price: number;
   currency_mode: CurrencyMode;
+  condition: 'above' | 'below';
   notify_app: boolean;
   notify_email: boolean;
   notify_webhook: boolean;
