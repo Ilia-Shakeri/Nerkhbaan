@@ -37,7 +37,7 @@ def list_alerts(
     )
 
 
-@router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 def delete_alert(
     alert_id: int,
     current_user: User = Depends(get_current_user),
