@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, ArrowRight, ArrowLeft, KeyRound, CheckCircle2 } from 'lucide-react';
+import { Mail, ArrowRight, ArrowLeft, KeyRound, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -19,6 +19,7 @@ export function ForgotPasswordView() {
   const [newPassword, setNewPassword] = useState('');
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
   const t = {
     // Replaced the simple tagline with a descriptive footer message
@@ -148,7 +149,7 @@ export function ForgotPasswordView() {
                     <label className="block space-y-2">
                         <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.emailLabel[language]}</span>
                         <div className="relative">
-                            <Mail size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
+                            <Mail size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-[#D4AF37]`} />
                             <Input
                                 type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                                 placeholder={t.emailPlaceholder[language]} required dir="ltr"
@@ -174,7 +175,7 @@ export function ForgotPasswordView() {
                     <label className="block space-y-2">
                         <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.codeLabel[language]}</span>
                         <div className="relative">
-                            <KeyRound size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
+                            <KeyRound size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-[#D4AF37]`} />
                             <Input
                                 type="text" value={code} onChange={(e) => setCode(e.target.value)}
                                 placeholder={t.codePlaceholder[language]} required dir="ltr"
@@ -185,12 +186,24 @@ export function ForgotPasswordView() {
                     <label className="block space-y-2">
                         <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.newPassLabel[language]}</span>
                         <div className="relative">
-                            <KeyRound size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#CDB879]/55' : 'text-[#A8883A]/75'}`} />
+                            <KeyRound size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-[#D4AF37]`} />
                             <Input
-                                type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                                type={showNewPassword ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                                 placeholder={t.newPassPlaceholder[language]} required dir="ltr"
-                                className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 tracking-widest ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                                className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-14 text-right' : 'pl-11 pr-14 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 tracking-widest [&::-ms-reveal]:hidden [&::-ms-clear]:hidden ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowNewPassword(p => !p)}
+                                tabIndex={-1}
+                                className={`absolute ${isRtl ? 'left-2.5' : 'right-2.5'} top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 ${
+                                  isDark
+                                    ? 'bg-[#D4AF37]/12 text-[#D4AF37] hover:bg-[#D4AF37]/22 hover:shadow-[0_0_14px_rgba(212,175,55,0.32)]'
+                                    : 'bg-[#D4AF37]/18 text-[#8A6A23] hover:bg-[#D4AF37]/30 hover:shadow-[0_0_14px_rgba(212,175,55,0.22)]'
+                                }`}
+                            >
+                                {showNewPassword ? <EyeOff size={15} strokeWidth={2.2} /> : <Eye size={15} strokeWidth={2.2} />}
+                            </button>
                         </div>
                     </label>
                     <Button
