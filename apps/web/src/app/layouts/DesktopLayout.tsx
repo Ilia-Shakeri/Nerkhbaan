@@ -188,7 +188,7 @@ export function DesktopLayout() {
             animate={{ x: 0 }}
             exit={{ x: language === 'fa' ? '100%' : '-100%' }}
             transition={{ type: 'spring', bounce: 0.08, duration: 0.56 }}
-            className={`fixed bottom-0 top-10 z-50 flex w-72 flex-col ${
+            className={`fixed bottom-0 top-0 z-50 flex w-72 flex-col ${
               isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
             } lg:hidden ${
               language === 'fa' ? 'right-0 border-l border-[#D4AF37]/15' : 'left-0 border-r border-[#D4AF37]/15'
@@ -206,7 +206,7 @@ export function DesktopLayout() {
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <div className="relative mt-10 flex flex-1 flex-col overflow-hidden">
+      <div className="relative flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}
         <header
           className={`z-10 flex h-16 shrink-0 items-center justify-between border-b border-[#D4AF37]/12 px-6 backdrop-blur-md transition-colors duration-500 ${
@@ -455,15 +455,9 @@ export function DesktopLayout() {
           </div>
         </header>
 
-        {/* Page Content Wrapped in Glassmorphism Container */}
-        <main className="flex-1 overflow-hidden p-4 sm:p-6 lg:p-8 flex flex-col">
-          <div className={`flex-1 relative overflow-y-auto rounded-[2.5rem] border p-6 sm:p-8 shadow-2xl backdrop-blur-2xl transition-all duration-500 h-full ${
-            isDark 
-              ? 'border-white/5 bg-[#0E0E0E]/60 shadow-black/50' 
-              : 'border-black/5 bg-white/60 shadow-[#D4AF37]/20'
-          }`}>
-            <Outlet />
-          </div>
+        {/* Page Content */}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <Outlet />
         </main>
       </div>
 

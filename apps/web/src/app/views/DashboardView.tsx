@@ -306,40 +306,7 @@ export function DashboardView() {
   );
 
   return (
-    <div className="h-full flex flex-col space-y-6">
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className={`text-xs font-semibold ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>
-            {t.currencyView[language]}
-          </span>
-          <div className={`flex rounded-xl border p-0.5 ${isDark ? 'border-white/10 bg-[#111111]' : 'border-black/10 bg-white'}`}>
-            {(['usd', 'toman'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setCurrencyMode(mode)}
-                className={`px-4 py-1.5 rounded-[10px] text-xs font-semibold transition-all ${
-                  currencyMode === mode
-                    ? isDark
-                      ? 'bg-[#D4AF37] text-black'
-                      : 'bg-[#D4AF37] text-black'
-                    : isDark
-                      ? 'text-[#A89668] hover:text-white'
-                      : 'text-[#7A5E24] hover:text-black'
-                }`}
-              >
-                {mode === 'usd' ? t.usd[language] : t.toman[language]}
-              </button>
-            ))}
-          </div>
-        </div>
-        {lastRefreshAt && (
-          <span className={`text-[11px] ${isDark ? 'text-[#6A5830]' : 'text-[#A8883A]'}`} dir="ltr">
-            {t.updatedAt[language]}: {new Date(lastRefreshAt).toLocaleTimeString(language === 'fa' ? 'fa-IR' : 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-          </span>
-        )}
-      </div>
+    <div className="flex flex-col gap-4">
 
       {loadError && (
         <div className={`rounded-2xl border px-4 py-3 text-xs font-medium ${isDark ? 'border-red-500/20 bg-red-500/5 text-red-400' : 'border-red-300 bg-red-50 text-red-700'}`}>
@@ -353,7 +320,7 @@ export function DashboardView() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {orderedAssets.map((asset, idx) => {
         const fallbackValue = currencyMode === 'usd' 
           ? (asset.priceUsd ?? (asset.priceToman ? asset.priceToman / usdToTomanRate : 0)) 

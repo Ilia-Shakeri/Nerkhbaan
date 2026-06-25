@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Mail, Lock, CheckCircle2, XCircle, Sun, Moon, Languages } from 'lucide-react';
+import { User, Mail, Lock, CheckCircle2, XCircle, Sun, Moon, Languages, Eye, EyeOff } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -24,6 +24,7 @@ export function AuthView() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fullName, setFullName] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   // Password live validation checks
   const hasLength = password.length >= 8;
@@ -219,12 +220,22 @@ export function AuthView() {
               <label className={`block ${isLogin ? 'space-y-2' : 'space-y-1'}`}>
                 <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.password[language]}</span>
                 <div className="relative">
+                  {/* Lock icon on the "start" side — right in RTL, left in LTR */}
                   <Lock size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                   <Input
-                    type="password" value={password} onChange={(e) => setPassword(e.target.value)}
+                    type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
                     required dir="ltr" placeholder={t.passwordPlaceholder[language]}
-                    className={`${isLogin ? 'h-12' : 'h-11'} rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                    className={`${isLogin ? 'h-12' : 'h-11'} rounded-2xl ${isRtl ? 'pr-11 pl-11' : 'pl-11 pr-11'} text-left text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                   />
+                  {/* Eye toggle on the "end" side — left in RTL, right in LTR */}
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className={`absolute ${isRtl ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 transition-colors ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#A8883A] hover:text-[#6A4E11]'}`}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </label>
 
