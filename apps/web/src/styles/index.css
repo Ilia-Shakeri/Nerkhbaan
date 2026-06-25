@@ -7,6 +7,11 @@
 @tailwind utilities;
 
 @layer base {
+  /* Suppress browser-native password reveal/clear icons (Edge, IE) */
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear {
+    display: none;
+  }
   @font-face {
     font-family: 'Vazirmatn';
     src: url('/fonts/Vazir-Black.woff2') format('woff2'),

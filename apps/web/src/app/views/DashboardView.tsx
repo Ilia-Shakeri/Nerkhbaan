@@ -559,7 +559,10 @@ export function DashboardView() {
                         <LineChart data={chartData}>
                           <CartesianGrid stroke={isDark ? '#D4AF37' : '#B68A2A'} strokeOpacity={isDark ? 0.12 : 0.18} vertical={false} />
                           <XAxis dataKey="time" tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 11 }} axisLine={false} tickLine={false} />
-                          <YAxis domain={['dataMin', 'dataMax']} tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
+                          <YAxis domain={[
+                            (dataMin: number) => dataMin === 0 ? -0.5 : dataMin * 0.9985,
+                            (dataMax: number) => dataMax === 0 ? 0.5 : dataMax * 1.0015
+                          ]} tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
                           <ReferenceLine x={selectedChartPoint.time} stroke={chartColor} strokeOpacity={0.65} strokeDasharray="5 4" />
                           <Line
                             type="monotone"
@@ -808,7 +811,10 @@ export function DashboardView() {
                   <LineChart data={mappedData}>
                     <CartesianGrid stroke={isDark ? '#D4AF37' : '#B68A2A'} strokeOpacity={isDark ? 0.12 : 0.18} vertical={false} />
                     <XAxis dataKey="time" tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={['dataMin', 'dataMax']} tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 12 }} axisLine={false} tickLine={false} width={70} />
+                    <YAxis domain={[
+                            (dataMin: number) => dataMin === 0 ? -0.5 : dataMin * 0.9985,
+                            (dataMax: number) => dataMax === 0 ? 0.5 : dataMax * 1.0015
+                          ]} tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 12 }} axisLine={false} tickLine={false} width={70} />
                     <Line type="monotone" dataKey="value" stroke={chartColor} strokeWidth={3} dot={false} activeDot={{ r: 7, fill: chartColor, stroke: isDark ? '#0A0A0A' : '#FFFFFF', strokeWidth: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>

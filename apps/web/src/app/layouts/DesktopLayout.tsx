@@ -239,46 +239,33 @@ export function DesktopLayout() {
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              onClick={() => setCurrencyMode(currencyMode === 'toman' ? 'usd' : 'toman')}
-              className={`relative flex h-10 items-center rounded-xl border overflow-hidden text-sm font-bold transition-all ${
-                isDark
-                  ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40'
-                  : 'border-[#D4AF37]/30 bg-white/60'
-              }`}
-            >
-              <div
-                className={`absolute inset-0 transition-transform duration-300 ease-out ${
-                  isDark
-                    ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB]'
-                    : 'bg-gradient-to-r from-[#3B2E13] to-[#1F180A]'
-                } ${currencyMode === 'usd' ? 'translate-x-0' : 'translate-x-full'}`}
-                style={{ width: '50%' }}
-              />
-              <div className="relative flex w-full">
+            <div className={`relative flex h-10 overflow-hidden rounded-xl border text-xs font-bold ${
+              isDark ? 'border-[#D4AF37]/25 bg-[#0E0E0E]/40' : 'border-[#D4AF37]/30 bg-[#FFF3D8]'
+            }`}>
+              {(['usd', 'toman'] as const).map((mode) => (
                 <button
+                  key={mode}
                   type="button"
-                  className={`flex-1 px-4 py-2 transition-colors duration-300 ${
-                    currencyMode === 'usd'
-                      ? isDark ? 'text-[#0A0A0A]' : 'text-white'
+                  onClick={() => setCurrencyMode(mode)}
+                  className={`relative flex-1 px-4 py-2 transition-colors duration-150 ${
+                    currencyMode === mode
+                      ? 'text-[#0A0A0A] font-bold'
                       : isDark ? 'text-[#CFBE91]' : 'text-[#8A6B20]'
                   }`}
                 >
-                  USD
+                  {currencyMode === mode && (
+                    <motion.div
+                      layoutId="currency-indicator"
+                      className={`absolute inset-0 ${isDark ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB]' : 'bg-gradient-to-r from-[#D4AF37] to-[#C9A227]'}`}
+                      transition={{ type: 'spring', stiffness: 500, damping: 35 }}
+                    />
+                  )}
+                  <span className="relative z-10">
+                    {mode === 'usd' ? 'USD' : (language === 'fa' ? 'تومان' : 'Toman')}
+                  </span>
                 </button>
-                <button
-                  type="button"
-                  className={`flex-1 px-4 py-2 transition-colors duration-300 ${
-                    currencyMode === 'toman'
-                      ? isDark ? 'text-[#0A0A0A]' : 'text-white'
-                      : isDark ? 'text-[#CFBE91]' : 'text-[#8A6B20]'
-                  }`}
-                >
-                  {language === 'fa' ? 'تومان' : 'Toman'}
-                </button>
-              </div>
-            </button>
+              ))}
+            </div>
 
             {/* Notification Bell */}
             <div className="relative">

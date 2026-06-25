@@ -170,33 +170,33 @@ export function AuthView() {
                   <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.fullName[language]}</span>
                     <div className="relative">
-                      <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
+                      <User size={18} className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                       <Input
                         type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                        placeholder={t.fullNamePlaceholder[language]} required
-                        className={`h-11 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                        placeholder={t.fullNamePlaceholder[language]} required dir="ltr"
+                        className={`h-11 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>
                   </label>
                   <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.username[language]}</span>
                     <div className="relative">
-                      <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
+                      <User size={18} className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                       <Input
                         type="text" value={username} onChange={(e) => setUsername(e.target.value)}
                         placeholder={t.usernamePlaceholder[language]} required dir="ltr"
-                        className={`h-11 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                        className={`h-11 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>
                   </label>
                   <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.email[language]}</span>
                     <div className="relative">
-                      <Mail size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
+                      <Mail size={18} className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                       <Input
                         type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                         placeholder={t.emailPlaceholder[language]} required dir="ltr"
-                        className={`h-11 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                        className={`h-11 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>
                   </label>
@@ -207,11 +207,11 @@ export function AuthView() {
                 <label className="block space-y-2">
                   <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.identifierLabel[language]}</span>
                   <div className="relative">
-                    <User size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
+                    <User size={18} className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                     <Input
                       type="text" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
                       placeholder={t.identifierPlaceholder[language]} required dir="ltr"
-                      className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                      className={`h-12 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                     />
                   </div>
                 </label>
@@ -221,17 +221,17 @@ export function AuthView() {
                 <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.password[language]}</span>
                 <div className="relative">
                   {/* Lock icon on the "start" side — right in RTL, left in LTR */}
-                  <Lock size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
+                  <Lock size={18} className={`pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#D4AF37]' : 'text-[#A8883A]/75'}`} />
                   <Input
                     type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
                     required dir="ltr" placeholder={t.passwordPlaceholder[language]}
-                    className={`${isLogin ? 'h-12' : 'h-11'} rounded-2xl ${isRtl ? 'pr-11 pl-11' : 'pl-11 pr-11'} text-left text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                    className={`${isLogin ? 'h-12' : 'h-11'} rounded-2xl pl-11 pr-11 text-left text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                   />
                   {/* Eye toggle on the "end" side — left in RTL, right in LTR */}
                   <button
                     type="button"
                     onClick={() => setShowPassword((prev) => !prev)}
-                    className={`absolute ${isRtl ? 'left-4' : 'right-4'} top-1/2 -translate-y-1/2 transition-colors ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#A8883A] hover:text-[#6A4E11]'}`}
+                    className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#A8883A] hover:text-[#6A4E11]'}`}
                     tabIndex={-1}
                   >
                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
