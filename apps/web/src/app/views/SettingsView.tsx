@@ -73,8 +73,20 @@ export function SettingsView() {
   const headingCls = `mb-4 flex items-center gap-2 text-xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-[#3B2E13]'}`;
   const cardCls = `divide-y ${isDark ? 'divide-white/5 border-white/5 bg-[#0E0E0E]/70' : 'divide-black/5 border-black/5 bg-white/80'} backdrop-blur-md rounded-2xl`;
   const rowCls = 'flex items-center justify-between p-5';
-  const iconWrapCls = (color: string) =>
-    `flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isDark ? `${color}/10` : `${color}/15`}`;
+  const iconWrapBase = 'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl';
+
+  // Static class pairs so Tailwind's compiler can detect them at build time.
+  // Runtime-concatenated arbitrary opacities are stripped by the JIT pass.
+  const ICON_WRAP: Record<string, { dark: string; light: string }> = {
+    gold: { dark: 'bg-[#D4AF37]/10', light: 'bg-[#D4AF37]/15' },
+    emerald: { dark: 'bg-emerald-500/10', light: 'bg-emerald-500/15' },
+    purple: { dark: 'bg-purple-500/10', light: 'bg-purple-500/15' },
+    sky: { dark: 'bg-sky-500/10', light: 'bg-sky-500/15' },
+    slate: { dark: 'bg-slate-500/10', light: 'bg-slate-500/15' },
+    orange: { dark: 'bg-orange-500/10', light: 'bg-orange-500/15' },
+  };
+  const iconWrapCls = (key: keyof typeof ICON_WRAP) =>
+    `${iconWrapBase} ${isDark ? ICON_WRAP[key].dark : ICON_WRAP[key].light}`;
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 pb-10">
@@ -87,7 +99,7 @@ export function SettingsView() {
         <Card className={cardCls}>
           <div className={rowCls}>
             <div className="flex items-center gap-4">
-              <div className={`${iconWrapCls('bg-[#D4AF37]')} text-[#D4AF37]`}>
+              <div className={`${iconWrapCls('gold')} text-[#D4AF37]`}>
                 {isDark ? <Moon size={20} /> : <Sun size={20} />}
               </div>
               <div className="flex flex-col">
@@ -100,7 +112,7 @@ export function SettingsView() {
 
           <div className={rowCls}>
             <div className="flex items-center gap-4">
-              <div className={`${iconWrapCls('bg-[#D4AF37]')} text-[#D4AF37]`}>
+              <div className={`${iconWrapCls('gold')} text-[#D4AF37]`}>
                 <Languages size={20} />
               </div>
               <div className="flex flex-col">
@@ -125,10 +137,10 @@ export function SettingsView() {
         </h2>
         <Card className={cardCls}>
           {([
-            { key: 'pushApp',   icon: <Bell size={20} />,        color: 'bg-[#D4AF37]', iconColor: 'text-[#D4AF37]',   label: t.pushApp   },
-            { key: 'sms',       icon: <Smartphone size={20} />,  color: 'bg-emerald-500', iconColor: 'text-emerald-400', label: t.sms       },
-            { key: 'email',     icon: <Mail size={20} />,        color: 'bg-purple-500', iconColor: 'text-purple-400',  label: t.email     },
-            { key: 'telegram',  icon: <Send size={20} />,        color: 'bg-sky-500',    iconColor: 'text-sky-400',     label: t.telegram  },
+            { key: 'pushApp',   icon: <Bell size={20} />,        color: 'gold',    iconColor: 'text-[#D4AF37]',   label: t.pushApp   },
+            { key: 'sms',       icon: <Smartphone size={20} />,  color: 'emerald', iconColor: 'text-emerald-400', label: t.sms       },
+            { key: 'email',     icon: <Mail size={20} />,        color: 'purple',  iconColor: 'text-purple-400',  label: t.email     },
+            { key: 'telegram',  icon: <Send size={20} />,        color: 'sky',     iconColor: 'text-sky-400',     label: t.telegram  },
           ] as const).map(({ key, icon, color, iconColor, label }) => (
             <div key={key} className={rowCls}>
               <div className="flex items-center gap-4">
@@ -149,7 +161,7 @@ export function SettingsView() {
         <Card className={cardCls}>
           <div className={rowCls}>
             <div className="flex items-center gap-4">
-              <div className={`${iconWrapCls('bg-slate-500')} ${isDark ? 'text-slate-400' : 'text-slate-600'}`}><VolumeX size={20} /></div>
+              <div className={`${iconWrapCls('slate')} ${isDark ? 'text-slate-400' : 'text-slate-600'}`}><VolumeX size={20} /></div>
               <div className="flex flex-col">
                 <span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.silent[language]}</span>
                 <span className={`text-sm ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.silentSub[language]}</span>
@@ -159,7 +171,7 @@ export function SettingsView() {
           </div>
           <div className={rowCls}>
             <div className="flex items-center gap-4">
-              <div className={`${iconWrapCls('bg-orange-500')} ${isDark ? 'text-orange-400' : 'text-orange-600'}`}><Repeat size={20} /></div>
+              <div className={`${iconWrapCls('orange')} ${isDark ? 'text-orange-400' : 'text-orange-600'}`}><Repeat size={20} /></div>
               <div className="flex flex-col">
                 <span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.aggressiveTl[language]}</span>
                 <span className={`text-sm ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.aggressiveSub[language]}</span>

@@ -63,14 +63,15 @@ export function ForgotPasswordView() {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    // Prepared for SMTP API linking
     try {
-      setTimeout(() => {
-        setStep(3);
-        setIsSubmitting(false);
-      }, 1000);
+      await api.auth.resetPassword({ email, code: code.trim(), new_password: newPassword });
+      setStep(3);
     } catch (error: any) {
-      toast.error(error.message || 'Error resetting password');
+      toast.error(
+        error?.message ||
+          (language === 'fa' ? 'کد نامعتبر یا منقضی شده است' : 'Invalid or expired code')
+      );
+    } finally {
       setIsSubmitting(false);
     }
   };

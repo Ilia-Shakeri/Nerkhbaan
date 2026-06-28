@@ -54,16 +54,18 @@ apiInstance.interceptors.response.use(
   }
 );
 
+export type UserProfile = {
+  id: number;
+  username: string;
+  full_name: string;
+  email: string;
+  created_at: string;
+};
+
 export type AuthResponse = {
   access_token: string;
   token_type: 'bearer';
-  user: {
-    id: number;
-    username: string;
-    full_name: string;
-    email: string;
-    created_at: string;
-  };
+  user: UserProfile;
 };
 
 export const api = {
@@ -78,6 +80,34 @@ export const api = {
     },
     async forgotPassword(email: string): Promise<void> {
       await apiInstance.post('auth/forgot-password', { email });
+    },
+    async resetPassword(payload: { email: string; code: string; new_password: string }): Promise<void> {
+      await apiInstance.post('auth/reset-password', payload);
+    },
+    async me(): Promise<UserProfile> {
+      const { data } = await apiInstance.get<UserProfile>('auth/me');
+      return data;
+    },
+    async changePassword(payload: { current_password: string; new_password: string }): Promise<void> {
+      await apiInstance.post('auth/change-password', payload);
+    },
+  },
+  support: {
+    async listTickets(): Promise<SupportTicket[]> {
+      const { data } = await apiInstance.get<SupportTicket[]>('support/tickets');
+      return data;
+    },
+    async createTicket(payload: { subject: string; message: string }): Promise<SupportTicket> {
+      const { data } = await apiInstance.post<SupportTicket>('support/ticket', payload);
+      return data;
+    },
+    async listMessages(ticketId: number): Promise<SupportMessage[]> {
+      const { data } = await apiInstance.get<SupportMessage[]>(`support/ticket/${ticketId}/messages`);
+      return data;
+    },
+    async sendMessage(ticketId: number, content: string): Promise<SupportMessage> {
+      const { data } = await apiInstance.post<SupportMessage>(`support/ticket/${ticketId}/message`, { content });
+      return data;
     },
   },
   alerts: {
@@ -120,6 +150,22 @@ export type AlertResponse = {
   enable_dlq: boolean;
   is_active: boolean;
   created_at: string;
+};
+
+export type SupportTicket = {
+  id: number;
+  subject: string;
+  status: 'open' | 'answered' | 'closed';
+  date: string;
+  last_message: string;
+};
+
+export type SupportMessage = {
+  id: number;
+  ticket_id: number;
+  from_user: 'user' | 'admin';
+  content: string;
+  timestamp: string;
 };
 
 export type CurrencyMode = 'usd' | 'toman';

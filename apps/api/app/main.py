@@ -8,7 +8,8 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import settings
-from .routers import alerts, auth, prices, providers, support
+from .routers import alerts, auth, prices, providers, push, support
+from .services.background import background_runner
 from .db import engine, Base, get_db
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -73,8 +74,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.critical(f"Failed to initialize database: {e}")
         raise e
+
+    # Launch the price-evaluation loop and DLQ worker that deliver alerts.
+    await background_runner.start()
     yield
     logger.info("Shutting down API...")
+    await background_runner.stop()
 
 app = FastAPI(
     title="Nerkhbaan API",
@@ -113,6 +118,7 @@ app.include_router(prices.router, tags=["Prices"])
 app.include_router(providers.router, tags=["Providers"])
 app.include_router(support.router, tags=["Support"])
 app.include_router(alerts.router, tags=["Alerts"])
+app.include_router(push.router, tags=["Push"])
 
 @app.get("/api/health", tags=["System"])
 @app.get("/health", tags=["System"])
@@ -147,7 +153,10 @@ async def global_exception_handler(request: Request, exc: Exception):
         )
         
     logger.error(f"Unhandled system error on {request.url.path}: {exc}", exc_info=True)
+    # Avoid leaking internal exception details to clients in production. The full
+    # traceback is logged above; debug mode surfaces it for local development.
+    detail = str(exc) if settings.debug else "An internal error occurred."
     return JSONResponse(
         status_code=500,
-        content={"error": "Internal Server Error", "detail": str(exc), "path": request.url.path}
+        content={"error": "Internal Server Error", "detail": detail}
     )

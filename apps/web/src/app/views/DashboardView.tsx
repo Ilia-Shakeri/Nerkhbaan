@@ -260,7 +260,12 @@ export function DashboardView() {
   };
 
   const currentUsdt = orderedAssets.find((a) => a.id === 'usdt');
-  const usdToTomanRate = (currentUsdt?.priceToman ?? 1) / (currentUsdt?.priceUsd ?? 1);
+  // Derive the USD→Toman rate from Tether only when both legs are present and
+  // non-zero. Falling back to 1 would silently render USD figures as Toman.
+  const usdToTomanRate =
+    currentUsdt?.priceToman && currentUsdt?.priceUsd
+      ? currentUsdt.priceToman / currentUsdt.priceUsd
+      : null;
 
   const t = {
     currencyView: { fa: 'نمایش بر اساس:', en: 'Currency:' },
@@ -322,9 +327,9 @@ export function DashboardView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {orderedAssets.map((asset, idx) => {
-        const fallbackValue = currencyMode === 'usd' 
-          ? (asset.priceUsd ?? (asset.priceToman ? asset.priceToman / usdToTomanRate : 0)) 
-          : (asset.priceToman ?? (asset.priceUsd ? asset.priceUsd * usdToTomanRate : 0));
+        const fallbackValue = currencyMode === 'usd'
+          ? (asset.priceUsd ?? (asset.priceToman && usdToTomanRate ? asset.priceToman / usdToTomanRate : 0))
+          : (asset.priceToman ?? (asset.priceUsd && usdToTomanRate ? asset.priceUsd * usdToTomanRate : 0));
 
         const safeHistory = Array.isArray(asset.history) ? asset.history : [];
         const resolvedHistory = safeHistory.length > 0 ? [...safeHistory] : [
@@ -791,9 +796,9 @@ export function DashboardView() {
           
           const mappedData = chartData.map((point) => ({
             time: new Date(point.timestamp).toLocaleTimeString(language === 'fa' ? 'fa-IR' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
-            value: currencyMode === 'usd' 
-              ? (point.value_usd ?? (point.value_toman ? point.value_toman / usdToTomanRate : 0))
-              : (point.value_toman ?? (point.value_usd ? point.value_usd * usdToTomanRate : 0))
+            value: currencyMode === 'usd'
+              ? (point.value_usd ?? (point.value_toman && usdToTomanRate ? point.value_toman / usdToTomanRate : 0))
+              : (point.value_toman ?? (point.value_usd && usdToTomanRate ? point.value_usd * usdToTomanRate : 0))
           }));
           
           const chartColor = CHART_COLORS[asset.id][isDark ? 'dark' : 'light'];

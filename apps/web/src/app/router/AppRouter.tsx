@@ -1,6 +1,5 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAppContext } from '../context/AppContext';
 import { DesktopLayout } from '../layouts/DesktopLayout';
 import { DashboardView } from '../views/DashboardView';
 import { AlertsView } from '../views/AlertsView';
@@ -11,17 +10,7 @@ import { AuthView } from '../views/AuthView';
 import { ForgotPasswordView } from '../views/ForgotPasswordView';
 import { AdvancedReportView } from '../views/AdvancedReportView';
 import { SupportView } from '../views/SupportView';
-
-const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated } = useAppContext();
-  const token = localStorage.getItem('authToken');
-
-  if (!isAuthenticated && !token) {
-    return <Navigate to="/auth" replace />;
-  }
-
-  return <>{children}</>;
-};
+import { ProtectedRoute } from './ProtectedRoute';
 
 export const AppRouter = () => {
   return (

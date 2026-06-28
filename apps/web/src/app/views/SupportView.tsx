@@ -1,61 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { MessageCircle, Send, Paperclip, Upload } from 'lucide-react';
+import { MessageCircle, Send, Paperclip, Loader2 } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { useAppContext } from '../context/AppContext';
+import { api, type SupportMessage, type SupportTicket } from '../services/api';
 import { toast } from 'sonner';
 
-type Ticket = {
-  id: string;
-  subject: string;
-  status: 'open' | 'answered' | 'closed';
-  date: string;
-  lastMessage: string;
-};
-
-type Message = {
-  id: string;
-  from: 'user' | 'admin';
-  content: string;
-  timestamp: string;
-};
-
 export function SupportView() {
-  const { language, theme } = useAppContext() as any;
+  const { language, theme } = useAppContext();
   const isDark = theme === 'dark';
 
-  const [tickets, setTickets] = useState<Ticket[]>([
-    {
-      id: '1',
-      subject: language === 'fa' ? 'مشکل در دریافت قیمت طلا' : 'Issue with gold price fetching',
-      status: 'open',
-      date: '2025-06-20',
-      lastMessage: language === 'fa' ? 'در حال بررسی...' : 'Investigating...'
-    }
-  ]);
+  const [tickets, setTickets] = useState<SupportTicket[]>([]);
+  const [isLoadingTickets, setIsLoadingTickets] = useState(true);
 
-  const [selectedTicket, setSelectedTicket] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      from: 'user',
-      content: language === 'fa' ? 'سلام، قیمت طلا به روز نمی‌شود.' : 'Hello, gold price is not updating.',
-      timestamp: '2025-06-20T10:30:00'
-    },
-    {
-      id: '2',
-      from: 'admin',
-      content: language === 'fa' ? 'سلام، در حال بررسی هستیم.' : 'Hello, we are investigating.',
-      timestamp: '2025-06-20T10:35:00'
-    }
-  ]);
+  const [selectedTicket, setSelectedTicket] = useState<number | null>(null);
+  const [messages, setMessages] = useState<SupportMessage[]>([]);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
   const [newMessage, setNewMessage] = useState('');
+  const [isSending, setIsSending] = useState(false);
   const [newTicketSubject, setNewTicketSubject] = useState('');
   const [newTicketMessage, setNewTicketMessage] = useState('');
   const [showNewTicketForm, setShowNewTicketForm] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   const t = {
     title: { fa: 'پشتیبانی', en: 'Support' },
@@ -72,36 +41,89 @@ export function SupportView() {
     attach: { fa: 'پیوست فایل', en: 'Attach file' },
     createTicket: { fa: 'ایجاد تیکت', en: 'Create Ticket' },
     ticketCreated: { fa: 'تیکت با موفقیت ایجاد شد', en: 'Ticket created successfully' },
-    messageSent: { fa: 'پیام ارسال شد', en: 'Message sent' }
+    messageSent: { fa: 'پیام ارسال شد', en: 'Message sent' },
+    loadFail: { fa: 'خطا در بارگذاری تیکت‌ها', en: 'Failed to load tickets' },
+    sendFail: { fa: 'خطا در ارسال پیام', en: 'Failed to send message' },
+    createFail: { fa: 'خطا در ایجاد تیکت', en: 'Failed to create ticket' },
+    noTickets: { fa: 'هنوز تیکتی ثبت نشده است', en: 'No tickets yet' }
   };
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
-    const msg: Message = {
-      id: Date.now().toString(),
-      from: 'user',
-      content: newMessage,
-      timestamp: new Date().toISOString()
-    };
-    setMessages([...messages, msg]);
-    setNewMessage('');
-    toast.success(t.messageSent[language]);
+  const loadTickets = async () => {
+    try {
+      const data = await api.support.listTickets();
+      setTickets(data);
+    } catch {
+      toast.error(t.loadFail[language]);
+    } finally {
+      setIsLoadingTickets(false);
+    }
   };
 
-  const handleCreateTicket = () => {
-    if (!newTicketSubject.trim() || !newTicketMessage.trim()) return;
-    const ticket: Ticket = {
-      id: Date.now().toString(),
-      subject: newTicketSubject,
-      status: 'open',
-      date: new Date().toISOString().split('T')[0],
-      lastMessage: newTicketMessage
+  useEffect(() => {
+    loadTickets();
+  }, []);
+
+  useEffect(() => {
+    if (selectedTicket === null) {
+      setMessages([]);
+      return;
+    }
+    let cancelled = false;
+    setIsLoadingMessages(true);
+    api.support
+      .listMessages(selectedTicket)
+      .then((data) => {
+        if (!cancelled) setMessages(data);
+      })
+      .catch(() => {
+        if (!cancelled) setMessages([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingMessages(false);
+      });
+    return () => {
+      cancelled = true;
     };
-    setTickets([ticket, ...tickets]);
-    setNewTicketSubject('');
-    setNewTicketMessage('');
-    setShowNewTicketForm(false);
-    toast.success(t.ticketCreated[language]);
+  }, [selectedTicket]);
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || selectedTicket === null || isSending) return;
+    setIsSending(true);
+    try {
+      const sent = await api.support.sendMessage(selectedTicket, newMessage.trim());
+      setMessages((prev) => [...prev, sent]);
+      setNewMessage('');
+      setTickets((prev) =>
+        prev.map((ticket) =>
+          ticket.id === selectedTicket ? { ...ticket, last_message: sent.content } : ticket
+        )
+      );
+    } catch {
+      toast.error(t.sendFail[language]);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleCreateTicket = async () => {
+    if (!newTicketSubject.trim() || !newTicketMessage.trim() || isCreating) return;
+    setIsCreating(true);
+    try {
+      const ticket = await api.support.createTicket({
+        subject: newTicketSubject.trim(),
+        message: newTicketMessage.trim()
+      });
+      setTickets((prev) => [ticket, ...prev]);
+      setNewTicketSubject('');
+      setNewTicketMessage('');
+      setShowNewTicketForm(false);
+      setSelectedTicket(ticket.id);
+      toast.success(t.ticketCreated[language]);
+    } catch {
+      toast.error(t.createFail[language]);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const statusColors = {
@@ -159,8 +181,12 @@ export function SupportView() {
                 />
               </div>
               <div className="flex gap-3">
-                <Button onClick={handleCreateTicket} className="flex-1 bg-[#D4AF37] text-black">
-                  {t.createTicket[language]}
+                <Button
+                  onClick={handleCreateTicket}
+                  disabled={isCreating || !newTicketSubject.trim() || !newTicketMessage.trim()}
+                  className="flex-1 bg-[#D4AF37] text-black disabled:opacity-50"
+                >
+                  {isCreating ? <Loader2 size={16} className="animate-spin" /> : t.createTicket[language]}
                 </Button>
                 <Button onClick={() => setShowNewTicketForm(false)} variant="outline" className="flex-1">
                   {t.cancel[language]}
@@ -175,7 +201,16 @@ export function SupportView() {
         <Card className={`lg:col-span-1 p-4 overflow-y-auto ${isDark ? 'bg-[#0E0E0E]/60 border-white/5' : 'bg-white/60 border-black/5'}`}>
           <h2 className={`text-lg font-bold mb-4 ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>{t.tickets[language]}</h2>
           <div className="space-y-3">
-            {tickets.map((ticket) => (
+            {isLoadingTickets ? (
+              <div className="flex justify-center py-8">
+                <Loader2 size={24} className={`animate-spin ${isDark ? 'text-[#D4AF37]' : 'text-[#9D7A20]'}`} />
+              </div>
+            ) : tickets.length === 0 ? (
+              <p className={`py-8 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
+                {t.noTickets[language]}
+              </p>
+            ) : (
+              tickets.map((ticket) => (
               <motion.button
                 key={ticket.id}
                 onClick={() => setSelectedTicket(ticket.id)}
@@ -196,10 +231,11 @@ export function SupportView() {
                   <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{ticket.date}</span>
                 </div>
                 <div className={`text-xs truncate ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {ticket.lastMessage}
+                  {ticket.last_message}
                 </div>
               </motion.button>
-            ))}
+              ))
+            )}
           </div>
         </Card>
 
@@ -213,27 +249,33 @@ export function SupportView() {
               </div>
               
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {messages.map((msg) => (
+                {isLoadingMessages ? (
+                  <div className="flex h-full items-center justify-center">
+                    <Loader2 size={24} className={`animate-spin ${isDark ? 'text-[#D4AF37]' : 'text-[#9D7A20]'}`} />
+                  </div>
+                ) : (
+                  messages.map((msg) => (
                   <motion.div
                     key={msg.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={`flex ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}
+                    className={`flex ${msg.from_user === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
                       className={`max-w-[70%] rounded-2xl px-4 py-3 ${
-                        msg.from === 'user'
+                        msg.from_user === 'user'
                           ? isDark ? 'bg-[#D4AF37] text-black' : 'bg-[#D4AF37] text-black'
                           : isDark ? 'bg-[#1A1A1A] text-white' : 'bg-gray-100 text-[#3B2E13]'
                       }`}
                     >
                       <p className="text-sm">{msg.content}</p>
-                      <p className={`text-xs mt-1 ${msg.from === 'user' ? 'text-black/60' : isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <p className={`text-xs mt-1 ${msg.from_user === 'user' ? 'text-black/60' : isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                         {new Date(msg.timestamp).toLocaleTimeString(language === 'fa' ? 'fa-IR' : 'en-US', { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
                   </motion.div>
-                ))}
+                  ))
+                )}
               </div>
 
               <div className={`p-4 border-t ${isDark ? 'border-white/10' : 'border-black/10'}`}>
@@ -247,12 +289,17 @@ export function SupportView() {
                   <Input
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSendMessage();
+                      }
+                    }}
                     placeholder={t.typeMessage[language]}
                     className={`flex-1 ${isDark ? 'bg-[#141414] border-[#D4AF37]/20' : 'bg-white border-[#D4AF37]/30'}`}
                   />
-                  <Button onClick={handleSendMessage} className="bg-[#D4AF37] text-black">
-                    <Send size={18} />
+                  <Button onClick={handleSendMessage} disabled={isSending || !newMessage.trim()} className="bg-[#D4AF37] text-black disabled:opacity-50">
+                    {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                   </Button>
                 </div>
               </div>
