@@ -51,4 +51,10 @@ class Settings(BaseSettings):
     # Redis configuration
     redis_url: str | None = None
 
+    # Reasoning provider using the standard chat-completions protocol.
+    # Override the base URL, model and key to point at any compatible provider.
+    insight_api_base_url: str = "https://api.deepseek.com"
+    insight_api_key: str | None = None
+    insight_model: str = "deepseek-chat"
+
 settings = Settings()

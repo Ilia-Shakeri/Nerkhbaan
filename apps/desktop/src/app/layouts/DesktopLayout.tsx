@@ -17,7 +17,9 @@ import {
   ChevronDown,
   LogOut,
   User,
-  KeyRound
+  KeyRound,
+  Sparkles,
+  Bot
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { WindowTitleBar } from '@nerkhbaan/ui/app/components/WindowTitleBar';
@@ -28,6 +30,8 @@ import logo from '../../logo/logo.png';
 const NAV_ITEMS = [
   { path: '/', label: { fa: 'داشبورد', en: 'Dashboard' }, icon: LayoutDashboard },
   { path: '/alerts', label: { fa: 'هشدارها', en: 'Alerts' }, icon: BellRing },
+  { path: '/analysis', label: { fa: 'تحلیل هوشمند', en: 'Smart Analysis' }, icon: Sparkles },
+  { path: '/assistant', label: { fa: 'دستیار هوشمند', en: 'Smart Assistant' }, icon: Bot },
   { path: '/settings', label: { fa: 'تنظیمات', en: 'Settings' }, icon: Settings },
 ];
 

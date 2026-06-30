@@ -18,7 +18,9 @@ import {
   LogOut,
   User,
   KeyRound,
-  MessageCircle
+  MessageCircle,
+  Sparkles,
+  Bot
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { UserInfoModal } from '../components/UserInfoModal';
@@ -30,6 +32,8 @@ const NAV_ITEMS = [
   { path: '/', label: { fa: 'داشبورد', en: 'Dashboard' }, icon: LayoutDashboard },
   { path: '/alerts', label: { fa: 'هشدارها', en: 'Alerts' }, icon: BellRing },
   { path: '/advanced-report', label: { fa: 'گزارش پیشرفته', en: 'Advanced Report' }, icon: BarChart3 },
+  { path: '/analysis', label: { fa: 'تحلیل هوشمند', en: 'Smart Analysis' }, icon: Sparkles },
+  { path: '/assistant', label: { fa: 'دستیار هوشمند', en: 'Smart Assistant' }, icon: Bot },
   { path: '/settings', label: { fa: 'تنظیمات', en: 'Settings' }, icon: Settings },
 ];
 

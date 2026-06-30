@@ -147,11 +147,27 @@ class PricingFetcher:
                 return self._normalize_chain_value(asset_id, region, provider, raw_value)
             except Exception as exc:
                 last_error = exc
-                if attempt < attempts - 1:
-                    # Exponential backoff to recover from rate limiting anomalies
-                    await asyncio.sleep(1.5 ** attempt)
+                # Only retry transient faults. Deterministic client errors such as
+                # 404 or a geo-block 451 will never succeed, so fail over to the
+                # next provider immediately instead of burning the cycle budget.
+                if not self._is_retryable(exc) or attempt >= attempts - 1:
+                    break
+                # Exponential backoff to recover from rate limiting and timeouts.
+                await asyncio.sleep(1.5 ** attempt)
 
         raise RuntimeError(str(last_error) if last_error else "provider failed")
+
+    @staticmethod
+    def _is_retryable(exc: Exception) -> bool:
+        # Network/timeout errors are worth retrying.
+        if isinstance(exc, (httpx.TimeoutException, httpx.TransportError)):
+            return True
+        # Among HTTP status errors, retry only rate limiting (429) and 5xx.
+        if isinstance(exc, httpx.HTTPStatusError):
+            status_code = exc.response.status_code
+            return status_code == 429 or status_code >= 500
+        # Parse/empty-value errors are deterministic for a given response.
+        return False
 
     def _normalize_chain_value(
         self,

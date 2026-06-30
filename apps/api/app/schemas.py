@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 class UserBase(BaseModel):
@@ -115,15 +116,25 @@ class PricesHealthResponse(BaseModel):
 
 
 class AlertCreate(BaseModel):
-    asset: str
-    target_price: float
-    currency_mode: str = "usd"
-    condition: str = "above"
+    asset: str = Field(min_length=1, max_length=20)
+    # Must be positive; non-positive targets can never trigger and waste cycles.
+    target_price: float = Field(gt=0)
+    # Constrained to values the alert engine knows how to evaluate. Free-form
+    # strings would create alerts that silently never fire.
+    currency_mode: Literal["usd", "toman"] = "usd"
+    condition: Literal["above", "below"] = "above"
     notify_app: bool = True
     notify_email: bool = False
     notify_webhook: bool = False
-    webhook_url: str | None = None
+    webhook_url: str | None = Field(default=None, max_length=500)
     enable_dlq: bool = False
+
+    @model_validator(mode="after")
+    def require_webhook_url(self) -> "AlertCreate":
+        # A webhook alert without a destination URL would be dropped silently.
+        if self.notify_webhook and not (self.webhook_url and self.webhook_url.strip()):
+            raise ValueError("webhook_url is required when notify_webhook is enabled")
+        return self
 
 
 class AlertResponse(BaseModel):

@@ -91,7 +91,11 @@ class PricingService:
         return datetime.now(UTC) - self._last_refresh > timedelta(seconds=CACHE_TTL_SECONDS)
 
     async def _refresh_prices(self) -> None:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        # follow_redirects keeps providers that answer with 301/302 (such as
+        # brsapi switching scheme or host) from silently failing the chain.
+        async with httpx.AsyncClient(
+            timeout=REQUEST_TIMEOUT_SECONDS, follow_redirects=True
+        ) as client:
             snapshots = await asyncio.gather(
                 *(self._build_asset_snapshot(client, asset_id) for asset_id in ASSET_LABELS)
             )

@@ -10,6 +10,8 @@ import { AuthView } from '../views/AuthView';
 import { ForgotPasswordView } from '../views/ForgotPasswordView';
 import { AdvancedReportView } from '../views/AdvancedReportView';
 import { SupportView } from '../views/SupportView';
+import { ChartAnalysisView } from '../views/ChartAnalysisView';
+import { AssistantView } from '../views/AssistantView';
 import { ProtectedRoute } from './ProtectedRoute';
 
 export const AppRouter = () => {
@@ -29,6 +31,8 @@ export const AppRouter = () => {
         <Route index element={<DashboardView />} />
         <Route path="alerts" element={<AlertsView />} />
         <Route path="advanced-report" element={<AdvancedReportView />} />
+        <Route path="analysis" element={<ChartAnalysisView />} />
+        <Route path="assistant" element={<AssistantView />} />
         <Route path="settings" element={<SettingsView />} />
         <Route path="contact" element={<ContactView />} />
         <Route path="privacy" element={<PrivacyView />} />

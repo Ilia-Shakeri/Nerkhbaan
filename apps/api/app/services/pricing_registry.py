@@ -59,16 +59,34 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                     "unit": "troy_ounce",
                 },
                 {
-                    "id": "coingecko_gold_fallback",
+                    # Free spot metal price, no API key required.
+                    "id": "goldapi_xau",
                     "priority": 2,
+                    "url": "https://api.gold-api.com/price/XAU",
+                    "method": "GET",
+                    "response_path": "price",
+                    "unit": "troy_ounce",
+                },
+                {
+                    "id": "coingecko_gold_fallback",
+                    "priority": 3,
                     "url": "https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd",
                     "method": "GET",
                     "response_path": "pax-gold.usd",
                     "unit": "troy_ounce",
                 },
                 {
+                    # Free tier, no API key required.
+                    "id": "coinpaprika_paxg",
+                    "priority": 4,
+                    "url": "https://api.coinpaprika.com/v1/tickers/paxg-pax-gold",
+                    "method": "GET",
+                    "response_path": "quotes.USD.price",
+                    "unit": "troy_ounce",
+                },
+                {
                     "id": "metals_dev_gold_backup",
-                    "priority": 3,
+                    "priority": 5,
                     "url": "https://api.metals.dev/v1/latest?currency=USD&unit=toz",
                     "method": "GET",
                     "auth": {"type": "api_key", "key_source": "metals_dev_api_key", "key_param": "api_key"},
@@ -112,20 +130,22 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                     "unit": "troy_ounce",
                 },
                 {
-                    "id": "metals_dev_silver",
+                    # Free spot metal price, no API key required. Replaces the old
+                    # coingecko "silver" id, which resolved to an unrelated token.
+                    "id": "goldapi_xag",
                     "priority": 2,
+                    "url": "https://api.gold-api.com/price/XAG",
+                    "method": "GET",
+                    "response_path": "price",
+                    "unit": "troy_ounce",
+                },
+                {
+                    "id": "metals_dev_silver",
+                    "priority": 3,
                     "url": "https://api.metals.dev/v1/latest?currency=USD&unit=toz",
                     "method": "GET",
                     "auth": {"type": "api_key", "key_source": "metals_dev_api_key", "key_param": "api_key"},
                     "response_path": "metals.silver",
-                    "unit": "troy_ounce",
-                },
-                {
-                    "id": "coingecko_silver_fallback",
-                    "priority": 3,
-                    "url": "https://api.coingecko.com/api/v3/simple/price?ids=silver&vs_currencies=usd",
-                    "method": "GET",
-                    "response_path": "silver.usd",
                     "unit": "troy_ounce",
                 },
             ],
@@ -181,8 +201,17 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                     "unit": "usd",
                 },
                 {
-                    "id": "kraken_usdt_backup",
+                    # Free tier, no API key required.
+                    "id": "coinpaprika_usdt",
                     "priority": 3,
+                    "url": "https://api.coinpaprika.com/v1/tickers/usdt-tether",
+                    "method": "GET",
+                    "response_path": "quotes.USD.price",
+                    "unit": "usd",
+                },
+                {
+                    "id": "kraken_usdt_backup",
+                    "priority": 4,
                     "url": "https://api.kraken.com/0/public/Ticker?pair=USDTUSD",
                     "method": "GET",
                     "response_path": "result.USDTUSD.c.0",
@@ -241,8 +270,26 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                     "unit": "usd",
                 },
                 {
-                    "id": "kraken_btc_backup",
+                    # Free tier, no API key required.
+                    "id": "coinpaprika_btc",
                     "priority": 3,
+                    "url": "https://api.coinpaprika.com/v1/tickers/btc-bitcoin",
+                    "method": "GET",
+                    "response_path": "quotes.USD.price",
+                    "unit": "usd",
+                },
+                {
+                    # Free, no API key required. Returns a single-element array.
+                    "id": "coinlore_btc",
+                    "priority": 4,
+                    "url": "https://api.coinlore.net/api/ticker/?id=90",
+                    "method": "GET",
+                    "response_path": "0.price_usd",
+                    "unit": "usd",
+                },
+                {
+                    "id": "kraken_btc_backup",
+                    "priority": 5,
                     "url": "https://api.kraken.com/0/public/Ticker?pair=XBTUSD",
                     "method": "GET",
                     "response_path": "result.XXBTZUSD.c.0",

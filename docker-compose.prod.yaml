@@ -5,7 +5,11 @@ services:
     image: redis:7-alpine
     container_name: nerkhbaan-redis
     restart: unless-stopped
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    # appendonly persists the price history/cache across restarts and rebuilds so
+    # charts keep rendering immediately instead of waiting for a cold refresh.
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
     networks:
       - nerkhbaan-network
     healthcheck:
@@ -30,6 +34,31 @@ services:
       timeout: 5s
       retries: 5
 
+  # Automated, scheduled database backups with built-in retention pruning.
+  # Dumps land in the db_backups named volume so they survive container rebuilds.
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
+    container_name: nerkhbaan-db-backup
+    restart: unless-stopped
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-nerkhbaan}
+      POSTGRES_USER: ${POSTGRES_USER:-nerkhbaan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Daily at 03:00; keep 7 daily, 4 weekly, 6 monthly snapshots.
+      SCHEDULE: "0 0 3 * * *"
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "4"
+      BACKUP_KEEP_MONTHS: "6"
+      HEALTHCHECK_PORT: "8080"
+    volumes:
+      - db_backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nerkhbaan-network
+
   backend:
     build:
       context: ./apps/api
@@ -46,7 +75,7 @@ services:
     networks:
       - nerkhbaan-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=5).status==200 else 1)"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -75,7 +104,8 @@ services:
       - "443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt/live/nerkhbaan.ir:/etc/nginx/ssl:ro
+      - /etc/letsencrypt:/etc/nginx/ssl:ro
+      - certbot_www:/var/www/certbot:ro
       - nginx_logs:/var/log/nginx
     depends_on:
       - frontend
@@ -89,4 +119,7 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:
+  db_backups:
   nginx_logs:
+  certbot_www:

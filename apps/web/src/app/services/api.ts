@@ -123,6 +123,30 @@ export const api = {
       await apiInstance.delete(`alerts/${alertId}`);
     },
   },
+  insights: {
+    async analyze(asset: string, language: 'fa' | 'en'): Promise<AnalyzeResponse> {
+      const { data } = await apiInstance.post<AnalyzeResponse>('insights/analyze', { asset, language });
+      return data;
+    },
+    async chat(messages: ChatMessage[], language: 'fa' | 'en'): Promise<ChatResponse> {
+      const { data } = await apiInstance.post<ChatResponse>('insights/chat', { messages, language });
+      return data;
+    },
+  },
+};
+
+export type AnalyzeResponse = {
+  asset: string;
+  analysis: string;
+};
+
+export type ChatMessage = {
+  role: 'user' | 'assistant';
+  content: string;
+};
+
+export type ChatResponse = {
+  reply: string;
 };
 
 export type AlertCreate = {
