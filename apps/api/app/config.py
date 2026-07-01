@@ -57,4 +57,18 @@ class Settings(BaseSettings):
     insight_api_key: str | None = None
     insight_model: str = "deepseek-chat"
 
+    # Web push (VAPID). Generate a key pair once and keep it stable; rotating it
+    # invalidates every stored browser subscription.
+    vapid_public_key: str | None = None
+    vapid_private_key: str | None = None
+    vapid_subject: str = "mailto:alerts@nerkhbaan.ir"
+
+    # SMTP email delivery for price alerts. Leave unset to disable email sends.
+    smtp_host: str | None = None
+    smtp_port: int = 587
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_from: str = "Nerkhbaan Alerts <alerts@nerkhbaan.ir>"
+    smtp_use_tls: bool = True
+
 settings = Settings()

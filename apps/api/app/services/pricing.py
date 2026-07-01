@@ -115,7 +115,11 @@ class PricingService:
         Graceful Degradation: If external APIs are unresponsive during startup, 
         construct the response payload purely from the last known disk cache state.
         """
-        self._cache._sync_from_disk()
+        # File cache needs a disk reload to expose the latest persisted values;
+        # the Redis cache is already authoritative and exposes no such hook.
+        sync_from_disk = getattr(self._cache, "_sync_from_disk", None)
+        if callable(sync_from_disk):
+            sync_from_disk()
         snapshots = []
         for asset_id in ASSET_LABELS:
             iran_cached = self._cache.get_chain(asset_id, "iran")

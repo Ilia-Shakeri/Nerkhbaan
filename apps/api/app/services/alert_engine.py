@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import smtplib
+import ssl
 from datetime import UTC, datetime
+from email.message import EmailMessage
 from typing import Any
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import Alert as AlertModel
+from ..config import settings
+from ..models import Alert as AlertModel, PushSubscription, User
 from ..db import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -144,13 +149,139 @@ class AlertEngine:
                 if self.dlq_callback:
                     await self.dlq_callback(alert, i, result)
 
+    def _current_price(self, alert: Alert, current_prices: dict[str, Any]) -> float | None:
+        asset_data = next(
+            (a for a in current_prices.get("assets", []) if a["asset"] == alert.asset_id),
+            None,
+        )
+        if not asset_data:
+            return None
+        return asset_data.get("price_usd") if alert.currency == "usd" else asset_data.get("price_toman")
+
+    def _alert_summary(self, alert: Alert, current_prices: dict[str, Any]) -> tuple[str, str]:
+        price = self._current_price(alert, current_prices)
+        price_text = f"{price:,.2f}" if isinstance(price, (int, float)) else "-"
+        unit = alert.currency.upper()
+        title = f"Nerkhbaan alert: {alert.asset_id.upper()}"
+        body = (
+            f"{alert.asset_id.upper()} is now {price_text} {unit} "
+            f"({alert.condition} target {alert.target_price:,.2f} {unit})."
+        )
+        return title, body
+
     async def _send_push_notification(self, alert: Alert, current_prices: dict[str, Any]) -> None:
-        await asyncio.sleep(0.1)
-        logger.info(f"Push notification sent for alert_id={alert.id}")
+        if not (settings.vapid_private_key and settings.vapid_public_key):
+            logger.warning(
+                "Push requested for alert_id=%s but VAPID keys are not configured; skipping.",
+                alert.id,
+            )
+            return
+        if alert.user_id is None:
+            return
+
+        try:
+            from pywebpush import WebPushException, webpush  # noqa: WPS433
+        except ImportError:
+            logger.error("pywebpush is not installed; cannot deliver web push notifications.")
+            raise
+
+        db: Session = SessionLocal()
+        try:
+            subscriptions = db.scalars(
+                select(PushSubscription).where(PushSubscription.user_id == alert.user_id)
+            ).all()
+            targets = [
+                (sub.endpoint, sub.p256dh, sub.auth) for sub in subscriptions
+            ]
+        finally:
+            db.close()
+
+        if not targets:
+            return
+
+        title, body = self._alert_summary(alert, current_prices)
+        payload = json.dumps({"title": title, "body": body, "asset": alert.asset_id})
+        expired_endpoints: list[str] = []
+
+        def _push(endpoint: str, p256dh: str, auth: str) -> None:
+            webpush(
+                subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
+                data=payload,
+                vapid_private_key=settings.vapid_private_key,
+                vapid_claims={"sub": settings.vapid_subject},
+                timeout=10,
+            )
+
+        delivered = 0
+        for endpoint, p256dh, auth in targets:
+            try:
+                await asyncio.to_thread(_push, endpoint, p256dh, auth)
+                delivered += 1
+            except WebPushException as exc:
+                status_code = getattr(exc.response, "status_code", None)
+                # 404/410 mean the browser dropped the subscription; prune it.
+                if status_code in (404, 410):
+                    expired_endpoints.append(endpoint)
+                else:
+                    logger.error("Web push failed for alert_id=%s: %s", alert.id, exc)
+
+        if expired_endpoints:
+            self._prune_subscriptions(expired_endpoints)
+
+        if delivered == 0 and not expired_endpoints:
+            raise RuntimeError("No push subscription accepted the notification")
+        logger.info("Push delivered for alert_id=%s to %s endpoint(s)", alert.id, delivered)
+
+    def _prune_subscriptions(self, endpoints: list[str]) -> None:
+        db: Session = SessionLocal()
+        try:
+            rows = db.scalars(
+                select(PushSubscription).where(PushSubscription.endpoint.in_(endpoints))
+            ).all()
+            for row in rows:
+                db.delete(row)
+            db.commit()
+        finally:
+            db.close()
 
     async def _send_email(self, alert: Alert, current_prices: dict[str, Any]) -> None:
-        await asyncio.sleep(0.1)
-        logger.info(f"Email sent for alert_id={alert.id}")
+        if not (settings.smtp_host and settings.smtp_username and settings.smtp_password):
+            logger.warning(
+                "Email requested for alert_id=%s but SMTP is not configured; skipping.",
+                alert.id,
+            )
+            return
+
+        db: Session = SessionLocal()
+        try:
+            recipient = db.scalar(select(User.email).where(User.id == alert.user_id))
+        finally:
+            db.close()
+
+        if not recipient:
+            logger.error("No email on file for alert_id=%s user_id=%s", alert.id, alert.user_id)
+            return
+
+        title, body = self._alert_summary(alert, current_prices)
+        message = EmailMessage()
+        message["From"] = settings.smtp_from
+        message["To"] = recipient
+        message["Subject"] = title
+        message.set_content(body)
+
+        def _smtp_send() -> None:
+            if settings.smtp_use_tls:
+                with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
+                    server.starttls(context=ssl.create_default_context())
+                    server.login(settings.smtp_username, settings.smtp_password)
+                    server.send_message(message)
+            else:
+                with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15) as server:
+                    server.login(settings.smtp_username, settings.smtp_password)
+                    server.send_message(message)
+
+        await asyncio.to_thread(_smtp_send)
+        logger.info("Email sent for alert_id=%s", alert.id)
 
     async def _send_webhook(self, alert: Alert, current_prices: dict[str, Any]) -> None:
         if not alert.webhook_url:
