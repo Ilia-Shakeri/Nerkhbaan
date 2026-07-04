@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, CartesianGrid, ReferenceLine } from 'recharts';
-import { BellPlus, ArrowUpRight, ArrowDownRight, Gem, Coins, GripVertical, Bitcoin, CircleDollarSign, Webhook, Mail, Smartphone, AlertTriangle, Maximize2 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { BellPlus, ArrowUpRight, ArrowDownRight, GripVertical, Webhook, Mail, Smartphone, AlertTriangle, Maximize2 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -24,7 +23,6 @@ type AssetPoint = {
 type AssetCard = {
   id: AssetId;
   label: { fa: string; en: string };
-  icon: LucideIcon;
   priceUsd: number | null;
   priceToman: number | null;
   changePercent: number;
@@ -58,13 +56,6 @@ const STATUS_COLORS = {
   live: { dark: 'bg-emerald-500/10 text-emerald-400', light: 'bg-emerald-100 text-emerald-700' },
   cached: { dark: 'bg-amber-500/10 text-amber-400', light: 'bg-amber-100 text-amber-700' },
   unavailable: { dark: 'bg-red-500/10 text-red-400', light: 'bg-red-100 text-red-700' }
-};
-
-const ASSET_ICONS: Record<AssetId, LucideIcon> = {
-  gold: Gem,
-  silver: Coins,
-  usdt: CircleDollarSign,
-  btc: Bitcoin
 };
 
 const ASSET_LABELS: Record<AssetId, { fa: string; en: string }> = {
@@ -118,13 +109,12 @@ const buildPlaceholderAsset = (id: AssetId): PriceAsset => ({
 
 const EMPTY_ASSETS: PriceAsset[] = DEFAULT_ASSET_ORDER.map(buildPlaceholderAsset);
 
-const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, icon: LucideIcon): AssetCard => {
+const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId): AssetCard => {
   if (!asset) {
     const placeholder = buildPlaceholderAsset(id);
     return {
       id,
       label: { fa: placeholder.label_fa, en: placeholder.label_en },
-      icon,
       priceUsd: placeholder.price_usd,
       priceToman: placeholder.price_toman,
       changePercent: placeholder.change_percent,
@@ -142,7 +132,6 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, icon: LucideI
   return {
     id,
     label: { fa: asset.label_fa, en: asset.label_en },
-    icon,
     priceUsd: asset.price_usd,
     priceToman: asset.price_toman,
     changePercent: asset.change_percent,
@@ -160,8 +149,14 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, icon: LucideI
 
 const toChartValue = (point: AssetPoint, mode: CurrencyMode, fallbackValue: number) => {
   const raw = mode === 'usd' ? point.value_usd : point.value_toman;
-  return raw ?? fallbackValue;
+  const value = raw ?? fallbackValue;
+  return Number.isFinite(value) ? value : 0;
 };
+
+function AssetIcon({ id, className = '' }: { id: AssetId; className?: string }) {
+  const symbols: Record<AssetId, string> = { gold: 'Au', silver: 'Ag', usdt: '₮', btc: '₿' };
+  return <span className={`inline-flex items-center justify-center rounded-full bg-black/10 font-black ${className}`} dir="ltr">{symbols[id]}</span>;
+}
 
 export function DashboardView() {
   const { language, theme, currencyMode, setCurrencyMode } = useAppContext();
@@ -218,7 +213,7 @@ export function DashboardView() {
   const orderedAssets = useMemo(() => {
     return assetOrder.map((id) => {
       const live = pricesData.find((a) => a.asset === id);
-      return buildLiveCard(live, id, ASSET_ICONS[id]);
+      return buildLiveCard(live, id);
     });
   }, [assetOrder, pricesData]);
 
@@ -355,12 +350,17 @@ export function DashboardView() {
           value_toman: asset.priceToman
         };
 
-        const chartData = resolvedHistory.map((point) => ({
-          time: new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          value: toChartValue(point, currencyMode, fallbackValue)
-        }));
+        const chartData = resolvedHistory
+          .map((point) => ({
+            time: new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            value: toChartValue(point, currencyMode, fallbackValue)
+          }))
+          .filter((point) => Number.isFinite(point.value));
 
-        const selectedChartPoint = chartData[activeIndex] ?? chartData[chartData.length - 1];
+        const selectedChartPoint = chartData[activeIndex] ?? chartData[chartData.length - 1] ?? {
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          value: 0
+        };
         const chartColor = isDark ? CHART_COLORS[asset.id].dark : CHART_COLORS[asset.id].light;
         const tooltipPosition = tooltipPositionByAsset[asset.id];
 
@@ -439,7 +439,7 @@ export function DashboardView() {
                   <div>
                     <CardTitle className={`flex items-center gap-2 text-lg font-semibold ${isDark ? 'text-[#E8D9AE]' : 'text-[#6A4D16]'}`}>
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#111111]" style={{ backgroundColor: chartColor }}>
-                        <asset.icon size={20} />
+                        <AssetIcon id={asset.id} className="h-7 w-7 text-[11px]" />
                       </div>
                       {asset.label[language]}
                     </CardTitle>
@@ -568,7 +568,7 @@ export function DashboardView() {
                             (dataMin: number) => dataMin === 0 ? -0.5 : dataMin * 0.9985,
                             (dataMax: number) => dataMax === 0 ? 0.5 : dataMax * 1.0015
                           ]} tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
-                          <ReferenceLine x={selectedChartPoint.time} stroke={chartColor} strokeOpacity={0.65} strokeDasharray="5 4" />
+                          {selectedChartPoint && <ReferenceLine x={selectedChartPoint.time} stroke={chartColor} strokeOpacity={0.65} strokeDasharray="5 4" />}
                           <Line
                             type="monotone"
                             dataKey="value"
@@ -618,7 +618,7 @@ export function DashboardView() {
             </label>
             <div className={`flex items-center gap-3 rounded-[1.5rem] border p-3 ${isDark ? 'border-[#D4AF37]/20 bg-[#111111]' : 'border-[#D4AF37]/35 bg-[#FFF0CC]'}`}>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37] text-[#0A0A0A]">
-                {React.createElement(ASSET_ICONS[selectedAssetForAlert], { size: 20 })}
+                <AssetIcon id={selectedAssetForAlert} className="h-7 w-7 text-[11px]" />
               </div>
               <span className={`font-bold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
                 {ASSET_LABELS[selectedAssetForAlert][language]}
@@ -794,12 +794,17 @@ export function DashboardView() {
             ? [resolvedHistory[0], resolvedHistory[0]]
             : resolvedHistory;
           
-          const mappedData = chartData.map((point) => ({
-            time: new Date(point.timestamp).toLocaleTimeString(language === 'fa' ? 'fa-IR' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
-            value: currencyMode === 'usd'
-              ? (point.value_usd ?? (point.value_toman && usdToTomanRate ? point.value_toman / usdToTomanRate : 0))
-              : (point.value_toman ?? (point.value_usd && usdToTomanRate ? point.value_usd * usdToTomanRate : 0))
-          }));
+          const mappedData = chartData
+            .map((point) => {
+              const value = currencyMode === 'usd'
+                ? (point.value_usd ?? (point.value_toman && usdToTomanRate ? point.value_toman / usdToTomanRate : 0))
+                : (point.value_toman ?? (point.value_usd && usdToTomanRate ? point.value_usd * usdToTomanRate : 0));
+              return {
+                time: new Date(point.timestamp).toLocaleTimeString(language === 'fa' ? 'fa-IR' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
+                value: Number.isFinite(value) ? value : 0
+              };
+            })
+            .filter((point) => Number.isFinite(point.value));
           
           const chartColor = CHART_COLORS[asset.id][isDark ? 'dark' : 'light'];
           

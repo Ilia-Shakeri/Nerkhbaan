@@ -29,7 +29,7 @@ class MarketInsightEngine:
 
     def __init__(self) -> None:
         self.base_url = settings.insight_api_base_url.rstrip("/")
-        self.api_key = settings.insight_api_key
+        self.api_key = settings.insight_api_key or settings.deepseek_api_key
         self.model = settings.insight_model
 
     def is_configured(self) -> bool:

@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     insight_api_base_url: str = "https://api.deepseek.com"
     insight_api_key: str | None = None
     insight_model: str = "deepseek-chat"
+    deepseek_api_key: str | None = None
 
     # Web push (VAPID). Generate a key pair once and keep it stable; rotating it
     # invalidates every stored browser subscription.

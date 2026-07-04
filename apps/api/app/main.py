@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .config import settings
-from .routers import alerts, auth, insights, prices, providers, push, support
+from .routers import alerts, auth, insights, notifications, prices, providers, push, support
 from .services.background import background_runner
 from .db import engine, Base, get_db
 from sqlalchemy import text
@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI):
                     logger.info("Administrative account successfully provisioned.")
                 else:
                     logger.info("Administrative account already exists in the registry.")
+            insights.purge_expired_chat_history(db)
         except Exception as seed_exception:
             # Trigger a rollback to release locks and prevent database hanging on failure
             db.rollback()
@@ -120,6 +121,7 @@ app.include_router(support.router, tags=["Support"])
 app.include_router(alerts.router, tags=["Alerts"])
 app.include_router(push.router, tags=["Push"])
 app.include_router(insights.router, tags=["Insights"])
+app.include_router(notifications.router, tags=["Notifications"])
 
 @app.get("/api/health", tags=["System"])
 @app.get("/health", tags=["System"])

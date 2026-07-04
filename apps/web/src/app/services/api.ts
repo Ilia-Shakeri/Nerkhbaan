@@ -128,8 +128,49 @@ export const api = {
       const { data } = await apiInstance.post<AnalyzeResponse>('insights/analyze', { asset, language });
       return data;
     },
-    async chat(messages: ChatMessage[], language: 'fa' | 'en'): Promise<ChatResponse> {
-      const { data } = await apiInstance.post<ChatResponse>('insights/chat', { messages, language });
+    async chat(messages: ChatMessage[], language: 'fa' | 'en', session_id?: number | null): Promise<ChatResponse> {
+      const { data } = await apiInstance.post<ChatResponse>('insights/chat', { messages, language, session_id });
+      return data;
+    },
+    async listSessions(): Promise<ChatSessionSummary[]> {
+      const { data } = await apiInstance.get<ChatSessionSummary[]>('insights/chat/sessions');
+      return data;
+    },
+    async getSession(sessionId: number): Promise<ChatSessionDetail> {
+      const { data } = await apiInstance.get<ChatSessionDetail>(`insights/chat/sessions/${sessionId}`);
+      return data;
+    },
+    async renameSession(sessionId: number, title: string): Promise<ChatSessionSummary> {
+      const { data } = await apiInstance.patch<ChatSessionSummary>(`insights/chat/sessions/${sessionId}`, { title });
+      return data;
+    },
+    async deleteSession(sessionId: number): Promise<void> {
+      await apiInstance.delete(`insights/chat/sessions/${sessionId}`);
+    },
+  },
+  notifications: {
+    async preferences(): Promise<NotificationPreferences> {
+      const { data } = await apiInstance.get<NotificationPreferences>('notifications/preferences');
+      return data;
+    },
+    async setBasic(key: 'push_app' | 'silent_mode' | 'aggressive_alerts', enabled: boolean): Promise<NotificationPreferences> {
+      const { data } = await apiInstance.patch<NotificationPreferences>(`notifications/preferences/${key}`, { enabled });
+      return data;
+    },
+    async startOtp(channel: 'sms' | 'email', destination: string): Promise<{ message: string; destination: string; ttl_minutes: number }> {
+      const { data } = await apiInstance.post('notifications/otp/start', { channel, destination });
+      return data;
+    },
+    async confirmOtp(channel: 'sms' | 'email', destination: string, code: string): Promise<NotificationPreferences> {
+      const { data } = await apiInstance.post<NotificationPreferences>('notifications/otp/confirm', { channel, destination, code });
+      return data;
+    },
+    async setTelegram(telegram_id: string): Promise<NotificationPreferences> {
+      const { data } = await apiInstance.post<NotificationPreferences>('notifications/telegram', { telegram_id });
+      return data;
+    },
+    async disable(channel: 'sms' | 'email' | 'telegram'): Promise<NotificationPreferences> {
+      const { data } = await apiInstance.delete<NotificationPreferences>(`notifications/${channel}`);
       return data;
     },
   },
@@ -146,7 +187,34 @@ export type ChatMessage = {
 };
 
 export type ChatResponse = {
+  session_id: number;
   reply: string;
+};
+
+export type ChatSessionSummary = {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ChatSessionDetail = ChatSessionSummary & {
+  messages: ChatMessage[];
+};
+
+export type NotificationPreferences = {
+  push_app: boolean;
+  sms_enabled: boolean;
+  sms_phone: string | null;
+  sms_verified: boolean;
+  email_enabled: boolean;
+  email_address: string | null;
+  email_verified: boolean;
+  telegram_enabled: boolean;
+  telegram_id: string | null;
+  telegram_verified: boolean;
+  silent_mode: boolean;
+  aggressive_alerts: boolean;
 };
 
 export type AlertCreate = {
