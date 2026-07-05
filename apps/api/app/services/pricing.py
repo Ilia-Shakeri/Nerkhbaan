@@ -288,7 +288,7 @@ class PricingService:
         self._cache.set_history(asset_id, self._history[asset_id])
 
     def _store_market_ticks(self, asset_id: str, intl_chain: ChainResult, iran_chain: ChainResult) -> None:
-        now = datetime.now(UTC).replace(microsecond=0)
+        now = datetime.now(UTC)
         rows: list[MarketPrice] = []
         if intl_chain.status == "live" and intl_chain.value is not None:
             rows.append(

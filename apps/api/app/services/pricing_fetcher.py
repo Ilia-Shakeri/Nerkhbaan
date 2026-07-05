@@ -49,6 +49,16 @@ class PricingFetcher:
 
         for provider in providers:
             try:
+                fresh_cached = self._fresh_provider_cache(asset_id, region, provider)
+                if fresh_cached is not None:
+                    value, source, updated_at = fresh_cached
+                    return ChainResult(
+                        value=value,
+                        source=f"cache ({source})",
+                        status="cached",
+                        updated_at=updated_at,
+                    )
+
                 value = await self._call_provider(client, asset_id, region, provider)
                 if value is None:
                     raise RuntimeError("empty value")
@@ -99,10 +109,6 @@ class PricingFetcher:
         fixed_value = provider.get("fixed_value")
         if fixed_value is not None:
             return self._normalize_chain_value(asset_id, region, provider, float(fixed_value))
-
-        cached_value = self._fresh_provider_cache(asset_id, region, provider)
-        if cached_value is not None:
-            return cached_value
 
         if auth.get("type") == "api_key":
             key_source = auth.get("key_source")
@@ -177,7 +183,12 @@ class PricingFetcher:
 
         raise RuntimeError(str(last_error) if last_error else "provider failed")
 
-    def _fresh_provider_cache(self, asset_id: str, region: str, provider: dict[str, Any]) -> float | None:
+    def _fresh_provider_cache(
+        self,
+        asset_id: str,
+        region: str,
+        provider: dict[str, Any],
+    ) -> tuple[float, str, datetime] | None:
         min_interval = self.to_float(provider.get("min_interval_seconds"))
         if not min_interval:
             return None
@@ -193,7 +204,7 @@ class PricingFetcher:
         age_seconds = (datetime.now(UTC) - updated_at).total_seconds()
         if age_seconds > min_interval:
             return None
-        return value
+        return value, source, updated_at
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:

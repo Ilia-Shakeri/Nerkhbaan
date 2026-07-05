@@ -21,13 +21,11 @@ API_REGISTRY: dict = {
         },
         "nobitex": {
             "description": "Crypto prices in Toman",
-            "base_url": "https://api.nobitex.ir",
+            "base_url": "https://apiv2.nobitex.ir",
             "endpoints": {
-                "market_stats": "https://api.nobitex.ir/market/stats",
-                "orderbook": "https://api.nobitex.ir/v2/orderbook/{symbol}",
-                "trades": "https://api.nobitex.ir/v2/trades/{symbol}",
+                "orderbook_all": "https://apiv2.nobitex.ir/v3/orderbook/all",
             },
-            "auth": "none for public endpoints",
+            "auth": "none",
             "rate_limit": "100 requests/minute",
             "docs": "https://apidocs.nobitex.ir",
         },

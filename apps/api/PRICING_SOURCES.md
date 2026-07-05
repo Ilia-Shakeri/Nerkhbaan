@@ -1,36 +1,39 @@
 # Pricing API Sources
 
-Nerkhbaan backend now uses per-asset provider chains with regional separation:
+Nerkhbaan backend uses per-asset provider chains with regional separation.
 
-- **Iran chain** (`price_toman`) and **international chain** (`price_usd`) run independently.
-- Each chain uses priority fallback (primary -> backup).
-- If both providers in a chain fail, backend serves the chain's **last known value** from `backend/price_cache.json`.
-- If cache is missing too, value is returned as `null` and frontend renders `--`.
+- Iran chains populate `price_toman`.
+- International chains populate `price_usd`.
+- Each chain uses priority fallback.
+- If all providers in a chain fail, backend serves the chain's last known value from Redis or the file cache.
+- If cache is missing too, the value is returned as `null` and the frontend renders `--`.
 
 ## Assets and chains
 
-- `gold` (Iran: TGJU -> Bonbast, International: Metals.dev -> GoldAPI)
-- `silver` (Iran: TGJU -> Tetherland, International: Metals.dev -> GoldAPI)
-- `usdt` (Iran: Nobitex -> Tetherland, International: CoinGecko -> CoinCap)
-- `btc` (Iran: Nobitex -> Tetherland, International: CoinGecko -> CoinCap)
+- `gold` Iran: TGJU -> Alanchand -> Bonbast -> Tetherland
+- `gold` international: GoldAPI -> Gold API free fallback -> Metals.dev
+- `silver` Iran: TGJU -> Tetherland -> Bonbast
+- `silver` international: GoldAPI -> Gold API free fallback -> Metals.dev
+- `usdt` Iran: Nobitex -> Tetherland -> Bonbast -> TGJU
+- `usdt` international: CoinGecko -> CoinCap -> ExchangeRate-API -> Frankfurter
+- `btc` Iran: Nobitex -> Tetherland
+- `btc` international: CoinGecko -> CoinCap
 
 ## Error behavior
 
-- Price cards remain visible even during provider outages.
+- Price cards remain visible during provider outages.
 - Chain-level failures mark the asset as `cached` or `unavailable` without blocking the other region.
 - Chart error text is returned in both languages:
-  - `fa`: `امکان دریافت اطلاعات وجود ندارد`
-  - `en`: `Unable to fetch data`
+  - `fa`: `داده بازار در دسترس نیست`
+  - `en`: `Unable to fetch market data`
 
-## Full provider registry metadata
+## Registry metadata
 
-`GET /api/providers` exposes catalog metadata from:
+`GET /api/providers` exposes catalog metadata from `apps/api/app/services/api_registry.py`.
 
-- `backend/app/services/api_registry.py`
-
-`GET /api/prices/health` exposes chain health details:
+`GET /api/prices/health` exposes:
 
 - per-asset regional status (`live`, `cached`, `unavailable`)
 - provider source used for each chain
-- cache age metadata and startup env-key checks
-- per-provider rows include `provider_name`, `status`, `last_success_time`, `has_api_key`
+- cache age metadata and startup environment key checks
+- per-provider rows with `provider_name`, `status`, `last_success_time`, and `has_api_key`

@@ -84,6 +84,8 @@ services:
       start_period: 40s
 
   telegram-worker:
+    profiles:
+      - telegram
     build:
       context: ./apps/telegram_worker
       dockerfile: Dockerfile

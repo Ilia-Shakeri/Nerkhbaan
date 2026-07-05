@@ -72,7 +72,7 @@ class MarketPrice(Base):
     time: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True, nullable=False)
     asset: Mapped[str] = mapped_column(String(20), primary_key=True, nullable=False)
     region: Mapped[str] = mapped_column(String(20), primary_key=True, nullable=False)
-    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    source: Mapped[str] = mapped_column(String(80), primary_key=True, nullable=False)
     price_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
     price_toman: Mapped[float | None] = mapped_column(Float, nullable=True)
     volume: Mapped[float | None] = mapped_column(Float, nullable=True)

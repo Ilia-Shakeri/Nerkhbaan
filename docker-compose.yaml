@@ -60,6 +60,8 @@
       retries: 5
 
   telegram-worker:
+    profiles:
+      - telegram
     build:
       context: ./apps/telegram_worker
     container_name: nerkhbaan-telegram-worker

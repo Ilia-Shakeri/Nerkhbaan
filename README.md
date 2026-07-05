@@ -1,264 +1,245 @@
-# Nerkhbaan - Smart Price Tracking Platform
+# Nerkhbaan
 
-A modern, full-stack price tracking and alerting platform built with FastAPI, React, and Electron.
+Nerkhbaan is a full-stack market price tracking platform for gold, silver, USDT, and Bitcoin prices across Iranian and international markets. It includes a FastAPI backend, TimescaleDB time-series storage, Redis caching, a React PWA, an Electron desktop shell, alert delivery, provider health reporting, and an optional Telegram MTProto ingestion worker.
 
-## Features
+## Production Stack
 
-### Frontend
-- **Glassmorphism UI** with dark/light themes
-- **Real-time Price Charts** with TradingView-style scrubbing
-- **Smart Alerts** with webhook, email, and push notification support
-- **PWA Support** with offline capability
-- **Support Ticketing System** with live chat interface
-- **Multi-currency** toggle (USD/Toman)
-- **Responsive Design** optimized for desktop and mobile
+- FastAPI backend with SQLAlchemy and JWT authentication
+- TimescaleDB on PostgreSQL 16 for tick storage and OHLCV rollups
+- Redis for shared price cache and fast fallback reads
+- React + Vite web app served by Nginx
+- Optional Electron desktop app
+- Optional Telegram MTProto worker using Telethon
+- Prometheus metrics endpoint at `/metrics`
 
-### Backend
-- **Layered Pricing Architecture** with primary/fallback providers
-- **Redis Caching** with automatic file-based fallback
-- **Prometheus Metrics** for monitoring
-- **Alert Engine** with single-pass evaluation
-- **Dead Letter Queue** with exponential backoff retry
-- **JWT Authentication** with secure password hashing
-- **RESTful API** with OpenAPI documentation
+## Repository Structure
 
-## Quick Start (Windows)
-
-### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- PostgreSQL 14+
-- Docker Desktop (recommended)
-
-### Setup
-
-1. **Install Dependencies**
-```powershell
-npm install
-cd apps\api
-.\setup_windows.bat
-```
-
-2. **Configure Environment**
-
-Create `apps\api\.env`:
-```env
-DATABASE_URL=postgresql+psycopg://nerkhbaan:nerkhbaan@localhost:5432/nerkhbaan
-JWT_SECRET_KEY=your-random-32-character-secret-key
-ALLOWED_ORIGINS=http://localhost:5173
-ADMIN_INITIAL_PASSWORD=admin123
-REDIS_URL=redis://localhost:6379/0
-```
-
-3. **Start Database**
-```powershell
-docker run -d --name nerkhbaan-postgres -e POSTGRES_USER=nerkhbaan -e POSTGRES_PASSWORD=nerkhbaan -e POSTGRES_DB=nerkhbaan -p 5432:5432 postgres:15
-```
-
-4. **Start Redis (Optional)**
-```powershell
-docker run -d --name nerkhbaan-redis -p 6379:6379 redis:7-alpine
-```
-
-5. **Run Application**
-```powershell
-npm run dev:all
-```
-
-Access:
-- Web: http://localhost:5173
-- API: http://localhost:8000/api/docs
-- Metrics: http://localhost:8000/metrics
-
-## Documentation
-
-- **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - Comprehensive setup instructions
-- **[QUICK_START.md](QUICK_START.md)** - Fast track setup for Windows
-- **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - Frontend features
-- **[BACKEND_IMPLEMENTATION_SUMMARY.md](BACKEND_IMPLEMENTATION_SUMMARY.md)** - Backend architecture
-
-## Project Structure
-
-```
+```text
 Nerkhbaan/
 ├── apps/
-│   ├── api/              # FastAPI backend
+│   ├── api/
 │   │   ├── app/
-│   │   │   ├── routers/  # API endpoints
-│   │   │   ├── services/ # Business logic
-│   │   │   └── models.py # Database models
+│   │   │   ├── routers/
+│   │   │   ├── services/
+│   │   │   ├── config.py
+│   │   │   ├── db.py
+│   │   │   ├── main.py
+│   │   │   └── models.py
+│   │   ├── db/
+│   │   │   ├── init/
+│   │   │   └── migrations/
+│   │   ├── tests/
+│   │   ├── Dockerfile
 │   │   └── requirements.txt
-│   ├── web/              # React PWA
+│   ├── desktop/
+│   │   ├── electron/
 │   │   └── src/
-│   │       ├── app/
-│   │       │   ├── views/      # Page components
-│   │       │   ├── components/ # Reusable components
-│   │       │   └── services/   # API client
-│   │       └── pwa/            # Service worker
-│   └── desktop/          # Electron wrapper
-└── packages/
-    └── ui/               # Shared UI library
+│   ├── telegram_worker/
+│   │   ├── app/
+│   │   ├── Dockerfile
+│   │   ├── login.py
+│   │   └── telegram_setup_guide.txt
+│   └── web/
+│       ├── public/
+│       ├── src/
+│       ├── Dockerfile
+│       └── nginx.conf
+├── nginx/
+├── packages/
+│   └── ui/
+├── API_DOCUMENTATION.md
+├── docker-compose.prod.yaml
+├── docker-compose.yaml
+├── package.json
+└── README.md
 ```
 
-## Tech Stack
+## Required Environment Variables
 
-### Frontend
-- React 18
-- TypeScript
-- Tailwind CSS
-- Vite
-- Motion (Framer Motion)
-- Recharts
-- Lucide Icons
+Create a `.env` file in the repository root before starting Docker. Use `.env.example` as the template.
 
-### Backend
-- FastAPI
-- SQLAlchemy
-- PostgreSQL
-- Redis
-- Prometheus
-- Python-JOSE (JWT)
-- Bcrypt
-- HTTPX
+Minimum production values:
 
-### DevOps
-- Docker
-- Uvicorn
-- Concurrently
-- ESLint
-- Prettier
+```env
+COMPOSE_FILE=docker-compose.prod.yaml
 
-## Key Features Implementation
+POSTGRES_USER=nerkhbaan
+POSTGRES_DB=nerkhbaan
+POSTGRES_PASSWORD=replace-with-a-long-random-password
+DATABASE_URL=postgresql+psycopg://nerkhbaan:replace-with-a-long-random-password@postgres:5432/nerkhbaan
 
-### Password Visibility Toggle
-All password inputs automatically include eye icon toggle for show/hide functionality.
+JWT_SECRET_KEY=replace-with-a-random-secret-at-least-32-characters
+ADMIN_INITIAL_PASSWORD=replace-with-a-strong-admin-password
+ALLOWED_ORIGINS=https://your-domain.example,https://www.your-domain.example
 
-### Currency Toggle
-Segmented control with sliding indicator showing both USD and Toman options simultaneously.
-
-### Alert Modal
-Production-ready modal with:
-- In-app notifications
-- Email delivery
-- Webhook integration
-- Dead Letter Queue for failed deliveries
-
-### Chart Fullscreen
-Maximize button on each chart opens modal with 60vh detailed view for technical analysis.
-
-### Support System
-Full ticketing interface with:
-- Ticket creation and listing
-- Live chat with admin
-- Message history
-- File attachment placeholder
-
-### PWA Offline Support
-Network detection with stabilization delay prevents false offline banner flashes during reconnection.
-
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/signin` - User login
-- `POST /api/auth/signup` - User registration
-
-### Prices
-- `GET /api/prices` - Get current prices with history
-
-### Support
-- `POST /api/support/ticket` - Create ticket
-- `GET /api/support/tickets` - List user tickets
-- `GET /api/support/ticket/{id}/messages` - Get messages
-- `POST /api/support/ticket/{id}/message` - Send message
-
-### Monitoring
-- `GET /api/health` - Health check
-- `GET /metrics` - Prometheus metrics
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `DATABASE_URL` | PostgreSQL connection string | Yes |
-| `JWT_SECRET_KEY` | JWT signing key (32+ chars) | Yes |
-| `ALLOWED_ORIGINS` | CORS allowed origins | Yes |
-| `ADMIN_INITIAL_PASSWORD` | Admin account password | Yes |
-| `REDIS_URL` | Redis connection string | No |
-| `ALANCHAND_API_TOKEN` | Alanchand API key | No |
-| `METALS_DEV_API_KEY` | Metals.dev API key | No |
-| `GOLDAPI_API_KEY` | GoldAPI key | No |
-| `EXCHANGERATE_API_KEY` | ExchangeRate API key | No |
-
-## Monitoring
-
-### Prometheus Metrics
-- `price_fetches_total` - Total price fetches by asset/region/status
-- `cache_staleness_seconds` - Cache age by asset/region
-- `price_fetch_duration_seconds` - Fetch latency histogram
-
-### Grafana Dashboards
-Configure Prometheus scraper:
-```yaml
-scrape_configs:
-  - job_name: 'nerkhbaan'
-    static_configs:
-      - targets: ['localhost:8000']
-    metrics_path: '/metrics'
+REDIS_URL=redis://redis:6379/0
+VITE_API_URL=
 ```
 
-## Development
+Optional provider keys:
 
-### Run Tests
+```env
+GOLDAPI_API_KEY=
+METALS_DEV_API_KEY=
+EXCHANGERATE_API_KEY=
+ALANCHAND_API_TOKEN=
+```
+
+Optional Telegram ingestion values:
+
+```env
+TELEGRAM_API_ID=
+TELEGRAM_API_HASH=
+TELEGRAM_SESSION_STRING=
+TELEGRAM_CHANNELS=
+```
+
+See `apps/telegram_worker/telegram_setup_guide.txt` before enabling the Telegram worker.
+
+## Fresh Linux VPS Deployment Guide
+
+These steps assume Ubuntu 22.04 or 24.04 with a non-root sudo user.
+
+### 1. Install system packages
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl git ufw
+```
+
+### 2. Install Docker Engine and Compose
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER"
+newgrp docker
+docker --version
+docker compose version
+```
+
+### 3. Clone the repository
+
+```bash
+git clone <your-repository-url> Nerkhbaan
+cd Nerkhbaan
+```
+
+### 4. Configure environment
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Set at least:
+
+- `POSTGRES_PASSWORD`
+- `DATABASE_URL` with the same password
+- `JWT_SECRET_KEY`
+- `ADMIN_INITIAL_PASSWORD`
+- `ALLOWED_ORIGINS`
+
+Keep `COMPOSE_FILE=docker-compose.prod.yaml` in `.env` so Docker uses the production stack by default.
+
+### 5. Start the production stack
+
+Run this exact command from the repository root:
+
+```bash
+docker compose up -d --build --force-recreate
+```
+
+This starts:
+
+- `postgres` with TimescaleDB
+- `redis`
+- `backend`
+- `frontend`
+- `db-backup`
+
+The Telegram worker is defined but not started by default because it requires MTProto credentials.
+
+### 6. Verify deployment
+
+```bash
+docker compose ps
+curl -f http://127.0.0.1:8000/api/health
+curl -f http://127.0.0.1:8000/api/prices
+```
+
+Open the frontend through your reverse proxy or local tunnel. For the default compose port mapping, the web container is published on `127.0.0.1:3000`.
+
+### 7. Enable Telegram ingestion
+
+After generating `TELEGRAM_SESSION_STRING` and setting `TELEGRAM_CHANNELS`, start the profile:
+
+```bash
+docker compose --profile telegram up -d --build telegram-worker
+```
+
+### 8. Apply TimescaleDB migration to an existing database
+
+New Docker volumes run `apps/api/db/init/001_timescale_market_prices.sql` automatically. Existing databases must run:
+
+```bash
+docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < apps/api/db/migrations/20260705_timescale_market_prices.sql
+```
+
+## Local Development
+
+Install Node dependencies:
+
+```bash
+npm install
+```
+
+Install backend dependencies:
+
 ```bash
 cd apps/api
-pytest
-
-cd apps/web
-npm test
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 ```
 
-### Build Production
+Run services:
+
+```bash
+npm run dev:api
+npm run dev:web
+```
+
+Run builds:
+
 ```bash
 npm run build:web
 npm run build:desktop
 ```
 
-## Troubleshooting
+Run backend tests:
 
-**Uvicorn not found:**
-```powershell
-cd apps\api
-venv\Scripts\activate
-pip install -r requirements.txt
+```bash
+cd apps/api
+python -m unittest discover -s tests
 ```
 
-**Electron binary missing:**
-```powershell
-cd apps\desktop
-npm rebuild electron
-```
+## API Endpoints
 
-**Database connection error:**
-```powershell
-docker ps | findstr postgres
-docker restart nerkhbaan-postgres
-```
+- `GET /api/health`
+- `GET /api/prices`
+- `GET /api/prices/health`
+- `GET /api/providers`
+- `POST /api/auth/signup`
+- `POST /api/auth/signin`
+- `GET /api/auth/me`
+- `GET /metrics`
 
-**Redis timeout (optional):**
-Remove `REDIS_URL` from `.env` to use file-based cache fallback.
+Detailed provider documentation is in `API_DOCUMENTATION.md`.
 
-## Contributing
+## Operations Notes
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## License
-
-[Your License Here]
-
-## Support
-
-For issues or questions, please open a GitHub issue or contact the development team.
+- Keep `.env` out of version control.
+- Rotate `JWT_SECRET_KEY` only with a planned user-session invalidation window.
+- Keep TimescaleDB backups in the `db_backups` Docker volume or export them to external object storage.
+- Monitor `/api/prices/health` for provider degradation.
+- If Redis is unavailable, the backend falls back to file cache behavior, but Redis is recommended for multi-worker deployments.

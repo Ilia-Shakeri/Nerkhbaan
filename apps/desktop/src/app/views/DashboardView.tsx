@@ -164,7 +164,7 @@ const toChartValue = (point: AssetPoint, mode: CurrencyMode, fallbackValue: numb
 };
 
 export function DashboardView() {
-  const { language, theme, currencyMode, setCurrencyMode } = useAppContext() as any;
+  const { language, theme, currencyMode, setCurrencyMode } = useAppContext();
   const isDark = theme === 'dark';
 
   const [assetOrder, setAssetOrder] = useState<AssetId[]>(getInitialAssetOrder);

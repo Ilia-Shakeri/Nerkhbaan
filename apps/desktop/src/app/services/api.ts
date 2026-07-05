@@ -134,7 +134,7 @@ export const getPrices = async () => {
   return data;
 };
 
-export const formatPrice = (value: number | null | undefined, mode: CurrencyMode, language: 'en' | 'fa'): string => {
+export const formatPrice = (value: number | null | undefined, mode: CurrencyMode, language: 'en' | 'fa' = 'en'): string => {
   if (value === null || value === undefined) return '--';
   
   const locale = language === 'fa' ? 'fa-IR' : 'en-US';

@@ -1,11 +1,15 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+const appDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(appDir, "../..");
+
 export default defineConfig({
   // Force Vite to load environment variables from the monorepo root
-  envDir: '../../',
+  envDir: repoRoot,
   plugins: [
     react(),
     VitePWA({
@@ -76,8 +80,21 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      '@nerkhbaan/ui': path.resolve(__dirname, '../../packages/ui/src')
+      "@": path.resolve(appDir, "src"),
+      "@nerkhbaan/ui": path.resolve(repoRoot, "packages/ui/src")
+    }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom", "react-router", "react-router-dom"],
+          charts: ["recharts"],
+          motion: ["motion"],
+          ui: ["@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu", "@radix-ui/react-popover"],
+          http: ["axios"]
+        }
+      }
     }
   }
 });

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import type { Variants } from 'motion/react';
 import { User, Mail, Lock, CheckCircle2, XCircle, Sun, Moon, Languages } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
@@ -10,7 +11,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import logo from '../../logo/logo.png';
 
 export function AuthView() {
-  const { language, toggleLanguage, login, theme, toggleTheme } = useAppContext() as any;
+  const { language, toggleLanguage, login, theme, toggleTheme } = useAppContext();
   const isDark = theme === 'dark';
   const isRtl = language === 'fa';
   const navigate = useNavigate();
@@ -108,10 +109,10 @@ export function AuthView() {
   };
 
   // 3D Flip Animation configuration
-  const flipVariants = {
+  const flipVariants: Variants = {
     initial: { rotateY: isRtl ? -90 : 90, opacity: 0 },
-    animate: { rotateY: 0, opacity: 1, transition: { duration: 0.4, ease: "easeOut" } },
-    exit: { rotateY: isRtl ? 90 : -90, opacity: 0, transition: { duration: 0.3, ease: "easeIn" } }
+    animate: { rotateY: 0, opacity: 1, transition: { duration: 0.4, ease: [0, 0, 0.2, 1] } },
+    exit: { rotateY: isRtl ? 90 : -90, opacity: 0, transition: { duration: 0.3, ease: [0.4, 0, 1, 1] } }
   };
 
   return (

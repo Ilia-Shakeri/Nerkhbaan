@@ -36,7 +36,7 @@ const NAV_ITEMS = [
 ];
 
 export function DesktopLayout() {
-  const { language, theme, logout, toggleTheme, toggleLanguage, currencyMode, setCurrencyMode } = useAppContext() as any;
+  const { language, theme, logout, toggleTheme, toggleLanguage, currencyMode, setCurrencyMode } = useAppContext();
   const { isAuthenticated } = useAppContext();
   const isDark = theme === 'dark';
 
