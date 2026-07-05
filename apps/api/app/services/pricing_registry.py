@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 from typing import Any
 
 REQUEST_TIMEOUT_SECONDS = 10
 RETRY_ATTEMPTS = 2
 
 CHART_ERROR_MESSAGE = {
-    "fa": "امکان دریافت اطلاعات وجود ندارد",
-    "en": "Unable to fetch data",
+    "fa": "داده بازار در دسترس نیست",
+    "en": "Unable to fetch market data",
 }
 
 ASSET_LABELS: dict[str, dict[str, str]] = {
@@ -16,83 +17,87 @@ ASSET_LABELS: dict[str, dict[str, str]] = {
     "btc": {"fa": "بیت کوین", "en": "Bitcoin"},
 }
 
+NOBITEX_HEADERS = {"User-Agent": "TraderBot/Nerkhbaan_Worker"}
+LIMITED_INTERVAL_SECONDS = 60 * 60
+SLOW_INTERVAL_SECONDS = 2 * 60 * 60
+
 PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
     "gold": {
         "iran": {
             "currency": "IRR",
             "providers": [
                 {
-                    "id": "tetherland_gold",
+                    "id": "tgju_gold",
                     "priority": 1,
+                    "url": "https://api.tgju.org/v1/market/indicator/summary-table-data/global-price",
+                    "method": "GET",
+                    "response_path": "data.gold.p",
+                    "unit": "toman",
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
+                },
+                {
+                    "id": "alanchand_gold",
+                    "priority": 2,
+                    "url": "https://api.alanchand.com/v1/markets/gold",
+                    "method": "GET",
+                    "auth": {"type": "header_api_key", "key_source": "alanchand_api_token", "header_name": "Authorization"},
+                    "response_path": "data.gold_18k.price",
+                    "unit": "toman",
+                    "min_interval_seconds": SLOW_INTERVAL_SECONDS,
+                    "optional_auth": True,
+                },
+                {
+                    "id": "bonbast_gold",
+                    "priority": 3,
+                    "url": "https://www.bonbast.com/json",
+                    "method": "GET",
+                    "auth": {"type": "header_simulation"},
+                    "response_path": "gold",
+                    "unit": "toman",
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
+                },
+                {
+                    "id": "tetherland_gold",
+                    "priority": 4,
                     "url": "https://api.tetherland.com/currencies",
                     "method": "GET",
                     "response_path": "data.currencies.GOLD.price",
                     "unit": "toman",
                 },
-                {
-                    "id": "tgju_gold_fallback",
-                    "priority": 2,
-                    "url": "https://api.tgju.org/v1/market/indicator/summary-table-data/global-price",
-                    "method": "GET",
-                    "response_path": "data.gold.p",
-                    "unit": "toman",
-                },
-                {
-                    "id": "brsapi_gold",
-                    "priority": 3,
-                    "url": "https://brsapi.ir/FreeTsetmcBourseApi/Api_Free_Gold_Currency.json",
-                    "method": "GET",
-                    "response_path": "gold.0.price",
-                    "unit": "toman",
-                }
             ],
         },
         "international": {
             "currency": "USD",
             "providers": [
                 {
-                    "id": "binance_paxg_gold",
+                    "id": "goldapi_xau",
                     "priority": 1,
-                    "url": "https://api.binance.com/api/v3/ticker/price?symbol=PAXGUSDT",
+                    "url": "https://www.goldapi.io/api/XAU/USD",
                     "method": "GET",
+                    "auth": {"type": "header_api_key", "key_source": "goldapi_api_key", "header_name": "x-access-token"},
                     "response_path": "price",
                     "unit": "troy_ounce",
+                    "min_interval_seconds": SLOW_INTERVAL_SECONDS,
                 },
                 {
-                    # Free spot metal price, no API key required.
-                    "id": "goldapi_xau",
+                    "id": "gold_api_xau_free",
                     "priority": 2,
                     "url": "https://api.gold-api.com/price/XAU",
                     "method": "GET",
                     "response_path": "price",
                     "unit": "troy_ounce",
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
                 },
                 {
-                    "id": "coingecko_gold_fallback",
+                    "id": "metals_dev_gold",
                     "priority": 3,
-                    "url": "https://api.coingecko.com/api/v3/simple/price?ids=pax-gold&vs_currencies=usd",
-                    "method": "GET",
-                    "response_path": "pax-gold.usd",
-                    "unit": "troy_ounce",
-                },
-                {
-                    # Free tier, no API key required.
-                    "id": "coinpaprika_paxg",
-                    "priority": 4,
-                    "url": "https://api.coinpaprika.com/v1/tickers/paxg-pax-gold",
-                    "method": "GET",
-                    "response_path": "quotes.USD.price",
-                    "unit": "troy_ounce",
-                },
-                {
-                    "id": "metals_dev_gold_backup",
-                    "priority": 5,
                     "url": "https://api.metals.dev/v1/latest?currency=USD&unit=toz",
                     "method": "GET",
                     "auth": {"type": "api_key", "key_source": "metals_dev_api_key", "key_param": "api_key"},
                     "response_path": "metals.gold",
                     "unit": "troy_ounce",
-                }
+                    "min_interval_seconds": SLOW_INTERVAL_SECONDS,
+                },
             ],
         },
     },
@@ -101,43 +106,55 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
             "currency": "IRR",
             "providers": [
                 {
-                    "id": "tetherland_silver",
+                    "id": "tgju_silver",
                     "priority": 1,
+                    "url": "https://api.tgju.org/v1/market/indicator/summary-table-data/silver",
+                    "method": "GET",
+                    "response_path": "data.silver.p",
+                    "unit": "toman",
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
+                },
+                {
+                    "id": "tetherland_silver",
+                    "priority": 2,
                     "url": "https://api.tetherland.com/currencies",
                     "method": "GET",
                     "response_path": "data.currencies.SILVER.price",
                     "unit": "toman",
                 },
                 {
-                    "id": "tgju_silver_fallback",
-                    "priority": 2,
-                    "url": "https://api.tgju.org/v1/market/indicator/summary-table-data/silver",
+                    "id": "bonbast_silver",
+                    "priority": 3,
+                    "url": "https://www.bonbast.com/json",
                     "method": "GET",
-                    "response_path": "data.silver.p",
+                    "auth": {"type": "header_simulation"},
+                    "response_path": "silver",
                     "unit": "toman",
-                }
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
+                },
             ],
         },
         "international": {
             "currency": "USD",
             "providers": [
                 {
-                    "id": "binance_silver",
+                    "id": "goldapi_xag",
                     "priority": 1,
-                    "url": "https://api.binance.com/api/v3/ticker/price?symbol=XAGUSDT",
+                    "url": "https://www.goldapi.io/api/XAG/USD",
                     "method": "GET",
+                    "auth": {"type": "header_api_key", "key_source": "goldapi_api_key", "header_name": "x-access-token"},
                     "response_path": "price",
                     "unit": "troy_ounce",
+                    "min_interval_seconds": SLOW_INTERVAL_SECONDS,
                 },
                 {
-                    # Free spot metal price, no API key required. Replaces the old
-                    # coingecko "silver" id, which resolved to an unrelated token.
-                    "id": "goldapi_xag",
+                    "id": "gold_api_xag_free",
                     "priority": 2,
                     "url": "https://api.gold-api.com/price/XAG",
                     "method": "GET",
                     "response_path": "price",
                     "unit": "troy_ounce",
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
                 },
                 {
                     "id": "metals_dev_silver",
@@ -147,6 +164,7 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                     "auth": {"type": "api_key", "key_source": "metals_dev_api_key", "key_param": "api_key"},
                     "response_path": "metals.silver",
                     "unit": "troy_ounce",
+                    "min_interval_seconds": SLOW_INTERVAL_SECONDS,
                 },
             ],
         },
@@ -158,13 +176,15 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                 {
                     "id": "nobitex_usdt",
                     "priority": 1,
-                    "url": "https://api.nobitex.ir/v2/orderbook/USDTIRT",
+                    "url": "https://apiv2.nobitex.ir/v3/orderbook/all",
                     "method": "GET",
-                    "response_path": "lastTradePrice",
+                    "headers": NOBITEX_HEADERS,
+                    "orderbook_symbol": "USDTIRT",
+                    "orderbook_side": "mid",
                     "unit": "toman",
                 },
                 {
-                    "id": "tetherland_usdt_fallback",
+                    "id": "tetherland_usdt",
                     "priority": 2,
                     "url": "https://api.tetherland.com/currencies",
                     "method": "GET",
@@ -172,51 +192,67 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                     "unit": "toman",
                 },
                 {
-                    "id": "wallex_usdt_backup",
+                    "id": "bonbast_usd",
                     "priority": 3,
-                    "url": "https://api.wallex.ir/v1/markets",
+                    "url": "https://www.bonbast.com/json",
                     "method": "GET",
-                    "response_path": "result.symbols.USDTTMN.stats.lastPrice",
+                    "auth": {"type": "header_simulation"},
+                    "response_path": "usd1",
                     "unit": "toman",
-                }
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
+                },
+                {
+                    "id": "tgju_usd",
+                    "priority": 4,
+                    "url": "https://api.tgju.org/v1/market/indicator/summary-table-data/currency",
+                    "method": "GET",
+                    "response_path": "data.price_dollar_rl.p",
+                    "unit": "rial",
+                    "convert_to_toman": True,
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
+                },
             ],
         },
         "international": {
             "currency": "USD",
             "providers": [
                 {
-                    "id": "binance_usdt",
+                    "id": "coingecko_usdt",
                     "priority": 1,
-                    "url": "https://api.binance.com/api/v3/ticker/price?symbol=USDCUSDT",
-                    "method": "GET",
-                    "response_path": "price",
-                    "unit": "usd",
-                },
-                {
-                    "id": "coingecko_usdt_fallback",
-                    "priority": 2,
                     "url": "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd",
                     "method": "GET",
                     "response_path": "tether.usd",
                     "unit": "usd",
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
                 },
                 {
-                    # Free tier, no API key required.
-                    "id": "coinpaprika_usdt",
+                    "id": "coincap_usdt",
+                    "priority": 2,
+                    "url": "https://api.coincap.io/v2/assets/tether",
+                    "method": "GET",
+                    "response_path": "data.priceUsd",
+                    "unit": "usd",
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
+                },
+                {
+                    "id": "exchangerate_usd",
                     "priority": 3,
-                    "url": "https://api.coinpaprika.com/v1/tickers/usdt-tether",
+                    "url": "https://v6.exchangerate-api.com/v6/latest/USD",
                     "method": "GET",
-                    "response_path": "quotes.USD.price",
+                    "auth": {"type": "path_api_key", "key_source": "exchangerate_api_key", "path_token": "latest"},
+                    "response_path": "conversion_rates.USD",
                     "unit": "usd",
+                    "min_interval_seconds": SLOW_INTERVAL_SECONDS,
                 },
                 {
-                    "id": "kraken_usdt_backup",
+                    "id": "frankfurter_usd",
                     "priority": 4,
-                    "url": "https://api.kraken.com/0/public/Ticker?pair=USDTUSD",
+                    "url": "https://api.frankfurter.app/latest?from=USD&to=EUR",
                     "method": "GET",
-                    "response_path": "result.USDTUSD.c.0",
+                    "fixed_value": 1,
                     "unit": "usd",
-                }
+                    "min_interval_seconds": SLOW_INTERVAL_SECONDS,
+                },
             ],
         },
     },
@@ -227,74 +263,44 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                 {
                     "id": "nobitex_btc",
                     "priority": 1,
-                    "url": "https://api.nobitex.ir/v2/orderbook/BTCIRT",
+                    "url": "https://apiv2.nobitex.ir/v3/orderbook/all",
                     "method": "GET",
-                    "response_path": "lastTradePrice",
+                    "headers": NOBITEX_HEADERS,
+                    "orderbook_symbol": "BTCIRT",
+                    "orderbook_side": "mid",
                     "unit": "toman",
                 },
                 {
-                    "id": "tetherland_btc_fallback",
+                    "id": "tetherland_btc",
                     "priority": 2,
                     "url": "https://api.tetherland.com/currencies",
                     "method": "GET",
                     "response_path": "data.currencies.BTC.price",
                     "unit": "toman",
                 },
-                {
-                    "id": "wallex_btc_backup",
-                    "priority": 3,
-                    "url": "https://api.wallex.ir/v1/markets",
-                    "method": "GET",
-                    "response_path": "result.symbols.BTCTMN.stats.lastPrice",
-                    "unit": "toman",
-                }
             ],
         },
         "international": {
             "currency": "USD",
             "providers": [
                 {
-                    "id": "binance_btc",
+                    "id": "coingecko_btc",
                     "priority": 1,
-                    "url": "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
-                    "method": "GET",
-                    "response_path": "price",
-                    "unit": "usd",
-                },
-                {
-                    "id": "coingecko_btc_fallback",
-                    "priority": 2,
                     "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
                     "method": "GET",
                     "response_path": "bitcoin.usd",
                     "unit": "usd",
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
                 },
                 {
-                    # Free tier, no API key required.
-                    "id": "coinpaprika_btc",
-                    "priority": 3,
-                    "url": "https://api.coinpaprika.com/v1/tickers/btc-bitcoin",
+                    "id": "coincap_btc",
+                    "priority": 2,
+                    "url": "https://api.coincap.io/v2/assets/bitcoin",
                     "method": "GET",
-                    "response_path": "quotes.USD.price",
+                    "response_path": "data.priceUsd",
                     "unit": "usd",
+                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
                 },
-                {
-                    # Free, no API key required. Returns a single-element array.
-                    "id": "coinlore_btc",
-                    "priority": 4,
-                    "url": "https://api.coinlore.net/api/ticker/?id=90",
-                    "method": "GET",
-                    "response_path": "0.price_usd",
-                    "unit": "usd",
-                },
-                {
-                    "id": "kraken_btc_backup",
-                    "priority": 5,
-                    "url": "https://api.kraken.com/0/public/Ticker?pair=XBTUSD",
-                    "method": "GET",
-                    "response_path": "result.XXBTZUSD.c.0",
-                    "unit": "usd",
-                }
             ],
         },
     },

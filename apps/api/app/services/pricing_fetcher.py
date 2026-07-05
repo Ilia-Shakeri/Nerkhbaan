@@ -96,6 +96,13 @@ class PricingFetcher:
         headers = dict(provider.get("headers") or {})
         params = dict(provider.get("query_params") or {})
         body = provider.get("body")
+        fixed_value = provider.get("fixed_value")
+        if fixed_value is not None:
+            return self._normalize_chain_value(asset_id, region, provider, float(fixed_value))
+
+        cached_value = self._fresh_provider_cache(asset_id, region, provider)
+        if cached_value is not None:
+            return cached_value
 
         if auth.get("type") == "api_key":
             key_source = auth.get("key_source")
@@ -112,7 +119,18 @@ class PricingFetcher:
             if not key:
                 raise RuntimeError(f"{key_source} is not configured")
             if header_name:
-                headers[header_name] = key
+                header_value = key
+                if header_name.lower() == "authorization" and not str(key).lower().startswith("bearer "):
+                    header_value = f"Bearer {key}"
+                headers[header_name] = header_value
+        elif auth.get("type") == "path_api_key":
+            key_source = auth.get("key_source")
+            path_token = str(auth.get("path_token") or "")
+            key = getattr(self.settings, key_source, None) if key_source else None
+            if not key:
+                raise RuntimeError(f"{key_source} is not configured")
+            if path_token:
+                url = url.replace(f"/{path_token}/", f"/{key}/{path_token}/")
         elif auth.get("type") == "header_simulation":
             headers.update(
                 {
@@ -141,7 +159,9 @@ class PricingFetcher:
                 )
                 response.raise_for_status()
                 payload = response.json()
-                raw_value = self._extract_provider_value(payload, provider, asset_id)
+                raw_value = self._extract_orderbook_value(payload, provider) or self._extract_provider_value(
+                    payload, provider, asset_id
+                )
                 if raw_value is None:
                     raise RuntimeError("could not parse numeric value")
                 return self._normalize_chain_value(asset_id, region, provider, raw_value)
@@ -156,6 +176,24 @@ class PricingFetcher:
                 await asyncio.sleep(1.5 ** attempt)
 
         raise RuntimeError(str(last_error) if last_error else "provider failed")
+
+    def _fresh_provider_cache(self, asset_id: str, region: str, provider: dict[str, Any]) -> float | None:
+        min_interval = self.to_float(provider.get("min_interval_seconds"))
+        if not min_interval:
+            return None
+
+        cached = self.cache.get_chain(asset_id, region)
+        if not cached:
+            return None
+
+        value, source, updated_at = cached
+        if source != provider.get("id"):
+            return None
+
+        age_seconds = (datetime.now(UTC) - updated_at).total_seconds()
+        if age_seconds > min_interval:
+            return None
+        return value
 
     @staticmethod
     def _is_retryable(exc: Exception) -> bool:
@@ -208,6 +246,37 @@ class PricingFetcher:
         records = list(self._iter_dict_records(payload))
         return self._extract_value_by_keywords(records, include_keywords=self._asset_keywords(asset_id))
 
+    def _extract_orderbook_value(self, payload: Any, provider: dict[str, Any]) -> float | None:
+        symbol = provider.get("orderbook_symbol")
+        if not symbol or not isinstance(payload, dict):
+            return None
+
+        book = payload.get(symbol)
+        if not isinstance(book, dict):
+            return None
+
+        bid = self._first_orderbook_price(book.get("bids"))
+        ask = self._first_orderbook_price(book.get("asks"))
+        side = provider.get("orderbook_side", "mid")
+
+        if side == "bid":
+            return bid
+        if side == "ask":
+            return ask
+        if bid is not None and ask is not None:
+            return (bid + ask) / 2
+        return bid if bid is not None else ask
+
+    def _first_orderbook_price(self, levels: Any) -> float | None:
+        if not isinstance(levels, list) or not levels:
+            return None
+        first_level = levels[0]
+        if isinstance(first_level, list) and first_level:
+            return self.to_float(first_level[0])
+        if isinstance(first_level, dict):
+            return self.to_float(first_level.get("price"))
+        return None
+
     def _resolve_path(self, payload: Any, path: str) -> Any:
         cursor: Any = payload
         for token in path.split("."):
@@ -235,7 +304,7 @@ class PricingFetcher:
         if asset_id == "silver":
             return ["silver", "xag", "نقره"]
         if asset_id == "usdt":
-            return ["usdt", "tether", "تتر", "usd"]
+            return ["usdt", "tether", "تتر", "usd", "دلار"]
         if asset_id == "btc":
             return ["btc", "bitcoin", "بیت", "کوین"]
         return [asset_id]
@@ -270,8 +339,7 @@ class PricingFetcher:
         if not isinstance(record, dict):
             return None
 
-        # UPGRADE: Explicitly include 'lastTradePrice' for Nobitex strings 
-        # and shortened variants like 'p' / 'l' typical for TGJU JSON schemas
+        # Include exchange-specific last price keys and compact market fields.
         target_keys = ("lasttradeprice", "price", "value", "last", "rate", "buy", "sell", "close", "p", "l")
         for target in target_keys:
             for key in record.keys():

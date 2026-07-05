@@ -23,7 +23,7 @@ class PricingServiceFallbackTests(unittest.IsolatedAsyncioTestCase):
         cache_file = Path(self.temp_dir.name) / 'price_cache.json'
         self.cache = PricingCacheStore(cache_file)
         self.fetcher = PricingFetcher(
-            settings=SimpleNamespace(metals_dev_api_key=None, goldapi_api_key=None),
+            settings=SimpleNamespace(metals_dev_api_key=None, goldapi_api_key=None, exchangerate_api_key=None),
             cache=self.cache,
             registry=PRICE_REGISTRY,
             timeout_seconds=8,
@@ -35,7 +35,7 @@ class PricingServiceFallbackTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_chain_uses_backup_when_primary_fails(self) -> None:
         async def fake_call_provider(_client, _asset_id, _region, provider):
-            if provider['id'] == 'tgju_gold':
+            if provider['id'] in {'tgju_gold', 'alanchand_gold'}:
                 raise RuntimeError('primary unavailable')
             if provider['id'] == 'bonbast_gold':
                 return 12_345_678.0

@@ -14,6 +14,8 @@ def required_provider_keys(
         for region in asset.values():
             providers = region.get("providers", [])
             for provider in providers:
+                if provider.get("optional_auth"):
+                    continue
                 auth = provider.get("auth") or {}
                 key_source = auth.get("key_source")
                 if key_source:

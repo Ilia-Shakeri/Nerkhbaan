@@ -24,6 +24,7 @@ class StartupValidationTests(unittest.TestCase):
             pricing_require_provider_keys=False,
             metals_dev_api_key=None,
             goldapi_api_key=None,
+            exchangerate_api_key=None,
             alanchand_api_token=None,
         )
 
@@ -31,6 +32,7 @@ class StartupValidationTests(unittest.TestCase):
 
         self.assertIn('metals_dev_api_key', checks['missing_env_keys'])
         self.assertIn('goldapi_api_key', checks['missing_env_keys'])
+        self.assertIn('exchangerate_api_key', checks['missing_env_keys'])
         self.assertIn('alanchand_api_token', checks['missing_optional_env_keys'])
         self.assertFalse(checks['ok'])
 
@@ -39,6 +41,7 @@ class StartupValidationTests(unittest.TestCase):
             pricing_require_provider_keys=False,
             metals_dev_api_key='metals-key',
             goldapi_api_key='gold-key',
+            exchangerate_api_key='fx-key',
             alanchand_api_token=None,
         )
 
@@ -57,6 +60,7 @@ class ProviderFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.settings = SimpleNamespace(
             metals_dev_api_key=None,
             goldapi_api_key=None,
+            exchangerate_api_key=None,
         )
         self.fetcher = PricingFetcher(
             settings=self.settings,
@@ -101,6 +105,24 @@ class ProviderFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.status, 'cached')
         self.assertEqual(result.value, 1.0)
         self.assertEqual(result.source, 'cache (coingecko_usdt)')
+
+    async def test_nobitex_orderbook_all_extracts_mid_price(self) -> None:
+        payload = {
+            "USDTIRT": {
+                "bids": [["61000", "10"]],
+                "asks": [["61200", "8"]],
+            }
+        }
+        provider = {
+            "id": "nobitex_usdt",
+            "orderbook_symbol": "USDTIRT",
+            "orderbook_side": "mid",
+            "unit": "toman",
+        }
+
+        value = self.fetcher._extract_orderbook_value(payload, provider)
+
+        self.assertEqual(value, 61100.0)
 
     async def test_primary_backup_failure_without_cache(self) -> None:
         async def always_fail(*_args, **_kwargs):

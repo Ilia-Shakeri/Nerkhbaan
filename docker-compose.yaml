@@ -41,7 +41,7 @@
       - "127.0.0.1:8000:8000"
 
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
     container_name: nerkhbaan-postgres
     restart: unless-stopped
     environment:
@@ -52,11 +52,25 @@
       - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./apps/api/db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U nerkhbaan -d nerkhbaan']
       interval: 10s
       timeout: 5s
       retries: 5
+
+  telegram-worker:
+    build:
+      context: ./apps/telegram_worker
+    container_name: nerkhbaan-telegram-worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://nerkhbaan:${POSTGRES_PASSWORD}@postgres:5432/nerkhbaan
 
   # CI/CD Services
   gitea:

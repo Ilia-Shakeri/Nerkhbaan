@@ -1,0 +1,27 @@
+Telegram MTProto setup guide
+
+1. Get api_id and api_hash
+- Open https://my.telegram.org in a browser.
+- Log in with the Telegram phone number that will read the public market channels.
+- Open API development tools.
+- Create an app if none exists.
+- Copy api_id and api_hash.
+- Put them in the local environment as TELEGRAM_API_ID and TELEGRAM_API_HASH.
+
+2. Generate the session string
+- Install this worker's Python dependencies:
+  pip install -r apps/telegram_worker/requirements.txt
+- Run the login script from the repository root:
+  TELEGRAM_API_ID=12345 TELEGRAM_API_HASH=your_hash python apps/telegram_worker/login.py
+- Enter the phone number, login code, and two-step password if Telegram asks for them.
+- The script prints one long session string. Treat it like a password.
+
+3. Inject the session string in production
+- Add these variables to the production secret store or .env file:
+  TELEGRAM_API_ID=12345
+  TELEGRAM_API_HASH=your_hash
+  TELEGRAM_SESSION_STRING=the_long_session_string
+  TELEGRAM_CHANNELS=channel_one,channel_two,channel_three
+- Never commit TELEGRAM_SESSION_STRING to Git.
+- Restrict access to the deployment secret store to operators who can rotate Telegram access.
+- If the session leaks, terminate it from Telegram settings, generate a new string, and redeploy.

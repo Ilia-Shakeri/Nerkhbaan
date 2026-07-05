@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -64,6 +64,19 @@ class PushSubscription(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class MarketPrice(Base):
+    __tablename__ = "market_prices"
+
+    time: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True, nullable=False)
+    asset: Mapped[str] = mapped_column(String(20), primary_key=True, nullable=False)
+    region: Mapped[str] = mapped_column(String(20), primary_key=True, nullable=False)
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    price_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    price_toman: Mapped[float | None] = mapped_column(Float, nullable=True)
+    volume: Mapped[float | None] = mapped_column(Float, nullable=True)
+    extra: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
 
 
 class NotificationPreference(Base):

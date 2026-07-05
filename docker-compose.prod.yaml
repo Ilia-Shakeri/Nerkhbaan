@@ -17,13 +17,14 @@ services:
       retries: 3
 
   postgres:
-    image: postgres:16-alpine
+    image: timescale/timescaledb:latest-pg16
     container_name: nerkhbaan-postgres
     restart: unless-stopped
     env_file:
       - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./apps/api/db/init:/docker-entrypoint-initdb.d:ro
     networks:
       - nerkhbaan-network
     healthcheck:
@@ -81,6 +82,22 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  telegram-worker:
+    build:
+      context: ./apps/telegram_worker
+      dockerfile: Dockerfile
+    container_name: nerkhbaan-telegram-worker
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nerkhbaan}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nerkhbaan}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nerkhbaan-network
 
   frontend:
     build:

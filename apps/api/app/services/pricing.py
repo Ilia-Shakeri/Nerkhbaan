@@ -10,6 +10,8 @@ from typing import Any
 import httpx
 
 from ..config import settings
+from ..db import SessionLocal
+from ..models import MarketPrice
 from .pricing_cache import PricingCacheStore as FilePricingCache
 from .redis_cache import RedisPricingCache
 from .pricing_fetcher import ChainResult, PricingFetcher
@@ -175,6 +177,7 @@ class PricingService:
 
         if iran_chain.status == "live" or intl_chain.status == "live":
             self._append_history(asset_id, intl_chain.value, iran_chain.value)
+            await asyncio.to_thread(self._store_market_ticks, asset_id, intl_chain, iran_chain)
 
         change = self._calc_change_percent(asset_id)
         stale_candidates = [
@@ -283,6 +286,46 @@ class PricingService:
         )
         self._history[asset_id] = self._history[asset_id][-HISTORY_MAX_POINTS:]
         self._cache.set_history(asset_id, self._history[asset_id])
+
+    def _store_market_ticks(self, asset_id: str, intl_chain: ChainResult, iran_chain: ChainResult) -> None:
+        now = datetime.now(UTC).replace(microsecond=0)
+        rows: list[MarketPrice] = []
+        if intl_chain.status == "live" and intl_chain.value is not None:
+            rows.append(
+                MarketPrice(
+                    time=now,
+                    asset=asset_id,
+                    region="international",
+                    source=intl_chain.source,
+                    price_usd=intl_chain.value,
+                    price_toman=None,
+                    volume=None,
+                )
+            )
+        if iran_chain.status == "live" and iran_chain.value is not None:
+            rows.append(
+                MarketPrice(
+                    time=now,
+                    asset=asset_id,
+                    region="iran",
+                    source=iran_chain.source,
+                    price_usd=None,
+                    price_toman=iran_chain.value,
+                    volume=None,
+                )
+            )
+        if not rows:
+            return
+
+        db = SessionLocal()
+        try:
+            db.add_all(rows)
+            db.commit()
+        except Exception as exc:
+            db.rollback()
+            logger.warning("Market price tick persistence failed: %s", exc)
+        finally:
+            db.close()
 
     def _history_points(self, asset_key: str) -> list[dict[str, str | float | None]]:
         return [
