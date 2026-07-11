@@ -23,7 +23,9 @@ API_REGISTRY: dict = {
             "description": "Crypto prices in Toman",
             "base_url": "https://apiv2.nobitex.ir",
             "endpoints": {
+                "market_stats": "https://apiv2.nobitex.ir/market/stats",
                 "orderbook_all": "https://apiv2.nobitex.ir/v3/orderbook/all",
+                "udf_history": "https://api.nobitex.ir/market/udf/history",
             },
             "auth": "none",
             "rate_limit": "100 requests/minute",

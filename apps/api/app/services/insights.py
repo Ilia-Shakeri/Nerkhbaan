@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # Upper bound on conversation turns accepted per request to cap token usage and
 # keep latency predictable under load.
 MAX_HISTORY_MESSAGES = 20
-REQUEST_TIMEOUT_SECONDS = 20
+REQUEST_TIMEOUT_SECONDS = 5
 
 
 @dataclass(frozen=True)

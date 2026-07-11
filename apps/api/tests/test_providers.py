@@ -125,14 +125,33 @@ class ProviderFallbackTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(value, 61100.0)
 
     def test_nobitex_stats_is_primary_and_orderbook_is_fallback(self) -> None:
-        for asset in ('usdt', 'btc'):
+        expected_paths = {
+            'usdt': 'stats.usdt-rls.latest',
+            'btc': 'stats.btc-rls.latest',
+        }
+        for asset, response_path in expected_paths.items():
             providers = sorted(
                 PRICE_REGISTRY[asset]['iran']['providers'],
                 key=lambda provider: provider['priority'],
             )
-            self.assertEqual(providers[0]['response_path'], 'stats.usdt-rls.latest')
+            self.assertEqual(providers[0]['url'], 'https://apiv2.nobitex.ir/market/stats')
+            self.assertEqual(providers[0]['response_path'], response_path)
             self.assertTrue(providers[0]['convert_to_toman'])
             self.assertEqual(providers[1]['orderbook_side'], 'mid')
+
+    async def test_provider_circuit_opens_after_repeated_failures(self) -> None:
+        async def always_fail(*_args, **_kwargs):
+            raise RuntimeError('provider down')
+
+        provider_count = len(PRICE_REGISTRY['btc']['iran']['providers'])
+        with patch.object(self.fetcher, '_call_provider', side_effect=always_fail) as call:
+            for _ in range(self.fetcher.CIRCUIT_FAILURE_THRESHOLD):
+                await self.fetcher.fetch_chain(object(), 'btc', 'iran')
+            calls_before_open_check = call.await_count
+            await self.fetcher.fetch_chain(object(), 'btc', 'iran')
+
+        self.assertEqual(calls_before_open_check, provider_count * self.fetcher.CIRCUIT_FAILURE_THRESHOLD)
+        self.assertEqual(call.await_count, calls_before_open_check)
 
     async def test_primary_backup_failure_without_cache(self) -> None:
         async def always_fail(*_args, **_kwargs):

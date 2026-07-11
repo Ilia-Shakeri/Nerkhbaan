@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -21,6 +22,9 @@ class ChainResult:
 
 
 class PricingFetcher:
+    CIRCUIT_FAILURE_THRESHOLD = 3
+    CIRCUIT_OPEN_SECONDS = 60
+
     def __init__(
         self,
         *,
@@ -35,6 +39,8 @@ class PricingFetcher:
         self.registry = registry
         self.timeout_seconds = timeout_seconds
         self.retry_attempts = retry_attempts
+        self._provider_failures: dict[str, int] = {}
+        self._circuit_open_until: dict[str, float] = {}
 
     async def fetch_chain(
         self,
@@ -48,7 +54,10 @@ class PricingFetcher:
         failures: list[str] = []
 
         for provider in providers:
+            provider_id = str(provider["id"])
             try:
+                if self._is_circuit_open(provider_id):
+                    raise RuntimeError("circuit open")
                 fresh_cached = self._fresh_provider_cache(asset_id, region, provider)
                 if fresh_cached is not None:
                     value, source, updated_at = fresh_cached
@@ -64,6 +73,7 @@ class PricingFetcher:
                     raise RuntimeError("empty value")
 
                 now = datetime.now(UTC)
+                self._record_provider_success(provider_id)
                 self.cache.set_chain(asset_id, region, value, provider["id"], now)
                 return ChainResult(
                     value=value,
@@ -72,7 +82,9 @@ class PricingFetcher:
                     updated_at=now,
                 )
             except Exception as exc:
-                failures.append(f"{provider['id']}: {exc}")
+                if str(exc) != "circuit open":
+                    self._record_provider_failure(provider_id)
+                failures.append(f"{provider_id}: {exc}")
 
         cached = self.cache.get_chain(asset_id, region)
         if cached:
@@ -182,6 +194,23 @@ class PricingFetcher:
                 await asyncio.sleep(1.5 ** attempt)
 
         raise RuntimeError(str(last_error) if last_error else "provider failed")
+
+    def _is_circuit_open(self, provider_id: str) -> bool:
+        open_until = self._circuit_open_until.get(provider_id, 0)
+        if open_until <= time.monotonic():
+            self._circuit_open_until.pop(provider_id, None)
+            return False
+        return True
+
+    def _record_provider_success(self, provider_id: str) -> None:
+        self._provider_failures.pop(provider_id, None)
+        self._circuit_open_until.pop(provider_id, None)
+
+    def _record_provider_failure(self, provider_id: str) -> None:
+        failures = self._provider_failures.get(provider_id, 0) + 1
+        self._provider_failures[provider_id] = failures
+        if failures >= self.CIRCUIT_FAILURE_THRESHOLD:
+            self._circuit_open_until[provider_id] = time.monotonic() + self.CIRCUIT_OPEN_SECONDS
 
     def _fresh_provider_cache(
         self,

@@ -123,7 +123,7 @@ export function ChartAnalysisView() {
           )}
         </Card>
 
-        <Card className={`lg:col-span-2 flex flex-col p-6 ${isDark ? 'bg-[#0E0E0E]/60 border-white/5' : 'bg-white/60 border-black/5'}`}>
+        <Card className={`lg:col-span-2 flex min-h-[400px] flex-col p-6 ${isDark ? 'bg-[#0E0E0E]/60 border-white/5' : 'bg-white/60 border-black/5'}`}>
           {isAnalyzing ? (
             <div className="flex-1 flex flex-col items-center justify-center gap-3">
               <Loader2 size={32} className={`animate-spin ${isDark ? 'text-[#D4AF37]' : 'text-[#9D7A20]'}`} />

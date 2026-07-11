@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Response
 
 from ..schemas import PriceHistoryResponse, PricesHealthResponse, PricesResponse
-from ..services.pricing import pricing_service
+from ..services.pricing import PricingUpstreamError, pricing_service
 from ..services.pricing_registry import ASSET_LABELS
 
 router = APIRouter(prefix="/api/prices", tags=["prices"])
@@ -11,12 +11,14 @@ router = APIRouter(prefix="/api/prices", tags=["prices"])
 async def get_price_history(asset: str, response: Response) -> PriceHistoryResponse:
     asset_id = asset.lower()
     if asset_id not in ASSET_LABELS:
-        raise HTTPException(status_code=404, detail="Unknown asset")
+        raise HTTPException(status_code=422, detail="Unknown asset")
 
     try:
         points = await pricing_service.get_history(asset_id)
+    except PricingUpstreamError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="Failed to load price history") from exc
+        raise HTTPException(status_code=503, detail="Price history is unavailable") from exc
 
     response.headers["Cache-Control"] = "public, max-age=300"
     return PriceHistoryResponse(asset=asset_id, points=points)
@@ -28,6 +30,14 @@ async def get_prices(response: Response) -> PricesResponse:
         payload = await pricing_service.get_prices()
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Failed to fetch market prices: {exc}") from exc
+
+    assets = payload.get("assets", [])
+    if assets and all(
+        asset.get("usd_status") == "unavailable"
+        and asset.get("toman_status") == "unavailable"
+        for asset in assets
+    ):
+        raise HTTPException(status_code=503, detail="All pricing providers are unavailable")
 
     # Set Cache-Control to reduce network load from duplicate client queries
     response.headers["Cache-Control"] = "public, max-age=10"

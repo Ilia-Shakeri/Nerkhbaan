@@ -28,7 +28,12 @@ apiInstance.interceptors.request.use((config) => {
 });
 
 apiInstance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    window.dispatchEvent(new CustomEvent('api-error-clear', {
+      detail: { key: response.config.url || 'unknown' }
+    }));
+    return response;
+  },
   async (error) => {
     console.error('API Error:', error.response?.data || error.message);
     
@@ -50,6 +55,9 @@ apiInstance.interceptors.response.use(
         // Keep default message if parsing fails
       }
     }
+    window.dispatchEvent(new CustomEvent('api-error', {
+      detail: { key: error.config?.url || 'unknown', message }
+    }));
     throw new Error(message);
   }
 );

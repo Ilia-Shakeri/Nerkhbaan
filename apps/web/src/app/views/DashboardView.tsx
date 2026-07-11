@@ -215,21 +215,31 @@ export function DashboardView() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(
-      DEFAULT_ASSET_ORDER.map(async (asset) => {
-        try {
-          return [asset, (await getPriceHistory(asset)).points] as const;
-        } catch {
-          return [asset, []] as const;
-        }
-      })
-    )
-      .then((entries) => {
-        if (!cancelled) setHistoryByAsset(Object.fromEntries(entries) as Record<AssetId, AssetPoint[]>);
-      })
-      .catch(() => undefined);
+    const loadHistory = async () => {
+      const entries = await Promise.all(
+        DEFAULT_ASSET_ORDER.map(async (asset) => {
+          try {
+            return [asset, (await getPriceHistory(asset)).points] as const;
+          } catch {
+            return [asset, null] as const;
+          }
+        })
+      );
+      if (!cancelled) {
+        setHistoryByAsset((current) => {
+          const next = { ...current };
+          for (const [asset, points] of entries) {
+            if (points) next[asset] = points;
+          }
+          return next;
+        });
+      }
+    };
+    void loadHistory();
+    const interval = setInterval(loadHistory, 60_000);
     return () => {
       cancelled = true;
+      clearInterval(interval);
     };
   }, []);
 
@@ -376,7 +386,9 @@ export function DashboardView() {
 
         const chartData = resolvedHistory
           .map((point) => ({
-            time: new Date(point.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: new Date(point.timestamp).toLocaleString([], {
+              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+            }),
             value: toChartValue(point, currencyMode, fallbackValue)
           }))
           .filter((point) => Number.isFinite(point.value));
@@ -531,7 +543,7 @@ export function DashboardView() {
                 </div>
                 
                 {showChartError ? (
-                  <div className={`flex h-[260px] w-full flex-col items-center justify-center rounded-[1.5rem] border backdrop-blur-md ${
+                  <div className={`flex h-[400px] min-h-[400px] w-full flex-col items-center justify-center rounded-[1.5rem] border backdrop-blur-md ${
                     isDark ? 'border-red-500/20 bg-[#1A0B0B]/50' : 'border-red-200 bg-[#FFF0F0]/50'
                   }`}>
                     <div className={`text-sm font-semibold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
@@ -562,7 +574,7 @@ export function DashboardView() {
                       </button>
                       <div
                       id={`asset-chart-${asset.id}`}
-                      className={`relative h-[260px] w-full rounded-[1.5rem] border p-2 backdrop-blur-md transition-colors ${
+                      className={`relative h-[400px] min-h-[400px] w-full rounded-[1.5rem] border p-2 backdrop-blur-md transition-colors ${
                         isDark 
                           ? 'border-white/5 bg-[#111111]/40' 
                           : 'border-black/5 bg-white/40'
@@ -584,6 +596,9 @@ export function DashboardView() {
                         setIsScrubbingByAsset((prev) => ({ ...prev, [asset.id]: false }));
                       }}
                     >
+                      {isLoading ? (
+                        <div className={`h-full w-full animate-pulse rounded-[1.25rem] ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
+                      ) : (
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={chartData}>
                           <CartesianGrid stroke={isDark ? '#D4AF37' : '#B68A2A'} strokeOpacity={isDark ? 0.12 : 0.18} vertical={false} />
@@ -604,6 +619,7 @@ export function DashboardView() {
                           />
                         </LineChart>
                       </ResponsiveContainer>
+                      )}
 
                       {isScrubbingByAsset[asset.id] && tooltipPosition && (
                         <div

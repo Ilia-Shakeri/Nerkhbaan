@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-REQUEST_TIMEOUT_SECONDS = 10
-RETRY_ATTEMPTS = 2
+REQUEST_TIMEOUT_SECONDS = 5
+RETRY_ATTEMPTS = 0
 
 CHART_ERROR_MESSAGE = {
     "fa": "داده بازار در دسترس نیست",
@@ -176,7 +176,7 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                 {
                     "id": "nobitex_stats_usdt",
                     "priority": 1,
-                    "url": "https://api.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls",
+                    "url": "https://apiv2.nobitex.ir/market/stats",
                     "method": "GET",
                     "headers": NOBITEX_HEADERS,
                     "response_path": "stats.usdt-rls.latest",
@@ -211,29 +211,18 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                     "unit": "toman",
                     "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
                 },
-                {
-                    "id": "tgju_usd",
-                    "priority": 5,
-                    "url": "https://api.tgju.org/v1/market/indicator/summary-table-data/currency",
-                    "method": "GET",
-                    "response_path": "data.price_dollar_rl.p",
-                    "unit": "rial",
-                    "convert_to_toman": True,
-                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
-                },
             ],
         },
         "international": {
             "currency": "USD",
             "providers": [
                 {
-                    "id": "coingecko_usdt",
+                    "id": "nobitex_usdt_usd_reference",
                     "priority": 1,
-                    "url": "https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=usd",
+                    "url": "https://apiv2.nobitex.ir/market/stats",
                     "method": "GET",
-                    "response_path": "tether.usd",
+                    "fixed_value": 1,
                     "unit": "usd",
-                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
                 },
                 {
                     "id": "coincap_usdt",
@@ -273,10 +262,10 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                 {
                     "id": "nobitex_stats_btc",
                     "priority": 1,
-                    "url": "https://api.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls",
+                    "url": "https://apiv2.nobitex.ir/market/stats",
                     "method": "GET",
                     "headers": NOBITEX_HEADERS,
-                    "response_path": "stats.usdt-rls.latest",
+                    "response_path": "stats.btc-rls.latest",
                     "unit": "rial",
                     "convert_to_toman": True,
                 },
@@ -304,13 +293,13 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
             "currency": "USD",
             "providers": [
                 {
-                    "id": "coingecko_btc",
+                    "id": "nobitex_stats_btc_usdt",
                     "priority": 1,
-                    "url": "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
+                    "url": "https://apiv2.nobitex.ir/market/stats",
                     "method": "GET",
-                    "response_path": "bitcoin.usd",
+                    "headers": NOBITEX_HEADERS,
+                    "response_path": "stats.btc-usdt.latest",
                     "unit": "usd",
-                    "min_interval_seconds": LIMITED_INTERVAL_SECONDS,
                 },
                 {
                     "id": "coincap_btc",

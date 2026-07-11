@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -29,6 +30,14 @@ logger = logging.getLogger(__name__)
 
 CACHE_TTL_SECONDS = 20
 HISTORY_MAX_POINTS = 48
+NOBITEX_HISTORY_URL = "https://api.nobitex.ir/market/udf/history"
+EXTERNAL_REQUEST_TIMEOUT_SECONDS = 5
+HISTORY_CIRCUIT_FAILURE_THRESHOLD = 3
+HISTORY_CIRCUIT_OPEN_SECONDS = 60
+
+
+class PricingUpstreamError(RuntimeError):
+    pass
 
 
 @dataclass
@@ -47,6 +56,8 @@ class PricingService:
         }
         self._latest: LivePrices | None = None
         self._chain_health: dict[str, dict[str, dict[str, Any]]] = {}
+        self._history_failures: dict[str, int] = {}
+        self._history_circuit_open_until: dict[str, float] = {}
 
         if settings.redis_url:
             self._cache = RedisPricingCache(settings.redis_url)
@@ -89,9 +100,114 @@ class PricingService:
         return self._latest.payload
 
     async def get_history(self, asset_id: str) -> list[dict[str, str | float | None]]:
-        return await asyncio.to_thread(self._query_history, asset_id)
+        if asset_id in {"usdt", "btc"}:
+            if self._history_circuit_open_until.get(asset_id, 0) > time.monotonic():
+                raise PricingUpstreamError("Nobitex history circuit is open")
+            try:
+                points = await self._fetch_nobitex_history(asset_id)
+            except PricingUpstreamError:
+                failures = self._history_failures.get(asset_id, 0) + 1
+                self._history_failures[asset_id] = failures
+                if failures >= HISTORY_CIRCUIT_FAILURE_THRESHOLD:
+                    self._history_circuit_open_until[asset_id] = (
+                        time.monotonic() + HISTORY_CIRCUIT_OPEN_SECONDS
+                    )
+                raise
+            self._history_failures.pop(asset_id, None)
+            self._history_circuit_open_until.pop(asset_id, None)
+            return points
+        return await asyncio.to_thread(self._query_database_history, asset_id)
 
-    def _query_history(self, asset_id: str) -> list[dict[str, str | float | None]]:
+    async def _fetch_nobitex_history(
+        self, asset_id: str
+    ) -> list[dict[str, str | float | None]]:
+        now = datetime.now(UTC)
+        params = {
+            "resolution": "60",
+            "from": int((now - timedelta(days=30)).timestamp()),
+            "to": int(now.timestamp()),
+        }
+        toman_symbol = "USDTIRT" if asset_id == "usdt" else "BTCIRT"
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=EXTERNAL_REQUEST_TIMEOUT_SECONDS, follow_redirects=True
+            ) as client:
+                toman_request = self._request_udf_history(client, toman_symbol, params)
+                if asset_id == "btc":
+                    toman_data, usd_data = await asyncio.gather(
+                        toman_request,
+                        self._request_udf_history(client, "BTCUSDT", params),
+                    )
+                else:
+                    toman_data = await toman_request
+                    usd_data = None
+        except (httpx.TimeoutException, httpx.HTTPError) as exc:
+            logger.warning("Nobitex history request failed for %s: %s", asset_id, exc)
+            raise PricingUpstreamError("Nobitex history service is unavailable") from exc
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.warning("Nobitex history payload was invalid for %s: %s", asset_id, exc)
+            raise PricingUpstreamError("Nobitex returned invalid history data") from exc
+
+        usd_by_timestamp = {}
+        if usd_data:
+            usd_by_timestamp = {
+                int(timestamp): self._to_float(close)
+                for timestamp, close in zip(usd_data["t"], usd_data["c"], strict=True)
+            }
+
+        points: list[dict[str, str | float | None]] = []
+        arrays = zip(
+            toman_data["t"],
+            toman_data["o"],
+            toman_data["c"],
+            toman_data["h"],
+            toman_data["l"],
+            toman_data["v"],
+            strict=True,
+        )
+        for timestamp, open_value, close, high, low, volume in arrays:
+            timestamp_number = int(timestamp)
+            close_value = self._to_float(close)
+            points.append(
+                {
+                    "timestamp": datetime.fromtimestamp(timestamp_number, UTC).isoformat(),
+                    "value_usd": (
+                        usd_by_timestamp.get(timestamp_number) if asset_id == "btc" else 1.0
+                    ),
+                    "value_toman": close_value,
+                    "open": self._to_float(open_value),
+                    "close": close_value,
+                    "high": self._to_float(high),
+                    "low": self._to_float(low),
+                    "volume": self._to_float(volume),
+                }
+            )
+        return points
+
+    async def _request_udf_history(
+        self,
+        client: httpx.AsyncClient,
+        symbol: str,
+        params: dict[str, int | str],
+    ) -> dict[str, Any]:
+        response = await client.get(
+            NOBITEX_HISTORY_URL,
+            params={**params, "symbol": symbol},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or payload.get("s") != "ok":
+            raise ValueError(f"Nobitex history status: {payload.get('s') if isinstance(payload, dict) else 'invalid'}")
+        required = ("t", "o", "c", "h", "l", "v")
+        if any(not isinstance(payload.get(key), list) for key in required):
+            raise ValueError("Nobitex history arrays are missing")
+        lengths = {len(payload[key]) for key in required}
+        if len(lengths) != 1:
+            raise ValueError("Nobitex history arrays have different lengths")
+        return payload
+
+    def _query_database_history(self, asset_id: str) -> list[dict[str, str | float | None]]:
         query = text(
             """
             SELECT

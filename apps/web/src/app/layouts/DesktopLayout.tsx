@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -48,6 +48,33 @@ export function DesktopLayout() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const showApiError = (event: Event) => {
+      const detail = (event as CustomEvent<{ key: string; message: string }>).detail;
+      setApiErrors((current) => ({
+        ...current,
+        [detail?.key || 'unknown']: detail?.message || 'Service request failed'
+      }));
+    };
+    const clearApiError = (event: Event) => {
+      const key = (event as CustomEvent<{ key: string }>).detail?.key || 'unknown';
+      setApiErrors((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    };
+    window.addEventListener('api-error', showApiError);
+    window.addEventListener('api-error-clear', clearApiError);
+    return () => {
+      window.removeEventListener('api-error', showApiError);
+      window.removeEventListener('api-error-clear', clearApiError);
+    };
+  }, []);
+
+  const apiError = Object.values(apiErrors).at(-1) ?? null;
 
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
@@ -213,7 +240,7 @@ export function DesktopLayout() {
       <div className="relative flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}
         <header
-          className={`z-10 flex h-16 shrink-0 items-center justify-between border-b border-[#D4AF37]/12 px-6 backdrop-blur-md transition-colors duration-500 ${
+          className={`relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-[#D4AF37]/12 px-6 backdrop-blur-md transition-colors duration-500 ${
             isDark ? 'bg-[#0B0B0B]/95' : 'bg-[#FFF3D8]/95'
           }`}
         >
@@ -238,6 +265,16 @@ export function DesktopLayout() {
                 <Menu size={20} />
              </button>
           </div>
+
+          {apiError && (
+            <div
+              className="pointer-events-none absolute inset-x-20 top-1/2 -translate-y-1/2 truncate text-center text-xs font-bold text-red-500 sm:text-sm lg:inset-x-72"
+              role="alert"
+              title={apiError}
+            >
+              {apiError}
+            </div>
+          )}
           
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Currency Toggle */}

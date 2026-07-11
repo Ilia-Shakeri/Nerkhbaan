@@ -51,6 +51,11 @@ class PricePoint(BaseModel):
     timestamp: str
     value_usd: float | None
     value_toman: float | None
+    open: float | None = None
+    close: float | None = None
+    high: float | None = None
+    low: float | None = None
+    volume: float | None = None
 
 
 class PriceHistoryResponse(BaseModel):
