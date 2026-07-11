@@ -10,7 +10,7 @@ import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { toast } from 'sonner';
-import { api, formatPrice, getPrices, type CurrencyMode, type PriceAsset } from '../services/api';
+import { api, formatPrice, getPriceHistory, getPrices, type CurrencyMode, type PriceAsset } from '../services/api';
 
 type AssetId = 'gold' | 'silver' | 'usdt' | 'btc';
 
@@ -176,6 +176,9 @@ export function DashboardView() {
   const [isSavingAlert, setIsSavingAlert] = useState(false);
 
   const [pricesData, setPricesData] = useState<PriceAsset[]>(EMPTY_ASSETS);
+  const [historyByAsset, setHistoryByAsset] = useState<Record<AssetId, AssetPoint[]>>({
+    gold: [], silver: [], usdt: [], btc: []
+  });
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
   const [sourceLabel, setSourceLabel] = useState<{ usd: string; toman: string }>({ usd: '...', toman: '...' });
   const [isLoading, setIsLoading] = useState(true);
@@ -210,12 +213,33 @@ export function DashboardView() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      DEFAULT_ASSET_ORDER.map(async (asset) => {
+        try {
+          return [asset, (await getPriceHistory(asset)).points] as const;
+        } catch {
+          return [asset, []] as const;
+        }
+      })
+    )
+      .then((entries) => {
+        if (!cancelled) setHistoryByAsset(Object.fromEntries(entries) as Record<AssetId, AssetPoint[]>);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const orderedAssets = useMemo(() => {
     return assetOrder.map((id) => {
       const live = pricesData.find((a) => a.asset === id);
-      return buildLiveCard(live, id);
+      const card = buildLiveCard(live, id);
+      return { ...card, history: historyByAsset[id] };
     });
-  }, [assetOrder, pricesData]);
+  }, [assetOrder, historyByAsset, pricesData]);
 
   const reorderAssets = (draggedId: AssetId, targetId: AssetId) => {
     setAssetOrder((prev) => {

@@ -75,7 +75,7 @@ class ProviderFallbackTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_primary_failure_then_backup_success(self) -> None:
         async def fake_call_provider(_client, _asset_id, _region, provider):
-            if provider['id'] == 'nobitex_btc':
+            if provider['id'] in {'nobitex_stats_btc', 'nobitex_btc'}:
                 raise RuntimeError('primary failed')
             if provider['id'] == 'tetherland_btc':
                 return 9_999_999.0
@@ -123,6 +123,16 @@ class ProviderFallbackTests(unittest.IsolatedAsyncioTestCase):
         value = self.fetcher._extract_orderbook_value(payload, provider)
 
         self.assertEqual(value, 61100.0)
+
+    def test_nobitex_stats_is_primary_and_orderbook_is_fallback(self) -> None:
+        for asset in ('usdt', 'btc'):
+            providers = sorted(
+                PRICE_REGISTRY[asset]['iran']['providers'],
+                key=lambda provider: provider['priority'],
+            )
+            self.assertEqual(providers[0]['response_path'], 'stats.usdt-rls.latest')
+            self.assertTrue(providers[0]['convert_to_toman'])
+            self.assertEqual(providers[1]['orderbook_side'], 'mid')
 
     async def test_primary_backup_failure_without_cache(self) -> None:
         async def always_fail(*_args, **_kwargs):

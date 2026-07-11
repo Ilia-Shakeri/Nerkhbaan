@@ -150,6 +150,11 @@ async def analyze_chart(
         )
 
     try:
+        snapshot["history"] = await pricing_service.get_history(payload.asset)
+    except Exception:
+        pass
+
+    try:
         analysis = await insight_engine.analyze_chart(
             payload.asset, snapshot, payload.language
         )

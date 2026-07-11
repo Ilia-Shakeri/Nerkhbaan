@@ -280,9 +280,25 @@ export type PriceAsset = {
   chart_error_message: { fa: string; en: string };
 };
 
+export type PricePoint = {
+  timestamp: string;
+  value_usd: number | null;
+  value_toman: number | null;
+};
+
+export type PriceHistoryResponse = {
+  asset: string;
+  points: PricePoint[];
+};
+
 export const getPrices = async () => {
   // Use relative path to prevent Axios from stripping the /api base path
   const { data } = await apiInstance.get('prices');
+  return data;
+};
+
+export const getPriceHistory = async (asset: string): Promise<PriceHistoryResponse> => {
+  const { data } = await apiInstance.get<PriceHistoryResponse>(`prices/${asset}/history`);
   return data;
 };
 

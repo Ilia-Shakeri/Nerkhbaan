@@ -53,6 +53,11 @@ class PricePoint(BaseModel):
     value_toman: float | None
 
 
+class PriceHistoryResponse(BaseModel):
+    asset: str
+    points: list[PricePoint]
+
+
 class AssetPrice(BaseModel):
     asset: str
     label_fa: str

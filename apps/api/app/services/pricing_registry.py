@@ -174,8 +174,18 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
             "currency": "IRR",
             "providers": [
                 {
-                    "id": "nobitex_usdt",
+                    "id": "nobitex_stats_usdt",
                     "priority": 1,
+                    "url": "https://api.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls",
+                    "method": "GET",
+                    "headers": NOBITEX_HEADERS,
+                    "response_path": "stats.usdt-rls.latest",
+                    "unit": "rial",
+                    "convert_to_toman": True,
+                },
+                {
+                    "id": "nobitex_usdt",
+                    "priority": 2,
                     "url": "https://apiv2.nobitex.ir/v3/orderbook/all",
                     "method": "GET",
                     "headers": NOBITEX_HEADERS,
@@ -185,7 +195,7 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                 },
                 {
                     "id": "tetherland_usdt",
-                    "priority": 2,
+                    "priority": 3,
                     "url": "https://api.tetherland.com/currencies",
                     "method": "GET",
                     "response_path": "data.currencies.USDT.price",
@@ -193,7 +203,7 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                 },
                 {
                     "id": "bonbast_usd",
-                    "priority": 3,
+                    "priority": 4,
                     "url": "https://www.bonbast.com/json",
                     "method": "GET",
                     "auth": {"type": "header_simulation"},
@@ -203,7 +213,7 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                 },
                 {
                     "id": "tgju_usd",
-                    "priority": 4,
+                    "priority": 5,
                     "url": "https://api.tgju.org/v1/market/indicator/summary-table-data/currency",
                     "method": "GET",
                     "response_path": "data.price_dollar_rl.p",
@@ -261,8 +271,18 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
             "currency": "IRR",
             "providers": [
                 {
-                    "id": "nobitex_btc",
+                    "id": "nobitex_stats_btc",
                     "priority": 1,
+                    "url": "https://api.nobitex.ir/market/stats?srcCurrency=usdt&dstCurrency=rls",
+                    "method": "GET",
+                    "headers": NOBITEX_HEADERS,
+                    "response_path": "stats.usdt-rls.latest",
+                    "unit": "rial",
+                    "convert_to_toman": True,
+                },
+                {
+                    "id": "nobitex_btc",
+                    "priority": 2,
                     "url": "https://apiv2.nobitex.ir/v3/orderbook/all",
                     "method": "GET",
                     "headers": NOBITEX_HEADERS,
@@ -272,7 +292,7 @@ PRICE_REGISTRY: dict[str, dict[str, dict[str, Any]]] = {
                 },
                 {
                     "id": "tetherland_btc",
-                    "priority": 2,
+                    "priority": 3,
                     "url": "https://api.tetherland.com/currencies",
                     "method": "GET",
                     "response_path": "data.currencies.BTC.price",

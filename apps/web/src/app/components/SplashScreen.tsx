@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import logo from '../../logo/logo.png';
 
 interface SplashScreenProps {
@@ -35,15 +35,9 @@ const LOADING_LABELS = {
 
 export function SplashScreen({ onComplete, language, theme }: SplashScreenProps) {
   const isDark = theme === 'dark';
-  const [progress, setProgress] = useState(0);
-
   useEffect(() => {
-    const step = 100 / 30;
-    const interval = setInterval(() => {
-      setProgress(p => Math.min(p + step, 100));
-    }, 100);
     const timer = setTimeout(onComplete, 3200);
-    return () => { clearInterval(interval); clearTimeout(timer); };
+    return () => clearTimeout(timer);
   }, [onComplete]);
 
   const glassCard = {
@@ -347,25 +341,6 @@ export function SplashScreen({ onComplete, language, theme }: SplashScreenProps)
                 transition={{ delay: 1.15, duration: 1.4, ease: 'easeInOut' }}
               />
             </svg>
-          </motion.div>
-
-          {/* Progress bar */}
-          <motion.div
-            initial={{ opacity: 0, scaleX: 0 }}
-            animate={{ opacity: 1, scaleX: 1 }}
-            transition={{ delay: 0.45, duration: 0.4 }}
-            className="mt-5 h-[3px] w-52 overflow-hidden rounded-full"
-            style={{ background: isDark ? 'rgba(212,175,55,0.12)' : 'rgba(212,175,55,0.20)' }}
-          >
-            <div
-              className="h-full rounded-full"
-              style={{
-                background: 'linear-gradient(to right, #D4AF37, #F3E2AB)',
-                width: `${progress}%`,
-                boxShadow: '0 0 8px rgba(212,175,55,0.65)',
-                transition: 'width 0.12s linear',
-              }}
-            />
           </motion.div>
 
           {/* Loading status + version */}

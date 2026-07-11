@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from sqlalchemy import text
 
 from ..config import settings
 from ..db import SessionLocal
@@ -86,6 +87,38 @@ class PricingService:
             raise RuntimeError("Price cache is not initialized and fallback failed.")
 
         return self._latest.payload
+
+    async def get_history(self, asset_id: str) -> list[dict[str, str | float | None]]:
+        return await asyncio.to_thread(self._query_history, asset_id)
+
+    def _query_history(self, asset_id: str) -> list[dict[str, str | float | None]]:
+        query = text(
+            """
+            SELECT
+                date_trunc('hour', time) AS timestamp,
+                AVG(price_usd) FILTER (WHERE price_usd IS NOT NULL) AS value_usd,
+                AVG(price_toman) FILTER (WHERE price_toman IS NOT NULL) AS value_toman
+            FROM market_prices
+            WHERE asset = :asset
+              AND time >= NOW() - INTERVAL '30 days'
+            GROUP BY date_trunc('hour', time)
+            ORDER BY timestamp ASC
+            """
+        )
+        db = SessionLocal()
+        try:
+            rows = db.execute(query, {"asset": asset_id}).mappings().all()
+        finally:
+            db.close()
+
+        return [
+            {
+                "timestamp": row["timestamp"].isoformat(),
+                "value_usd": self._to_float(row["value_usd"]),
+                "value_toman": self._to_float(row["value_toman"]),
+            }
+            for row in rows
+        ]
 
     def _should_refresh(self) -> bool:
         if not self._last_refresh:

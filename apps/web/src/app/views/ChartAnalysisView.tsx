@@ -4,7 +4,7 @@ import { Sparkles, Loader2, RefreshCw } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { useAppContext } from '../context/AppContext';
-import { api, getPrices, type PriceAsset } from '../services/api';
+import { api, getPriceHistory, getPrices, type PriceAsset } from '../services/api';
 import { toast } from 'sonner';
 
 export function ChartAnalysisView() {
@@ -34,8 +34,19 @@ export function ChartAnalysisView() {
   useEffect(() => {
     let cancelled = false;
     getPrices()
-      .then((data) => {
-        if (!cancelled) setAssets(data?.assets ?? []);
+      .then(async (data) => {
+        const liveAssets: PriceAsset[] = data?.assets ?? [];
+        const assetsWithHistory = await Promise.all(
+          liveAssets.map(async (asset) => {
+            try {
+              const history = await getPriceHistory(asset.asset);
+              return { ...asset, history: history.points };
+            } catch {
+              return { ...asset, history: [] };
+            }
+          })
+        );
+        if (!cancelled) setAssets(assetsWithHistory);
       })
       .catch(() => {
         if (!cancelled) toast.error(t.loadFail[language]);

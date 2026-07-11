@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -12,7 +13,14 @@ logger = logging.getLogger(__name__)
 # Upper bound on conversation turns accepted per request to cap token usage and
 # keep latency predictable under load.
 MAX_HISTORY_MESSAGES = 20
-REQUEST_TIMEOUT_SECONDS = 45
+REQUEST_TIMEOUT_SECONDS = 20
+
+
+@dataclass(frozen=True)
+class ProviderConfig:
+    base_url: str
+    model: str
+    api_key: str | None
 
 
 class InsightUnavailableError(RuntimeError):
@@ -28,51 +36,78 @@ class MarketInsightEngine:
     """
 
     def __init__(self) -> None:
-        self.base_url = settings.insight_api_base_url.rstrip("/")
-        self.api_key = settings.insight_api_key or settings.deepseek_api_key
-        self.model = settings.insight_model
+        self.providers = [
+            ProviderConfig(
+                base_url=settings.groq_api_base_url,
+                model=settings.groq_model,
+                api_key=settings.groq_api_key,
+            ),
+            ProviderConfig(
+                base_url=settings.insight_api_base_url,
+                model=settings.insight_model,
+                api_key=settings.insight_api_key or settings.deepseek_api_key,
+            ),
+        ]
 
     def is_configured(self) -> bool:
-        return bool(self.api_key)
+        return any(provider.api_key for provider in self.providers)
 
-    async def _complete(self, messages: list[dict[str, str]], temperature: float) -> str:
-        if not self.is_configured():
+    async def _complete(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float,
+        providers: list[ProviderConfig] | None = None,
+    ) -> str:
+        provider_chain = [provider for provider in (providers or self.providers) if provider.api_key]
+        if not provider_chain:
             raise InsightUnavailableError("Reasoning provider API key is not configured")
 
-        url = f"{self.base_url}/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        body = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "stream": False,
-        }
+        last_error: Exception | None = None
+        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+            for index, provider in enumerate(provider_chain):
+                url = f"{provider.base_url.rstrip('/')}/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {provider.api_key}",
+                    "Content-Type": "application/json",
+                }
+                body = {
+                    "model": provider.model,
+                    "messages": messages,
+                    "temperature": temperature,
+                    "stream": False,
+                }
+                try:
+                    response = await client.post(url, headers=headers, json=body)
+                    response.raise_for_status()
+                    payload = response.json()
+                except (httpx.TimeoutException, httpx.HTTPStatusError) as exc:
+                    last_error = exc
+                    logger.warning(
+                        "Reasoning provider %s failed; trying fallback %s of %s",
+                        provider.base_url,
+                        index + 1,
+                        len(provider_chain),
+                    )
+                    continue
+                except httpx.HTTPError as exc:
+                    last_error = exc
+                    logger.error("Reasoning provider request failed: %s", exc)
+                    break
 
-        try:
-            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
-                response = await client.post(url, headers=headers, json=body)
-                response.raise_for_status()
-                payload = response.json()
-        except httpx.HTTPStatusError as exc:
-            logger.error("Reasoning provider returned %s: %s", exc.response.status_code, exc)
-            raise InsightUnavailableError("Reasoning provider rejected the request") from exc
-        except Exception as exc:
-            logger.error("Reasoning provider request failed: %s", exc)
-            raise InsightUnavailableError("Reasoning provider is unreachable") from exc
+                try:
+                    content = payload["choices"][0]["message"]["content"]
+                except (KeyError, IndexError, TypeError) as exc:
+                    logger.error("Unexpected reasoning provider payload: %s", payload)
+                    raise InsightUnavailableError("Reasoning provider returned an invalid response") from exc
 
-        try:
-            content = payload["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            logger.error("Unexpected reasoning provider payload: %s", payload)
-            raise InsightUnavailableError("Reasoning provider returned an invalid response") from exc
+                text = (content or "").strip()
+                if text:
+                    return text
+                raise InsightUnavailableError("Reasoning provider returned an empty response")
 
-        text = (content or "").strip()
-        if not text:
-            raise InsightUnavailableError("Reasoning provider returned an empty response")
-        return text
+        if isinstance(last_error, httpx.HTTPStatusError):
+            raise InsightUnavailableError("All reasoning providers rejected the request") from last_error
+        raise InsightUnavailableError("All reasoning providers are unreachable") from last_error
 
     async def analyze_chart(
         self,
