@@ -89,7 +89,8 @@ export default defineConfig({
       output: {
         manualChunks: {
           react: ["react", "react-dom", "react-router", "react-router-dom"],
-          charts: ["recharts"],
+          charts: ["lightweight-charts"],
+          query: ["@tanstack/react-query"],
           motion: ["motion"],
           ui: ["@radix-ui/react-dialog", "@radix-ui/react-dropdown-menu", "@radix-ui/react-popover"],
           http: ["axios"]

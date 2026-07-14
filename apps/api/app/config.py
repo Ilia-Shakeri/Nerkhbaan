@@ -1,4 +1,6 @@
-from pydantic import Field, field_validator
+from typing import Literal
+
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -23,6 +25,33 @@ class Settings(BaseSettings):
 
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
+    jwt_issuer: str = "nerkhbaan-api"
+    jwt_audience: str = "nerkhbaan-clients"
+
+    auth_cookie_enabled: bool = False
+    auth_cookie_name: str = "nerkhbaan_session"
+    auth_cookie_secure: bool = True
+    auth_cookie_samesite: Literal["lax", "strict", "none"] = "strict"
+
+    @field_validator("jwt_expire_minutes")
+    @classmethod
+    def jwt_expiry_must_be_bounded(cls, value: int) -> int:
+        if not 5 <= value <= 60 * 24 * 7:
+            raise ValueError("JWT_EXPIRE_MINUTES must be between 5 minutes and 7 days")
+        return value
+
+    @field_validator("jwt_algorithm")
+    @classmethod
+    def jwt_algorithm_must_be_safe(cls, value: str) -> str:
+        if value not in {"HS256", "HS384", "HS512"}:
+            raise ValueError("JWT_ALGORITHM must be HS256, HS384, or HS512")
+        return value
+
+    @model_validator(mode="after")
+    def cookie_policy_must_be_safe(self) -> "Settings":
+        if self.auth_cookie_enabled and self.auth_cookie_samesite == "none" and not self.auth_cookie_secure:
+            raise ValueError("AUTH_COOKIE_SECURE must be true when SameSite is none")
+        return self
 
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
@@ -50,16 +79,33 @@ class Settings(BaseSettings):
     
     # Redis configuration
     redis_url: str | None = None
+    trusted_proxy_ips: str = "127.0.0.1,::1"
 
-    # Reasoning provider using the standard chat-completions protocol.
-    # Override the base URL, model and key to point at any compatible provider.
+    # Remote reasoning providers use the standard chat-completions protocol.
     insight_api_base_url: str = "https://api.deepseek.com"
     insight_api_key: str | None = None
     insight_model: str = "deepseek-chat"
     deepseek_api_key: str | None = None
     groq_api_base_url: str = "https://api.groq.com/openai/v1"
     groq_api_key: str | None = None
-    groq_model: str = "llama3-70b-8192"
+    groq_model: str = "llama-3.3-70b-versatile"
+    openrouter_api_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_api_key: str | None = None
+    openrouter_model: str | None = None
+    ai_model: str | None = None
+    ai_max_tokens: int = 600
+
+    @field_validator("ai_max_tokens")
+    @classmethod
+    def reasoning_output_must_be_bounded(cls, value: int) -> int:
+        if not 64 <= value <= 2048:
+            raise ValueError("AI_MAX_TOKENS must be between 64 and 2048")
+        return value
+
+    push_allowed_hosts: str = (
+        "fcm.googleapis.com,updates.push.services.mozilla.com,"
+        "web.push.apple.com,notify.windows.com"
+    )
 
     # Web push (VAPID). Generate a key pair once and keep it stable; rotating it
     # invalidates every stored browser subscription.

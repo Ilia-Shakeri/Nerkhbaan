@@ -3,24 +3,41 @@ from __future__ import annotations
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import get_current_user
 from ..models import SupportMessage, SupportTicket, User
+from ..security import rate_limit_hit
 
 router = APIRouter(prefix="/api/support")
 
 
 class TicketCreate(BaseModel):
     subject: str = Field(min_length=1, max_length=200)
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=8000)
+
+    @field_validator("subject", "message")
+    @classmethod
+    def clean_text(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean or "\x00" in clean:
+            raise ValueError("Text must not be empty or contain null bytes")
+        return clean
 
 
 class MessageCreate(BaseModel):
-    content: str = Field(min_length=1)
+    content: str = Field(min_length=1, max_length=8000)
+
+    @field_validator("content")
+    @classmethod
+    def clean_text(cls, value: str) -> str:
+        clean = value.strip()
+        if not clean or "\x00" in clean:
+            raise ValueError("Text must not be empty or contain null bytes")
+        return clean
 
 
 class TicketResponse(BaseModel):
@@ -71,12 +88,23 @@ def _owned_ticket(ticket_id: int, user: User, db: Session) -> SupportTicket:
     return ticket
 
 
+def _enforce_write_limit(user_id: int) -> None:
+    rate_state = rate_limit_hit("support-write", str(user_id), 30, 60)
+    if rate_state.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many support messages. Please retry later.",
+            headers={"Retry-After": str(rate_state.retry_after)},
+        )
+
+
 @router.post("/ticket", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
 def create_ticket(
     ticket: TicketCreate,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _enforce_write_limit(current_user.id)
     new_ticket = SupportTicket(
         user_id=current_user.id,
         subject=ticket.subject,
@@ -128,6 +156,7 @@ def send_message(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _enforce_write_limit(current_user.id)
     ticket = _owned_ticket(ticket_id, current_user, db)
     new_message = SupportMessage(
         ticket_id=ticket.id,

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import ast
+import ipaddress
 import json
 import logging
+import math
+import re
+import socket
 import smtplib
 import ssl
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import select
@@ -18,6 +24,143 @@ from ..models import Alert as AlertModel, PushSubscription, User
 from ..db import SessionLocal
 
 logger = logging.getLogger(__name__)
+
+MAX_FORMULA_NODES = 40
+FORMULA_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+SOURCE_NAME_PATTERN = re.compile(r"[^a-z0-9]+")
+
+
+class FormulaValidationError(ValueError):
+    pass
+
+
+def validate_webhook_url(url: str, *, resolve_dns: bool = False) -> None:
+    parsed = urlsplit(url.strip())
+    if parsed.scheme != "https" or not parsed.hostname:
+        raise ValueError("Webhook URL must use HTTPS and include a host")
+    if parsed.username or parsed.password:
+        raise ValueError("Webhook URL credentials are not allowed")
+
+    hosts: set[str] = {parsed.hostname}
+    if resolve_dns:
+        try:
+            hosts = {
+                item[4][0]
+                for item in socket.getaddrinfo(
+                    parsed.hostname,
+                    parsed.port or 443,
+                    type=socket.SOCK_STREAM,
+                )
+            }
+        except socket.gaierror as exc:
+            raise ValueError("Webhook host cannot be resolved") from exc
+
+    for host in hosts:
+        try:
+            address = ipaddress.ip_address(host)
+        except ValueError:
+            if resolve_dns:
+                raise ValueError("Webhook host returned an invalid address")
+            continue
+        if not address.is_global:
+            raise ValueError("Webhook host must resolve to a public address")
+
+
+def _parse_formula(formula: str) -> ast.Expression:
+    if len(formula) > 200:
+        raise FormulaValidationError("Formula is too long")
+    try:
+        tree = ast.parse(formula.strip(), mode="eval")
+    except SyntaxError as exc:
+        raise FormulaValidationError("Formula syntax is invalid") from exc
+
+    nodes = list(ast.walk(tree))
+    if len(nodes) > MAX_FORMULA_NODES:
+        raise FormulaValidationError("Formula is too complex")
+
+    allowed = (
+        ast.Expression,
+        ast.Compare,
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.Name,
+        ast.Load,
+        ast.Constant,
+        ast.Add,
+        ast.Sub,
+        ast.Mult,
+        ast.Div,
+        ast.UAdd,
+        ast.USub,
+        ast.Gt,
+        ast.GtE,
+        ast.Lt,
+        ast.LtE,
+    )
+    if any(not isinstance(node, allowed) for node in nodes):
+        raise FormulaValidationError("Formula contains an unsupported operation")
+    if not isinstance(tree.body, ast.Compare) or len(tree.body.ops) != 1:
+        raise FormulaValidationError("Formula must contain one comparison")
+    for node in nodes:
+        if isinstance(node, ast.Name) and not FORMULA_NAME_PATTERN.fullmatch(node.id.lower()):
+            raise FormulaValidationError("Formula contains an invalid market name")
+        if isinstance(node, ast.Constant) and (
+            isinstance(node.value, bool) or not isinstance(node.value, (int, float))
+        ):
+            raise FormulaValidationError("Formula constants must be numbers")
+    return tree
+
+
+def validate_formula(formula: str) -> None:
+    _parse_formula(formula)
+
+
+def _formula_value(node: ast.AST, values: dict[str, float]) -> float | bool:
+    if isinstance(node, ast.Constant):
+        value = float(node.value)
+        if not math.isfinite(value):
+            raise FormulaValidationError("Formula number is not finite")
+        return value
+    if isinstance(node, ast.Name):
+        name = node.id.lower()
+        if name not in values:
+            raise FormulaValidationError(f"Market value is unavailable: {name}")
+        return values[name]
+    if isinstance(node, ast.UnaryOp):
+        value = float(_formula_value(node.operand, values))
+        return value if isinstance(node.op, ast.UAdd) else -value
+    if isinstance(node, ast.BinOp):
+        left = float(_formula_value(node.left, values))
+        right = float(_formula_value(node.right, values))
+        if isinstance(node.op, ast.Add):
+            result = left + right
+        elif isinstance(node.op, ast.Sub):
+            result = left - right
+        elif isinstance(node.op, ast.Mult):
+            result = left * right
+        else:
+            if right == 0:
+                raise FormulaValidationError("Formula divides by zero")
+            result = left / right
+        if not math.isfinite(result):
+            raise FormulaValidationError("Formula result is not finite")
+        return result
+    if isinstance(node, ast.Compare):
+        left = float(_formula_value(node.left, values))
+        right = float(_formula_value(node.comparators[0], values))
+        operator = node.ops[0]
+        if isinstance(operator, ast.Gt):
+            return left > right
+        if isinstance(operator, ast.GtE):
+            return left >= right
+        if isinstance(operator, ast.Lt):
+            return left < right
+        return left <= right
+    raise FormulaValidationError("Formula node is not supported")
+
+
+def evaluate_formula(formula: str, values: dict[str, float]) -> bool:
+    return bool(_formula_value(_parse_formula(formula).body, values))
 
 
 class Alert:
@@ -34,6 +177,8 @@ class Alert:
         email_enabled: bool,
         webhook_enabled: bool,
         webhook_url: str | None,
+        alert_type: str = "price",
+        formula: str | None = None,
     ):
         self.id = id
         self.user_id = user_id
@@ -46,6 +191,8 @@ class Alert:
         self.email_enabled = email_enabled
         self.webhook_enabled = webhook_enabled
         self.webhook_url = webhook_url
+        self.alert_type = alert_type
+        self.formula = formula
 
 
 class AlertEngine:
@@ -92,6 +239,8 @@ class AlertEngine:
                 email_enabled=row.notify_email,
                 webhook_enabled=row.notify_webhook,
                 webhook_url=row.webhook_url,
+                alert_type=row.alert_type,
+                formula=row.formula,
             )
             for row in rows
         ]
@@ -108,6 +257,15 @@ class AlertEngine:
         db.commit()
 
     def _should_trigger(self, alert: Alert, current_prices: dict[str, Any]) -> bool:
+        if alert.alert_type == "formula":
+            if not alert.formula:
+                return False
+            try:
+                return evaluate_formula(alert.formula, self._formula_values(alert, current_prices))
+            except FormulaValidationError as exc:
+                logger.warning("Formula alert %s skipped: %s", alert.id, exc)
+                return False
+
         assets = current_prices.get("assets", [])
         
         asset_data = next((a for a in assets if a["asset"] == alert.asset_id), None)
@@ -128,6 +286,26 @@ class AlertEngine:
             return price <= alert.target_price
         
         return False
+
+    def _formula_values(self, alert: Alert, current_prices: dict[str, Any]) -> dict[str, float]:
+        price_key = "price_usd" if alert.currency == "usd" else "price_toman"
+        source_key = "source_usd" if alert.currency == "usd" else "source_toman"
+        values: dict[str, float] = {}
+        for asset in current_prices.get("assets", []):
+            asset_id = str(asset.get("asset", "")).lower()
+            value = asset.get(price_key)
+            if not asset_id or not isinstance(value, (int, float)) or not math.isfinite(value):
+                continue
+            values[asset_id] = float(value)
+            source = SOURCE_NAME_PATTERN.sub("_", str(asset.get(source_key, "")).lower()).strip("_")
+            if source:
+                values[f"{asset_id}_{source}"] = float(value)
+
+        if "usd" in values:
+            values.setdefault("dollar", values["usd"])
+        if alert.target_price is not None:
+            values["x"] = float(alert.target_price)
+        return values
 
     async def _deliver_alert(self, alert: Alert, current_prices: dict[str, Any]) -> None:
         tasks = []
@@ -159,6 +337,9 @@ class AlertEngine:
         return asset_data.get("price_usd") if alert.currency == "usd" else asset_data.get("price_toman")
 
     def _alert_summary(self, alert: Alert, current_prices: dict[str, Any]) -> tuple[str, str]:
+        if alert.alert_type == "formula":
+            title = "Nerkhbaan formula alert"
+            return title, f"Formula condition met: {alert.formula}"
         price = self._current_price(alert, current_prices)
         price_text = f"{price:,.2f}" if isinstance(price, (int, float)) else "-"
         unit = alert.currency.upper()
@@ -288,7 +469,8 @@ class AlertEngine:
             return
         
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            await asyncio.to_thread(validate_webhook_url, alert.webhook_url, resolve_dns=True)
+            async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
                 payload = {
                     "alert_id": alert.id,
                     "asset": alert.asset_id,
@@ -300,7 +482,7 @@ class AlertEngine:
                 }
                 response = await client.post(alert.webhook_url, json=payload)
                 response.raise_for_status()
-                logger.info(f"Webhook delivered for alert_id={alert.id} to {alert.webhook_url}")
+                logger.info("Webhook delivered for alert_id=%s", alert.id)
         except Exception as e:
-            logger.error(f"Webhook failed for alert_id={alert.id}: {e}")
+            logger.error("Webhook failed for alert_id=%s: %s", alert.id, e)
             raise

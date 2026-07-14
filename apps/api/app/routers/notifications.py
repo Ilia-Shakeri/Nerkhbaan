@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import get_current_user
 from ..models import NotificationPreference, OtpVerification, User
-from ..security import hash_password, verify_password
+from ..security import hash_password, rate_limit_clear, rate_limit_hit, send_email, verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class OtpStartRequest(BaseModel):
 
 
 class OtpConfirmRequest(OtpStartRequest):
-    code: str = Field(min_length=4, max_length=12)
+    code: str = Field(pattern=r"^\d{6}$")
 
 
 class TelegramRequest(BaseModel):
@@ -130,7 +130,24 @@ def start_otp(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    rate_state = rate_limit_hit(
+        "notification-otp-start",
+        f"{current_user.id}:{payload.channel}",
+        5,
+        10 * 60,
+    )
+    if rate_state.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many verification requests. Please retry later.",
+            headers={"Retry-After": str(rate_state.retry_after)},
+        )
     destination = _normalize_destination(payload.channel, payload.destination)
+    if payload.channel == "sms":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="SMS delivery is not configured.",
+        )
     code = f"{secrets.randbelow(1_000_000):06d}"
     verification = OtpVerification(
         user_id=current_user.id,
@@ -141,7 +158,18 @@ def start_otp(
     )
     db.add(verification)
     db.commit()
-    logger.info("Notification %s code for user_id=%s destination=%s: %s", payload.channel, current_user.id, destination, code)
+    if not send_email(
+        destination,
+        "Nerkhbaan verification code",
+        f"Your verification code is {code}. It expires in {OTP_TTL_MINUTES} minutes.",
+    ):
+        db.delete(verification)
+        db.commit()
+        logger.warning("Notification email delivery is unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email delivery is temporarily unavailable.",
+        )
     return {"message": "Verification code sent.", "destination": destination, "ttl_minutes": OTP_TTL_MINUTES}
 
 
@@ -152,6 +180,19 @@ def confirm_otp(
     db: Session = Depends(get_db),
 ) -> NotificationPreferencesResponse:
     destination = _normalize_destination(payload.channel, payload.destination)
+    confirmation_identity = f"{current_user.id}:{payload.channel}:{destination}"
+    rate_state = rate_limit_hit(
+        "notification-otp-confirm",
+        confirmation_identity,
+        10,
+        10 * 60,
+    )
+    if rate_state.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many verification attempts. Please retry later.",
+            headers={"Retry-After": str(rate_state.retry_after)},
+        )
     verification = db.scalar(
         select(OtpVerification)
         .where(
@@ -176,6 +217,7 @@ def confirm_otp(
         prefs.email_verified = True
     verification.used = True
     db.commit()
+    rate_limit_clear("notification-otp-confirm", confirmation_identity)
     db.refresh(prefs)
     return _to_response(prefs)
 

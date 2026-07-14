@@ -21,6 +21,9 @@ SELECT create_hypertable(
 CREATE INDEX IF NOT EXISTS ix_market_prices_asset_region_time
     ON public.market_prices (asset, region, time DESC);
 
+CREATE INDEX IF NOT EXISTS ix_market_prices_source_time
+    ON public.market_prices (source, time DESC);
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS public.market_prices_1h
 WITH (timescaledb.continuous) AS
 SELECT
@@ -64,6 +67,56 @@ BEGIN
 EXCEPTION
     WHEN duplicate_object THEN NULL;
 END $$;
+
+DO $$
+BEGIN
+    ALTER TABLE public.market_prices SET (
+        timescaledb.compress,
+        timescaledb.compress_segmentby = 'asset,region,source',
+        timescaledb.compress_orderby = 'time DESC'
+    );
+    PERFORM add_compression_policy(
+        'public.market_prices',
+        INTERVAL '7 days',
+        if_not_exists => TRUE
+    );
+EXCEPTION
+    WHEN undefined_function OR feature_not_supported THEN NULL;
+END $$;
+
+DO $$
+BEGIN
+    PERFORM add_retention_policy(
+        'public.market_prices',
+        INTERVAL '400 days',
+        if_not_exists => TRUE
+    );
+EXCEPTION
+    WHEN undefined_function OR feature_not_supported THEN NULL;
+END $$;
+
+ALTER TABLE IF EXISTS public.alerts
+    ADD COLUMN IF NOT EXISTS alert_type VARCHAR(16) NOT NULL DEFAULT 'price',
+    ADD COLUMN IF NOT EXISTS formula TEXT,
+    ALTER COLUMN target_price DROP NOT NULL;
+
+CREATE TABLE IF NOT EXISTS public.market_articles (
+    id BIGSERIAL PRIMARY KEY,
+    source VARCHAR(120) NOT NULL,
+    url VARCHAR(1000) NOT NULL UNIQUE,
+    title VARCHAR(500) NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    content TEXT,
+    published_at TIMESTAMPTZ NOT NULL,
+    embedding JSONB,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS ix_market_articles_published_at
+    ON public.market_articles (published_at DESC);
+
+CREATE INDEX IF NOT EXISTS ix_market_articles_source
+    ON public.market_articles (source);
 
 DO $$
 BEGIN

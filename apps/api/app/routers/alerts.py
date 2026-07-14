@@ -8,6 +8,7 @@ from ..db import get_db
 from ..deps import get_current_user
 from ..models import Alert, User
 from ..schemas import AlertCreate, AlertResponse
+from ..services.alert_engine import FormulaValidationError, validate_formula, validate_webhook_url
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
@@ -18,6 +19,16 @@ def create_alert(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AlertResponse:
+    if payload.alert_type == "formula" and payload.formula:
+        try:
+            validate_formula(payload.formula)
+        except FormulaValidationError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    if payload.notify_webhook and payload.webhook_url:
+        try:
+            validate_webhook_url(payload.webhook_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     alert = Alert(user_id=current_user.id, **payload.model_dump())
     db.add(alert)
     db.commit()

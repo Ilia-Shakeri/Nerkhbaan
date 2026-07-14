@@ -227,7 +227,9 @@ export type NotificationPreferences = {
 
 export type AlertCreate = {
   asset: string;
-  target_price: number;
+  target_price: number | null;
+  alert_type?: 'price' | 'formula';
+  formula?: string | null;
   currency_mode: CurrencyMode;
   condition: 'above' | 'below';
   notify_app: boolean;
@@ -240,7 +242,9 @@ export type AlertCreate = {
 export type AlertResponse = {
   id: number;
   asset: string;
-  target_price: number;
+  target_price: number | null;
+  alert_type: 'price' | 'formula';
+  formula: string | null;
   currency_mode: CurrencyMode;
   condition: 'above' | 'below';
   notify_app: boolean;
@@ -292,6 +296,11 @@ export type PricePoint = {
   timestamp: string;
   value_usd: number | null;
   value_toman: number | null;
+  open?: number | null;
+  close?: number | null;
+  high?: number | null;
+  low?: number | null;
+  volume?: number | null;
 };
 
 export type PriceHistoryResponse = {
@@ -299,15 +308,48 @@ export type PriceHistoryResponse = {
   points: PricePoint[];
 };
 
-export const getPrices = async () => {
-  // Use relative path to prevent Axios from stripping the /api base path
-  const { data } = await apiInstance.get('prices');
+export type PricesResponse = {
+  refreshed_at: string;
+  source: { usd?: string; toman?: string };
+  assets: PriceAsset[];
+};
+
+export type PriceTimeframe = '24h' | '7d' | '30d' | '1y';
+
+export const queryKeys = {
+  prices: ['prices'] as const,
+  priceHistory: (asset: string, timeframe: PriceTimeframe) => ['prices', asset, 'history', timeframe] as const,
+  alerts: ['alerts'] as const,
+  profile: ['profile'] as const,
+  analysis: (asset: string, language: 'fa' | 'en') => ['insights', 'analysis', asset, language] as const,
+  chatSessions: ['insights', 'chat', 'sessions'] as const,
+  chatSession: (sessionId: number) => ['insights', 'chat', 'sessions', sessionId] as const,
+};
+
+export const getPrices = async (signal?: AbortSignal): Promise<PricesResponse> => {
+  const { data } = await apiInstance.get<PricesResponse>('prices', { signal });
   return data;
 };
 
-export const getPriceHistory = async (asset: string): Promise<PriceHistoryResponse> => {
-  const { data } = await apiInstance.get<PriceHistoryResponse>(`prices/${asset}/history`);
+export const getPriceHistory = async (
+  asset: string,
+  timeframe: PriceTimeframe = '24h',
+  signal?: AbortSignal,
+): Promise<PriceHistoryResponse> => {
+  const { data } = await apiInstance.get<PriceHistoryResponse>(`prices/${asset}/history`, {
+    params: { timeframe },
+    signal,
+  });
   return data;
+};
+
+export const getPricesWebSocketUrl = (): string => {
+  const url = new URL(baseURL, window.location.origin);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = `${url.pathname.replace(/\/api\/?$/, '').replace(/\/$/, '')}/api/ws/prices`;
+  url.search = '';
+  url.hash = '';
+  return url.toString();
 };
 
 export const formatPrice = (value: number | null | undefined, mode: CurrencyMode, language: 'en' | 'fa'): string => {

@@ -6,19 +6,17 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir --index-url https://package-mirror.liara.ir/repository/pypi/simple --trusted-host package-mirror.liara.ir -r requirements.txt \
-    || pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --no-compile --index-url https://package-mirror.liara.ir/repository/pypi/simple --trusted-host package-mirror.liara.ir -r requirements.txt \
+    || pip install --no-cache-dir --no-compile -r requirements.txt
 
 COPY app ./app
 
 
-# Create a non-root user and group for security
+# Create a non-root runtime account.
 RUN addgroup --system deploy && adduser --system --group deploy
 
-# Transfer ownership of the application directory
 RUN chown -R deploy:deploy /app
 
-# Switch to the non-root user
 USER deploy
 
 EXPOSE 8000

@@ -5,6 +5,14 @@
     restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379"
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   frontend:
     image: nerkhbaan-frontend
@@ -53,6 +61,16 @@
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./apps/api/db/init:/docker-entrypoint-initdb.d:ro
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=4MB
+      - -c
+      - max_connections=50
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U nerkhbaan -d nerkhbaan']
       interval: 10s
@@ -76,6 +94,8 @@
 
   # CI/CD Services
   gitea:
+    profiles:
+      - devops
     image: gitea/gitea:1.21.11
     container_name: nerkhbaan-gitea
     restart: unless-stopped
@@ -100,6 +120,8 @@
           memory: 512M
 
   gitea-runner:
+    profiles:
+      - devops
     image: gitea/act_runner:nightly
     container_name: nerkhbaan-gitea-runner
     restart: unless-stopped
@@ -121,3 +143,4 @@
 
 volumes:
   postgres_data:
+  redis_data:

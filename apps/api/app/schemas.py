@@ -126,11 +126,10 @@ class PricesHealthResponse(BaseModel):
 
 
 class AlertCreate(BaseModel):
-    asset: str = Field(min_length=1, max_length=20)
-    # Must be positive; non-positive targets can never trigger and waste cycles.
-    target_price: float = Field(gt=0)
-    # Constrained to values the alert engine knows how to evaluate. Free-form
-    # strings would create alerts that silently never fire.
+    asset: str = Field(default="formula", min_length=1, max_length=20)
+    target_price: float | None = Field(default=None, gt=0)
+    alert_type: Literal["price", "formula"] = "price"
+    formula: str | None = Field(default=None, min_length=3, max_length=200)
     currency_mode: Literal["usd", "toman"] = "usd"
     condition: Literal["above", "below"] = "above"
     notify_app: bool = True
@@ -140,8 +139,11 @@ class AlertCreate(BaseModel):
     enable_dlq: bool = False
 
     @model_validator(mode="after")
-    def require_webhook_url(self) -> "AlertCreate":
-        # A webhook alert without a destination URL would be dropped silently.
+    def validate_alert(self) -> "AlertCreate":
+        if self.alert_type == "price" and self.target_price is None:
+            raise ValueError("target_price is required for price alerts")
+        if self.alert_type == "formula" and not self.formula:
+            raise ValueError("formula is required for formula alerts")
         if self.notify_webhook and not (self.webhook_url and self.webhook_url.strip()):
             raise ValueError("webhook_url is required when notify_webhook is enabled")
         return self
@@ -150,7 +152,9 @@ class AlertCreate(BaseModel):
 class AlertResponse(BaseModel):
     id: int
     asset: str
-    target_price: float
+    target_price: float | None
+    alert_type: str
+    formula: str | None
     currency_mode: str
     condition: str
     notify_app: bool

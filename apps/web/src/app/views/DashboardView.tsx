@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, CartesianGrid, ReferenceLine } from 'recharts';
-import { BellPlus, ArrowUpRight, ArrowDownRight, GripVertical, Webhook, Mail, Smartphone, AlertTriangle, Maximize2 } from 'lucide-react';
+import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type UTCTimestamp } from 'lightweight-charts';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { BellPlus, ArrowUpRight, ArrowDownRight, GripVertical, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, Radio, WifiOff } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -10,7 +11,18 @@ import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { toast } from 'sonner';
-import { api, formatPrice, getPriceHistory, getPrices, type CurrencyMode, type PriceAsset } from '../services/api';
+import {
+  api,
+  formatPrice,
+  getPriceHistory,
+  getPrices,
+  getPricesWebSocketUrl,
+  queryKeys,
+  type CurrencyMode,
+  type PriceAsset,
+  type PricesResponse,
+  type PriceTimeframe,
+} from '../services/api';
 
 type AssetId = 'gold' | 'silver' | 'usdt' | 'btc';
 
@@ -37,13 +49,9 @@ type AssetCard = {
   chartErrorMessage: { fa: string; en: string };
 };
 
-type TooltipPosition = {
-  x: number;
-  y: number;
-};
-
 const CHART_ORDER_STORAGE_KEY = 'dashboard-chart-order-v3';
 const DEFAULT_ASSET_ORDER: AssetId[] = ['gold', 'silver', 'usdt', 'btc'];
+const TIMEFRAMES: PriceTimeframe[] = ['24h', '7d', '30d', '1y'];
 
 const CHART_COLORS: Record<AssetId, { dark: string; light: string }> = {
   gold: { dark: '#D4AF37', light: '#B8860B' },
@@ -147,11 +155,139 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId): AssetCard =>
   };
 };
 
-const toChartValue = (point: AssetPoint, mode: CurrencyMode, fallbackValue: number) => {
+const toChartValue = (point: AssetPoint, mode: CurrencyMode, usdToTomanRate: number | null) => {
   const raw = mode === 'usd' ? point.value_usd : point.value_toman;
-  const value = raw ?? fallbackValue;
-  return Number.isFinite(value) ? value : 0;
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw;
+
+  const other = mode === 'usd' ? point.value_toman : point.value_usd;
+  if (typeof other !== 'number' || !Number.isFinite(other) || other <= 0 || !usdToTomanRate) return null;
+  const converted = mode === 'usd' ? other / usdToTomanRate : other * usdToTomanRate;
+  return Number.isFinite(converted) && converted > 0 ? converted : null;
 };
+
+const toChartData = (
+  points: AssetPoint[],
+  mode: CurrencyMode,
+  usdToTomanRate: number | null,
+): LineData<UTCTimestamp>[] => {
+  const unique = new Map<number, number>();
+  for (const point of points) {
+    const milliseconds = Date.parse(point.timestamp);
+    const value = toChartValue(point, mode, usdToTomanRate);
+    if (!Number.isFinite(milliseconds) || value === null) continue;
+    unique.set(Math.floor(milliseconds / 1_000), value);
+  }
+  return [...unique.entries()]
+    .sort(([left], [right]) => left - right)
+    .map(([time, value]) => ({ time: time as UTCTimestamp, value }));
+};
+
+function FinancialChart({
+  data,
+  color,
+  isDark,
+  currencyMode,
+  language,
+  className = 'h-[400px] min-h-[400px]',
+}: {
+  data: LineData<UTCTimestamp>[];
+  color: string;
+  isDark: boolean;
+  currencyMode: CurrencyMode;
+  language: 'fa' | 'en';
+  className?: string;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const [crosshairValue, setCrosshairValue] = useState<number | null>(null);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const chart = createChart(container, {
+      autoSize: true,
+      layout: {
+        background: { type: ColorType.Solid, color: 'transparent' },
+        textColor: isDark ? '#AA986A' : '#7A5E24',
+        attributionLogo: true,
+      },
+      grid: {
+        vertLines: { color: isDark ? 'rgba(212,175,55,0.06)' : 'rgba(122,94,36,0.08)' },
+        horzLines: { color: isDark ? 'rgba(212,175,55,0.10)' : 'rgba(122,94,36,0.12)' },
+      },
+      crosshair: {
+        mode: CrosshairMode.Normal,
+        vertLine: { color, labelBackgroundColor: color },
+        horzLine: { color, labelBackgroundColor: color },
+      },
+      rightPriceScale: {
+        borderVisible: false,
+        scaleMargins: { top: 0.12, bottom: 0.12 },
+      },
+      timeScale: {
+        borderVisible: false,
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 3,
+        barSpacing: 8,
+        minBarSpacing: 2,
+      },
+      handleScale: true,
+      handleScroll: true,
+      localization: {
+        locale: language === 'fa' ? 'fa-IR' : 'en-US',
+        priceFormatter: (value: number) => formatPrice(value, currencyMode, language),
+      },
+    });
+    const series = chart.addSeries(LineSeries, {
+      color,
+      lineWidth: 3,
+      priceLineVisible: true,
+      lastValueVisible: true,
+      crosshairMarkerVisible: true,
+      crosshairMarkerRadius: 5,
+    });
+
+    chart.subscribeCrosshairMove((event) => {
+      const point = event.seriesData.get(series);
+      setCrosshairValue(point && 'value' in point && typeof point.value === 'number' ? point.value : null);
+    });
+    chartRef.current = chart;
+    seriesRef.current = series;
+
+    const observer = new ResizeObserver(() => {
+      chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+    });
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+      chart.remove();
+      chartRef.current = null;
+      seriesRef.current = null;
+    };
+  }, [color, currencyMode, isDark, language]);
+
+  useEffect(() => {
+    seriesRef.current?.setData(data);
+    if (data.length > 0) chartRef.current?.timeScale().fitContent();
+  }, [data]);
+
+  return (
+    <div className={`relative w-full ${className}`} dir="ltr">
+      <div ref={containerRef} className="h-full w-full" />
+      {crosshairValue !== null && (
+        <div className={`pointer-events-none absolute start-3 top-3 z-10 rounded-lg border px-2 py-1 text-xs font-bold backdrop-blur ${
+          isDark ? 'border-white/10 bg-black/75 text-white' : 'border-black/10 bg-white/85 text-[#3B2E13]'
+        }`}>
+          {formatPrice(crosshairValue, currencyMode, language)}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AssetIcon({ id, className = '' }: { id: AssetId; className?: string }) {
   const symbols: Record<AssetId, string> = { gold: 'Au', silver: 'Ag', usdt: '₮', btc: '₿' };
@@ -159,10 +295,13 @@ function AssetIcon({ id, className = '' }: { id: AssetId; className?: string }) 
 }
 
 export function DashboardView() {
-  const { language, theme, currencyMode, setCurrencyMode } = useAppContext();
+  const { language, theme, currencyMode } = useAppContext();
   const isDark = theme === 'dark';
+  const queryClient = useQueryClient();
 
   const [assetOrder, setAssetOrder] = useState<AssetId[]>(getInitialAssetOrder);
+  const [timeframe, setTimeframe] = useState<PriceTimeframe>('24h');
+  const [socketStatus, setSocketStatus] = useState<'connecting' | 'live' | 'fallback'>('connecting');
   const [draggedAssetId, setDraggedAssetId] = useState<AssetId | null>(null);
   const [dragOverAssetId, setDragOverAssetId] = useState<AssetId | null>(null);
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
@@ -173,75 +312,143 @@ export function DashboardView() {
   const [alertNotifyWebhook, setAlertNotifyWebhook] = useState(false);
   const [alertWebhookUrl, setAlertWebhookUrl] = useState('');
   const [alertEnableDlq, setAlertEnableDlq] = useState(false);
-  const [isSavingAlert, setIsSavingAlert] = useState(false);
-
-  const [pricesData, setPricesData] = useState<PriceAsset[]>(EMPTY_ASSETS);
-  const [historyByAsset, setHistoryByAsset] = useState<Record<AssetId, AssetPoint[]>>({
-    gold: [], silver: [], usdt: [], btc: []
-  });
-  const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
-  const [sourceLabel, setSourceLabel] = useState<{ usd: string; toman: string }>({ usd: '...', toman: '...' });
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  const [activePointIndexByAsset, setActivePointIndexByAsset] = useState<Record<string, number>>({});
-  const [isScrubbingByAsset, setIsScrubbingByAsset] = useState<Record<string, boolean>>({});
-  const [tooltipPositionByAsset, setTooltipPositionByAsset] = useState<Record<string, TooltipPosition>>({});
   const [fullscreenAsset, setFullscreenAsset] = useState<AssetId | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem(CHART_ORDER_STORAGE_KEY, JSON.stringify(assetOrder));
   }, [assetOrder]);
 
-  const loadPrices = async () => {
-    try {
-      setLoadError(null);
-      const data = await getPrices();
-      setPricesData(data.assets);
-      setLastRefreshAt(data.refreshed_at);
-      setSourceLabel({ usd: data.source?.usd ?? 'Unknown', toman: data.source?.toman ?? 'Unknown' });
-    } catch (err: any) {
-      setLoadError(err.message || 'Failed to sync prices');
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const pricesQuery = useQuery({
+    queryKey: queryKeys.prices,
+    queryFn: ({ signal }) => getPrices(signal),
+    placeholderData: keepPreviousData,
+    refetchInterval: socketStatus === 'live' ? false : 15_000,
+    refetchIntervalInBackground: false,
+  });
+
+  const historyQueries = useQueries({
+    queries: DEFAULT_ASSET_ORDER.map((asset) => ({
+      queryKey: queryKeys.priceHistory(asset, timeframe),
+      queryFn: ({ signal }: { signal: AbortSignal }) => getPriceHistory(asset, timeframe, signal),
+      placeholderData: keepPreviousData,
+      staleTime: timeframe === '24h' ? 30_000 : 5 * 60_000,
+      refetchInterval: timeframe === '24h' ? 60_000 : 5 * 60_000,
+      refetchIntervalInBackground: false,
+    })),
+  });
 
   useEffect(() => {
-    loadPrices();
-    const interval = setInterval(loadPrices, 15000);
-    return () => clearInterval(interval);
-  }, []);
+    let stopped = false;
+    let socket: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryCount = 0;
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadHistory = async () => {
-      const entries = await Promise.all(
-        DEFAULT_ASSET_ORDER.map(async (asset) => {
-          try {
-            return [asset, (await getPriceHistory(asset)).points] as const;
-          } catch {
-            return [asset, null] as const;
-          }
-        })
+    const mergeMessage = (message: unknown) => {
+      if (!message || typeof message !== 'object') return;
+      const root = message as Record<string, unknown>;
+      const nested = root.data ?? root.payload ?? root;
+      if (!nested || typeof nested !== 'object') return;
+      const payload = nested as Record<string, unknown>;
+      const incoming = Array.isArray(payload.assets)
+        ? payload.assets
+        : typeof payload.asset === 'string'
+          ? [payload]
+          : [];
+      const validAssets = incoming.filter(
+        (asset): asset is Record<string, unknown> => Boolean(asset && typeof asset === 'object' && typeof (asset as Record<string, unknown>).asset === 'string'),
       );
-      if (!cancelled) {
-        setHistoryByAsset((current) => {
-          const next = { ...current };
-          for (const [asset, points] of entries) {
-            if (points) next[asset] = points;
-          }
-          return next;
-        });
+      if (validAssets.length === 0) return;
+
+      queryClient.setQueryData<PricesResponse>(queryKeys.prices, (current) => {
+        const currentAssets = current?.assets ?? EMPTY_ASSETS;
+        const byId = new Map(currentAssets.map((asset) => [asset.asset, asset]));
+        for (const next of validAssets) {
+          const assetId = next.asset as string;
+          const fallback = DEFAULT_ASSET_ORDER.includes(assetId as AssetId)
+            ? buildPlaceholderAsset(assetId as AssetId)
+            : undefined;
+          const base = byId.get(assetId) ?? fallback;
+          if (base) byId.set(assetId, { ...base, ...next } as PriceAsset);
+        }
+        return {
+          refreshed_at: typeof payload.refreshed_at === 'string' ? payload.refreshed_at : new Date().toISOString(),
+          source: payload.source && typeof payload.source === 'object'
+            ? payload.source as PricesResponse['source']
+            : current?.source ?? {},
+          assets: [...byId.values()],
+        };
+      });
+    };
+
+    const connect = () => {
+      if (stopped || !navigator.onLine) {
+        setSocketStatus('fallback');
+        return;
       }
+      setSocketStatus('connecting');
+      socket = new WebSocket(getPricesWebSocketUrl());
+      socket.onopen = () => {
+        retryCount = 0;
+        setSocketStatus('live');
+      };
+      socket.onmessage = (event) => {
+        try {
+          mergeMessage(JSON.parse(event.data));
+        } catch {
+          setSocketStatus('fallback');
+        }
+      };
+      socket.onerror = () => socket?.close();
+      socket.onclose = () => {
+        if (stopped) return;
+        setSocketStatus('fallback');
+        void queryClient.invalidateQueries({ queryKey: queryKeys.prices });
+        retryCount += 1;
+        retryTimer = setTimeout(connect, Math.min(1_000 * 2 ** retryCount, 30_000));
+      };
     };
-    void loadHistory();
-    const interval = setInterval(loadHistory, 60_000);
+    const reconnectWhenOnline = () => {
+      if (!socket || socket.readyState === WebSocket.CLOSED) connect();
+    };
+
+    connect();
+    window.addEventListener('online', reconnectWhenOnline);
     return () => {
-      cancelled = true;
-      clearInterval(interval);
+      stopped = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      socket?.close();
+      window.removeEventListener('online', reconnectWhenOnline);
     };
-  }, []);
+  }, [queryClient]);
+
+  const pricesData = pricesQuery.data?.assets ?? EMPTY_ASSETS;
+  const lastRefreshAt = pricesQuery.data?.refreshed_at ?? null;
+  const sourceLabel = {
+    usd: pricesQuery.data?.source?.usd ?? 'Unknown',
+    toman: pricesQuery.data?.source?.toman ?? 'Unknown',
+  };
+  const isLoading = pricesQuery.isPending;
+  const loadError = pricesQuery.error instanceof Error ? pricesQuery.error.message : null;
+
+  const historyByAsset = useMemo(() => {
+    const next: Record<AssetId, AssetPoint[]> = { gold: [], silver: [], usdt: [], btc: [] };
+    DEFAULT_ASSET_ORDER.forEach((asset, index) => {
+      next[asset] = historyQueries[index]?.data?.points ?? [];
+    });
+    return next;
+  }, [historyQueries]);
+
+  const historyStateByAsset = useMemo(() => {
+    const next = {} as Record<AssetId, { isLoading: boolean; error: string | null }>;
+    DEFAULT_ASSET_ORDER.forEach((asset, index) => {
+      const query = historyQueries[index];
+      next[asset] = {
+        isLoading: query?.isPending ?? false,
+        error: query?.error instanceof Error ? query.error.message : null,
+      };
+    });
+    return next;
+  }, [historyQueries]);
 
   const orderedAssets = useMemo(() => {
     return assetOrder.map((id) => {
@@ -260,32 +467,6 @@ export function DashboardView() {
       newOrder.splice(toIndex, 0, draggedId);
       return newOrder;
     });
-  };
-
-  const updateScrubPoint = (asset: AssetCard, clientX: number, clientY: number) => {
-    const chartNode = document.getElementById(`asset-chart-${asset.id}`);
-    if (!chartNode) return;
-    const rect = chartNode.getBoundingClientRect();
-
-    const paddingX = 64;
-    let relativeX = clientX - rect.left - paddingX;
-    const chartWidth = rect.width - paddingX * 2;
-    relativeX = Math.max(0, Math.min(relativeX, chartWidth));
-
-    const totalPoints = asset.history.length;
-    if (totalPoints === 0) return;
-
-    const rawIndex = Math.round((relativeX / chartWidth) * (totalPoints - 1));
-    const safeIndex = Math.max(0, Math.min(rawIndex, totalPoints - 1));
-
-    setActivePointIndexByAsset((prev) => ({ ...prev, [asset.id]: safeIndex }));
-    setTooltipPositionByAsset((prev) => ({
-      ...prev,
-      [asset.id]: {
-        x: Math.max(10, Math.min(clientX - rect.left, rect.width - 120)),
-        y: Math.max(10, clientY - rect.top - 80)
-      }
-    }));
   };
 
   const currentUsdt = orderedAssets.find((a) => a.id === 'usdt');
@@ -320,7 +501,13 @@ export function DashboardView() {
     cacheAge: { fa: 'عمر داده', en: 'Age' },
     minute: { fa: 'دقیقه', en: 'min' },
     dragToReorder: { fa: 'برای جابجایی بکشید', en: 'Drag to reorder' },
-    degradedNotice: { fa: '⚠️ برخی از منابع تامین قیمت در دسترس نیستند. آخرین قیمت‌های ذخیره شده نمایش داده می‌شوند.', en: '⚠️ Some pricing providers are down. Displaying latest known cached prices.' }
+    degradedNotice: { fa: '⚠️ برخی از منابع تامین قیمت در دسترس نیستند. آخرین قیمت‌های ذخیره شده نمایش داده می‌شوند.', en: '⚠️ Some pricing providers are down. Displaying latest known cached prices.' },
+    realtime: { fa: 'قیمت زنده', en: 'Live stream' },
+    connecting: { fa: 'در حال اتصال', en: 'Connecting' },
+    polling: { fa: 'به‌روزرسانی دوره‌ای', en: 'Polling fallback' },
+    historyEmpty: { fa: 'داده تاریخی برای این بازه هنوز ثبت نشده است', en: 'No historical data recorded for this range yet' },
+    timeframe: { fa: 'بازه نمودار', en: 'Chart range' },
+    retry: { fa: 'تلاش دوباره', en: 'Retry' },
   };
 
   const activeCurrencyLabel = currencyMode === 'usd' ? t.usd[language] : t.toman[language];
@@ -342,9 +529,58 @@ export function DashboardView() {
   return (
     <div className="flex flex-col gap-4">
 
+      <div className={`flex flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between ${
+        isDark ? 'border-white/5 bg-[#0E0E0E]/60' : 'border-black/5 bg-white/60'
+      }`}>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`text-xs font-semibold ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>
+            {t.timeframe[language]}
+          </span>
+          <div className={`flex rounded-xl p-1 ${isDark ? 'bg-black/40' : 'bg-[#F6EBD0]'}`} dir="ltr">
+            {TIMEFRAMES.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setTimeframe(value)}
+                className={`min-w-12 rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
+                  timeframe === value
+                    ? 'bg-[#D4AF37] text-black shadow-sm'
+                    : isDark ? 'text-[#A89668] hover:text-white' : 'text-[#7A5E24] hover:text-[#3B2E13]'
+                }`}
+              >
+                {value}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px]">
+          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold ${
+            socketStatus === 'live'
+              ? isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
+              : socketStatus === 'connecting'
+                ? isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-100 text-amber-700'
+                : isDark ? 'bg-white/5 text-[#A89668]' : 'bg-black/5 text-[#7A5E24]'
+          }`}>
+            {socketStatus === 'live' ? <Radio size={12} /> : <WifiOff size={12} />}
+            {socketStatus === 'live' ? t.realtime[language] : socketStatus === 'connecting' ? t.connecting[language] : t.polling[language]}
+          </span>
+          {lastRefreshAt && (
+            <span className={`truncate ${isDark ? 'text-[#887850]' : 'text-[#8A6A25]'}`} dir="ltr">
+              {t.updatedAt[language]}: {new Date(lastRefreshAt).toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}
+            </span>
+          )}
+          <span className={`truncate ${isDark ? 'text-[#887850]' : 'text-[#8A6A25]'}`} dir="ltr" title={`${sourceLabel.usd} / ${sourceLabel.toman}`}>
+            {t.source[language]}: {sourceLabel.usd} / {sourceLabel.toman}
+          </span>
+        </div>
+      </div>
+
       {loadError && (
-        <div className={`rounded-2xl border px-4 py-3 text-xs font-medium ${isDark ? 'border-red-500/20 bg-red-500/5 text-red-400' : 'border-red-300 bg-red-50 text-red-700'}`}>
-          {language === 'fa' ? `خطا در دریافت قیمت‌ها: ${loadError}` : `Failed to load prices: ${loadError}`}
+        <div className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-xs font-medium ${isDark ? 'border-red-500/20 bg-red-500/5 text-red-400' : 'border-red-300 bg-red-50 text-red-700'}`}>
+          <span>{language === 'fa' ? `خطا در دریافت قیمت‌ها: ${loadError}` : `Failed to load prices: ${loadError}`}</span>
+          <button type="button" onClick={() => pricesQuery.refetch()} className="shrink-0 rounded-lg border border-current px-2 py-1 font-bold">
+            {t.retry[language]}
+          </button>
         </div>
       )}
 

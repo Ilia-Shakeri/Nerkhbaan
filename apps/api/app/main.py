@@ -113,6 +113,24 @@ else:
         allow_headers=["*"],
     )
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+    if request.url.path not in {"/api/docs", "/api/redoc", "/api/openapi.json"}:
+        response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    if request.url.path.startswith(("/api/auth", "/api/insights")):
+        response.headers["Cache-Control"] = "no-store"
+    forwarded_scheme = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    if request.url.scheme == "https" or forwarded_scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
 # Include routers without prefix since they define their own in the router files
 app.include_router(auth.router, tags=["Authentication"])
 app.include_router(prices.router, tags=["Prices"])

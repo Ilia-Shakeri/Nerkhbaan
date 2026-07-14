@@ -25,7 +25,9 @@ class Alert(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     asset: Mapped[str] = mapped_column(String(20), nullable=False)
-    target_price: Mapped[float] = mapped_column(Float, nullable=False)
+    target_price: Mapped[float | None] = mapped_column(Float, nullable=True)
+    alert_type: Mapped[str] = mapped_column(String(16), nullable=False, default="price")
+    formula: Mapped[str | None] = mapped_column(Text, nullable=True)
     currency_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="usd")
     condition: Mapped[str] = mapped_column(String(10), nullable=False, default="above")
     notify_app: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -139,6 +141,22 @@ class AssistantChatMessage(Base):
     )
     role: Mapped[str] = mapped_column(String(16), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class MarketArticle(Base):
+    __tablename__ = "market_articles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    source: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    url: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    embedding: Mapped[list[float] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
