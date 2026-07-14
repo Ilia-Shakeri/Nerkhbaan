@@ -312,6 +312,7 @@ export function DashboardView() {
   const [alertNotifyWebhook, setAlertNotifyWebhook] = useState(false);
   const [alertWebhookUrl, setAlertWebhookUrl] = useState('');
   const [alertEnableDlq, setAlertEnableDlq] = useState(false);
+  const [isSavingAlert, setIsSavingAlert] = useState(false);
   const [fullscreenAsset, setFullscreenAsset] = useState<AssetId | null>(null);
 
   useEffect(() => {
@@ -601,7 +602,7 @@ export function DashboardView() {
           { timestamp: new Date().toISOString(), value_usd: asset.priceUsd, value_toman: asset.priceToman }
         ];
 
-        // Recharts requires at least 2 points to draw a line. If only 1, duplicate it to show a flat line.
+        // Two points keep the initial chart range stable while history is collected.
         if (resolvedHistory.length === 1) {
             resolvedHistory.unshift({
                 ...resolvedHistory[0],
@@ -609,32 +610,8 @@ export function DashboardView() {
             });
         }
 
-        const activeIndex = Math.min(
-          activePointIndexByAsset[asset.id] ?? Math.max(resolvedHistory.length - 1, 0),
-          Math.max(resolvedHistory.length - 1, 0)
-        );
-
-        const selectedPoint = resolvedHistory[activeIndex] ?? {
-          timestamp: new Date().toISOString(),
-          value_usd: asset.priceUsd,
-          value_toman: asset.priceToman
-        };
-
-        const chartData = resolvedHistory
-          .map((point) => ({
-            time: new Date(point.timestamp).toLocaleString([], {
-              month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-            }),
-            value: toChartValue(point, currencyMode, fallbackValue)
-          }))
-          .filter((point) => Number.isFinite(point.value));
-
-        const selectedChartPoint = chartData[activeIndex] ?? chartData[chartData.length - 1] ?? {
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          value: 0
-        };
+        const chartData = toChartData(resolvedHistory, currencyMode, usdToTomanRate);
         const chartColor = isDark ? CHART_COLORS[asset.id].dark : CHART_COLORS[asset.id].light;
-        const tooltipPosition = tooltipPositionByAsset[asset.id];
 
         const chartErrorMsg = typeof asset.chartErrorMessage === 'string' 
             ? asset.chartErrorMessage 
@@ -771,7 +748,7 @@ export function DashboardView() {
               <CardContent>
                 <div className="mb-6 flex items-baseline gap-2">
                   <div className={`text-4xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-[#3B2E13]'}`} dir="ltr">
-                    {formatPrice(toChartValue(selectedPoint, currencyMode, fallbackValue), currencyMode, language)}
+                    {formatPrice(fallbackValue, currencyMode, language)}
                   </div>
                   <span className={`text-sm font-medium ${isDark ? 'text-[#CDBB8C]' : 'text-[#8A6B26]'}`}>
                     {activeCurrencyLabel}
@@ -808,75 +785,22 @@ export function DashboardView() {
                       >
                         <Maximize2 size={16} />
                       </button>
-                      <div
-                      id={`asset-chart-${asset.id}`}
-                      className={`relative h-[400px] min-h-[400px] w-full rounded-[1.5rem] border p-2 backdrop-blur-md transition-colors ${
+                      {isLoading ? (
+                        <div className={`h-[400px] min-h-[400px] w-full animate-pulse rounded-[1.5rem] ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
+                      ) : (
+                        <FinancialChart
+                          data={chartData}
+                          color={chartColor}
+                          isDark={isDark}
+                          currencyMode={currencyMode}
+                          language={language}
+                          className={`h-[400px] min-h-[400px] rounded-[1.5rem] border p-2 backdrop-blur-md transition-colors ${
                         isDark 
                           ? 'border-white/5 bg-[#111111]/40' 
                           : 'border-black/5 bg-white/40'
-                      }`}
-                      dir="ltr"
-                      onMouseDown={(event) => {
-                        setIsScrubbingByAsset((prev) => ({ ...prev, [asset.id]: true }));
-                        updateScrubPoint(asset, event.clientX, event.clientY);
-                      }}
-                      onMouseMove={(event) => {
-                        if (isScrubbingByAsset[asset.id]) {
-                          updateScrubPoint(asset, event.clientX, event.clientY);
-                        }
-                      }}
-                      onMouseLeave={() => {
-                        setIsScrubbingByAsset((prev) => ({ ...prev, [asset.id]: false }));
-                      }}
-                      onMouseUp={() => {
-                        setIsScrubbingByAsset((prev) => ({ ...prev, [asset.id]: false }));
-                      }}
-                    >
-                      {isLoading ? (
-                        <div className={`h-full w-full animate-pulse rounded-[1.25rem] ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
-                      ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartData}>
-                          <CartesianGrid stroke={isDark ? '#D4AF37' : '#B68A2A'} strokeOpacity={isDark ? 0.12 : 0.18} vertical={false} />
-                          <XAxis dataKey="time" tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 11 }} axisLine={false} tickLine={false} />
-                          <YAxis domain={[
-                            (dataMin: number) => dataMin === 0 ? -0.5 : dataMin * 0.9985,
-                            (dataMax: number) => dataMax === 0 ? 0.5 : dataMax * 1.0015
-                          ]} tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 11 }} axisLine={false} tickLine={false} width={56} />
-                          {selectedChartPoint && <ReferenceLine x={selectedChartPoint.time} stroke={chartColor} strokeOpacity={0.65} strokeDasharray="5 4" />}
-                          <Line
-                            type="monotone"
-                            dataKey="value"
-                            stroke={chartColor}
-                            strokeWidth={3}
-                            dot={false}
-                            activeDot={{ r: 6, fill: chartColor, stroke: isDark ? '#0A0A0A' : '#FFFFFF', strokeWidth: 2 }}
-                            isAnimationActive={false}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                      )}
-
-                      {isScrubbingByAsset[asset.id] && tooltipPosition && (
-                        <div
-                          className={`pointer-events-none absolute z-10 flex flex-col items-center gap-1 rounded-xl p-2 shadow-lg backdrop-blur-md ${
-                            isDark ? 'bg-[#0E0E0E]/90 border border-white/10' : 'bg-white/90 border border-black/10'
                           }`}
-                          style={{
-                            left: tooltipPosition.x,
-                            top: tooltipPosition.y,
-                            transform: 'translate(-50%, -100%)'
-                          }}
-                        >
-                          <span className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
-                            {formatPrice(selectedChartPoint.value, currencyMode, language)}
-                          </span>
-                          <span className={`text-[10px] ${isDark ? 'text-[#A89668]' : 'text-[#8A6A25]'}`}>
-                            {selectedChartPoint.time}
-                          </span>
-                        </div>
+                        />
                       )}
-                    </div>
                     </div>
                   </>
                 )}
@@ -1066,21 +990,7 @@ export function DashboardView() {
           const resolvedHistory = safeHistory.length > 0 ? [...safeHistory] : [
             { timestamp: new Date().toISOString(), value_usd: asset.priceUsd, value_toman: asset.priceToman }
           ];
-          const chartData = resolvedHistory.length === 1 
-            ? [resolvedHistory[0], resolvedHistory[0]]
-            : resolvedHistory;
-          
-          const mappedData = chartData
-            .map((point) => {
-              const value = currencyMode === 'usd'
-                ? (point.value_usd ?? (point.value_toman && usdToTomanRate ? point.value_toman / usdToTomanRate : 0))
-                : (point.value_toman ?? (point.value_usd && usdToTomanRate ? point.value_usd * usdToTomanRate : 0));
-              return {
-                time: new Date(point.timestamp).toLocaleTimeString(language === 'fa' ? 'fa-IR' : 'en-US', { hour: '2-digit', minute: '2-digit' }),
-                value: Number.isFinite(value) ? value : 0
-              };
-            })
-            .filter((point) => Number.isFinite(point.value));
+          const chartData = toChartData(resolvedHistory, currencyMode, usdToTomanRate);
           
           const chartColor = CHART_COLORS[asset.id][isDark ? 'dark' : 'light'];
           
@@ -1089,22 +999,14 @@ export function DashboardView() {
               <div className={`text-center text-4xl font-bold ${isDark ? 'text-[#D4AF37]' : 'text-[#8A6B20]'}`}>
                 {formatPrice(currencyMode === 'usd' ? asset.priceUsd : asset.priceToman, currencyMode, language)}
               </div>
-              <div 
-                className={`h-[60vh] w-full rounded-2xl border p-4 ${isDark ? 'border-white/5 bg-[#111111]/40' : 'border-black/5 bg-white/40'}`}
-                dir="ltr"
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={mappedData}>
-                    <CartesianGrid stroke={isDark ? '#D4AF37' : '#B68A2A'} strokeOpacity={isDark ? 0.12 : 0.18} vertical={false} />
-                    <XAxis dataKey="time" tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[
-                            (dataMin: number) => dataMin === 0 ? -0.5 : dataMin * 0.9985,
-                            (dataMax: number) => dataMax === 0 ? 0.5 : dataMax * 1.0015
-                          ]} tick={{ fill: isDark ? '#AA986A' : '#7A5E24', fontSize: 12 }} axisLine={false} tickLine={false} width={70} />
-                    <Line type="monotone" dataKey="value" stroke={chartColor} strokeWidth={3} dot={false} activeDot={{ r: 7, fill: chartColor, stroke: isDark ? '#0A0A0A' : '#FFFFFF', strokeWidth: 3 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+              <FinancialChart
+                data={chartData}
+                color={chartColor}
+                isDark={isDark}
+                currencyMode={currencyMode}
+                language={language}
+                className={`h-[60vh] rounded-2xl border p-4 ${isDark ? 'border-white/5 bg-[#111111]/40' : 'border-black/5 bg-white/40'}`}
+              />
               <div className={`text-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                 USD: {asset.sourceUsd} | Toman: {asset.sourceToman}
               </div>

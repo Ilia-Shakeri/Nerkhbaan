@@ -43,35 +43,10 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2}"],
-        navigateFallback: "/offline.html",
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*/i,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "external-cache",
-              expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 60 * 60 * 24 * 7
-              }
-            }
-          },
-          {
-            urlPattern: /\/api\/.*/i,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-cache",
-              networkTimeoutSeconds: 4,
-              expiration: {
-                maxEntries: 80,
-                maxAgeSeconds: 60 * 5
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          }
-        ]
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api\//],
+        clientsClaim: true,
+        skipWaiting: true
       },
       devOptions: {
         enabled: true

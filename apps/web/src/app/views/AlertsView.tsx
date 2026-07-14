@@ -196,8 +196,9 @@ export function AlertsView() {
                         <div dir="ltr">
                           <div className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`} dir={language === 'fa' ? 'rtl' : 'ltr'}>{t.target[language]}</div>
                           <div className={`font-bold tracking-wider ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
-                            {alert.currency_mode === 'usd' ? '$' : ''}{alert.target_price.toLocaleString()}
-                            {alert.currency_mode === 'toman' ? ' T' : ''}
+                            {alert.alert_type === 'formula'
+                              ? alert.formula
+                              : `${alert.currency_mode === 'usd' ? '$' : ''}${alert.target_price?.toLocaleString() ?? '--'}${alert.currency_mode === 'toman' ? ' T' : ''}`}
                           </div>
                         </div>
                       </div>

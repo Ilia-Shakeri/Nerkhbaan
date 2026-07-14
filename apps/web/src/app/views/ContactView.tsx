@@ -3,7 +3,7 @@ import { useAppContext } from '../context/AppContext';
 import { Mail, Phone, MapPin, MessageSquare } from 'lucide-react';
 
 export function ContactView() {
-  const { language, theme } = useAppContext() as any;
+  const { language, theme } = useAppContext();
   const isDark = theme === 'dark';
 
   const t = {

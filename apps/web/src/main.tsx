@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app/App';
+import { AppErrorBoundary } from './app/components/AppErrorBoundary';
 import { registerServiceWorker } from './pwa/registerServiceWorker';
 import './styles/index.css';
 
@@ -27,9 +28,11 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </AppErrorBoundary>
   </React.StrictMode>
 );
 

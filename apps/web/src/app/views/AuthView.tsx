@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
 
 export function AuthView() {
-  const { language, toggleLanguage, login, theme, toggleTheme } = useAppContext() as any;
+  const { language, toggleLanguage, login, theme, toggleTheme } = useAppContext();
   const isDark = theme === 'dark';
   const isRtl = language === 'fa';
   const navigate = useNavigate();

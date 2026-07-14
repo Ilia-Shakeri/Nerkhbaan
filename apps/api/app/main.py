@@ -11,6 +11,7 @@ from .config import settings
 from .routers import alerts, auth, insights, notifications, prices, providers, push, support
 from .services.background import background_runner
 from .db import engine, Base, get_db
+from .schema_migrations import apply_schema_migrations
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -37,6 +38,7 @@ async def lifespan(app: FastAPI):
     try:
         # Create tables on startup synchronously using SQLAlchemy metadata
         Base.metadata.create_all(bind=engine)
+        apply_schema_migrations(engine)
         logger.info("Database tables verified/created successfully.")
         
 # Seed the administrative account securely

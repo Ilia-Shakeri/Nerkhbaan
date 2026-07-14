@@ -3,7 +3,7 @@ import { useAppContext } from '../context/AppContext';
 import { Shield, Lock, Eye, FileText } from 'lucide-react';
 
 export function PrivacyView() {
-  const { language, theme } = useAppContext() as any;
+  const { language, theme } = useAppContext();
   const isDark = theme === 'dark';
 
   const t = {

@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { Link, useNavigate } from 'react-router-dom';
 
 export function ForgotPasswordView() {
-  const { language, theme } = useAppContext() as any;
+  const { language, theme } = useAppContext();
   const isDark = theme === 'dark';
   const isRtl = language === 'fa';
   const navigate = useNavigate();
