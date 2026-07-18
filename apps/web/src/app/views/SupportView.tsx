@@ -35,7 +35,10 @@ export function SupportView() {
     send: { fa: 'ارسال', en: 'Send' },
     cancel: { fa: 'لغو', en: 'Cancel' },
     open: { fa: 'باز', en: 'Open' },
+    in_progress: { fa: 'در حال بررسی', en: 'In progress' },
+    waiting_for_user: { fa: 'در انتظار پاسخ شما', en: 'Waiting for you' },
     answered: { fa: 'پاسخ داده شده', en: 'Answered' },
+    resolved: { fa: 'حل شده', en: 'Resolved' },
     closed: { fa: 'بسته شده', en: 'Closed' },
     typeMessage: { fa: 'پیام خود را بنویسید...', en: 'Type your message...' },
     attach: { fa: 'پیوست فایل', en: 'Attach file' },
@@ -128,7 +131,10 @@ export function SupportView() {
 
   const statusColors = {
     open: { bg: isDark ? 'bg-blue-500/10' : 'bg-blue-100', text: isDark ? 'text-blue-400' : 'text-blue-700' },
+    in_progress: { bg: isDark ? 'bg-amber-500/10' : 'bg-amber-100', text: isDark ? 'text-amber-400' : 'text-amber-700' },
+    waiting_for_user: { bg: isDark ? 'bg-purple-500/10' : 'bg-purple-100', text: isDark ? 'text-purple-400' : 'text-purple-700' },
     answered: { bg: isDark ? 'bg-emerald-500/10' : 'bg-emerald-100', text: isDark ? 'text-emerald-400' : 'text-emerald-700' },
+    resolved: { bg: isDark ? 'bg-teal-500/10' : 'bg-teal-100', text: isDark ? 'text-teal-400' : 'text-teal-700' },
     closed: { bg: isDark ? 'bg-gray-500/10' : 'bg-gray-100', text: isDark ? 'text-gray-400' : 'text-gray-700' }
   };
 

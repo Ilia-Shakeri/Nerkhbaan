@@ -25,6 +25,10 @@ const emptyPrefs: NotificationPreferences = {
   telegram_verified: false,
   silent_mode: false,
   aggressive_alerts: false,
+  push_available: false,
+  email_available: false,
+  sms_available: false,
+  telegram_available: false,
 };
 
 export function SettingsView() {
@@ -38,6 +42,8 @@ export function SettingsView() {
   const [otpCode, setOtpCode] = useState('');
   const [otpSent, setOtpSent] = useState(false);
   const [telegramId, setTelegramId] = useState('');
+  const [telegramCode, setTelegramCode] = useState('');
+  const [telegramCodeSent, setTelegramCodeSent] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const t = {
@@ -64,14 +70,18 @@ export function SettingsView() {
     emailPlaceholder: { fa: 'name@example.com', en: 'name@example.com' },
     otpPlaceholder: { fa: 'کد تایید', en: 'Verification code' },
     telegramPlaceholder: { fa: '@username', en: '@username' },
-    telegramHelp: { fa: 'برای تایید خودکار، ربات Nerkhbaan را در تلگرام start کنید.', en: 'Start the Nerkhbaan Telegram bot for automatic verification.' },
+    telegramHelp: { fa: 'ربات را start کنید؛ سپس کد تایید برای شما ارسال می‌شود.', en: 'Start the bot, then request a verification code.' },
     verified: { fa: 'تایید شده', en: 'Verified' },
     pending: { fa: 'در انتظار تایید', en: 'Pending verification' },
     saved: { fa: 'ذخیره شد', en: 'Saved' },
+    unavailable: { fa: 'در دسترس نیست', en: 'Unavailable' },
   };
 
   useEffect(() => {
-    api.notifications.preferences().then(setPrefs).catch((error) => toast.error(error instanceof Error ? error.message : 'Failed to load settings'));
+    api.notifications.preferences().then((value) => {
+      setPrefs(value);
+      setTelegramId(value.telegram_id ?? '');
+    }).catch((error) => toast.error(error instanceof Error ? error.message : 'Failed to load settings'));
   }, []);
 
   const headingCls = `mb-4 flex items-center gap-2 text-xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-[#3B2E13]'}`;
@@ -129,6 +139,8 @@ export function SettingsView() {
   const enableTelegram = async (checked: boolean) => {
     if (!checked) {
       setPrefs(await api.notifications.disable('telegram'));
+      setTelegramCodeSent(false);
+      setTelegramCode('');
       return;
     }
     if (!telegramId.trim() && !prefs.telegram_id) {
@@ -138,9 +150,24 @@ export function SettingsView() {
     setIsSaving(true);
     try {
       setPrefs(await api.notifications.setTelegram(telegramId || prefs.telegram_id || ''));
-      toast.success(t.saved[language]);
+      setTelegramCodeSent(true);
+      toast.success(t.sendCode[language]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to save');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const confirmTelegram = async () => {
+    setIsSaving(true);
+    try {
+      setPrefs(await api.notifications.confirmTelegram(telegramCode.trim()));
+      setTelegramCodeSent(false);
+      setTelegramCode('');
+      toast.success(t.verified[language]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to confirm');
     } finally {
       setIsSaving(false);
     }
@@ -192,33 +219,39 @@ export function SettingsView() {
         <Card className={cardCls}>
           <div className={rowCls}>
             <div className="flex items-center gap-4"><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><Bell size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.pushApp[language]}</span></div>
-            <Switch checked={prefs.push_app} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} />
+            <Switch disabled={!prefs.push_available} checked={prefs.push_available && prefs.push_app} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} />
           </div>
           <div>
             <div className={rowCls}>
-              <div className="flex items-center gap-4"><div className={iconWrap('bg-emerald-500/10 text-emerald-400')}><Smartphone size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.sms[language]}</span>{prefs.sms_verified && <span className="ms-2 inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle2 size={13} />{t.verified[language]}</span>}</div></div>
-              <Switch checked={prefs.sms_enabled && prefs.sms_verified} onCheckedChange={(value: boolean) => toggleOtpChannel('sms', value)} />
+              <div className="flex items-center gap-4"><div className={iconWrap('bg-emerald-500/10 text-emerald-400')}><Smartphone size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.sms[language]}</span>{prefs.sms_verified && <span className="ms-2 inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle2 size={13} />{t.verified[language]}</span>}{!prefs.sms_available && <span className="ms-2 text-xs text-slate-500">{t.unavailable[language]}</span>}</div></div>
+              <Switch disabled={!prefs.sms_available} checked={prefs.sms_enabled && prefs.sms_verified} onCheckedChange={(value: boolean) => toggleOtpChannel('sms', value)} />
             </div>
             {otpFields('sms')}
           </div>
           <div>
             <div className={rowCls}>
-              <div className="flex items-center gap-4"><div className={iconWrap('bg-purple-500/10 text-purple-400')}><Mail size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.email[language]}</span>{prefs.email_verified && <span className="ms-2 inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle2 size={13} />{t.verified[language]}</span>}</div></div>
-              <Switch checked={prefs.email_enabled && prefs.email_verified} onCheckedChange={(value: boolean) => toggleOtpChannel('email', value)} />
+              <div className="flex items-center gap-4"><div className={iconWrap('bg-purple-500/10 text-purple-400')}><Mail size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.email[language]}</span>{prefs.email_verified && <span className="ms-2 inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle2 size={13} />{t.verified[language]}</span>}{!prefs.email_available && <span className="ms-2 text-xs text-slate-500">{t.unavailable[language]}</span>}</div></div>
+              <Switch disabled={!prefs.email_available} checked={prefs.email_enabled && prefs.email_verified} onCheckedChange={(value: boolean) => toggleOtpChannel('email', value)} />
             </div>
             {otpFields('email')}
           </div>
           <div>
             <div className={rowCls}>
-              <div className="flex min-w-0 flex-1 items-center gap-4"><div className={iconWrap('bg-sky-500/10 text-sky-400')}><Send size={20} /></div><div className="min-w-0 flex-1"><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.telegram[language]}</span><p className={`mt-1 text-xs ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{prefs.telegram_enabled ? t.pending[language] : t.telegramHelp[language]}</p></div></div>
-              <Switch checked={prefs.telegram_enabled} onCheckedChange={enableTelegram} />
+              <div className="flex min-w-0 flex-1 items-center gap-4"><div className={iconWrap('bg-sky-500/10 text-sky-400')}><Send size={20} /></div><div className="min-w-0 flex-1"><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.telegram[language]}</span><p className={`mt-1 text-xs ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{prefs.telegram_verified ? t.verified[language] : telegramCodeSent ? t.pending[language] : t.telegramHelp[language]}</p></div></div>
+              <Switch disabled={!prefs.telegram_available} checked={prefs.telegram_enabled && prefs.telegram_verified} onCheckedChange={enableTelegram} />
             </div>
             <AnimatePresence>
-              {(!prefs.telegram_enabled && telegramId) && (
+              {(!prefs.telegram_enabled && (telegramId || telegramCodeSent)) && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                   <div className="grid gap-3 px-5 pb-5 sm:grid-cols-[1fr_140px]">
-                    <Input dir="ltr" value={telegramId} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setTelegramId(event.target.value)} placeholder={t.telegramPlaceholder[language]} />
-                    <Button disabled={isSaving || !telegramId.trim()} onClick={() => enableTelegram(true)} className="bg-[#D4AF37] text-black">{t.confirm[language]}</Button>
+                    <Input disabled={!prefs.telegram_available || telegramCodeSent} dir="ltr" value={telegramId} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setTelegramId(event.target.value)} placeholder={t.telegramPlaceholder[language]} />
+                    <Button disabled={isSaving || !prefs.telegram_available || telegramCodeSent || !telegramId.trim()} onClick={() => enableTelegram(true)} className="bg-[#D4AF37] text-black">{t.sendCode[language]}</Button>
+                    {telegramCodeSent && (
+                      <>
+                        <Input dir="ltr" value={telegramCode} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setTelegramCode(event.target.value)} placeholder={t.otpPlaceholder[language]} className="tracking-[0.3em]" />
+                        <Button disabled={isSaving || !/^\d{6}$/.test(telegramCode)} onClick={confirmTelegram} className="bg-emerald-500 text-white">{t.confirm[language]}</Button>
+                      </>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -244,7 +277,7 @@ export function SettingsView() {
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}>
         <h2 className={headingCls}><LifeBuoy className="text-[#D4AF37]" size={22} />{t.support[language]}</h2>
         <Card className={cardCls}>
-          <button onClick={() => navigate('/contact')} className={`flex w-full items-center gap-4 p-5 text-start transition-colors ${isDark ? 'hover:bg-white/3' : 'hover:bg-[#D4AF37]/5'}`}><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><LifeBuoy size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.contact[language]}</span></button>
+          <button onClick={() => navigate('/support')} className={`flex w-full items-center gap-4 p-5 text-start transition-colors ${isDark ? 'hover:bg-white/3' : 'hover:bg-[#D4AF37]/5'}`}><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><LifeBuoy size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.contact[language]}</span></button>
           <button onClick={() => navigate('/privacy')} className={`flex w-full items-center gap-4 p-5 text-start transition-colors ${isDark ? 'hover:bg-white/3' : 'hover:bg-[#D4AF37]/5'}`}><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><ShieldCheck size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.privacy[language]}</span></button>
         </Card>
       </motion.div>

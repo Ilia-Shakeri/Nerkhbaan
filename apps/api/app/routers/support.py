@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,6 +12,7 @@ from ..db import get_db
 from ..deps import get_current_user
 from ..models import SupportMessage, SupportTicket, User
 from ..security import rate_limit_hit
+from ..admin.models import AdminSupportTicketState
 
 router = APIRouter(prefix="/api/support")
 
@@ -110,6 +112,7 @@ def create_ticket(
         subject=ticket.subject,
         status="open",
         last_message=ticket.message,
+        last_user_response_at=datetime.now(UTC),
     )
     db.add(new_ticket)
     db.flush()
@@ -143,7 +146,10 @@ def get_ticket_messages(
     _owned_ticket(ticket_id, current_user, db)
     messages = db.scalars(
         select(SupportMessage)
-        .where(SupportMessage.ticket_id == ticket_id)
+        .where(
+            SupportMessage.ticket_id == ticket_id,
+            SupportMessage.is_internal.is_(False),
+        )
         .order_by(SupportMessage.created_at.asc())
     ).all()
     return [_serialize_message(message) for message in messages]
@@ -158,6 +164,8 @@ def send_message(
 ):
     _enforce_write_limit(current_user.id)
     ticket = _owned_ticket(ticket_id, current_user, db)
+    if ticket.status == "closed":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ticket is closed")
     new_message = SupportMessage(
         ticket_id=ticket.id,
         from_user="user",
@@ -165,6 +173,14 @@ def send_message(
     )
     db.add(new_message)
     ticket.last_message = message.content
+    ticket.last_user_response_at = datetime.now(UTC)
+    if ticket.status in {"resolved", "waiting_for_user"}:
+        ticket.status = "open"
+    admin_state = db.get(AdminSupportTicketState, ticket.id)
+    if admin_state:
+        admin_state.last_user_response_at = ticket.last_user_response_at
+        if admin_state.status in {"resolved", "waiting_for_user"}:
+            admin_state.status = "open"
     db.commit()
     db.refresh(new_message)
     return _serialize_message(new_message)

@@ -1,56 +1,50 @@
-from fastapi import APIRouter, HTTPException, Response
+from __future__ import annotations
 
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, Response
+
+from ..pricing.compatibility import legacy_pricing_adapter
+from ..pricing.health import pricing_health_service
+from ..pricing.instruments import LEGACY_ASSET_MAPPING
 from ..schemas import PriceHistoryResponse, PricesHealthResponse, PricesResponse
-from ..services.pricing import PricingUpstreamError, pricing_service
-from ..services.pricing_registry import ASSET_LABELS
 
 router = APIRouter(prefix="/api/prices", tags=["prices"])
+_LEGACY_ASSETS = {asset for asset, _currency in LEGACY_ASSET_MAPPING}
 
 
 @router.get("/{asset}/history", response_model=PriceHistoryResponse)
-async def get_price_history(asset: str, response: Response) -> PriceHistoryResponse:
+async def get_price_history(
+    asset: str,
+    response: Response,
+    timeframe: Annotated[str, Query(pattern="^(1h|24h|7d|30d|1y)$")] = "30d",
+) -> PriceHistoryResponse:
     asset_id = asset.lower()
-    if asset_id not in ASSET_LABELS:
+    if asset_id not in _LEGACY_ASSETS:
         raise HTTPException(status_code=422, detail="Unknown asset")
-
     try:
-        points = await pricing_service.get_history(asset_id)
-    except PricingUpstreamError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        payload = await legacy_pricing_adapter.get_history(asset_id, timeframe)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Price history is unavailable") from exc
-
-    response.headers["Cache-Control"] = "public, max-age=300"
-    return PriceHistoryResponse(asset=asset_id, points=points)
+    response.headers["Cache-Control"] = "public, max-age=60"
+    return PriceHistoryResponse.model_validate(payload)
 
 
 @router.get("", response_model=PricesResponse)
 async def get_prices(response: Response) -> PricesResponse:
     try:
-        payload = await pricing_service.get_prices()
+        payload = await legacy_pricing_adapter.get_prices()
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Failed to fetch market prices: {exc}") from exc
-
-    assets = payload.get("assets", [])
-    if assets and all(
-        asset.get("usd_status") == "unavailable"
-        and asset.get("toman_status") == "unavailable"
-        for asset in assets
-    ):
-        raise HTTPException(status_code=503, detail="All pricing providers are unavailable")
-
-    # Set Cache-Control to reduce network load from duplicate client queries
+        raise HTTPException(status_code=503, detail="Pricing data is unavailable") from exc
     response.headers["Cache-Control"] = "public, max-age=10"
     return PricesResponse.model_validate(payload)
 
 
 @router.get("/health", response_model=PricesHealthResponse)
 async def get_prices_health() -> PricesHealthResponse:
-    try:
-        if not pricing_service.has_refreshed():
-            await pricing_service.get_prices()
-    except Exception:
-        # Health should remain visibly available even if upstream providers fail entirely.
-        pass
-
-    return PricesHealthResponse.model_validate(pricing_service.get_chain_health())
+    payload = await legacy_pricing_adapter.health()
+    detail = await pricing_health_service.detailed(authenticated=False)
+    payload["startup"]["ok"] = detail["database"] == "connected" or detail["redis"] == "connected"
+    return PricesHealthResponse.model_validate(payload)

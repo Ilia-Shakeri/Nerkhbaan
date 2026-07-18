@@ -1,12 +1,14 @@
 // frontend/src/app/context/AppContext.tsx
 
 import React, {
+  useCallback,
   createContext,
   useContext,
   useEffect,
   useMemo,
   useState
 } from 'react';
+import { api, type UserProfile } from '../services/api';
 
 type Language = 'fa' | 'en';
 type Theme = 'dark' | 'light';
@@ -14,14 +16,15 @@ type CurrencyMode = 'usd' | 'toman';
 
 interface AppContextType {
   isAuthenticated: boolean;
-  token: string | null;
+  authReady: boolean;
+  mustChangePassword: boolean;
 
   language: Language;
   theme: Theme;
   currencyMode: CurrencyMode;
 
-  login: (token: string) => void;
-  logout: () => void;
+  login: (user: UserProfile) => void;
+  logout: () => Promise<void>;
   toggleTheme: () => void;
   toggleLanguage: () => void;
   setCurrencyMode: (mode: CurrencyMode) => void;
@@ -34,10 +37,9 @@ export function AppProvider({
 }: {
   children: React.ReactNode;
 }) {
-  // Initialize token from localStorage
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('authToken');
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   const [language, setLanguage] = useState<Language>(() => {
     const savedLanguage = localStorage.getItem('language');
@@ -54,7 +56,28 @@ export function AppProvider({
     return saved === 'usd' || saved === 'toman' ? saved : 'usd';
   });
 
-  const isAuthenticated = !!token;
+  useEffect(() => {
+    let active = true;
+    api.auth.me()
+      .then((user) => {
+        if (active) {
+          setIsAuthenticated(true);
+          setMustChangePassword(user.must_change_password);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setIsAuthenticated(false);
+          setMustChangePassword(false);
+        }
+      })
+      .finally(() => {
+        if (active) setAuthReady(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('language', language);
@@ -76,15 +99,22 @@ export function AppProvider({
     localStorage.setItem('currencyMode', currencyMode);
   }, [currencyMode]);
 
-  const login = (newToken: string) => {
-    localStorage.setItem('authToken', newToken);
-    setToken(newToken);
-  };
+  const login = useCallback((user: UserProfile) => {
+    setIsAuthenticated(true);
+    setMustChangePassword(user.must_change_password);
+    setAuthReady(true);
+  }, []);
 
-  const logout = () => {
-    localStorage.removeItem('authToken');
-    setToken(null);
-  };
+  const logout = useCallback(async () => {
+    setIsAuthenticated(false);
+    setMustChangePassword(false);
+    setAuthReady(true);
+    try {
+      await api.auth.signout();
+    } catch {
+      // Local state still closes the browser session view when the server is unreachable.
+    }
+  }, []);
 
   const toggleTheme = () => {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
@@ -97,7 +127,8 @@ export function AppProvider({
   const value = useMemo(
     () => ({
       isAuthenticated,
-      token,
+      authReady,
+      mustChangePassword,
 
       language,
       theme,
@@ -110,7 +141,7 @@ export function AppProvider({
       toggleLanguage,
       setCurrencyMode
     }),
-    [isAuthenticated, token, language, theme, currencyMode]
+    [isAuthenticated, authReady, mustChangePassword, language, theme, currencyMode, login, logout]
   );
 
   return (

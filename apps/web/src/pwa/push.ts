@@ -28,13 +28,11 @@ export async function registerPushNotifications(registration: ServiceWorkerRegis
       applicationServerKey: base64ToUint8Array(vapidPublicKey)
     }));
 
-  const token = localStorage.getItem('authToken');
-
   await fetch("/api/push/subscribe", {
     method: "POST",
+    credentials: "include",
     headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {})
+      "Content-Type": "application/json"
     },
     body: JSON.stringify(subscription)
   });

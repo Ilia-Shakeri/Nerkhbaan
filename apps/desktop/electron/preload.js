@@ -11,5 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   minimizeWindow: () => ipcRenderer.send('window-minimize'),
   toggleMaximizeWindow: () => ipcRenderer.send('window-maximize-toggle'),
   closeWindow: () => ipcRenderer.send('window-close'),
-  isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized')
+  isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  auth: Object.freeze({
+    getCredentials: () => ipcRenderer.invoke('auth-get-credentials'),
+    setCredentials: (credentials) => ipcRenderer.invoke('auth-set-credentials', credentials),
+    clearCredentials: () => ipcRenderer.invoke('auth-clear-credentials')
+  })
 });

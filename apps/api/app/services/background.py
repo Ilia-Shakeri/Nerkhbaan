@@ -7,10 +7,12 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import delete, select
 
 from ..db import SessionLocal
+from ..config import settings
 from ..models import AssistantChatMessage, AssistantChatSession
+from ..pricing.compatibility import legacy_pricing_adapter
+from ..pricing.service import instrument_pricing_service
 from .alert_engine import AlertEngine
 from .dlq_worker import DLQWorker
-from .pricing import pricing_service
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +29,10 @@ class BackgroundRunner:
     drains failed deliveries with exponential backoff.
     """
 
-    def __init__(self, interval: int = EVALUATION_INTERVAL_SECONDS) -> None:
-        self.interval = interval
-        self.dlq_worker = DLQWorker(alert_engine=None)
-        self.alert_engine = AlertEngine(dlq_callback=self.dlq_worker.enqueue)
-        # Resolve the circular reference now that both objects exist.
-        self.dlq_worker.alert_engine = self.alert_engine
+    def __init__(self, interval: int | None = None) -> None:
+        self.interval = interval or settings.pricing_refresh_interval_seconds
+        self.alert_engine = AlertEngine()
+        self.dlq_worker = DLQWorker(alert_engine=self.alert_engine)
         self._running = False
         self._loop_task: asyncio.Task | None = None
         self._dlq_task: asyncio.Task | None = None
@@ -50,10 +50,26 @@ class BackgroundRunner:
     async def _run_evaluation_loop(self) -> None:
         while self._running:
             try:
-                prices = await pricing_service.get_prices()
-                await self.alert_engine.evaluate_alerts(prices)
+                refresh = await instrument_pricing_service.refresh_cycle()
+                redis_suspended = refresh and all(
+                    result == "suspended_redis_unavailable"
+                    for result in refresh.values()
+                )
+                if not redis_suspended:
+                    prices = await legacy_pricing_adapter.get_prices()
+                    await self.alert_engine.evaluate_alerts(prices)
+                    await instrument_pricing_service.flush_persistence_backlog(
+                        settings.pricing_persistence_flush_batch_size
+                    )
+                    if settings.pricing_backfill_enabled:
+                        await instrument_pricing_service.process_backfill_jobs(
+                            settings.pricing_backfill_max_jobs_per_cycle
+                        )
             except Exception as exc:
-                logger.error(f"Alert evaluation cycle failed: {exc}")
+                logger.error(
+                    "Pricing cycle failed error_type=%s",
+                    type(exc).__name__,
+                )
             await asyncio.sleep(self.interval)
 
     async def _run_chat_purge_loop(self) -> None:

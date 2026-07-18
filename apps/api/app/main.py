@@ -1,185 +1,253 @@
-﻿import logging
-import os
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+import uuid
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Depends
-from fastapi.responses import Response
+from urllib.parse import urlsplit
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from . import models
+from .admin import models as admin_models
+from .admin.worker import admin_operations_worker
 from .config import settings
-from .routers import alerts, auth, insights, notifications, prices, providers, push, support
+from .db import engine
+from .health import health_snapshot
+from .migrations.state import assert_migrations_current
+from .pricing import db_models as pricing_models
+from .pricing.service import instrument_pricing_service
+from .routers import (
+    admin,
+    alerts,
+    auth,
+    insights,
+    instruments,
+    notifications,
+    price_ws,
+    prices,
+    providers,
+    push,
+    support,
+)
 from .services.background import background_runner
-from .db import engine, Base, get_db
-from .schema_migrations import apply_schema_migrations
-from sqlalchemy import text
-from sqlalchemy.orm import Session
 
-from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
-
-price_fetches_total = Counter('price_fetches_total', 'Total price fetches', ['asset', 'region', 'status'])
-cache_staleness_seconds = Gauge('cache_staleness_seconds', 'Cache staleness in seconds', ['asset', 'region'])
-price_fetch_duration_seconds = Histogram('price_fetch_duration_seconds', 'Price fetch duration', ['asset'])
-
-# Import models to ensure SQLAlchemy registers the tables before create_all executes
-from . import models  
-
-# Initialize logger for debugging and monitoring
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
 logger = logging.getLogger(__name__)
 
+price_fetches_total = Counter(
+    "price_fetches_total", "Total price fetches", ["instrument", "status"]
+)
+cache_staleness_seconds = Gauge(
+    "cache_staleness_seconds", "Cache staleness in seconds", ["instrument"]
+)
+price_fetch_duration_seconds = Histogram(
+    "price_fetch_duration_seconds", "Price fetch duration", ["instrument"]
+)
+
+_REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
+_MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _csv(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _origin(value: str) -> str | None:
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return None
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _allowed_origins() -> list[str]:
+    values = {
+        origin
+        for origin in (
+            *(_origin(value) for value in _csv(settings.allowed_origins)),
+            _origin(settings.public_frontend_origin),
+            _origin(settings.admin_frontend_origin),
+        )
+        if origin
+    }
+    if "*" in _csv(settings.allowed_origins):
+        if not settings.debug:
+            raise RuntimeError("Wildcard CORS is not allowed outside debug mode")
+        return ["*"]
+    return sorted(values)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager for startup and shutdown events."""
-    logger.info("Starting up API and initializing database...")
-    try:
-        # Create tables on startup synchronously using SQLAlchemy metadata
-        Base.metadata.create_all(bind=engine)
-        apply_schema_migrations(engine)
-        logger.info("Database tables verified/created successfully.")
-        
-# Seed the administrative account securely
-        from .models import User
-        from .security import hash_password
-        from .db import SessionLocal
-        
-        db = SessionLocal()
-        try:
-            admin_password = os.environ.get("ADMIN_INITIAL_PASSWORD")
-            if not admin_password:
-                logger.warning("Administrative password not configured. Skipping seeding.")
-            else:
-                admin = db.query(User).filter(User.username == 'admin').first()
-                if not admin:
-                    admin_user = User(
-                        username='admin',
-                        full_name='Administrator',
-                        email='admin@nerkhbaan.local',
-                        password_hash=hash_password(admin_password)
-                    )
-                    db.add(admin_user)
-                    db.commit()
-                    logger.info("Administrative account successfully provisioned.")
-                else:
-                    logger.info("Administrative account already exists in the registry.")
-            insights.purge_expired_chat_history(db)
-        except Exception as seed_exception:
-            # Trigger a rollback to release locks and prevent database hanging on failure
-            db.rollback()
-            logger.critical(f"Database seeding execution failed: {seed_exception}")
-            raise
-        finally:
-            # Guarantee the session is terminated and returned to the pool
-            db.close()
-    except Exception as e:
-        logger.critical(f"Failed to initialize database: {e}")
-        raise e
-
-    # Launch the price-evaluation loop and DLQ worker that deliver alerts.
+    del app
+    await asyncio.to_thread(assert_migrations_current, engine)
+    await instrument_pricing_service.initialize()
     await background_runner.start()
-    yield
-    logger.info("Shutting down API...")
-    await background_runner.stop()
+    await admin_operations_worker.start()
+    logger.info("API startup complete")
+    try:
+        yield
+    finally:
+        await admin_operations_worker.stop()
+        await background_runner.stop()
+        logger.info("API shutdown complete")
+
 
 app = FastAPI(
     title="Nerkhbaan API",
-    version="1.0.0",
+    version="2.0.0",
     lifespan=lifespan,
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
-    redoc_url="/api/redoc"
+    docs_url="/api/docs" if settings.debug else None,
+    openapi_url="/api/openapi.json" if settings.debug else None,
+    redoc_url="/api/redoc" if settings.debug else None,
 )
 
-# Extract and format the allowed origins from the environment configuration
-origins = [origin.strip() for origin in settings.allowed_origins.split(',') if origin.strip()]
-
-# Dynamically route the CORS middleware based on the presence of a wildcard
-if "*" in origins:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"], 
-        # Credentials must be strictly disabled when utilizing wildcard origins
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins, 
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+origins = _allowed_origins()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=origins != ["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Authorization",
+        "Content-Type",
+        "If-None-Match",
+        "X-Client-Type",
+        "X-Request-ID",
+    ],
+    expose_headers=["ETag", "X-Request-ID"],
+)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=_csv(settings.trusted_hosts),
+)
 
 
 @app.middleware("http")
-async def add_security_headers(request: Request, call_next):
+async def request_guard(request: Request, call_next):
+    request_id = request.headers.get(settings.request_id_header, "")
+    if not _REQUEST_ID_PATTERN.fullmatch(request_id):
+        request_id = uuid.uuid4().hex
+    request.state.request_id = request_id
+
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            too_large = int(content_length) > settings.max_request_body_bytes
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid Content-Length header", "request_id": request_id},
+                headers={settings.request_id_header: request_id},
+            )
+        if too_large:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": "Request body is too large", "request_id": request_id},
+                headers={settings.request_id_header: request_id},
+            )
+
+    cookie_names = {
+        settings.auth_cookie_name,
+        settings.auth_refresh_cookie_name,
+        settings.admin_cookie_name,
+        settings.admin_refresh_cookie_name,
+    }
+    cookie_authenticated = any(name in request.cookies for name in cookie_names)
+    if request.method in _MUTATING_METHODS and cookie_authenticated:
+        request_origin = _origin(request.headers.get("origin", ""))
+        if request_origin not in origins:
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Request origin is not allowed", "request_id": request_id},
+                headers={settings.request_id_header: request_id},
+            )
+
     response = await call_next(request)
+    response.headers[settings.request_id_header] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-site"
     if request.url.path not in {"/api/docs", "/api/redoc", "/api/openapi.json"}:
         response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
-    if request.url.path.startswith(("/api/auth", "/api/insights")):
+    if request.url.path.startswith(("/api/auth", "/api/admin", "/api/insights")):
         response.headers["Cache-Control"] = "no-store"
     forwarded_scheme = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
     if request.url.scheme == "https" or forwarded_scheme == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
-# Include routers without prefix since they define their own in the router files
-app.include_router(auth.router, tags=["Authentication"])
-app.include_router(prices.router, tags=["Prices"])
-app.include_router(providers.router, tags=["Providers"])
-app.include_router(support.router, tags=["Support"])
-app.include_router(alerts.router, tags=["Alerts"])
-app.include_router(push.router, tags=["Push"])
-app.include_router(insights.router, tags=["Insights"])
-app.include_router(notifications.router, tags=["Notifications"])
 
-@app.get("/api/health", tags=["System"])
-@app.get("/health", tags=["System"])
-def health_check(db: Session = Depends(get_db)):
-    """Health validation endpoint mapping database connectivity."""
-    try:
-        # Synchronous execution is now safely isolated from the core event loop
-        db.execute(text("SELECT 1"))
-        db_status = "connected"
-    except Exception as e:
-        logger.error(f"Health check execution failure: {e}")
-        db_status = "disconnected"
-        
-    return {
-        "status": "operational" if db_status == "connected" else "degraded",
-        "database": db_status,
-        "version": "1.0.0"
-    }
+app.include_router(auth.router)
+app.include_router(prices.router)
+app.include_router(instruments.router)
+app.include_router(price_ws.router)
+app.include_router(providers.router)
+app.include_router(support.router)
+app.include_router(alerts.router)
+app.include_router(push.router)
+app.include_router(insights.router)
+app.include_router(notifications.router)
+app.include_router(admin.router)
 
-@app.get("/metrics", tags=["System"])
-async def metrics():
-    """Prometheus metrics endpoint."""
+
+@app.get("/api/health/live", tags=["system"])
+@app.get("/health", tags=["system"])
+def liveness() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/api/health/ready", tags=["system"])
+def readiness() -> JSONResponse:
+    snapshot = health_snapshot()
+    return JSONResponse(status_code=200 if snapshot["ready"] else 503, content=snapshot)
+
+
+@app.get("/api/health", tags=["system"])
+def detailed_health() -> JSONResponse:
+    snapshot = health_snapshot()
+    return JSONResponse(status_code=200 if snapshot["ready"] else 503, content=snapshot)
+
+
+@app.get("/metrics", tags=["system"])
+def metrics() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Global catch-all to prevent silent failures and ensure CORS headers are maintained."""
+    request_id = getattr(request.state, "request_id", uuid.uuid4().hex)
     if isinstance(exc, StarletteHTTPException):
         return JSONResponse(
-            status_code=exc.status_code, 
-            content={"detail": exc.detail}
+            status_code=exc.status_code,
+            content={"detail": exc.detail, "request_id": request_id},
+            headers={settings.request_id_header: request_id, **(exc.headers or {})},
         )
-        
-    logger.error(f"Unhandled system error on {request.url.path}: {exc}", exc_info=True)
-    # Avoid leaking internal exception details to clients in production. The full
-    # traceback is logged above; debug mode surfaces it for local development.
-    detail = str(exc) if settings.debug else "An internal error occurred."
+    logger.error(
+        "Unhandled request failure path=%s request_id=%s error_type=%s",
+        request.url.path,
+        request_id,
+        type(exc).__name__,
+        exc_info=True,
+    )
     return JSONResponse(
         status_code=500,
-        content={"error": "Internal Server Error", "detail": detail}
+        content={"detail": "Internal server error", "request_id": request_id},
+        headers={settings.request_id_header: request_id},
     )

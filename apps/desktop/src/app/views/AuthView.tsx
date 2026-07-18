@@ -6,7 +6,7 @@ import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { api } from '../services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
 import logo from '../../logo/logo.png';
 
@@ -74,20 +74,11 @@ export function AuthView() {
 
     try {
       if (isLogin) {
-        // Check for built-in admin account
-        if (identifier.trim() === 'admin' && password === 'Ili@1382') {
-          login('admin-builtin-token');
-          toast.success(t.success[language]);
-          navigate('/');
-          setIsSubmitting(false);
-          return;
-        }
-
         const response = await api.auth.signin({
           username_or_email: identifier.trim(),
           password
         });
-        login(response.access_token);
+        await login({ access_token: response.access_token, refresh_token: response.refresh_token ?? null }, response.user);
         toast.success(t.success[language]);
       } else {
         const response = await api.auth.signup({
@@ -96,7 +87,7 @@ export function AuthView() {
           email: email.trim(),
           password
         });
-        login(response.access_token);
+        await login({ access_token: response.access_token, refresh_token: response.refresh_token ?? null }, response.user);
         toast.success(t.created[language]);
       }
       navigate('/');

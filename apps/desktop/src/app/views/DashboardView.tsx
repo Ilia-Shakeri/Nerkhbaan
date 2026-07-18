@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { LineChart, Line, ResponsiveContainer, YAxis, XAxis, CartesianGrid, ReferenceLine } from 'recharts';
-import { BellPlus, ArrowUpRight, ArrowDownRight, Gem, Coins, GripVertical, Bitcoin, CircleDollarSign } from 'lucide-react';
+import { AlertTriangle, BellPlus, ArrowUpRight, ArrowDownRight, Gem, Coins, GripVertical, Bitcoin, CircleDollarSign, ChevronDown, Clock3, Radio, WifiOff } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
@@ -11,7 +11,7 @@ import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { toast } from 'sonner';
-import { formatPrice, getPrices, type CurrencyMode, type PriceAsset } from '../services/api';
+import { api, formatPrice, getPriceHistory, getPrices, getPricesWebSocketUrl, type CurrencyMode, type InstrumentSourcesResponse, type OperationalPriceStatus, type PriceAsset, type PriceTimeframe } from '../services/api';
 
 type AssetId = 'gold' | 'silver' | 'usdt' | 'btc';
 
@@ -32,11 +32,20 @@ type AssetCard = {
   history: AssetPoint[];
   sourceUsd: string;
   sourceToman: string;
-  usdStatus: 'live' | 'cached' | 'unavailable';
-  tomanStatus: 'live' | 'cached' | 'unavailable';
+  usdStatus: OperationalPriceStatus;
+  tomanStatus: OperationalPriceStatus;
   staleMinutes: number | null;
   chartError: boolean;
   chartErrorMessage: { fa: string; en: string };
+  observedAt: string | null;
+  canonicalAt: string | null;
+  ageSeconds: number | null;
+  candidatePriceUsd: number | null;
+  candidatePriceToman: number | null;
+  candidateProvider: string | null;
+  candidateObservedAt: string | null;
+  differencePercent: number | null;
+  verificationStatus: string | null;
 };
 
 type TooltipPosition = {
@@ -54,11 +63,28 @@ const CHART_COLORS: Record<AssetId, { dark: string; light: string }> = {
   btc: { dark: '#F7931A', light: '#D97706' }
 };
 
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<OperationalPriceStatus, { dark: string; light: string }> = {
   live: { dark: 'bg-emerald-500/10 text-emerald-400', light: 'bg-emerald-100 text-emerald-700' },
-  cached: { dark: 'bg-amber-500/10 text-amber-400', light: 'bg-amber-100 text-amber-700' },
+  fresh_cache: { dark: 'bg-sky-500/10 text-sky-300', light: 'bg-sky-100 text-sky-700' },
+  cached: { dark: 'bg-sky-500/10 text-sky-300', light: 'bg-sky-100 text-sky-700' },
+  verifying: { dark: 'bg-yellow-500/10 text-yellow-300', light: 'bg-yellow-100 text-yellow-800' },
+  suspicious: { dark: 'bg-orange-500/10 text-orange-300', light: 'bg-orange-100 text-orange-800' },
+  suspicious_unconfirmed: { dark: 'bg-orange-500/10 text-orange-300', light: 'bg-orange-100 text-orange-800' },
+  derived_fallback: { dark: 'bg-purple-500/10 text-purple-300', light: 'bg-purple-100 text-purple-800' },
+  stale: { dark: 'bg-amber-500/10 text-amber-300', light: 'bg-amber-100 text-amber-800' },
+  expired: { dark: 'bg-red-500/10 text-red-300', light: 'bg-red-100 text-red-800' },
+  unpersisted: { dark: 'bg-blue-500/10 text-blue-300', light: 'bg-blue-100 text-blue-800' },
   unavailable: { dark: 'bg-red-500/10 text-red-400', light: 'bg-red-100 text-red-700' }
 };
+
+const INSTRUMENT_IDS: Record<AssetId, Record<CurrencyMode, string>> = {
+  gold: { usd: 'XAU_USD_OZ', toman: 'GOLD_18K_TOMAN_GRAM' },
+  silver: { usd: 'XAG_USD_OZ', toman: 'SILVER_999_TOMAN_GRAM' },
+  usdt: { usd: 'USDT_USD', toman: 'USDT_TOMAN' },
+  btc: { usd: 'BTC_USD', toman: 'BTC_TOMAN' },
+};
+
+const TIMEFRAMES: PriceTimeframe[] = ['1h', '24h', '7d', '30d', '1y'];
 
 const ASSET_ICONS: Record<AssetId, LucideIcon> = {
   gold: Gem,
@@ -104,7 +130,7 @@ const buildPlaceholderAsset = (id: AssetId): PriceAsset => ({
   label_en: ASSET_LABELS[id].en,
   price_usd: null,
   price_toman: null,
-  change_percent: 0,
+  change_percent: Number.NaN,
   trend: 'up',
   source_usd: 'unavailable',
   source_toman: 'unavailable',
@@ -117,6 +143,11 @@ const buildPlaceholderAsset = (id: AssetId): PriceAsset => ({
 });
 
 const EMPTY_ASSETS: PriceAsset[] = DEFAULT_ASSET_ORDER.map(buildPlaceholderAsset);
+
+const normalizeStatus = (value: unknown): OperationalPriceStatus => {
+  if (value === 'confirmed') return 'live';
+  return Object.prototype.hasOwnProperty.call(STATUS_COLORS, value) ? value as OperationalPriceStatus : 'unavailable';
+};
 
 const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, icon: LucideIcon): AssetCard => {
   if (!asset) {
@@ -136,7 +167,16 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, icon: LucideI
       tomanStatus: placeholder.toman_status,
       staleMinutes: placeholder.stale_minutes,
       chartError: placeholder.chart_error,
-      chartErrorMessage: placeholder.chart_error_message
+      chartErrorMessage: placeholder.chart_error_message,
+      observedAt: null,
+      canonicalAt: null,
+      ageSeconds: null,
+      candidatePriceUsd: null,
+      candidatePriceToman: null,
+      candidateProvider: null,
+      candidateObservedAt: null,
+      differencePercent: null,
+      verificationStatus: null,
     };
   }
   return {
@@ -150,17 +190,35 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, icon: LucideI
     history: asset.history,
     sourceUsd: asset.source_usd,
     sourceToman: asset.source_toman,
-    usdStatus: asset.usd_status as any,
-    tomanStatus: asset.toman_status as any,
+    usdStatus: normalizeStatus(asset.usd_status),
+    tomanStatus: normalizeStatus(asset.toman_status),
     staleMinutes: asset.stale_minutes,
     chartError: asset.chart_error,
-    chartErrorMessage: asset.chart_error_message
+    chartErrorMessage: asset.chart_error_message,
+    observedAt: asset.observed_at ?? null,
+    canonicalAt: asset.canonical_at ?? null,
+    ageSeconds: asset.age_seconds ?? (asset.stale_minutes === null ? null : asset.stale_minutes * 60),
+    candidatePriceUsd: asset.candidate_price_usd ?? null,
+    candidatePriceToman: asset.candidate_price_toman ?? null,
+    candidateProvider: asset.candidate_provider ?? null,
+    candidateObservedAt: asset.candidate_observed_at ?? null,
+    differencePercent: asset.difference_percent ?? null,
+    verificationStatus: asset.verification_status ?? null,
   };
 };
 
-const toChartValue = (point: AssetPoint, mode: CurrencyMode, fallbackValue: number) => {
+const toChartValue = (point: AssetPoint, mode: CurrencyMode, fallbackValue: number | null) => {
   const raw = mode === 'usd' ? point.value_usd : point.value_toman;
   return raw ?? fallbackValue;
+};
+
+const formatAge = (seconds: number | null, language: 'fa' | 'en') => {
+  if (seconds === null || !Number.isFinite(seconds) || seconds < 0) return language === 'fa' ? 'نامشخص' : 'Unknown';
+  const value = Math.floor(seconds);
+  if (value < 60) return language === 'fa' ? `${value} ثانیه` : `${value}s`;
+  if (value < 3600) return language === 'fa' ? `${Math.floor(value / 60)} دقیقه` : `${Math.floor(value / 60)}m`;
+  if (value < 86400) return language === 'fa' ? `${Math.floor(value / 3600)} ساعت` : `${Math.floor(value / 3600)}h`;
+  return language === 'fa' ? `${Math.floor(value / 86400)} روز` : `${Math.floor(value / 86400)}d`;
 };
 
 export function DashboardView() {
@@ -172,6 +230,17 @@ export function DashboardView() {
   const [dragOverAssetId, setDragOverAssetId] = useState<AssetId | null>(null);
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [selectedAssetForAlert, setSelectedAssetForAlert] = useState<AssetId>('gold');
+  const [alertTarget, setAlertTarget] = useState('');
+  const [alertNotifyApp, setAlertNotifyApp] = useState(true);
+  const [alertNotifyEmail, setAlertNotifyEmail] = useState(false);
+  const [isSavingAlert, setIsSavingAlert] = useState(false);
+  const [timeframe, setTimeframe] = useState<PriceTimeframe>('24h');
+  const [socketStatus, setSocketStatus] = useState<'connecting' | 'live' | 'fallback'>('connecting');
+  const [expandedSources, setExpandedSources] = useState<Partial<Record<AssetId, boolean>>>({});
+  const [sourceDetails, setSourceDetails] = useState<Partial<Record<AssetId, InstrumentSourcesResponse>>>({});
+  const [sourceLoading, setSourceLoading] = useState<Partial<Record<AssetId, boolean>>>({});
+  const [sourceErrors, setSourceErrors] = useState<Partial<Record<AssetId, string>>>({});
+  const lastEventsRef = useRef(new Map<string, { sequence: number | null; timestamp: number | null }>());
 
   const [pricesData, setPricesData] = useState<PriceAsset[]>(EMPTY_ASSETS);
   const [lastRefreshAt, setLastRefreshAt] = useState<string | null>(null);
@@ -187,11 +256,14 @@ export function DashboardView() {
     window.localStorage.setItem(CHART_ORDER_STORAGE_KEY, JSON.stringify(assetOrder));
   }, [assetOrder]);
 
-  const loadPrices = async () => {
+  const loadPrices = useCallback(async () => {
     try {
       setLoadError(null);
       const data = await getPrices();
-      setPricesData(data.assets);
+      setPricesData((current) => data.assets.map((item) => {
+        const previous = current.find((value) => value.asset === item.asset);
+        return previous?.history?.length ? { ...item, history: previous.history } : item;
+      }));
       setLastRefreshAt(data.refreshed_at);
       setSourceLabel({ usd: data.source?.usd ?? 'Unknown', toman: data.source?.toman ?? 'Unknown' });
     } catch (err: any) {
@@ -199,12 +271,146 @@ export function DashboardView() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadPrices();
-    const interval = setInterval(loadPrices, 15000);
+    void loadPrices();
+    if (socketStatus === 'live') return;
+    const interval = setInterval(() => void loadPrices(), 15_000);
     return () => clearInterval(interval);
+  }, [loadPrices, socketStatus]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    Promise.all(DEFAULT_ASSET_ORDER.map(async (asset) => ({
+      asset,
+      history: await getPriceHistory(asset, timeframe, controller.signal),
+    })))
+      .then((results) => {
+        setPricesData((current) => current.map((item) => {
+          const result = results.find((entry) => entry.asset === item.asset);
+          return result ? { ...item, history: result.history.points } : item;
+        }));
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) setLoadError(error instanceof Error ? error.message : 'Failed to load history');
+      });
+    return () => controller.abort();
+  }, [timeframe]);
+
+  useEffect(() => {
+    let stopped = false;
+    let socket: WebSocket | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryCount = 0;
+    let lastMessageAt = Date.now();
+    const heartbeatTimeout = Math.max(Number(import.meta.env.VITE_WS_HEARTBEAT_TIMEOUT_MS) || 45_000, 15_000);
+
+    const mergeEvent = (message: unknown): void => {
+      if (!message || typeof message !== 'object') return;
+      const root = message as Record<string, unknown>;
+      if (root.type === 'heartbeat' || root.event_type === 'heartbeat') return;
+      if (Array.isArray(root.prices)) {
+        root.prices.forEach((price) => mergeEvent(price));
+        return;
+      }
+      const raw = root.data ?? root.payload ?? root;
+      if (!raw || typeof raw !== 'object') return;
+      const payload = raw as Record<string, unknown>;
+      if (Array.isArray(payload.assets)) {
+        setPricesData((current) => {
+          const byId = new Map(current.map((item) => [item.asset, item]));
+          for (const value of payload.assets as Array<Record<string, unknown>>) {
+            if (typeof value?.asset === 'string' && byId.has(value.asset)) byId.set(value.asset, { ...byId.get(value.asset)!, ...value } as PriceAsset);
+          }
+          return [...byId.values()];
+        });
+        return;
+      }
+      if (
+        typeof payload.instrument_id !== 'string' ||
+        (typeof payload.compatibility_asset !== 'string' && typeof payload.compatibility_asset_id !== 'string')
+      ) return;
+      const instrumentId = payload.instrument_id;
+      const assetId = String(payload.compatibility_asset ?? payload.compatibility_asset_id);
+      if (!DEFAULT_ASSET_ORDER.includes(assetId as AssetId)) return;
+      const sequenceValue = Number(root.sequence ?? payload.sequence ?? payload.sequence_number);
+      const sequence = Number.isFinite(sequenceValue) ? sequenceValue : null;
+      const timestampValue = payload.canonical_at ?? payload.observed_at;
+      const timestamp = typeof timestampValue === 'string' && Number.isFinite(Date.parse(timestampValue)) ? Date.parse(timestampValue) : null;
+      const previous = lastEventsRef.current.get(instrumentId);
+      if (previous && ((sequence !== null && previous.sequence !== null && sequence <= previous.sequence) || (sequence === null && timestamp !== null && previous.timestamp !== null && timestamp <= previous.timestamp))) return;
+      lastEventsRef.current.set(instrumentId, { sequence, timestamp });
+
+      const candidate = payload.candidate && typeof payload.candidate === 'object' ? payload.candidate as Record<string, unknown> : null;
+      const candidatePrice = candidate && typeof candidate.price === 'number' ? candidate.price : typeof payload.candidate === 'number' ? payload.candidate : null;
+      const isToman = instrumentId.includes('_TOMAN');
+      const status = normalizeStatus(payload.persistence_status === 'unpersisted' ? 'unpersisted' : payload.status);
+      const source = typeof payload.source_summary === 'string' ? payload.source_summary : 'stored canonical';
+      setPricesData((current) => current.map((item) => item.asset !== assetId ? item : ({
+        ...item,
+        ...(isToman
+          ? { price_toman: typeof payload.price === 'number' ? payload.price : item.price_toman, toman_status: status, source_toman: source, candidate_price_toman: candidatePrice }
+          : { price_usd: typeof payload.price === 'number' ? payload.price : item.price_usd, usd_status: status, source_usd: source, candidate_price_usd: candidatePrice }),
+        observed_at: typeof payload.observed_at === 'string' ? payload.observed_at : item.observed_at,
+        canonical_at: typeof payload.canonical_at === 'string' ? payload.canonical_at : item.canonical_at,
+        age_seconds: typeof payload.age_seconds === 'number' ? payload.age_seconds : item.age_seconds,
+        candidate_provider: candidate && typeof candidate.provider_name === 'string' ? candidate.provider_name : candidate && typeof candidate.provider_id === 'string' ? candidate.provider_id : item.candidate_provider,
+        candidate_observed_at: candidate && typeof candidate.observed_at === 'string' ? candidate.observed_at : typeof payload.candidate_observed_at === 'string' ? payload.candidate_observed_at : item.candidate_observed_at,
+        difference_percent: candidate && typeof candidate.difference_percent === 'number' ? candidate.difference_percent : item.difference_percent,
+        verification_status: typeof payload.verification_status === 'string' ? payload.verification_status : item.verification_status,
+      })));
+      setLastRefreshAt(typeof payload.canonical_at === 'string' ? payload.canonical_at : new Date().toISOString());
+    };
+
+    const connect = () => {
+      if (stopped || !navigator.onLine) {
+        setSocketStatus('fallback');
+        return;
+      }
+      setSocketStatus('connecting');
+      socket = new WebSocket(getPricesWebSocketUrl());
+      socket.onopen = () => {
+        retryCount = 0;
+        lastMessageAt = Date.now();
+        lastEventsRef.current.clear();
+        setSocketStatus('live');
+      };
+      socket.onmessage = (event) => {
+        lastMessageAt = Date.now();
+        try { mergeEvent(JSON.parse(event.data)); } catch { /* Ignore malformed events while the socket remains healthy. */ }
+      };
+      socket.onerror = () => socket?.close();
+      socket.onclose = () => {
+        if (stopped) return;
+        setSocketStatus('fallback');
+        retryCount += 1;
+        const baseDelay = Math.min(1_000 * 2 ** Math.max(retryCount - 1, 0), 30_000);
+        retryTimer = setTimeout(connect, Math.round(baseDelay * (0.8 + Math.random() * 0.4)));
+      };
+    };
+    const reconnect = () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      if (!socket || socket.readyState === WebSocket.CLOSED) connect();
+    };
+    const switchToPolling = () => {
+      setSocketStatus('fallback');
+      socket?.close();
+    };
+    connect();
+    const watchdog = setInterval(() => {
+      if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessageAt > heartbeatTimeout) socket.close();
+    }, 5_000);
+    window.addEventListener('online', reconnect);
+    window.addEventListener('offline', switchToPolling);
+    return () => {
+      stopped = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      clearInterval(watchdog);
+      socket?.close();
+      window.removeEventListener('online', reconnect);
+      window.removeEventListener('offline', switchToPolling);
+    };
   }, []);
 
   const orderedAssets = useMemo(() => {
@@ -213,6 +419,28 @@ export function DashboardView() {
       return buildLiveCard(live, id, ASSET_ICONS[id]);
     });
   }, [assetOrder, pricesData]);
+
+  useEffect(() => {
+    setExpandedSources({});
+    setSourceDetails({});
+    setSourceErrors({});
+  }, [currencyMode]);
+
+  const toggleSourcePanel = async (assetId: AssetId) => {
+    const open = !expandedSources[assetId];
+    setExpandedSources((current) => ({ ...current, [assetId]: open }));
+    if (!open || sourceDetails[assetId] || sourceLoading[assetId]) return;
+    setSourceLoading((current) => ({ ...current, [assetId]: true }));
+    setSourceErrors((current) => ({ ...current, [assetId]: '' }));
+    try {
+      const details = await api.instruments.sources(INSTRUMENT_IDS[assetId][currencyMode]);
+      setSourceDetails((current) => ({ ...current, [assetId]: details }));
+    } catch (error) {
+      setSourceErrors((current) => ({ ...current, [assetId]: error instanceof Error ? error.message : 'Source data is unavailable' }));
+    } finally {
+      setSourceLoading((current) => ({ ...current, [assetId]: false }));
+    }
+  };
 
   const reorderAssets = (draggedId: AssetId, targetId: AssetId) => {
     setAssetOrder((prev) => {
@@ -252,7 +480,7 @@ export function DashboardView() {
   };
 
   const currentUsdt = orderedAssets.find((a) => a.id === 'usdt');
-  const usdToTomanRate = (currentUsdt?.priceToman ?? 1) / (currentUsdt?.priceUsd ?? 1);
+  const usdToTomanRate = currentUsdt?.priceToman && currentUsdt.priceUsd ? currentUsdt.priceToman / currentUsdt.priceUsd : null;
 
   const t = {
     currencyView: { fa: 'نمایش بر اساس:', en: 'Currency:' },
@@ -283,28 +511,58 @@ export function DashboardView() {
 
   const activeCurrencyLabel = currencyMode === 'usd' ? t.usd[language] : t.toman[language];
 
-  const statusLabel = (status: 'live' | 'cached' | 'unavailable') => {
-    if (status === 'live') {
-      return t.live[language];
-    }
-    if (status === 'cached') {
-      return t.cached[language];
-    }
-    return t.unavailable[language];
+  const statusLabels: Record<OperationalPriceStatus, { fa: string; en: string }> = {
+    live: { fa: 'زنده', en: 'Live' },
+    fresh_cache: { fa: 'ذخیره تازه', en: 'Fresh cache' },
+    cached: { fa: 'ذخیره تازه', en: 'Fresh cache' },
+    verifying: { fa: 'در حال بررسی', en: 'Verifying' },
+    suspicious: { fa: 'مشکوک', en: 'Suspicious' },
+    suspicious_unconfirmed: { fa: 'تأیید نشده', en: 'Unconfirmed' },
+    derived_fallback: { fa: 'قیمت محاسبه‌شده', en: 'Derived fallback' },
+    stale: { fa: 'قدیمی', en: 'Stale' },
+    expired: { fa: 'منقضی', en: 'Expired' },
+    unpersisted: { fa: 'ذخیره‌نشده', en: 'Unpersisted' },
+    unavailable: { fa: 'خارج از دسترس', en: 'Unavailable' },
   };
+  const statusLabel = (status: OperationalPriceStatus) => statusLabels[status]?.[language] ?? status;
 
-  const hasDegradedSources = orderedAssets.some(
-    (asset) => asset.usdStatus !== 'live' || asset.tomanStatus !== 'live'
-  );
+  const healthyStatuses = new Set<OperationalPriceStatus>(['live', 'fresh_cache', 'cached']);
+  const hasDegradedSources = orderedAssets.some((asset) => !healthyStatuses.has(asset.usdStatus) || !healthyStatuses.has(asset.tomanStatus));
 
   return (
     <div className="space-y-6">
 
+      <div className={`flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-3 ${isDark ? 'border-white/5 bg-[#0E0E0E]/60' : 'border-black/5 bg-white/60'}`}>
+        <div className="flex rounded-xl bg-black/5 p-1 dark:bg-black/40" dir="ltr">
+          {TIMEFRAMES.map((value) => <button key={value} type="button" onClick={() => setTimeframe(value)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${timeframe === value ? 'bg-[#D4AF37] text-black' : 'text-slate-500 dark:text-[#A89668]'}`}>{value}</button>)}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold ${socketStatus === 'live' ? 'bg-emerald-500/10 text-emerald-500' : socketStatus === 'connecting' ? 'bg-amber-500/10 text-amber-500' : 'bg-slate-500/10 text-slate-500'}`}>
+            {socketStatus === 'live' ? <Radio size={12} /> : <WifiOff size={12} />}
+            {socketStatus === 'live' ? (language === 'fa' ? 'پخش زنده' : 'Live stream') : socketStatus === 'connecting' ? (language === 'fa' ? 'در حال اتصال' : 'Connecting') : (language === 'fa' ? 'دریافت دوره‌ای' : 'Polling fallback')}
+          </span>
+          {lastRefreshAt && <span className="text-slate-500" dir="ltr">{new Date(lastRefreshAt).toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}</span>}
+        </div>
+      </div>
+
+      {loadError && <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-500">{loadError}</div>}
+      {hasDegradedSources && <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-500">{t.degradedNotice[language]}</div>}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {orderedAssets.map((asset, idx) => {
         const fallbackValue = currencyMode === 'usd' 
-          ? (asset.priceUsd ?? (asset.priceToman ? asset.priceToman / usdToTomanRate : 0)) 
-          : (asset.priceToman ?? (asset.priceUsd ? asset.priceUsd * usdToTomanRate : 0));
+          ? (asset.priceUsd ?? (asset.priceToman && usdToTomanRate ? asset.priceToman / usdToTomanRate : null))
+          : (asset.priceToman ?? (asset.priceUsd && usdToTomanRate ? asset.priceUsd * usdToTomanRate : null));
+        const activeStatus = currencyMode === 'usd' ? asset.usdStatus : asset.tomanStatus;
+        const activeSource = currencyMode === 'usd' ? asset.sourceUsd : asset.sourceToman;
+        const candidatePrice = currencyMode === 'usd' ? asset.candidatePriceUsd : asset.candidatePriceToman;
+        const isAnomaly = activeStatus === 'verifying' || activeStatus === 'suspicious' || activeStatus === 'suspicious_unconfirmed';
+        const sourceRows = [...(sourceDetails[asset.id]?.sources ?? [])].sort((left, right) => {
+          const rank: Record<string, number> = { primary: 0, verifier: 1, fallback: 2, derived: 3 };
+          const leftOld = left.status === 'stale' || left.status === 'expired' || left.status === 'rejected' ? 10 : 0;
+          const rightOld = right.status === 'stale' || right.status === 'expired' || right.status === 'rejected' ? 10 : 0;
+          return leftOld + (rank[left.role ?? ''] ?? 4) - rightOld - (rank[right.role ?? ''] ?? 4);
+        });
 
         const resolvedHistory = asset.history.length ? asset.history : [
           { timestamp: new Date().toISOString(), value_usd: asset.priceUsd, value_toman: asset.priceToman }
@@ -326,7 +584,7 @@ export function DashboardView() {
           value: toChartValue(point, currencyMode, fallbackValue)
         }));
 
-        const selectedChartPoint = chartData[activeIndex] ?? chartData[chartData.length - 1];
+        const selectedChartPoint = chartData[activeIndex] ?? chartData[chartData.length - 1] ?? { time: '', value: fallbackValue };
         const chartColor = isDark ? CHART_COLORS[asset.id].dark : CHART_COLORS[asset.id].light;
         const tooltipPosition = tooltipPositionByAsset[asset.id];
 
@@ -421,9 +679,9 @@ export function DashboardView() {
                       >
                         Toman {statusLabel(asset.tomanStatus)}
                       </span>
-                      {asset.staleMinutes !== null ? (
+                      {asset.ageSeconds !== null ? (
                         <span className={`${isDark ? 'text-[#BCA96F]' : 'text-[#7D6023]'}`}>
-                          {t.cacheAge[language]}: {asset.staleMinutes} {t.minute[language]}
+                          {t.cacheAge[language]}: {formatAge(asset.ageSeconds, language)}
                         </span>
                       ) : null}
                     </div>
@@ -436,8 +694,8 @@ export function DashboardView() {
                       ? isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
                       : isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-700'
                   }`}>
-                    {asset.isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                    <span dir="ltr">{Math.abs(asset.changePercent).toFixed(2)}%</span>
+                    {Number.isFinite(asset.changePercent) && (asset.isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
+                    <span dir="ltr">{Number.isFinite(asset.changePercent) ? `${Math.abs(asset.changePercent).toFixed(2)}%` : 'N/A'}</span>
                   </div>
                   <Button
                     onClick={() => {
@@ -459,14 +717,27 @@ export function DashboardView() {
               <CardContent>
                 <div className="mb-6 flex items-baseline gap-2">
                   <div className={`text-4xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-[#3B2E13]'}`} dir="ltr">
-                    {formatPrice(toChartValue(selectedPoint, currencyMode, fallbackValue), currencyMode)}
+                    {formatPrice(toChartValue(selectedPoint, currencyMode, fallbackValue), currencyMode, language)}
                   </div>
                   <span className={`text-sm font-medium ${isDark ? 'text-[#CDBB8C]' : 'text-[#8A6B26]'}`}>
                     {activeCurrencyLabel}
                   </span>
                 </div>
+
+                <div className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs ${isDark ? 'border-white/5 bg-black/20 text-[#A89668]' : 'border-black/5 bg-white/60 text-[#7A5E24]'}`}>
+                  <div className="flex flex-wrap items-center gap-2"><span className={`rounded-full px-2 py-1 font-semibold ${isDark ? STATUS_COLORS[activeStatus].dark : STATUS_COLORS[activeStatus].light}`}>{statusLabel(activeStatus)}</span><span className="inline-flex items-center gap-1"><Clock3 size={12} />{formatAge(asset.ageSeconds, language)}</span>{(asset.canonicalAt || asset.observedAt) && <span dir="ltr">{new Date(asset.canonicalAt ?? asset.observedAt ?? '').toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}</span>}<span className="max-w-40 truncate" title={activeSource}>{activeSource}</span></div>
+                  <button type="button" onClick={() => void toggleSourcePanel(asset.id)} className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-bold ${isAnomaly ? 'border-orange-400/50 bg-orange-500/10 text-orange-400' : 'border-[#D4AF37]/20 text-[#D4AF37]'}`}>
+                    {language === 'fa' ? 'مقایسه منابع' : 'Compare sources'}<ChevronDown size={13} className={expandedSources[asset.id] ? 'rotate-180' : ''} />
+                  </button>
+                </div>
+
+                {isAnomaly && candidatePrice !== null && <div className={`mb-4 rounded-xl border p-3 text-xs ${isDark ? 'border-orange-500/30 bg-orange-500/5 text-orange-200' : 'border-orange-300 bg-orange-50 text-orange-800'}`}><div className="mb-1 flex items-center gap-2 font-bold"><AlertTriangle size={14} />{language === 'fa' ? 'قیمت مشکوک؛ قیمت پذیرفته‌شده نمایش داده می‌شود.' : 'Suspicious candidate; showing the last accepted price.'}</div><div className="flex flex-wrap gap-3" dir="ltr"><span>{formatPrice(candidatePrice, currencyMode, language)} {activeCurrencyLabel}</span>{asset.candidateProvider && <span>{asset.candidateProvider}</span>}{asset.candidateObservedAt && <span>{new Date(asset.candidateObservedAt).toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}</span>}{asset.differencePercent !== null && <span>{asset.differencePercent.toFixed(2)}%</span>}{asset.verificationStatus && <span>{asset.verificationStatus}</span>}</div></div>}
+
+                {expandedSources[asset.id] && <div className={`mb-4 overflow-hidden rounded-xl border ${isDark ? 'border-white/5 bg-black/20' : 'border-black/5 bg-white/60'}`}>
+                  {sourceLoading[asset.id] ? <div className="p-4 text-center text-xs">{language === 'fa' ? 'در حال دریافت داده ذخیره‌شده...' : 'Loading stored source data...'}</div> : sourceErrors[asset.id] ? <div className="p-4 text-center text-xs text-red-500">{sourceErrors[asset.id]}</div> : sourceRows.length === 0 ? <div className="p-4 text-center text-xs text-slate-500">{language === 'fa' ? 'داده منبعی ذخیره نشده است.' : 'No stored source quotes.'}</div> : <div className="divide-y divide-white/5">{sourceRows.map((source, index) => { const old = source.status === 'stale' || source.status === 'expired' || source.status === 'rejected'; return <div key={String(source.id ?? `${source.provider_id ?? 'source'}-${index}`)} className={`grid grid-cols-[1fr_auto] gap-3 px-3 py-2.5 text-xs ${old ? 'opacity-55 grayscale' : ''}`}><div><div className="font-bold">{source.provider_name ?? source.provider_id ?? 'Source'}</div><div className="mt-1 flex flex-wrap gap-2 text-slate-500"><span>{source.role ?? 'source'}</span><span>{source.status ?? 'unknown'}</span><span>{formatAge(source.age_seconds ?? null, language)}</span>{source.observed_at && <span dir="ltr">{new Date(source.observed_at).toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}</span>}{source.rejection_reason && <span>{source.rejection_reason}</span>}</div></div><div className="text-end font-bold" dir="ltr"><div>{formatPrice(source.price, currencyMode, language)}</div>{source.difference_percent !== null && source.difference_percent !== undefined && <div className="text-[10px] text-[#D4AF37]">{source.difference_percent.toFixed(2)}%</div>}</div></div>; })}</div>}
+                </div>}
                 
-                {asset.chartError ? (
+                {asset.chartError && asset.history.length === 0 && asset.priceUsd === null && asset.priceToman === null ? (
                   <div className={`flex h-[260px] w-full flex-col items-center justify-center rounded-[1.5rem] border backdrop-blur-md ${
                     isDark ? 'border-red-500/20 bg-[#1A0B0B]/50' : 'border-red-200 bg-[#FFF0F0]/50'
                   }`}>
@@ -536,7 +807,7 @@ export function DashboardView() {
                           }}
                         >
                           <span className={`text-xs font-semibold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
-                            {formatPrice(selectedChartPoint.value, currencyMode)}
+                            {formatPrice(selectedChartPoint.value, currencyMode, language)}
                           </span>
                           <span className={`text-[10px] ${isDark ? 'text-[#A89668]' : 'text-[#8A6A25]'}`}>
                             {selectedChartPoint.time}
@@ -576,6 +847,8 @@ export function DashboardView() {
               type="number"
               dir="ltr"
               placeholder="0.00"
+              value={alertTarget}
+              onChange={(event) => setAlertTarget(event.target.value)}
               className={`h-12 rounded-2xl text-lg font-bold tracking-wider ${
                 isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3]' : 'border-[#D4AF37]/30 bg-white text-[#3B2E13]'
               }`}
@@ -589,15 +862,11 @@ export function DashboardView() {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className={`text-sm ${isDark ? 'text-[#CDBB8C]' : 'text-[#8A6B26]'}`}>{t.appAlert[language]}</span>
-                <Switch defaultChecked />
+                <Switch checked={alertNotifyApp} onCheckedChange={setAlertNotifyApp} />
               </div>
               <div className="flex items-center justify-between">
                 <span className={`text-sm ${isDark ? 'text-[#CDBB8C]' : 'text-[#8A6B26]'}`}>{t.emailAlert[language]}</span>
-                <Switch />
-              </div>
-              <div className="flex items-center justify-between">
-                <span className={`text-sm ${isDark ? 'text-[#CDBB8C]' : 'text-[#8A6B26]'}`}>{t.smsAlert[language]}</span>
-                <Switch />
+                <Switch checked={alertNotifyEmail} onCheckedChange={setAlertNotifyEmail} />
               </div>
             </div>
           </div>
@@ -614,12 +883,24 @@ export function DashboardView() {
               className={`h-12 flex-1 rounded-2xl border-0 text-black shadow-lg hover:shadow-xl transition-all ${
                 isDark ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB]' : 'bg-[#D4AF37] hover:bg-[#E8C45A]'
               }`}
-              onClick={() => {
-                toast.success(t.alertSuccess[language]);
-                setIsAlertModalOpen(false);
+              disabled={isSavingAlert || !alertTarget}
+              onClick={async () => {
+                const value = Number(alertTarget);
+                if (!Number.isFinite(value) || value <= 0) return;
+                setIsSavingAlert(true);
+                try {
+                  await api.alerts.create({ asset: selectedAssetForAlert, target_price: value, alert_type: 'price', formula: null, currency_mode: currencyMode, condition: 'above', notify_app: alertNotifyApp, notify_email: alertNotifyEmail, notify_webhook: false, webhook_url: null, enable_dlq: false });
+                  toast.success(t.alertSuccess[language]);
+                  setAlertTarget('');
+                  setIsAlertModalOpen(false);
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : (language === 'fa' ? 'ثبت هشدار ناموفق بود' : 'Failed to save alert'));
+                } finally {
+                  setIsSavingAlert(false);
+                }
               }}
             >
-              {t.save[language]}
+              {isSavingAlert ? (language === 'fa' ? 'در حال ذخیره...' : 'Saving...') : t.save[language]}
             </Button>
           </div>
         </div>

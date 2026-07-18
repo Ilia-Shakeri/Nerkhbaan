@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
-import { Bot, Send, Loader2 } from 'lucide-react';
+import { Bot, Send, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { useAppContext } from '../context/AppContext';
-import { api, type ChatMessage } from '../services/api';
+import { api, type ChatMessage, type ChatSessionSummary } from '../services/api';
 import { toast } from 'sonner';
 
 export function AssistantView() {
@@ -15,6 +15,8 @@ export function AssistantView() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [isSending, setIsSending] = useState(false);
+  const [sessionId, setSessionId] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const t = {
@@ -26,6 +28,18 @@ export function AssistantView() {
     },
     sendFail: { fa: 'پاسخ در دسترس نیست', en: 'Reply is unavailable' }
   };
+
+  const refreshSessions = async () => {
+    try {
+      setSessions(await api.insights.listSessions());
+    } catch {
+      setSessions([]);
+    }
+  };
+
+  useEffect(() => {
+    void refreshSessions();
+  }, []);
 
   useEffect(() => {
     // Keep the newest message in view as the conversation grows.
@@ -41,13 +55,37 @@ export function AssistantView() {
     setDraft('');
     setIsSending(true);
     try {
-      const result = await api.insights.chat(nextMessages, language);
+      const result = await api.insights.chat(nextMessages, language, sessionId);
+      if (typeof result.session_id === 'number') setSessionId(result.session_id);
       setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
+      void refreshSessions();
     } catch (error) {
       const message = error instanceof Error ? error.message : t.sendFail[language];
       toast.error(message);
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const openSession = async (id: number) => {
+    setSessionId(id);
+    try {
+      const session = await api.insights.getSession(id);
+      setMessages(Array.isArray(session.messages) ? session.messages : []);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t.sendFail[language]);
+    }
+  };
+
+  const deleteSession = async () => {
+    if (sessionId === null) return;
+    try {
+      await api.insights.deleteSession(sessionId);
+      setSessionId(null);
+      setMessages([]);
+      await refreshSessions();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t.sendFail[language]);
     }
   };
 
@@ -60,6 +98,19 @@ export function AssistantView() {
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#D4AF37] text-black">
           <Bot size={22} />
         </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <select
+          value={sessionId ?? ''}
+          onChange={(event) => event.target.value && void openSession(Number(event.target.value))}
+          className={`min-w-0 flex-1 rounded-xl border px-3 py-2 text-sm ${isDark ? 'border-white/10 bg-[#141414] text-white' : 'border-black/10 bg-white text-[#3B2E13]'}`}
+        >
+          <option value="">{language === 'fa' ? 'گفت‌وگوی تازه' : 'New conversation'}</option>
+          {sessions.map((session) => <option key={session.id} value={session.id}>{session.title}</option>)}
+        </select>
+        <Button variant="ghost" size="icon" onClick={() => { setSessionId(null); setMessages([]); }} title={language === 'fa' ? 'گفت‌وگوی تازه' : 'New conversation'}><Plus size={17} /></Button>
+        <Button variant="ghost" size="icon" disabled={sessionId === null} onClick={() => void deleteSession()} className="text-red-500" title={language === 'fa' ? 'حذف گفت‌وگو' : 'Delete conversation'}><Trash2 size={17} /></Button>
       </div>
 
       <Card className={`flex flex-1 flex-col min-h-0 ${isDark ? 'bg-[#0E0E0E]/60 border-white/5' : 'bg-white/60 border-black/5'}`}>

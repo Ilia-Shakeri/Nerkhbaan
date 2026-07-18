@@ -6,14 +6,16 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field, TypeAdapter
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..db import get_db
 from ..deps import get_current_user
-from ..models import NotificationPreference, OtpVerification, User
+from ..models import NotificationPreference, OtpVerification, User, UserNotification
 from ..security import hash_password, rate_limit_clear, rate_limit_hit, send_email, verify_password
 
 logger = logging.getLogger(__name__)
@@ -22,7 +24,7 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 OTP_TTL_MINUTES = 10
 PHONE_RE = re.compile(r"^\+98\d{10}$")
-TELEGRAM_RE = re.compile(r"^@?[A-Za-z0-9_]{5,32}$")
+TELEGRAM_RE = re.compile(r"^(?:@?[A-Za-z][A-Za-z0-9_]{4,31}|-?\d{5,20})$")
 EMAIL_ADAPTER = TypeAdapter(EmailStr)
 
 
@@ -39,6 +41,10 @@ class NotificationPreferencesResponse(BaseModel):
     telegram_verified: bool
     silent_mode: bool
     aggressive_alerts: bool
+    push_available: bool
+    email_available: bool
+    sms_available: bool
+    telegram_available: bool
 
 
 class BasicPreferenceRequest(BaseModel):
@@ -56,6 +62,23 @@ class OtpConfirmRequest(OtpStartRequest):
 
 class TelegramRequest(BaseModel):
     telegram_id: str = Field(min_length=5, max_length=32)
+
+
+class TelegramConfirmRequest(BaseModel):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class NotificationItem(BaseModel):
+    id: int
+    title: str
+    message: str
+    severity: str
+    resource_type: str | None
+    resource_id: str | None
+    read_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 def _prefs_for(db: Session, user_id: int) -> NotificationPreference:
@@ -83,6 +106,12 @@ def _to_response(prefs: NotificationPreference) -> NotificationPreferencesRespon
         telegram_verified=prefs.telegram_verified,
         silent_mode=prefs.silent_mode,
         aggressive_alerts=prefs.aggressive_alerts,
+        push_available=bool(settings.vapid_public_key and settings.vapid_private_key),
+        email_available=bool(settings.smtp_host),
+        sms_available=False,
+        telegram_available=bool(
+            settings.telegram_alert_delivery_enabled and settings.telegram_bot_token
+        ),
     )
 
 
@@ -100,6 +129,92 @@ def _normalize_destination(channel: str, destination: str) -> str:
         return str(EMAIL_ADAPTER.validate_python(value)).lower()
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid email address") from exc
+
+
+def _normalize_telegram(destination: str) -> str:
+    value = destination.strip()
+    if not TELEGRAM_RE.fullmatch(value):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid Telegram destination")
+    if value.lstrip("-").isdigit():
+        return value
+    return value if value.startswith("@") else f"@{value}"
+
+
+def _send_telegram_verification(destination: str, code: str) -> None:
+    if not settings.telegram_bot_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Telegram alert delivery is not configured.",
+        )
+    try:
+        with httpx.Client(timeout=8.0, follow_redirects=False) as client:
+            response = client.post(
+                f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage",
+                json={
+                    "chat_id": destination,
+                    "text": f"Nerkhbaan verification code: {code}",
+                },
+            )
+        if response.status_code >= 400:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="The bot could not reach this Telegram destination. Start the bot, then retry.",
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Telegram verification is temporarily unavailable.",
+        ) from exc
+
+
+@router.get("", response_model=list[NotificationItem])
+def list_notifications(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[UserNotification]:
+    return list(
+        db.scalars(
+            select(UserNotification)
+            .where(UserNotification.user_id == current_user.id)
+            .order_by(UserNotification.created_at.desc())
+            .limit(100)
+        ).all()
+    )
+
+
+@router.patch("/{notification_id}/read", response_model=NotificationItem)
+def mark_notification_read(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> UserNotification:
+    notification = db.scalar(
+        select(UserNotification).where(
+            UserNotification.id == notification_id,
+            UserNotification.user_id == current_user.id,
+        )
+    )
+    if not notification:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
+    notification.read_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(notification)
+    return notification
+
+
+@router.post("/read-all", status_code=status.HTTP_204_NO_CONTENT)
+def mark_all_notifications_read(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> None:
+    db.execute(
+        update(UserNotification)
+        .where(UserNotification.user_id == current_user.id, UserNotification.read_at.is_(None))
+        .values(read_at=datetime.now(UTC))
+    )
+    db.commit()
 
 
 @router.get("/preferences", response_model=NotificationPreferencesResponse)
@@ -228,14 +343,100 @@ def set_telegram(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationPreferencesResponse:
-    telegram_id = payload.telegram_id.strip()
-    if not TELEGRAM_RE.match(telegram_id):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid Telegram ID")
+    if not settings.telegram_alert_delivery_enabled or not settings.telegram_bot_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Telegram alert delivery is not configured.",
+        )
+    telegram_id = _normalize_telegram(payload.telegram_id)
+    limit = rate_limit_hit(
+        "notification-telegram-start",
+        f"{current_user.id}:{telegram_id}",
+        5,
+        10 * 60,
+    )
+    if limit.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many verification requests. Please retry later.",
+            headers={"Retry-After": str(limit.retry_after)},
+        )
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    db.execute(
+        update(OtpVerification)
+        .where(
+            OtpVerification.user_id == current_user.id,
+            OtpVerification.channel == "telegram",
+            OtpVerification.used.is_(False),
+        )
+        .values(used=True)
+    )
+    db.add(
+        OtpVerification(
+            user_id=current_user.id,
+            channel="telegram",
+            destination=telegram_id,
+            code_hash=hash_password(code),
+            expires_at=datetime.now(UTC) + timedelta(minutes=OTP_TTL_MINUTES),
+        )
+    )
+    _send_telegram_verification(telegram_id, code)
     prefs = _prefs_for(db, current_user.id)
-    prefs.telegram_enabled = True
-    prefs.telegram_id = telegram_id if telegram_id.startswith("@") else f"@{telegram_id}"
+    prefs.telegram_enabled = False
+    prefs.telegram_id = telegram_id
     prefs.telegram_verified = False
     db.commit()
+    db.refresh(prefs)
+    return _to_response(prefs)
+
+
+@router.post("/telegram/confirm", response_model=NotificationPreferencesResponse)
+def confirm_telegram(
+    payload: TelegramConfirmRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> NotificationPreferencesResponse:
+    if (
+        key == "push_app"
+        and payload.enabled
+        and not (settings.vapid_public_key and settings.vapid_private_key)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Push delivery is not configured.",
+        )
+    prefs = _prefs_for(db, current_user.id)
+    if not prefs.telegram_id:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Telegram verification was not started")
+    identity = f"{current_user.id}:{prefs.telegram_id}"
+    limit = rate_limit_hit("notification-telegram-confirm", identity, 10, 10 * 60)
+    if limit.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many verification attempts. Please retry later.",
+            headers={"Retry-After": str(limit.retry_after)},
+        )
+    verification = db.scalar(
+        select(OtpVerification)
+        .where(
+            OtpVerification.user_id == current_user.id,
+            OtpVerification.channel == "telegram",
+            OtpVerification.destination == prefs.telegram_id,
+            OtpVerification.used.is_(False),
+        )
+        .order_by(OtpVerification.created_at.desc())
+    )
+    if (
+        verification is None
+        or verification.expires_at <= datetime.now(UTC)
+        or not verify_password(payload.code, verification.code_hash)
+    ):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+    verification.used = True
+    prefs.telegram_enabled = True
+    prefs.telegram_verified = True
+    db.commit()
+    rate_limit_clear("notification-telegram-confirm", identity)
     db.refresh(prefs)
     return _to_response(prefs)
 

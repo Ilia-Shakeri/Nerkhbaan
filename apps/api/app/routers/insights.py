@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import time
-from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -13,32 +11,32 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import get_current_user
 from ..models import AssistantChatMessage, AssistantChatSession, User
+from ..pricing.compatibility import legacy_pricing_adapter
+from ..pricing.instruments import LEGACY_ASSET_MAPPING
+from ..security import rate_limit_hit
 from ..services.insights import InsightUnavailableError, insight_engine
-from ..services.pricing import pricing_service
-from ..services.pricing_registry import ASSET_LABELS
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 
-# Lightweight per-user rate limit. The reasoning provider is metered, so this
-# caps how often a single account can spend tokens. Scope is per process; for a
-# multi-worker deployment a shared store would tighten this further.
 _RATE_LIMIT_WINDOW_SECONDS = 60
 _RATE_LIMIT_MAX_REQUESTS = 15
 CHAT_RETENTION_DAYS = 31
-_request_log: dict[int, list[float]] = defaultdict(list)
+_ASSET_IDS = {asset for asset, _currency in LEGACY_ASSET_MAPPING}
 
 
 def _enforce_rate_limit(user_id: int) -> None:
-    now = time.monotonic()
-    window_start = now - _RATE_LIMIT_WINDOW_SECONDS
-    recent = [stamp for stamp in _request_log[user_id] if stamp > window_start]
-    if len(recent) >= _RATE_LIMIT_MAX_REQUESTS:
+    limit = rate_limit_hit(
+        "insights-user",
+        str(user_id),
+        _RATE_LIMIT_MAX_REQUESTS,
+        _RATE_LIMIT_WINDOW_SECONDS,
+    )
+    if limit.blocked:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many requests. Please wait a moment and try again.",
+            headers={"Retry-After": str(limit.retry_after)},
         )
-    recent.append(now)
-    _request_log[user_id] = recent
 
 
 class AnalyzeRequest(BaseModel):
@@ -127,13 +125,13 @@ async def analyze_chart(
 ) -> AnalyzeResponse:
     _enforce_rate_limit(current_user.id)
 
-    if payload.asset not in ASSET_LABELS:
+    if payload.asset not in _ASSET_IDS:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Unknown asset"
         )
 
     try:
-        prices = await pricing_service.get_prices()
+        prices = await legacy_pricing_adapter.get_prices()
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -149,10 +147,23 @@ async def analyze_chart(
             status_code=status.HTTP_404_NOT_FOUND, detail="No data for this asset"
         )
 
+    operational = {"live", "confirmed", "fresh_cache", "derived_fallback", "unpersisted"}
+    if not (
+        str(snapshot.get("usd_status", "")).lower() in operational
+        or str(snapshot.get("toman_status", "")).lower() in operational
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Verified market data is not available for analysis",
+        )
+
     try:
-        snapshot["history"] = await pricing_service.get_history(payload.asset)
+        history = await legacy_pricing_adapter.get_history(payload.asset, "30d")
+        snapshot["history"] = history["points"]
+        snapshot["history_status"] = history["status"]
     except Exception:
-        pass
+        snapshot["history"] = []
+        snapshot["history_status"] = "unavailable"
 
     try:
         analysis = await insight_engine.analyze_chart(

@@ -16,7 +16,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('Application render failed', error, info);
+    if (import.meta.env.DEV) console.error('Application render failed', error, info);
   }
 
   private reload = () => {
@@ -24,8 +24,8 @@ export class AppErrorBoundary extends Component<Props, State> {
   };
 
   private signOut = () => {
-    window.localStorage.removeItem('authToken');
-    window.location.assign('/auth');
+    void fetch('/api/auth/signout', { method: 'POST', credentials: 'include' })
+      .finally(() => window.location.assign('/auth'));
   };
 
   render() {

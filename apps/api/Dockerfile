@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir --no-compile --index-url https://package-mirror.l
     || pip install --no-cache-dir --no-compile -r requirements.txt
 
 COPY app ./app
+COPY db ./db
 
 
 # Create a non-root runtime account.
@@ -21,6 +22,6 @@ USER deploy
 
 EXPOSE 8000
 
-# Proxy headers required for Nginx to pass real client IPs
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# Proxy trust comes from FORWARDED_ALLOW_IPS in the deployment environment.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
 

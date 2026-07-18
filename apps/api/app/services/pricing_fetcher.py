@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -273,18 +272,10 @@ class PricingFetcher:
         asset_id: str,
     ) -> float | None:
         response_path = provider.get("response_path")
-        if response_path:
-            value_node = self._resolve_path(payload, str(response_path))
-            direct_number = self.to_float(value_node)
-            if direct_number is not None:
-                return direct_number
-
-            nested_number = self._extract_numeric_candidate(value_node)
-            if nested_number is not None:
-                return nested_number
-
-        records = list(self._iter_dict_records(payload))
-        return self._extract_value_by_keywords(records, include_keywords=self._asset_keywords(asset_id))
+        if not response_path:
+            return None
+        value_node = self._resolve_path(payload, str(response_path))
+        return self.to_float(value_node)
 
     def _extract_orderbook_value(self, payload: Any, provider: dict[str, Any]) -> float | None:
         symbol = provider.get("orderbook_symbol")
@@ -337,72 +328,6 @@ class PricingFetcher:
 
             return None
         return cursor
-
-    def _asset_keywords(self, asset_id: str) -> list[str]:
-        if asset_id == "gold":
-            return ["gold", "xau", "طلا", "طلای", "18", "عیار"]
-        if asset_id == "silver":
-            return ["silver", "xag", "نقره"]
-        if asset_id == "usdt":
-            return ["usdt", "tether", "تتر", "usd", "دلار"]
-        if asset_id == "btc":
-            return ["btc", "bitcoin", "بیت", "کوین"]
-        return [asset_id]
-
-    def _extract_value_by_keywords(self, records: list[dict], include_keywords: list[str]) -> float | None:
-        best_value: float | None = None
-        for record in records:
-            text = " ".join(
-                str(record.get(key, ""))
-                for key in ("symbol", "name", "title", "label", "slug", "id")
-            ).lower()
-            if not any(keyword in text for keyword in include_keywords):
-                continue
-
-            number = self._extract_numeric_candidate(record)
-            if number is None:
-                continue
-
-            unit = str(record.get("unit", "")).lower()
-            currency = str(record.get("currency", "")).lower()
-            if "rial" in unit or "ريال" in unit or "rial" in currency or "ريال" in currency:
-                number = number / 10
-
-            if best_value is None or number > best_value:
-                best_value = number
-
-        return best_value
-
-    def _extract_numeric_candidate(self, record: Any) -> float | None:
-        if isinstance(record, (int, float, str)):
-            return self.to_float(record)
-        if not isinstance(record, dict):
-            return None
-
-        # Include exchange-specific last price keys and compact market fields.
-        target_keys = ("lasttradeprice", "price", "value", "last", "rate", "buy", "sell", "close", "p", "l")
-        for target in target_keys:
-            for key in record.keys():
-                if str(key).lower() == target or target in str(key).lower():
-                    number = self.to_float(record.get(key))
-                    if number is not None:
-                        return number
-
-        for value in record.values():
-            number = self.to_float(value)
-            if number is not None:
-                return number
-
-        return None
-
-    def _iter_dict_records(self, value: object) -> Iterable[dict]:
-        if isinstance(value, dict):
-            yield value
-            for nested in value.values():
-                yield from self._iter_dict_records(nested)
-        elif isinstance(value, list):
-            for item in value:
-                yield from self._iter_dict_records(item)
 
     @staticmethod
     def to_float(value: object) -> float | None:

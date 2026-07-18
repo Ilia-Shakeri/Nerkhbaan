@@ -1,8 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { Mail, Phone, MapPin, MessageSquare } from 'lucide-react';
 
 export function ContactView() {
+  const navigate = useNavigate();
   const { language, theme } = useAppContext();
   const isDark = theme === 'dark';
 
@@ -16,7 +18,7 @@ export function ContactView() {
     emailValue: { fa: 'support@nerkhbaan.com', en: 'support@nerkhbaan.com' },
     phoneValue: { fa: '+98 21 1234 5678', en: '+98 21 1234 5678' },
     addressValue: { fa: 'تهران، ایران', en: 'Tehran, Iran' },
-    supportValue: { fa: '۲۴/۷ پشتیبانی آنلاین', en: '24/7 Online Support' }
+    supportValue: { fa: 'ورود به مرکز پشتیبانی', en: 'Open Support Center' }
   };
 
   return (
@@ -91,7 +93,7 @@ export function ContactView() {
           </p>
         </div>
 
-        <div className={`rounded-2xl border p-6 transition-all ${
+        <button type="button" onClick={() => navigate('/support')} className={`rounded-2xl border p-6 text-start transition-all ${
           isDark 
             ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40 hover:bg-[#0E0E0E]/60' 
             : 'border-[#D4AF37]/30 bg-white/50 hover:bg-white/80'
@@ -109,7 +111,7 @@ export function ContactView() {
           <p className={`text-sm ${isDark ? 'text-[#A89668]' : 'text-[#8A6B20]'}`}>
             {t.supportValue[language]}
           </p>
-        </div>
+        </button>
       </div>
     </div>
   );

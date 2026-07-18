@@ -1,174 +1,243 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'motion/react';
-import { Moon, Sun, Languages, Bell, Smartphone, Mail, Send, Activity, ShieldCheck, LifeBuoy } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
+import { Bell, CheckCircle2, Languages, LifeBuoy, Loader2, Mail, Moon, Repeat, Send, ShieldCheck, Smartphone, Sun, VolumeX } from 'lucide-react';
+import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
+import { Input } from '@nerkhbaan/ui/app/components/ui/input';
+import { Button } from '@nerkhbaan/ui/app/components/ui/button';
+import { toast } from 'sonner';
 import { useAppContext } from '../context/AppContext';
+import { api, type NotificationPreferences } from '../services/api';
+
+const emptyPreferences: NotificationPreferences = {
+  push_app: false,
+  sms_enabled: false,
+  sms_phone: null,
+  sms_verified: false,
+  email_enabled: false,
+  email_address: null,
+  email_verified: false,
+  telegram_enabled: false,
+  telegram_id: null,
+  telegram_verified: false,
+  silent_mode: false,
+  aggressive_alerts: false,
+  push_available: false,
+  email_available: false,
+  sms_available: false,
+  telegram_available: false,
+};
+
+type VerifyChannel = 'sms' | 'email';
 
 export function SettingsView() {
   const navigate = useNavigate();
-  const { language, theme, toggleTheme, toggleLanguage } = useAppContext();
+  const { language, theme, toggleLanguage, toggleTheme } = useAppContext();
+  const isDark = theme === 'dark';
+  const [prefs, setPrefs] = useState<NotificationPreferences>(emptyPreferences);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [verifyChannel, setVerifyChannel] = useState<VerifyChannel | null>(null);
+  const [destination, setDestination] = useState('');
+  const [code, setCode] = useState('');
+  const [codeSent, setCodeSent] = useState(false);
+  const [telegramId, setTelegramId] = useState('');
+  const [telegramCode, setTelegramCode] = useState('');
+  const [telegramCodeSent, setTelegramCodeSent] = useState(false);
 
   const t = {
     general: { fa: 'عمومی', en: 'General' },
     notifications: { fa: 'اطلاع‌رسانی', en: 'Notifications' },
-    behavior: { fa: 'رفتار برنامه', en: 'Behavior' },
+    behavior: { fa: 'رفتار هشدار', en: 'Alert behavior' },
+    dark: { fa: 'حالت تاریک', en: 'Dark theme' },
+    language: { fa: 'زبان برنامه', en: 'App language' },
+    push: { fa: 'اعلان درون برنامه', en: 'In-app notifications' },
+    sms: { fa: 'پیامک', en: 'SMS' },
+    email: { fa: 'ایمیل', en: 'Email' },
+    telegram: { fa: 'تلگرام', en: 'Telegram' },
+    silent: { fa: 'حالت بی‌صدا', en: 'Silent mode' },
+    repeat: { fa: 'هشدار مکرر', en: 'Recurring alerts' },
+    verified: { fa: 'تأیید شده', en: 'Verified' },
+    unverified: { fa: 'تأیید نشده', en: 'Not verified' },
+    configure: { fa: 'تنظیم', en: 'Configure' },
+    disable: { fa: 'غیرفعال', en: 'Disable' },
+    send: { fa: 'ارسال کد', en: 'Send code' },
+    confirm: { fa: 'تأیید', en: 'Confirm' },
+    cancel: { fa: 'انصراف', en: 'Cancel' },
     support: { fa: 'پشتیبانی', en: 'Support' },
-    darkTheme: { fa: 'حالت تاریک', en: 'Dark Theme' },
-    languageSet: { fa: 'زبان برنامه', en: 'App Language' },
-    pushApp: { fa: 'اعلان درون‌برنامه‌ای (Push)', en: 'In-App Push' },
-    sms: { fa: 'پیامک (SMS)', en: 'SMS Notifications' },
-    email: { fa: 'ایمیل', en: 'Email Notifications' },
-    telegram: { fa: 'ربات تلگرام', en: 'Telegram Bot' },
-    aggressive: { fa: 'حالت هشدار مکرر', en: 'Aggressive Alerts' },
-    silent: { fa: 'حالت بی‌صدا', en: 'Silent Mode' },
-    contact: { fa: 'تماس با ما', en: 'Contact Us' },
-    privacy: { fa: 'حریم خصوصی', en: 'Privacy Policy' },
+    privacy: { fa: 'حریم خصوصی', en: 'Privacy' },
   };
 
+  useEffect(() => {
+    let active = true;
+    api.notifications.preferences()
+      .then((value) => {
+        if (active) {
+          setPrefs(value);
+          setTelegramId(value.telegram_id ?? '');
+        }
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : 'Failed to load settings'))
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const setBasic = async (key: 'push_app' | 'silent_mode' | 'aggressive_alerts', enabled: boolean) => {
+    const previous = prefs;
+    setPrefs((current) => ({ ...current, [key]: enabled }));
+    try {
+      setPrefs(await api.notifications.setBasic(key, enabled));
+    } catch (error) {
+      setPrefs(previous);
+      toast.error(error instanceof Error ? error.message : 'Failed to save setting');
+    }
+  };
+
+  const disableChannel = async (channel: VerifyChannel | 'telegram') => {
+    try {
+      setPrefs(await api.notifications.disable(channel));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to disable channel');
+    }
+  };
+
+  const startVerification = async () => {
+    if (!verifyChannel || !destination.trim()) return;
+    setIsSaving(true);
+    try {
+      await api.notifications.startOtp(verifyChannel, destination.trim());
+      setCodeSent(true);
+      toast.success(language === 'fa' ? 'کد ارسال شد' : 'Verification code sent');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Channel is unavailable');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const confirmVerification = async () => {
+    if (!verifyChannel || !destination.trim() || !code.trim()) return;
+    setIsSaving(true);
+    try {
+      setPrefs(await api.notifications.confirmOtp(verifyChannel, destination.trim(), code.trim()));
+      setVerifyChannel(null);
+      setDestination('');
+      setCode('');
+      setCodeSent(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Verification failed');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const saveTelegram = async () => {
+    if (!telegramId.trim()) return;
+    setIsSaving(true);
+    try {
+      setPrefs(await api.notifications.setTelegram(telegramId.trim()));
+      setTelegramCodeSent(true);
+      toast.success(language === 'fa' ? 'کد تأیید ارسال شد' : 'Verification code sent');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Telegram is unavailable');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const confirmTelegram = async () => {
+    if (!/^\d{6}$/.test(telegramCode.trim())) return;
+    setIsSaving(true);
+    try {
+      setPrefs(await api.notifications.confirmTelegram(telegramCode.trim()));
+      setTelegramCode('');
+      setTelegramCodeSent(false);
+      toast.success(t.verified[language]);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Verification failed');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const heading = 'mb-4 flex items-center gap-2 text-xl font-bold tracking-tight text-[#0B1F3A] dark:text-white';
+  const row = 'flex items-center justify-between gap-4 p-5';
+
+  if (isLoading) return <div className="flex min-h-64 items-center justify-center"><Loader2 className="animate-spin text-[#D4AF37]" /></div>;
+
   return (
-    <div className="mx-auto max-w-4xl space-y-8 pb-10">
-      
-      {/* General Settings */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-        <h2 className="mb-4 text-xl font-bold tracking-tight text-[#0B1F3A] dark:text-white flex items-center gap-2">
-          <Activity className="text-[#D4AF37]" size={24} />
-          {t.general[language]}
-        </h2>
+    <div className="mx-auto max-w-4xl space-y-8">
+      <section>
+        <h2 className={heading}><Sun className="text-[#D4AF37]" size={22} />{t.general[language]}</h2>
         <Card className="divide-y divide-slate-100 dark:divide-white/5">
-          <div className="flex items-center justify-between p-5">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300">
-                {theme === 'dark' ? <Moon size={20} /> : <Sun size={20} />}
-              </div>
-              <div className="flex flex-col">
-                <span className="font-semibold text-slate-900 dark:text-white">{t.darkTheme[language]}</span>
-                <span className="text-sm text-slate-500 dark:text-slate-400">تغییر ظاهر برنامه به حالت شب</span>
-              </div>
-            </div>
-            <Switch checked={theme === 'dark'} onCheckedChange={toggleTheme} />
+          <div className={row}>
+            <div className="flex items-center gap-3"><Moon size={20} /><span className="font-semibold">{t.dark[language]}</span></div>
+            <Switch checked={isDark} onCheckedChange={toggleTheme} />
           </div>
-          
-          <div className="flex items-center justify-between p-5">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300">
-                <Languages size={20} />
-              </div>
-              <div className="flex flex-col">
-                <span className="font-semibold text-slate-900 dark:text-white">{t.languageSet[language]}</span>
-                <span className="text-sm text-slate-500 dark:text-slate-400">فارسی / English</span>
-              </div>
-            </div>
-            <button
-              onClick={toggleLanguage}
-              className="flex items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold transition-colors hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20"
-            >
-              {language === 'fa' ? 'English' : 'فارسی'}
-            </button>
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* Notification Channels */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-        <h2 className="mb-4 text-xl font-bold tracking-tight text-[#0B1F3A] dark:text-white flex items-center gap-2">
-          <Bell className="text-[#D4AF37]" size={24} />
-          {t.notifications[language]}
-        </h2>
-        <Card className="divide-y divide-slate-100 dark:divide-white/5">
-          <div className="flex items-center justify-between p-5">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400">
-                <Bell size={20} />
-              </div>
-              <span className="font-semibold text-slate-900 dark:text-white">{t.pushApp[language]}</span>
-            </div>
-            <Switch checked={true} onCheckedChange={() => {}} />
-          </div>
-          
-          <div className="flex items-center justify-between p-5">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
-                <Smartphone size={20} />
-              </div>
-              <span className="font-semibold text-slate-900 dark:text-white">{t.sms[language]}</span>
-            </div>
-            <Switch checked={false} onCheckedChange={() => {}} />
-          </div>
-
-          <div className="flex items-center justify-between p-5">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400">
-                <Mail size={20} />
-              </div>
-              <span className="font-semibold text-slate-900 dark:text-white">{t.email[language]}</span>
-            </div>
-            <Switch checked={false} onCheckedChange={() => {}} />
-          </div>
-
-          <div className="flex items-center justify-between p-5">
-            <div className="flex items-center gap-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-400">
-                <Send size={20} />
-              </div>
-              <span className="font-semibold text-slate-900 dark:text-white">{t.telegram[language]}</span>
-            </div>
-            <Switch checked={true} onCheckedChange={() => {}} />
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* Behavior */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <h2 className="mb-4 text-xl font-bold tracking-tight text-[#0B1F3A] dark:text-white flex items-center gap-2">
-          <Activity className="text-[#D4AF37]" size={24} />
-          {t.behavior[language]}
-        </h2>
-        <Card className="divide-y divide-slate-100 dark:divide-white/5">
-          <div className="flex items-center justify-between p-5">
-            <div className="flex items-center gap-4">
-              <div className="flex flex-col">
-                <span className="font-semibold text-slate-900 dark:text-white">{t.silent[language]}</span>
-                <span className="text-sm text-slate-500 dark:text-slate-400">عدم پخش صدا برای هشدارها</span>
-              </div>
-            </div>
-            <Switch checked={false} onCheckedChange={() => {}} />
-          </div>
-          <div className="flex items-center justify-between p-5">
-            <div className="flex items-center gap-4">
-              <div className="flex flex-col">
-                <span className="font-semibold text-slate-900 dark:text-white">{t.aggressive[language]}</span>
-                <span className="text-sm text-slate-500 dark:text-slate-400">تکرار هشدار تا زمان مشاهده</span>
-              </div>
-            </div>
-            <Switch checked={true} onCheckedChange={() => {}} />
-          </div>
-        </Card>
-      </motion.div>
-
-      {/* Support */}
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-        <h2 className="mb-4 text-xl font-bold tracking-tight text-[#0B1F3A] dark:text-white flex items-center gap-2">
-          <LifeBuoy className="text-[#D4AF37]" size={24} />
-          {t.support[language]}
-        </h2>
-        <Card className="divide-y divide-slate-100 dark:divide-white/5">
-          <button onClick={() => navigate('/contact')} className="flex w-full items-center gap-4 p-5 text-start transition-colors hover:bg-slate-50 dark:hover:bg-white/5">
-             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300">
-                <LifeBuoy size={20} />
-             </div>
-             <span className="font-semibold text-slate-900 dark:text-white">{t.contact[language]}</span>
-          </button>
-          <button onClick={() => navigate('/privacy')} className="flex w-full items-center gap-4 p-5 text-start transition-colors hover:bg-slate-50 dark:hover:bg-white/5">
-             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-700 dark:bg-white/5 dark:text-slate-300">
-                <ShieldCheck size={20} />
-             </div>
-             <span className="font-semibold text-slate-900 dark:text-white">{t.privacy[language]}</span>
+          <button type="button" onClick={toggleLanguage} className={`${row} w-full text-start`}>
+            <div className="flex items-center gap-3"><Languages size={20} /><span className="font-semibold">{t.language[language]}</span></div>
+            <span className="text-sm text-[#D4AF37]">{language === 'fa' ? 'English' : 'فارسی'}</span>
           </button>
         </Card>
-      </motion.div>
+      </section>
 
+      <section>
+        <h2 className={heading}><Bell className="text-[#D4AF37]" size={22} />{t.notifications[language]}</h2>
+        <Card className="divide-y divide-slate-100 dark:divide-white/5">
+          <div className={row}>
+            <div className="flex items-center gap-3"><Bell size={20} /><span className="font-semibold">{t.push[language]}</span></div>
+            <Switch disabled={!prefs.push_available} checked={prefs.push_available && prefs.push_app} onCheckedChange={(value) => void setBasic('push_app', value)} />
+          </div>
+          {(['email', 'sms'] as const).map((channel) => {
+            const enabled = channel === 'email' ? prefs.email_enabled : prefs.sms_enabled;
+            const verified = channel === 'email' ? prefs.email_verified : prefs.sms_verified;
+            const value = channel === 'email' ? prefs.email_address : prefs.sms_phone;
+            const Icon = channel === 'email' ? Mail : Smartphone;
+            return (
+              <div key={channel} className={row}>
+                <div className="flex items-center gap-3">
+                  <Icon size={20} />
+                  <div><div className="font-semibold">{t[channel][language]}</div><div className="text-xs text-slate-500" dir="ltr">{value ?? t.unverified[language]}</div></div>
+                </div>
+                <Button variant="ghost" disabled={channel === 'email' ? !prefs.email_available : !prefs.sms_available} onClick={() => enabled ? void disableChannel(channel) : setVerifyChannel(channel)}>
+                  {enabled && verified ? t.disable[language] : t.configure[language]}
+                </Button>
+              </div>
+            );
+          })}
+          <div className={`${row} flex-wrap`}>
+            <div className="flex items-center gap-3"><Send size={20} /><div><div className="font-semibold">{t.telegram[language]}</div><div className="text-xs text-slate-500">{prefs.telegram_verified ? t.verified[language] : t.unverified[language]}</div></div></div>
+            <div className="flex gap-2"><Input disabled={!prefs.telegram_available} value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="@username" dir="ltr" className="w-40" /><Button variant="ghost" disabled={isSaving || !prefs.telegram_available} onClick={() => prefs.telegram_enabled ? void disableChannel('telegram') : void saveTelegram()}>{prefs.telegram_enabled ? t.disable[language] : t.configure[language]}</Button></div>
+            {telegramCodeSent && <div className="flex w-full justify-end gap-2"><Input value={telegramCode} onChange={(event) => setTelegramCode(event.target.value)} placeholder="123456" dir="ltr" className="w-40" /><Button variant="primary" disabled={isSaving || !/^\d{6}$/.test(telegramCode)} onClick={() => void confirmTelegram()}>{t.confirm[language]}</Button></div>}
+          </div>
+        </Card>
+      </section>
+
+      {verifyChannel && (
+        <Card className="space-y-3 border-[#D4AF37]/30 p-5">
+          <div className="font-semibold">{t[verifyChannel][language]}</div>
+          <Input value={destination} onChange={(event) => setDestination(event.target.value)} dir="ltr" placeholder={verifyChannel === 'email' ? 'name@example.com' : '+989121234567'} />
+          {codeSent && <Input value={code} onChange={(event) => setCode(event.target.value)} dir="ltr" placeholder="123456" />}
+          <div className="flex gap-2"><Button variant="primary" disabled={isSaving} onClick={() => void (codeSent ? confirmVerification() : startVerification())}>{codeSent ? t.confirm[language] : t.send[language]}</Button><Button variant="ghost" onClick={() => setVerifyChannel(null)}>{t.cancel[language]}</Button></div>
+        </Card>
+      )}
+
+      <section>
+        <h2 className={heading}><Repeat className="text-[#D4AF37]" size={22} />{t.behavior[language]}</h2>
+        <Card className="divide-y divide-slate-100 dark:divide-white/5">
+          <div className={row}><div className="flex items-center gap-3"><VolumeX size={20} /><span className="font-semibold">{t.silent[language]}</span></div><Switch checked={prefs.silent_mode} onCheckedChange={(value) => void setBasic('silent_mode', value)} /></div>
+          <div className={row}><div className="flex items-center gap-3"><Repeat size={20} /><span className="font-semibold">{t.repeat[language]}</span></div><Switch checked={prefs.aggressive_alerts} onCheckedChange={(value) => void setBasic('aggressive_alerts', value)} /></div>
+        </Card>
+      </section>
+
+      <section>
+        <h2 className={heading}><LifeBuoy className="text-[#D4AF37]" size={22} />{t.support[language]}</h2>
+        <Card className="divide-y divide-slate-100 dark:divide-white/5"><button className={`${row} w-full text-start`} onClick={() => navigate('/support')}><LifeBuoy size={20} /><span className="flex-1 font-semibold">{t.support[language]}</span></button><button className={`${row} w-full text-start`} onClick={() => navigate('/privacy')}><ShieldCheck size={20} /><span className="flex-1 font-semibold">{t.privacy[language]}</span></button></Card>
+      </section>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { api } from '../services/api';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import { Link, useNavigate } from 'react-router-dom';
 import logo from '../../logo/logo.png';
 
@@ -50,7 +50,6 @@ export function ForgotPasswordView() {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      // Connects to existing endpoint logic
       await api.auth.forgotPassword(email);
       toast.success(language === 'fa' ? 'کد بازیابی ارسال شد' : 'Recovery code sent');
       setStep(2);
@@ -64,14 +63,16 @@ export function ForgotPasswordView() {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    // Prepared for SMTP API linking
     try {
-      setTimeout(() => {
-        setStep(3);
-        setIsSubmitting(false);
-      }, 1000);
+      await api.auth.resetPassword({
+        email: email.trim(),
+        code: code.trim(),
+        new_password: newPassword,
+      });
+      setStep(3);
     } catch (error: any) {
       toast.error(error.message || 'Error resetting password');
+    } finally {
       setIsSubmitting(false);
     }
   };

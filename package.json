@@ -8,10 +8,12 @@
   "scripts": {
     "dev:api": "cd apps/api && (venv/Scripts/uvicorn.exe app.main:app --reload --host 0.0.0.0 --port 8000 || venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000)",
     "dev:web": "npm run dev --workspace=nerkhbaan-web",
+    "dev:admin": "npm run dev --workspace=nerkhbaan-admin-web",
     "dev:desktop": "npm run dev --workspace=nerkhbaan-desktop",
     "dev:all": "concurrently \"npm run dev:api\" \"npm run dev:web\" \"npm run dev:desktop\"",
     "build:web": "npm run build --workspace=nerkhbaan-web",
-    "build:desktop": "npm run build --workspace=nerkhbaan-desktop"
+    "build:desktop": "npm run build --workspace=nerkhbaan-desktop",
+    "build:admin": "npm run build --workspace=nerkhbaan-admin-web"
   },
   "devDependencies": {
     "electron": "^42.4.1"

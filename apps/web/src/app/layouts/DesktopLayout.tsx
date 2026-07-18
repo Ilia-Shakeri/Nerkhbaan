@@ -27,6 +27,7 @@ import { UserInfoModal } from '../components/UserInfoModal';
 import { ChangePasswordModal } from '../components/ChangePasswordModal';
 import logo from '../../logo/logo.png';
 import { BarChart3 } from 'lucide-react';
+import { api, type NotificationItem } from '../services/api';
 
 const NAV_ITEMS = [
   { path: '/', label: { fa: 'داشبورد', en: 'Dashboard' }, icon: LayoutDashboard },
@@ -49,6 +50,9 @@ export function DesktopLayout() {
   const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsUnavailable, setNotificationsUnavailable] = useState(false);
 
   useEffect(() => {
     const showApiError = (event: Event) => {
@@ -74,32 +78,35 @@ export function DesktopLayout() {
     };
   }, []);
 
-  const apiError = Object.values(apiErrors).at(-1) ?? null;
+  useEffect(() => {
+    if (!isNotificationsOpen || !isAuthenticated) return;
+    let active = true;
+    setNotificationsLoading(true);
+    setNotificationsUnavailable(false);
+    api.notifications.list()
+      .then((items) => {
+        if (active) setNotifications(items);
+      })
+      .catch(() => {
+        if (active) {
+          setNotifications([]);
+          setNotificationsUnavailable(true);
+        }
+      })
+      .finally(() => {
+        if (active) setNotificationsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isAuthenticated, isNotificationsOpen]);
+
+  const apiErrorValues = Object.values(apiErrors);
+  const apiError = apiErrorValues.length > 0 ? apiErrorValues[apiErrorValues.length - 1] : null;
 
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
-
-  const notifications = [
-    {
-      id: 1,
-      title: {
-        fa: 'قیمت طلا به حد مورد نظر رسید 🔔',
-        en: 'Gold reached your target price 🔔'
-      },
-      time: { fa: '۱۰ دقیقه پیش', en: '10 minutes ago' },
-      read: false
-    },
-    {
-      id: 2,
-      title: {
-        fa: 'بیت‌کوین از ۶۵,۰۰۰ عبور کرد 🚀',
-        en: 'Bitcoin crossed 65,000 🚀'
-      },
-      time: { fa: '۱ ساعت پیش', en: '1 hour ago' },
-      read: true
-    }
-  ];
 
   const hasDegradedSources = false;
 
@@ -317,7 +324,9 @@ export function DesktopLayout() {
                 }`}
               >
                 <Bell size={20} />
-                <span className="absolute right-2.5 top-2.5 flex h-2 w-2 rounded-full bg-[#EF4444] shadow-[0_0_8px_0_rgba(239,68,68,0.8)]" />
+                {notifications.some((item) => !item.read_at) && (
+                  <span className="absolute right-2.5 top-2.5 flex h-2 w-2 rounded-full bg-[#EF4444] shadow-[0_0_8px_0_rgba(239,68,68,0.8)]" />
+                )}
               </button>
 
               {/* Notifications Dropdown */}
@@ -352,23 +361,45 @@ export function DesktopLayout() {
                       )}
 
                       <div className="space-y-1">
+                        {notificationsLoading && (
+                          <div className={`p-4 text-center text-xs ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'}`}>
+                            {language === 'fa' ? 'در حال دریافت...' : 'Loading...'}
+                          </div>
+                        )}
+                        {!notificationsLoading && notificationsUnavailable && (
+                          <div className={`p-4 text-center text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                            {language === 'fa' ? 'سرویس اعلان در دسترس نیست.' : 'Notification service is unavailable.'}
+                          </div>
+                        )}
+                        {!notificationsLoading && !notificationsUnavailable && notifications.length === 0 && (
+                          <div className={`p-4 text-center text-xs ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'}`}>
+                            {language === 'fa' ? 'اعلان تازه‌ای نیست.' : 'No notifications yet.'}
+                          </div>
+                        )}
                         {notifications.map((notif) => (
-                          <div
+                          <button
                             key={notif.id}
+                            type="button"
+                            onClick={() => {
+                              if (notif.read_at) return;
+                              void api.notifications.markRead(notif.id).then((updated) => {
+                                setNotifications((current) => current.map((item) => item.id === notif.id ? updated : item));
+                              }).catch(() => setNotificationsUnavailable(true));
+                            }}
                             className={`relative flex cursor-pointer flex-col gap-1 rounded-xl p-3 text-sm transition-colors ${
                               isDark ? 'hover:bg-[#171717]' : 'hover:bg-[#F2E4BC]'
-                            }`}
+                            } w-full text-start`}
                           >
-                            {!notif.read && (
+                            {!notif.read_at && (
                               <span className="absolute start-1.5 top-3.5 h-1.5 w-1.5 rounded-full bg-[#EF4444]" />
                             )}
-                            <div className={`font-medium ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'} ${!notif.read ? 'ps-3' : ''}`}>
-                              {notif.title[language]}
+                            <div className={`font-medium ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'} ${!notif.read_at ? 'ps-3' : ''}`}>
+                              {notif.title || notif.message}
                             </div>
-                            <div className={`text-xs ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'} ${!notif.read ? 'ps-3' : ''}`}>
-                              {notif.time[language]}
+                            <div className={`text-xs ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'} ${!notif.read_at ? 'ps-3' : ''}`}>
+                              {new Date(notif.created_at).toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}
                             </div>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </motion.div>

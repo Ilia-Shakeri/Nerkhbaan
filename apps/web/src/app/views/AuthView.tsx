@@ -90,7 +90,7 @@ export function AuthView() {
           username_or_email: identifier.trim(),
           password
         });
-        login(response.access_token);
+        login(response.user);
         toast.success(t.success[language]);
       } else {
         const response = await api.auth.signup({
@@ -99,7 +99,7 @@ export function AuthView() {
           email: email.trim(),
           password
         });
-        login(response.access_token);
+        login(response.user);
         toast.success(t.created[language]);
       }
       navigate('/');

@@ -14,18 +14,25 @@ if (envApiUrl) {
 
 export const apiInstance = axios.create({
   baseURL,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-apiInstance.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+let refreshRequest: Promise<boolean> | null = null;
+
+async function refreshSession(): Promise<boolean> {
+  if (refreshRequest) return refreshRequest;
+  refreshRequest = axios
+    .post(`${baseURL}auth/refresh`, {}, { withCredentials: true })
+    .then(() => true)
+    .catch(() => false)
+    .finally(() => {
+      refreshRequest = null;
+    });
+  return refreshRequest;
+}
 
 apiInstance.interceptors.response.use(
   (response) => {
@@ -35,8 +42,13 @@ apiInstance.interceptors.response.use(
     return response;
   },
   async (error) => {
-    console.error('API Error:', error.response?.data || error.message);
-    
+    const requestConfig = error.config as (typeof error.config & { _sessionRetry?: boolean }) | undefined;
+    const requestUrl = String(requestConfig?.url || '');
+    const publicAuthRequest = /auth\/(signin|signup|refresh|forgot-password|reset-password)/.test(requestUrl);
+    if (error.response?.status === 401 && requestConfig && !requestConfig._sessionRetry && !publicAuthRequest) {
+      requestConfig._sessionRetry = true;
+      if (await refreshSession()) return apiInstance.request(requestConfig);
+    }
     let message = error.message || 'An unexpected error occurred.';
     if (error.response) {
       if (error.response.status === 401) {
@@ -67,11 +79,13 @@ export type UserProfile = {
   username: string;
   full_name: string;
   email: string;
+  is_active: boolean;
+  must_change_password: boolean;
   created_at: string;
 };
 
 export type AuthResponse = {
-  access_token: string;
+  access_token?: string;
   token_type: 'bearer';
   user: UserProfile;
 };
@@ -98,6 +112,9 @@ export const api = {
     },
     async changePassword(payload: { current_password: string; new_password: string }): Promise<void> {
       await apiInstance.post('auth/change-password', payload);
+    },
+    async signout(): Promise<void> {
+      await apiInstance.post('auth/signout');
     },
   },
   support: {
@@ -157,6 +174,18 @@ export const api = {
     },
   },
   notifications: {
+    async list(): Promise<NotificationItem[]> {
+      const { data } = await apiInstance.get<NotificationItem[] | { items?: NotificationItem[]; notifications?: NotificationItem[] }>('notifications');
+      if (Array.isArray(data)) return data;
+      return data.notifications ?? data.items ?? [];
+    },
+    async markRead(id: number | string): Promise<NotificationItem> {
+      const { data } = await apiInstance.patch<NotificationItem>(`notifications/${encodeURIComponent(String(id))}/read`);
+      return data;
+    },
+    async readAll(): Promise<void> {
+      await apiInstance.post('notifications/read-all');
+    },
     async preferences(): Promise<NotificationPreferences> {
       const { data } = await apiInstance.get<NotificationPreferences>('notifications/preferences');
       return data;
@@ -179,6 +208,47 @@ export const api = {
     },
     async disable(channel: 'sms' | 'email' | 'telegram'): Promise<NotificationPreferences> {
       const { data } = await apiInstance.delete<NotificationPreferences>(`notifications/${channel}`);
+      return data;
+    },
+    async confirmTelegram(code: string): Promise<NotificationPreferences> {
+      const { data } = await apiInstance.post<NotificationPreferences>('notifications/telegram/confirm', { code });
+      return data;
+    },
+  },
+  instruments: {
+    async list(): Promise<InstrumentSummary[]> {
+      const { data } = await apiInstance.get<InstrumentSummary[] | { instruments?: InstrumentSummary[]; items?: InstrumentSummary[] }>('instruments');
+      if (Array.isArray(data)) return data;
+      return data.instruments ?? data.items ?? [];
+    },
+    async get(instrumentId: string): Promise<InstrumentSummary> {
+      const { data } = await apiInstance.get<InstrumentSummary>(`instruments/${encodeURIComponent(instrumentId)}`);
+      return data;
+    },
+    async sources(instrumentId: string): Promise<InstrumentSourcesResponse> {
+      const { data } = await apiInstance.get<InstrumentSourcesResponse | InstrumentSourceQuote[] | { data?: InstrumentSourcesResponse }>(`instruments/${encodeURIComponent(instrumentId)}/sources`);
+      if (Array.isArray(data)) return { instrument_id: instrumentId, sources: data };
+      const payload = 'data' in data && data.data ? data.data : data as InstrumentSourcesResponse;
+      return { ...payload, instrument_id: payload.instrument_id ?? instrumentId, sources: Array.isArray(payload.sources) ? payload.sources : [] };
+    },
+    async history(instrumentId: string, timeframe: PriceTimeframe = '24h'): Promise<InstrumentHistoryResponse> {
+      const { data } = await apiInstance.get<InstrumentHistoryResponse>(`instruments/${encodeURIComponent(instrumentId)}/history`, {
+        params: { timeframe },
+      });
+      return data;
+    },
+    async sourceHistory(instrumentId: string, timeframe: PriceTimeframe = '24h'): Promise<InstrumentSourceHistoryResponse> {
+      const { data } = await apiInstance.get<InstrumentSourceHistoryResponse>(`instruments/${encodeURIComponent(instrumentId)}/sources/history`, {
+        params: { timeframe },
+      });
+      return data;
+    },
+    async verification(instrumentId: string): Promise<InstrumentVerification> {
+      const { data } = await apiInstance.get<InstrumentVerification>(`instruments/${encodeURIComponent(instrumentId)}/verification`);
+      return data;
+    },
+    async health(instrumentId: string): Promise<Record<string, unknown>> {
+      const { data } = await apiInstance.get<Record<string, unknown>>(`instruments/${encodeURIComponent(instrumentId)}/health`);
       return data;
     },
   },
@@ -223,6 +293,112 @@ export type NotificationPreferences = {
   telegram_verified: boolean;
   silent_mode: boolean;
   aggressive_alerts: boolean;
+  push_available: boolean;
+  email_available: boolean;
+  sms_available: boolean;
+  telegram_available: boolean;
+};
+
+export type NotificationItem = {
+  id: number | string;
+  title: string;
+  message: string;
+  created_at: string;
+  read_at?: string | null;
+  severity?: 'info' | 'success' | 'warning' | 'error';
+};
+
+export type OperationalPriceStatus =
+  | 'live'
+  | 'fresh_cache'
+  | 'cached'
+  | 'verifying'
+  | 'suspicious'
+  | 'suspicious_unconfirmed'
+  | 'derived_fallback'
+  | 'stale'
+  | 'expired'
+  | 'unpersisted'
+  | 'unavailable';
+
+export type InstrumentSummary = {
+  instrument_id: string;
+  base_asset: string;
+  quote_currency: string;
+  market?: string;
+  region?: string;
+  weight_unit?: string | null;
+  purity?: string | number | null;
+  display_decimals?: number;
+  price?: number | null;
+  canonical_price?: number | null;
+  candidate_price?: number | null;
+  status?: OperationalPriceStatus;
+  source_summary?: string | Record<string, unknown> | null;
+  observed_at?: string | null;
+  canonical_at?: string | null;
+  age_seconds?: number | null;
+  stale_at?: string | null;
+  expires_at?: string | null;
+  is_persisted?: boolean;
+  verification_status?: string | null;
+};
+
+export type InstrumentSourceQuote = {
+  id?: number | string;
+  provider_id?: string;
+  provider_name?: string;
+  role?: 'primary' | 'verifier' | 'fallback' | 'derived' | string;
+  price: number | null;
+  status?: OperationalPriceStatus | 'rejected';
+  observed_at?: string | null;
+  received_at?: string | null;
+  age_seconds?: number | null;
+  difference_percent?: number | null;
+  is_direct?: boolean;
+  is_derived?: boolean;
+  is_suspicious?: boolean;
+  rejection_reason?: string | null;
+  currency?: string;
+  weight_unit?: string | null;
+  purity?: string | number | null;
+};
+
+export type InstrumentSourcesResponse = {
+  instrument_id: string;
+  status?: OperationalPriceStatus;
+  canonical_price?: number | null;
+  candidate_price?: number | null;
+  candidate_provider?: string | null;
+  candidate_observed_at?: string | null;
+  difference_percent?: number | null;
+  verification_status?: string | null;
+  sources: InstrumentSourceQuote[];
+};
+
+export type InstrumentSourceHistoryResponse = {
+  instrument_id: string;
+  timeframe?: string;
+  status?: 'complete' | 'partial' | string;
+  sources: Array<{ provider_id: string; provider_name?: string; points: Array<{ timestamp: string; value: number }> }>;
+};
+
+export type InstrumentHistoryResponse = {
+  instrument_id: string;
+  timeframe?: string;
+  status?: 'complete' | 'partial' | string;
+  points: Array<{ timestamp: string; value: number; status?: OperationalPriceStatus }>;
+};
+
+export type InstrumentVerification = {
+  instrument_id: string;
+  status: string;
+  candidate_price?: number | null;
+  canonical_price?: number | null;
+  candidate_provider?: string | null;
+  difference_percent?: number | null;
+  decision_reason?: string | null;
+  updated_at?: string | null;
 };
 
 export type AlertCreate = {
@@ -259,7 +435,7 @@ export type AlertResponse = {
 export type SupportTicket = {
   id: number;
   subject: string;
-  status: 'open' | 'answered' | 'closed';
+  status: 'open' | 'in_progress' | 'waiting_for_user' | 'answered' | 'resolved' | 'closed';
   date: string;
   last_message: string;
 };
@@ -285,11 +461,20 @@ export type PriceAsset = {
   history: any[];
   source_usd: string;
   source_toman: string;
-  usd_status: 'live' | 'cached' | 'unavailable';
-  toman_status: 'live' | 'cached' | 'unavailable';
+  usd_status: OperationalPriceStatus;
+  toman_status: OperationalPriceStatus;
   stale_minutes: number | null;
   chart_error: boolean;
   chart_error_message: { fa: string; en: string };
+  observed_at?: string | null;
+  canonical_at?: string | null;
+  age_seconds?: number | null;
+  source_summary?: string | Record<string, unknown> | null;
+  candidate_price_usd?: number | null;
+  candidate_price_toman?: number | null;
+  candidate_provider?: string | null;
+  difference_percent?: number | null;
+  verification_status?: string | null;
 };
 
 export type PricePoint = {
@@ -314,7 +499,7 @@ export type PricesResponse = {
   assets: PriceAsset[];
 };
 
-export type PriceTimeframe = '24h' | '7d' | '30d' | '1y';
+export type PriceTimeframe = '1h' | '24h' | '7d' | '30d' | '1y';
 
 export const queryKeys = {
   prices: ['prices'] as const,

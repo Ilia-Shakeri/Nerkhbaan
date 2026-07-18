@@ -1,33 +1,21 @@
-services:
-  redis:
-    image: redis:7-alpine
-    container_name: nerkhbaan-redis
-    restart: unless-stopped
-    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 128mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data:/data
-    networks:
-      - nerkhbaan-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 160M
+x-api-environment: &api-environment
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nerkhbaan}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nerkhbaan}
+  REDIS_URL: redis://redis:6379/0
+  API_HOST: 0.0.0.0
+  API_PORT: 8000
+  FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,172.28.0.0/24}
 
+services:
   postgres:
     image: timescale/timescaledb:latest-pg16
     container_name: nerkhbaan-postgres
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nerkhbaan}
+      POSTGRES_USER: ${POSTGRES_USER:-nerkhbaan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./apps/api/db/init:/docker-entrypoint-initdb.d:ro
     command:
       - postgres
       - -c
@@ -39,22 +27,180 @@ services:
       - -c
       - work_mem=4MB
       - -c
-      - max_connections=50
+      - max_connections=60
     networks:
       - nerkhbaan-network
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-nerkhbaan} -d ${POSTGRES_DB:-nerkhbaan}']
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
     deploy:
       resources:
         limits:
           cpus: "0.75"
           memory: 1536M
 
-  # Automated, scheduled database backups with built-in retention pruning.
-  # Dumps land in the db_backups named volume so they survive container rebuilds.
+  redis:
+    image: redis:7-alpine
+    container_name: nerkhbaan-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis_data:/data
+    networks:
+      - nerkhbaan-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 320M
+
+  migrate:
+    image: nerkhbaan-api:${APP_IMAGE_TAG:-local}
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: nerkhbaan-migrate
+    restart: "no"
+    env_file:
+      - ./.env
+    environment:
+      <<: *api-environment
+      MIGRATIONS_DIR: /app/db/migrations
+    command: ["python", "-m", "app.migrations.runner"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - nerkhbaan-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 384M
+
+  backend:
+    image: nerkhbaan-api:${APP_IMAGE_TAG:-local}
+    container_name: nerkhbaan-backend
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      <<: *api-environment
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - nerkhbaan-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health/ready', timeout=5).status == 200 else 1)"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
+    stop_grace_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.75"
+          memory: 768M
+
+  frontend:
+    image: nerkhbaan-web:${APP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: nerkhbaan-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - nerkhbaan-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 160M
+
+  admin-frontend:
+    profiles: ["admin"]
+    image: nerkhbaan-admin-web:${APP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: apps/admin-web/Dockerfile
+    container_name: nerkhbaan-admin-frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - nerkhbaan-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 160M
+
+  telegram-worker:
+    profiles: ["telegram"]
+    build:
+      context: ./apps/telegram_worker
+      dockerfile: Dockerfile
+    image: nerkhbaan-telegram-worker:${APP_IMAGE_TAG:-local}
+    container_name: nerkhbaan-telegram-worker
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nerkhbaan}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nerkhbaan}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - nerkhbaan-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
   db-backup:
     image: prodrigestivill/postgres-backup-local:16
     container_name: nerkhbaan-db-backup
@@ -63,8 +209,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_DB: ${POSTGRES_DB:-nerkhbaan}
       POSTGRES_USER: ${POSTGRES_USER:-nerkhbaan}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      # Daily at 03:00; keep a small set for the 30 GB VPS disk.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
       SCHEDULE: "0 0 3 * * *"
       BACKUP_KEEP_DAYS: "7"
       BACKUP_KEEP_WEEKS: "2"
@@ -75,6 +220,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - nerkhbaan-network
     deploy:
@@ -82,86 +229,13 @@ services:
         limits:
           cpus: "0.25"
           memory: 256M
-
-  backend:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
-    container_name: nerkhbaan-backend
-    restart: unless-stopped
-    env_file:
-      - ./.env
-    # Published on loopback only; the host nginx reverse-proxies to this port.
-    ports:
-      - "127.0.0.1:8000:8000"
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    networks:
-      - nerkhbaan-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=5).status==200 else 1)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          cpus: "0.75"
-          memory: 640M
-
-  telegram-worker:
-    profiles:
-      - telegram
-    build:
-      context: ./apps/telegram_worker
-      dockerfile: Dockerfile
-    container_name: nerkhbaan-telegram-worker
-    restart: unless-stopped
-    env_file:
-      - ./.env
-    environment:
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nerkhbaan}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nerkhbaan}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - nerkhbaan-network
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 256M
-
-  frontend:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-    container_name: nerkhbaan-frontend
-    restart: unless-stopped
-    env_file:
-      - .env
-    # Published on loopback only; the host nginx reverse-proxies to this port.
-    # Container serves the built site on port 80 internally.
-    ports:
-      - "127.0.0.1:3000:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - nerkhbaan-network
-    deploy:
-      resources:
-        limits:
-          cpus: "0.25"
-          memory: 128M
 
 networks:
   nerkhbaan-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 volumes:
   postgres_data:

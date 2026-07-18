@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..db import get_db
 from ..deps import get_current_user
 from ..models import Alert, User
@@ -19,6 +20,16 @@ def create_alert(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AlertResponse:
+    if payload.notify_sms:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="SMS alert delivery is not configured.",
+        )
+    if payload.notify_telegram and not settings.telegram_alert_delivery_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Telegram alert delivery is not configured.",
+        )
     if payload.alert_type == "formula" and payload.formula:
         try:
             validate_formula(payload.formula)

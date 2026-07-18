@@ -1,6 +1,7 @@
 import hashlib
 import ipaddress
 import logging
+import secrets
 import smtplib
 import ssl
 import threading
@@ -48,9 +49,15 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
         return False
 
 
-def create_access_token(subject: str) -> str:
+def create_access_token(
+    subject: str,
+    *,
+    session_id: str | None = None,
+    security_version: int = 1,
+    expires_minutes: int | None = None,
+) -> str:
     now = datetime.now(timezone.utc)
-    expire = now + timedelta(minutes=settings.jwt_expire_minutes)
+    expire = now + timedelta(minutes=expires_minutes or settings.jwt_expire_minutes)
     payload: dict[str, Any] = {
         "sub": subject,
         "iss": settings.jwt_issuer,
@@ -60,11 +67,14 @@ def create_access_token(subject: str) -> str:
         "exp": expire,
         "jti": uuid.uuid4().hex,
         "type": "access",
+        "sv": security_version,
     }
+    if session_id:
+        payload["sid"] = session_id
     return jwt.encode(payload, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def decode_access_token(token: str) -> str | None:
+def decode_access_claims(token: str) -> dict[str, Any] | None:
     if not token or len(token) > 4096:
         return None
     try:
@@ -89,7 +99,26 @@ def decode_access_token(token: str) -> str | None:
     subject = payload.get("sub")
     if payload.get("type") != "access" or not isinstance(subject, str):
         return None
-    return subject
+    return payload
+
+
+def decode_access_token(token: str) -> str | None:
+    claims = decode_access_claims(token)
+    return str(claims["sub"]) if claims else None
+
+
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def hash_client_value(value: str | None) -> str | None:
+    if not value:
+        return None
+    return hashlib.sha256(value.strip().encode("utf-8")).hexdigest()
 
 
 @dataclass(frozen=True)

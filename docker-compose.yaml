@@ -1,146 +1,147 @@
-﻿services:
+x-api-environment: &api-environment
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nerkhbaan}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nerkhbaan}
+  REDIS_URL: redis://redis:6379/0
+  API_HOST: 0.0.0.0
+  API_PORT: 8000
+  FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,172.28.0.0/24}
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-nerkhbaan}
+      POSTGRES_USER: ${POSTGRES_USER:-nerkhbaan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    command: ["postgres", "-c", "shared_buffers=256MB", "-c", "effective_cache_size=1GB", "-c", "max_connections=60"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [nerkhbaan-network]
+
   redis:
     image: redis:7-alpine
-    container_name: nerkhbaan-redis
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:6379:6379"
-    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 128mb --maxmemory-policy allkeys-lru
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
-      retries: 3
+      retries: 10
+    networks: [nerkhbaan-network]
+
+  migrate:
+    image: nerkhbaan-api:${APP_IMAGE_TAG:-local}
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: "no"
+    env_file: [./.env]
+    environment:
+      <<: *api-environment
+      MIGRATIONS_DIR: /app/db/migrations
+    command: ["python", "-m", "app.migrations.runner"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [nerkhbaan-network]
+
+  backend:
+    image: nerkhbaan-api:${APP_IMAGE_TAG:-local}
+    restart: unless-stopped
+    env_file: [./.env]
+    environment:
+      <<: *api-environment
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health/ready', timeout=5).status == 200 else 1)"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
+    networks: [nerkhbaan-network]
 
   frontend:
-    image: nerkhbaan-frontend
+    image: nerkhbaan-web:${APP_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-    container_name: nerkhbaan-frontend
-    ports:
-      - "127.0.0.1:3000:80"
     restart: unless-stopped
+    ports: ["127.0.0.1:3000:80"]
     depends_on:
-      - backend
-
-  backend:
-    build:
-      context: ./apps/api
-    container_name: nerkhbaan-backend
-    restart: unless-stopped
-    depends_on:
-      redis:
-        condition: service_started
-      postgres:
+      backend:
         condition: service_healthy
-    env_file:
-      - ./.env
-    environment:
-      DATABASE_URL: postgresql+psycopg://nerkhbaan:${POSTGRES_PASSWORD}@postgres:5432/nerkhbaan
-      API_HOST: 0.0.0.0
-      API_PORT: 8000
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
-      REDIS_URL: redis://redis:6379/0
-      ALANCHAND_API_TOKEN: ${ALANCHAND_API_TOKEN:-}
-    ports:
-      - "127.0.0.1:8000:8000"
+    networks: [nerkhbaan-network]
 
-  postgres:
-    image: timescale/timescaledb:latest-pg16
-    container_name: nerkhbaan-postgres
+  admin-frontend:
+    profiles: [admin]
+    image: nerkhbaan-admin-web:${APP_IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: apps/admin-web/Dockerfile
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: nerkhbaan
-      POSTGRES_USER: nerkhbaan
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - '127.0.0.1:5432:5432'
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./apps/api/db/init:/docker-entrypoint-initdb.d:ro
-    command:
-      - postgres
-      - -c
-      - shared_buffers=256MB
-      - -c
-      - effective_cache_size=1GB
-      - -c
-      - work_mem=4MB
-      - -c
-      - max_connections=50
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U nerkhbaan -d nerkhbaan']
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    ports: ["127.0.0.1:3001:80"]
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [nerkhbaan-network]
 
   telegram-worker:
-    profiles:
-      - telegram
+    profiles: [telegram]
+    image: nerkhbaan-telegram-worker:${APP_IMAGE_TAG:-local}
     build:
       context: ./apps/telegram_worker
-    container_name: nerkhbaan-telegram-worker
+      dockerfile: Dockerfile
     restart: unless-stopped
+    env_file: [./.env]
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-nerkhbaan}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-nerkhbaan}
     depends_on:
-      postgres:
-        condition: service_healthy
-    env_file:
-      - ./.env
-    environment:
-      DATABASE_URL: postgresql+psycopg://nerkhbaan:${POSTGRES_PASSWORD}@postgres:5432/nerkhbaan
+      migrate:
+        condition: service_completed_successfully
+    networks: [nerkhbaan-network]
 
-  # CI/CD Services
-  gitea:
-    profiles:
-      - devops
-    image: gitea/gitea:1.21.11
-    container_name: nerkhbaan-gitea
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:16
     restart: unless-stopped
     environment:
-      - USER_UID=1000
-      - USER_GID=1000
-      - GITEA__database__DB_TYPE=sqlite3
-      - GITEA__server__DOMAIN=git.nerkhbaan.ir
-      - GITEA__server__SSH_DOMAIN=git.nerkhbaan.ir
-      - GITEA__server__ROOT_URL=https://git.nerkhbaan.ir/
-    ports:
-      - "127.0.0.1:3001:3000"
-      - "127.0.0.1:2222:22"
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-nerkhbaan}
+      POSTGRES_USER: ${POSTGRES_USER:-nerkhbaan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      SCHEDULE: "0 0 3 * * *"
+      BACKUP_KEEP_DAYS: "7"
+      BACKUP_KEEP_WEEKS: "2"
+      BACKUP_KEEP_MONTHS: "2"
     volumes:
-      - ./gitea_data:/data
-      - /etc/timezone:/etc/timezone:ro
-      - /etc/localtime:/etc/localtime:ro
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-
-  gitea-runner:
-    profiles:
-      - devops
-    image: gitea/act_runner:nightly
-    container_name: nerkhbaan-gitea-runner
-    restart: unless-stopped
+      - db_backups:/backups
     depends_on:
-      - gitea
-    volumes:
-      - ./gitea_runner_data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      - GITEA_INSTANCE_URL=http://gitea:3000
-      # The registration token will be added later from Gitea UI
-      - GITEA_RUNNER_REGISTRATION_TOKEN=
-      - GITEA_RUNNER_NAME=nerkhbaan-local-runner
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1024M
+      migrate:
+        condition: service_completed_successfully
+    networks: [nerkhbaan-network]
+
+networks:
+  nerkhbaan-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
 
 volumes:
   postgres_data:
   redis_data:
+  db_backups:

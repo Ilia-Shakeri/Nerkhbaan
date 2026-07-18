@@ -21,6 +21,8 @@ class UserSignin(BaseModel):
 
 class UserResponse(UserBase):
     id: int
+    is_active: bool
+    must_change_password: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -28,8 +30,21 @@ class UserResponse(UserBase):
 
 class AuthResponse(BaseModel):
     access_token: str
+    refresh_token: str | None = None
     token_type: str = "bearer"
     user: UserResponse
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str | None = Field(default=None, min_length=32, max_length=512)
+
+
+class SessionResponse(BaseModel):
+    id: str
+    created_at: datetime
+    last_used_at: datetime
+    expires_at: datetime
+    current: bool = False
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -61,6 +76,8 @@ class PricePoint(BaseModel):
 class PriceHistoryResponse(BaseModel):
     asset: str
     points: list[PricePoint]
+    timeframe: str | None = None
+    status: str = "complete"
 
 
 class AssetPrice(BaseModel):
@@ -69,7 +86,7 @@ class AssetPrice(BaseModel):
     label_en: str
     price_usd: float | None
     price_toman: float | None
-    change_percent: float
+    change_percent: float | None
     trend: str
     history: list[PricePoint]
     source_usd: str
@@ -137,6 +154,12 @@ class AlertCreate(BaseModel):
     notify_webhook: bool = False
     webhook_url: str | None = Field(default=None, max_length=500)
     enable_dlq: bool = False
+    instrument_id: str | None = Field(default=None, max_length=64)
+    mode: Literal["one_time", "recurring"] = "one_time"
+    cooldown_seconds: int = Field(default=900, ge=60, le=604800)
+    max_notifications_per_day: int = Field(default=10, ge=1, le=100)
+    notify_sms: bool = False
+    notify_telegram: bool = False
 
     @model_validator(mode="after")
     def validate_alert(self) -> "AlertCreate":
@@ -162,6 +185,13 @@ class AlertResponse(BaseModel):
     notify_webhook: bool
     webhook_url: str | None
     enable_dlq: bool
+    instrument_id: str | None
+    mode: str
+    cooldown_seconds: int
+    max_notifications_per_day: int
+    notify_sms: bool
+    notify_telegram: bool
+    next_eligible_trigger_at: datetime | None
     is_active: bool
     created_at: datetime
 

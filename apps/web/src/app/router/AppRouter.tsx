@@ -13,12 +13,14 @@ import { SupportView } from '../views/SupportView';
 import { ChartAnalysisView } from '../views/ChartAnalysisView';
 import { AssistantView } from '../views/AssistantView';
 import { ProtectedRoute } from './ProtectedRoute';
+import { RequiredPasswordView } from '../views/RequiredPasswordView';
 
 export const AppRouter = () => {
   return (
     <Routes>
       <Route path="/auth" element={<AuthView />} />
       <Route path="/forgot-password" element={<ForgotPasswordView />} />
+      <Route path="/change-password" element={<ProtectedRoute allowPasswordChange><RequiredPasswordView /></ProtectedRoute>} />
 
       <Route
         path="/"
