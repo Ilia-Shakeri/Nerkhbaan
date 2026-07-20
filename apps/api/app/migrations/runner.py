@@ -85,6 +85,20 @@ def _apply_file(connection: psycopg.Connection, path: Path) -> None:
     logger.info("Migration applied: %s", path.name)
 
 
+def _release_advisory_lock(connection: psycopg.Connection) -> None:
+    if connection.closed:
+        logger.warning("Migration connection closed before advisory lock release")
+        return
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT pg_advisory_unlock(%s)",
+                (settings.migration_advisory_lock_id,),
+            )
+    except psycopg.Error:
+        logger.exception("Could not release migration advisory lock")
+
+
 def run() -> None:
     logging.basicConfig(
         level=os.getenv("LOG_LEVEL", "INFO"),
@@ -104,11 +118,7 @@ def run() -> None:
             for path in files:
                 _apply_file(connection, path)
         finally:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT pg_advisory_unlock(%s)",
-                    (settings.migration_advisory_lock_id,),
-                )
+            _release_advisory_lock(connection)
 
     try:
         from ..admin.bootstrap import bootstrap_super_admin

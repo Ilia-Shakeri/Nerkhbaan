@@ -19,6 +19,8 @@ services:
     command:
       - postgres
       - -c
+      - shared_preload_libraries=timescaledb
+      - -c
       - shared_buffers=256MB
       - -c
       - effective_cache_size=1GB
