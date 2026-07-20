@@ -223,6 +223,51 @@ cd apps/api
 python -m unittest discover -s tests
 ```
 
+## Frontend Container Build
+
+The web image installs only `nerkhbaan-web` and `@nerkhbaan/ui` from the root lockfile. Desktop and Electron dependencies are not installed in this image.
+
+The registry order is:
+
+1. `https://package-mirror.liara.ir/repository/npm/`
+2. `https://mirror2.chabokan.net/npm/`
+3. `https://registry.npmjs.org/` as the final fallback
+
+Each registry is checked before use. A failed deterministic `npm ci` attempt moves to the next registry, while package integrity stays enforced by `package-lock.json`. BuildKit keeps the npm download cache between builds.
+
+Build with full logs:
+
+```bash
+DOCKER_BUILDKIT=1 docker compose build --no-cache --progress=plain frontend
+```
+
+Build again with layer and npm cache reuse:
+
+```bash
+DOCKER_BUILDKIT=1 docker compose build --progress=plain frontend
+```
+
+Start or recreate the stack:
+
+```bash
+docker compose up -d --force-recreate
+```
+
+Registry URLs can be overridden without editing the Dockerfile:
+
+```bash
+NPM_REGISTRY_PRIMARY=https://package-mirror.liara.ir/repository/npm/ \
+NPM_REGISTRY_SECONDARY=https://mirror2.chabokan.net/npm/ \
+docker compose build --progress=plain frontend
+```
+
+When dependency manifests change, regenerate the lockfile with the repository npm settings so registry-specific tarball URLs are not stored:
+
+```bash
+npm config set omit-lockfile-registry-resolved true --location=project
+npm install --package-lock-only
+```
+
 ## API Endpoints
 
 - `GET /api/health`

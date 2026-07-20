@@ -14,8 +14,5 @@
     "build:web": "npm run build --workspace=nerkhbaan-web",
     "build:desktop": "npm run build --workspace=nerkhbaan-desktop",
     "build:admin": "npm run build --workspace=nerkhbaan-admin-web"
-  },
-  "devDependencies": {
-    "electron": "^42.4.1"
   }
 }

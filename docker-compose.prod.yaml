@@ -132,6 +132,10 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      args:
+        NPM_REGISTRY_PRIMARY: ${NPM_REGISTRY_PRIMARY:-https://package-mirror.liara.ir/repository/npm/}
+        NPM_REGISTRY_SECONDARY: ${NPM_REGISTRY_SECONDARY:-https://mirror2.chabokan.net/npm/}
+        NPM_REGISTRY_FALLBACK: ${NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org/}
     container_name: nerkhbaan-frontend
     restart: unless-stopped
     ports:
