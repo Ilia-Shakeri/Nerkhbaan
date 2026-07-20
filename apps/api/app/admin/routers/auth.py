@@ -266,7 +266,12 @@ def change_password(
     return {"message": "Administrator password changed"}
 
 
-@router.post("/signout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/signout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
 def signout(
     request: Request,
     response: Response,

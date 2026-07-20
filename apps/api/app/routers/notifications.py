@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field, TypeAdapter
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -204,17 +204,23 @@ def mark_notification_read(
     return notification
 
 
-@router.post("/read-all", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/read-all",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
 def mark_all_notifications_read(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> None:
+) -> Response:
     db.execute(
         update(UserNotification)
         .where(UserNotification.user_id == current_user.id, UserNotification.read_at.is_(None))
         .values(read_at=datetime.now(UTC))
     )
     db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/preferences", response_model=NotificationPreferencesResponse)

@@ -262,7 +262,12 @@ def rename_chat_session(
     return _session_summary(session)
 
 
-@router.delete("/chat/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.delete(
+    "/chat/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
 def delete_chat_session(
     session_id: int,
     current_user: User = Depends(get_current_user),

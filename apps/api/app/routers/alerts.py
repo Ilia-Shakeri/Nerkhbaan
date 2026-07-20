@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -59,12 +59,17 @@ def list_alerts(
     )
 
 
-@router.delete("/{alert_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
+@router.delete(
+    "/{alert_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
 def delete_alert(
     alert_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> None:
+) -> Response:
     alert = db.scalar(
         select(Alert).where(Alert.id == alert_id, Alert.user_id == current_user.id)
     )
@@ -72,3 +77,4 @@ def delete_alert(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     alert.is_active = False
     db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

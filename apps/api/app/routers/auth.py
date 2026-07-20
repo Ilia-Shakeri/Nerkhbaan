@@ -453,12 +453,17 @@ def list_sessions(
     ]
 
 
-@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
 def terminate_session(
     session_id: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> None:
+) -> Response:
     session = db.scalar(
         select(UserSession).where(
             UserSession.id == session_id,
@@ -470,9 +475,15 @@ def terminate_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     session.revoked_at = datetime.now(UTC)
     db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/signout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/signout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
 def signout(
     request: Request,
     response: Response,
