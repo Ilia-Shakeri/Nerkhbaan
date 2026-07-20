@@ -69,7 +69,10 @@ POSTGRES_PASSWORD=replace-with-a-long-random-password
 DATABASE_URL=postgresql+psycopg://nerkhbaan:replace-with-a-long-random-password@postgres:5432/nerkhbaan
 
 JWT_SECRET_KEY=replace-with-a-random-secret-at-least-32-characters
-ADMIN_INITIAL_PASSWORD=replace-with-a-strong-admin-password
+ADMIN_BOOTSTRAP_USERNAME=admin
+ADMIN_BOOTSTRAP_EMAIL=admin@your-domain.example
+ADMIN_BOOTSTRAP_PASSWORD=Change-This-Strong-Password-14!
+ADMIN_BOOTSTRAP_FULL_NAME=System Administrator
 ALLOWED_ORIGINS=https://your-domain.example,https://www.your-domain.example
 
 REDIS_URL=redis://redis:6379/0
@@ -136,7 +139,7 @@ Set at least:
 - `POSTGRES_PASSWORD`
 - `DATABASE_URL` with the same password
 - `JWT_SECRET_KEY`
-- `ADMIN_INITIAL_PASSWORD`
+- all four `ADMIN_BOOTSTRAP_*` identity values
 - `ALLOWED_ORIGINS`
 
 Keep `COMPOSE_FILE=docker-compose.prod.yaml` in `.env` so Docker uses the production stack by default.

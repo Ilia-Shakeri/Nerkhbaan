@@ -88,18 +88,24 @@ def bootstrap_admin_from_environment(db: Session) -> int | None:
         db.commit()
         return None
 
-    raw = {
-        "username": os.getenv("ADMIN_BOOTSTRAP_USERNAME", ""),
-        "email": os.getenv("ADMIN_BOOTSTRAP_EMAIL", ""),
-        "password": os.getenv("ADMIN_BOOTSTRAP_PASSWORD", ""),
-        "full_name": os.getenv("ADMIN_BOOTSTRAP_FULL_NAME", ""),
+    environment = {
+        "username": "ADMIN_BOOTSTRAP_USERNAME",
+        "email": "ADMIN_BOOTSTRAP_EMAIL",
+        "password": "ADMIN_BOOTSTRAP_PASSWORD",
+        "full_name": "ADMIN_BOOTSTRAP_FULL_NAME",
     }
+    raw = {field: os.getenv(variable, "") for field, variable in environment.items()}
     supplied = [bool(str(value).strip()) for value in raw.values()]
     if not any(supplied):
         db.commit()
         return None
     if not all(supplied):
-        raise RuntimeError("Admin bootstrap identity is incomplete")
+        missing = sorted(
+            variable for field, variable in environment.items() if not str(raw[field]).strip()
+        )
+        raise RuntimeError(
+            f"Admin bootstrap identity is incomplete; missing: {', '.join(missing)}"
+        )
     try:
         identity = BootstrapIdentity.model_validate(raw)
     except ValidationError as exc:
