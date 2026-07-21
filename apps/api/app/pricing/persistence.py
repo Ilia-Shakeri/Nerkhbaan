@@ -556,6 +556,12 @@ class PricingPersistence:
                         estimated_request_cost=budget.estimated_request_cost,
                     )
                     db.add(provider_record)
+
+            # Provider configs reference pricing_providers. Flush every new parent row
+            # before adding configs so PostgreSQL can enforce the foreign key safely.
+            db.flush()
+
+            for provider in PROVIDERS.values():
                 config_key = {
                     "instrument_id": provider.instrument_id,
                     "provider_id": provider.provider_id,
