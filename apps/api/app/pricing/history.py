@@ -405,8 +405,7 @@ class InternalPriceHistory:
 
     @staticmethod
     def _query_latest_rows(instrument_id: str | None) -> list[Any]:
-        query = text(
-            """
+        query_sql = """
             SELECT DISTINCT ON (instrument_id)
                 id, instrument_id, price, status, primary_quote_id,
                 verification_quote_ids, source_summary, candidate_price,
@@ -415,13 +414,16 @@ class InternalPriceHistory:
                 verification_status, change_1h, change_24h, change_7d,
                 change_30d, idempotency_key, sequence_number
             FROM canonical_quotes
-            WHERE (:instrument_id IS NULL OR instrument_id = :instrument_id)
-            ORDER BY instrument_id, canonical_at DESC
-            """
-        )
+        """
+        parameters: dict[str, str] = {}
+        if instrument_id is not None:
+            query_sql += " WHERE instrument_id = :instrument_id"
+            parameters["instrument_id"] = instrument_id
+        query_sql += " ORDER BY instrument_id, canonical_at DESC"
+
         db = SessionLocal()
         try:
-            return db.execute(query, {"instrument_id": instrument_id}).mappings().all()
+            return db.execute(text(query_sql), parameters).mappings().all()
         finally:
             db.close()
 

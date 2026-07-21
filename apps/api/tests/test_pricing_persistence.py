@@ -16,6 +16,7 @@ from app.pricing.db_models import (
     PricingProviderRecord,
 )
 from app.pricing.persistence import PricingPersistence
+from app.pricing.history import InternalPriceHistory
 from app.pricing.registry import PROVIDERS
 
 
@@ -66,6 +67,48 @@ class PricingPersistenceCatalogTests(unittest.TestCase):
         self.assertTrue(session.committed)
         self.assertFalse(session.rolled_back)
         self.assertTrue(session.closed)
+
+
+class _HistoryRows:
+    def mappings(self):
+        return self
+
+    def all(self):
+        return []
+
+
+class _HistorySession:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, str]]] = []
+
+    def execute(self, query, parameters):
+        self.calls.append((str(query), parameters))
+        return _HistoryRows()
+
+    def close(self) -> None:
+        return None
+
+
+class InternalPriceHistoryQueryTests(unittest.TestCase):
+    def test_latest_all_uses_no_untyped_null_parameter(self) -> None:
+        session = _HistorySession()
+
+        with patch("app.pricing.history.SessionLocal", return_value=session):
+            rows = InternalPriceHistory._query_latest_rows(None)
+
+        self.assertEqual(rows, [])
+        self.assertEqual(session.calls[0][1], {})
+        self.assertNotIn(":instrument_id", session.calls[0][0])
+
+    def test_latest_instrument_keeps_typed_column_comparison(self) -> None:
+        session = _HistorySession()
+
+        with patch("app.pricing.history.SessionLocal", return_value=session):
+            rows = InternalPriceHistory._query_latest_rows("BTC_USD")
+
+        self.assertEqual(rows, [])
+        self.assertEqual(session.calls[0][1], {"instrument_id": "BTC_USD"})
+        self.assertIn("instrument_id = :instrument_id", session.calls[0][0])
 
 
 if __name__ == "__main__":
