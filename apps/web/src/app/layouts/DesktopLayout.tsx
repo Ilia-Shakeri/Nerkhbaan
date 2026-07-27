@@ -20,7 +20,8 @@ import {
   KeyRound,
   MessageCircle,
   Sparkles,
-  Bot
+  Bot,
+  AlertTriangle
 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { UserInfoModal } from '../components/UserInfoModal';
@@ -49,7 +50,8 @@ export function DesktopLayout() {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isUserInfoOpen, setIsUserInfoOpen] = useState(false);
   const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
-  const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
+  const [apiAlert, setApiAlert] = useState<{ id: number; key: string } | null>(null);
+  const [hasDegradedSources, setHasDegradedSources] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsUnavailable, setNotificationsUnavailable] = useState(false);
@@ -57,18 +59,14 @@ export function DesktopLayout() {
   useEffect(() => {
     const showApiError = (event: Event) => {
       const detail = (event as CustomEvent<{ key: string; message: string }>).detail;
-      setApiErrors((current) => ({
-        ...current,
-        [detail?.key || 'unknown']: detail?.message || 'Service request failed'
-      }));
+      setApiAlert({
+        id: Date.now(),
+        key: detail?.key || 'unknown',
+      });
     };
     const clearApiError = (event: Event) => {
       const key = (event as CustomEvent<{ key: string }>).detail?.key || 'unknown';
-      setApiErrors((current) => {
-        const next = { ...current };
-        delete next[key];
-        return next;
-      });
+      setApiAlert((current) => current?.key === key ? null : current);
     };
     window.addEventListener('api-error', showApiError);
     window.addEventListener('api-error-clear', clearApiError);
@@ -76,6 +74,21 @@ export function DesktopLayout() {
       window.removeEventListener('api-error', showApiError);
       window.removeEventListener('api-error-clear', clearApiError);
     };
+  }, []);
+
+  useEffect(() => {
+    if (!apiAlert) return;
+    const timer = window.setTimeout(() => setApiAlert(null), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [apiAlert]);
+
+  useEffect(() => {
+    const updatePricingHealth = (event: Event) => {
+      const detail = (event as CustomEvent<{ degraded?: boolean }>).detail;
+      setHasDegradedSources(Boolean(detail?.degraded));
+    };
+    window.addEventListener('pricing-health', updatePricingHealth);
+    return () => window.removeEventListener('pricing-health', updatePricingHealth);
   }, []);
 
   useEffect(() => {
@@ -101,14 +114,9 @@ export function DesktopLayout() {
     };
   }, [isAuthenticated, isNotificationsOpen]);
 
-  const apiErrorValues = Object.values(apiErrors);
-  const apiError = apiErrorValues.length > 0 ? apiErrorValues[apiErrorValues.length - 1] : null;
-
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
-
-  const hasDegradedSources = false;
 
   const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
     <>
@@ -193,6 +201,31 @@ export function DesktopLayout() {
         isDark ? 'bg-[#050505] text-[#F2E8CC]' : 'bg-[#FFF8E8] text-[#4A3913]'
       }`}
     >
+      <AnimatePresence>
+        {apiAlert && (
+          <motion.div
+            key={apiAlert.id}
+            initial={{ opacity: 0, y: -70, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -70, x: '-50%' }}
+            transition={{ type: 'spring', stiffness: 360, damping: 28 }}
+            className={`pointer-events-none fixed left-1/2 top-4 z-[100] flex w-[min(92vw,30rem)] items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-center text-sm font-bold shadow-2xl backdrop-blur-xl ${
+              isDark
+                ? 'border-[#D4AF37]/35 bg-[#151107]/95 text-[#F3E2AB] shadow-black/50'
+                : 'border-[#B8942A]/40 bg-[#FFF6D8]/95 text-[#6E5317] shadow-[#8A6B20]/20'
+            }`}
+            role="alert"
+          >
+            <AlertTriangle size={18} className="shrink-0 text-amber-500" />
+            <span>
+              {language === 'fa'
+                ? 'خطا در ارتباط با سرویس. لطفاً کمی بعد دوباره تلاش کنید.'
+                : 'Service request failed. Please try again shortly.'}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
@@ -273,16 +306,6 @@ export function DesktopLayout() {
              </button>
           </div>
 
-          {apiError && (
-            <div
-              className="pointer-events-none absolute inset-x-20 top-1/2 -translate-y-1/2 truncate text-center text-xs font-bold text-red-500 sm:text-sm lg:inset-x-72"
-              role="alert"
-              title={apiError}
-            >
-              {apiError}
-            </div>
-          )}
-          
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Currency Toggle */}
             <div className={`relative flex h-9 items-center gap-0.5 rounded-full p-1 ${
@@ -322,9 +345,10 @@ export function DesktopLayout() {
                 className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
                   isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
                 }`}
+                aria-label={language === 'fa' ? 'اعلان‌ها' : 'Notifications'}
               >
                 <Bell size={20} />
-                {notifications.some((item) => !item.read_at) && (
+                {(hasDegradedSources || notifications.some((item) => !item.read_at)) && (
                   <span className="absolute right-2.5 top-2.5 flex h-2 w-2 rounded-full bg-[#EF4444] shadow-[0_0_8px_0_rgba(239,68,68,0.8)]" />
                 )}
               </button>
@@ -356,7 +380,9 @@ export function DesktopLayout() {
                         <div className={`mx-2 mb-3 rounded-xl border px-3 py-2 text-xs ${
                           isDark ? 'border-amber-500/35 bg-amber-500/10 text-amber-200' : 'border-amber-400/50 bg-amber-100/90 text-amber-800'
                         }`}>
-                          {language === 'fa' ? '⚠️ برخی از منابع تامین قیمت در دسترس نیستند.' : '⚠️ Some pricing providers are down.'}
+                          {language === 'fa'
+                            ? '⚠️ برخی از منابع تامین قیمت در دسترس نیستند. آخرین قیمت‌های ذخیره شده نمایش داده می‌شوند.'
+                            : '⚠️ Some pricing providers are unavailable. The latest cached prices are being shown.'}
                         </div>
                       )}
 
@@ -371,7 +397,7 @@ export function DesktopLayout() {
                             {language === 'fa' ? 'سرویس اعلان در دسترس نیست.' : 'Notification service is unavailable.'}
                           </div>
                         )}
-                        {!notificationsLoading && !notificationsUnavailable && notifications.length === 0 && (
+                        {!notificationsLoading && !notificationsUnavailable && notifications.length === 0 && !hasDegradedSources && (
                           <div className={`p-4 text-center text-xs ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'}`}>
                             {language === 'fa' ? 'اعلان تازه‌ای نیست.' : 'No notifications yet.'}
                           </div>

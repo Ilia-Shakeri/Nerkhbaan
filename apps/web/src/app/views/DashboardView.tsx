@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type UTCTimestamp } from 'lightweight-charts';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellPlus, ArrowUpRight, ArrowDownRight, GripVertical, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, Radio, WifiOff, ChevronDown, Database, Clock3 } from 'lucide-react';
+import { BellPlus, ArrowUpRight, ArrowDownRight, GripVertical, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, Clock3 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -64,6 +64,12 @@ type AssetCard = {
 const CHART_ORDER_STORAGE_KEY = 'dashboard-chart-order-v3';
 const DEFAULT_ASSET_ORDER: AssetId[] = ['gold', 'silver', 'usdt', 'btc'];
 const TIMEFRAMES: PriceTimeframe[] = ['1h', '24h', '7d', '30d', '1y'];
+const DEFAULT_TIMEFRAMES: Record<AssetId, PriceTimeframe> = {
+  gold: '24h',
+  silver: '24h',
+  usdt: '24h',
+  btc: '24h',
+};
 
 const CHART_COLORS: Record<AssetId, { dark: string; light: string }> = {
   gold: { dark: '#D4AF37', light: '#B8860B' },
@@ -277,7 +283,7 @@ function FinancialChart({
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: isDark ? '#AA986A' : '#7A5E24',
-        attributionLogo: true,
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: isDark ? 'rgba(212,175,55,0.06)' : 'rgba(122,94,36,0.08)' },
@@ -366,7 +372,7 @@ export function DashboardView() {
   const queryClient = useQueryClient();
 
   const [assetOrder, setAssetOrder] = useState<AssetId[]>(getInitialAssetOrder);
-  const [timeframe, setTimeframe] = useState<PriceTimeframe>('24h');
+  const [timeframeByAsset, setTimeframeByAsset] = useState<Record<AssetId, PriceTimeframe>>(DEFAULT_TIMEFRAMES);
   const [socketStatus, setSocketStatus] = useState<'connecting' | 'live' | 'fallback'>('connecting');
   const [draggedAssetId, setDraggedAssetId] = useState<AssetId | null>(null);
   const [dragOverAssetId, setDragOverAssetId] = useState<AssetId | null>(null);
@@ -399,14 +405,17 @@ export function DashboardView() {
   });
 
   const historyQueries = useQueries({
-    queries: DEFAULT_ASSET_ORDER.map((asset) => ({
-      queryKey: queryKeys.priceHistory(asset, timeframe),
-      queryFn: ({ signal }: { signal: AbortSignal }) => getPriceHistory(asset, timeframe, signal),
-      placeholderData: keepPreviousData,
-      staleTime: timeframe === '1h' || timeframe === '24h' ? 30_000 : 5 * 60_000,
-      refetchInterval: timeframe === '1h' || timeframe === '24h' ? 60_000 : 5 * 60_000,
-      refetchIntervalInBackground: false,
-    })),
+    queries: DEFAULT_ASSET_ORDER.map((asset) => {
+      const assetTimeframe = timeframeByAsset[asset];
+      return {
+        queryKey: queryKeys.priceHistory(asset, assetTimeframe),
+        queryFn: ({ signal }: { signal: AbortSignal }) => getPriceHistory(asset, assetTimeframe, signal),
+        placeholderData: keepPreviousData,
+        staleTime: assetTimeframe === '1h' || assetTimeframe === '24h' ? 30_000 : 5 * 60_000,
+        refetchInterval: assetTimeframe === '1h' || assetTimeframe === '24h' ? 60_000 : 5 * 60_000,
+        refetchIntervalInBackground: false,
+      };
+    }),
   });
 
   useEffect(() => {
@@ -576,11 +585,6 @@ export function DashboardView() {
   }, [queryClient]);
 
   const pricesData = pricesQuery.data?.assets ?? EMPTY_ASSETS;
-  const lastRefreshAt = pricesQuery.data?.refreshed_at ?? null;
-  const sourceLabel = {
-    usd: pricesQuery.data?.source?.usd ?? 'Unknown',
-    toman: pricesQuery.data?.source?.toman ?? 'Unknown',
-  };
   const isLoading = pricesQuery.isPending;
   const loadError = pricesQuery.error instanceof Error ? pricesQuery.error.message : null;
 
@@ -588,18 +592,6 @@ export function DashboardView() {
     const next: Record<AssetId, AssetPoint[]> = { gold: [], silver: [], usdt: [], btc: [] };
     DEFAULT_ASSET_ORDER.forEach((asset, index) => {
       next[asset] = historyQueries[index]?.data?.points ?? [];
-    });
-    return next;
-  }, [historyQueries]);
-
-  const historyStateByAsset = useMemo(() => {
-    const next = {} as Record<AssetId, { isLoading: boolean; error: string | null }>;
-    DEFAULT_ASSET_ORDER.forEach((asset, index) => {
-      const query = historyQueries[index];
-      next[asset] = {
-        isLoading: query?.isPending ?? false,
-        error: query?.error instanceof Error ? query.error.message : null,
-      };
     });
     return next;
   }, [historyQueries]);
@@ -657,34 +649,19 @@ export function DashboardView() {
       : null;
 
   const t = {
-    currencyView: { fa: 'نمایش بر اساس:', en: 'Currency:' },
     usd: { fa: 'دلار', en: 'USD' },
     toman: { fa: 'تومان', en: 'Toman' },
-    source: { fa: 'منبع', en: 'Source' },
-    updatedAt: { fa: 'آخرین بروزرسانی', en: 'Updated' },
-    loading: { fa: 'در حال بروزرسانی...', en: 'Syncing...' },
     createAlert: { fa: 'ایجاد هشدار', en: 'Create Alert' },
     alertFor: { fa: 'هشدار برای', en: 'Alert for' },
     targetPrice: { fa: 'قیمت هدف', en: 'Target Price' },
     notifyVia: { fa: 'اطلاع‌رسانی از طریق', en: 'Notify via' },
     appAlert: { fa: 'اعلان برنامه', en: 'App Notification' },
     emailAlert: { fa: 'ایمیل', en: 'Email' },
-    smsAlert: { fa: 'پیامک', en: 'SMS' },
     cancel: { fa: 'انصراف', en: 'Cancel' },
     save: { fa: 'ذخیره', en: 'Save Alert' },
     alertSuccess: { fa: 'هشدار با موفقیت ثبت شد', en: 'Alert created successfully' },
     dragToInspect: { fa: 'برای مشاهده قیمت در زمان‌های مختلف روی نمودار بکشید', en: 'Drag on chart to inspect history' },
-    live: { fa: 'زنده', en: 'Live' },
-    cached: { fa: 'حافظه موقت', en: 'Cached' },
-    unavailable: { fa: 'خارج از دسترس', en: 'Down' },
     cacheAge: { fa: 'عمر داده', en: 'Age' },
-    minute: { fa: 'دقیقه', en: 'min' },
-    dragToReorder: { fa: 'برای جابجایی بکشید', en: 'Drag to reorder' },
-    degradedNotice: { fa: '⚠️ برخی از منابع تامین قیمت در دسترس نیستند. آخرین قیمت‌های ذخیره شده نمایش داده می‌شوند.', en: '⚠️ Some pricing providers are down. Displaying latest known cached prices.' },
-    realtime: { fa: 'قیمت زنده', en: 'Live stream' },
-    connecting: { fa: 'در حال اتصال', en: 'Connecting' },
-    polling: { fa: 'به‌روزرسانی دوره‌ای', en: 'Polling fallback' },
-    historyEmpty: { fa: 'داده تاریخی برای این بازه هنوز ثبت نشده است', en: 'No historical data recorded for this range yet' },
     timeframe: { fa: 'بازه نمودار', en: 'Chart range' },
     retry: { fa: 'تلاش دوباره', en: 'Retry' },
   };
@@ -708,58 +685,21 @@ export function DashboardView() {
   const statusLabel = (status: OperationalPriceStatus) => statusLabels[status]?.[language] ?? status;
 
   const healthyStatuses = new Set<OperationalPriceStatus>(['live', 'fresh_cache', 'cached']);
-  const hasDegradedSources = orderedAssets.some(
+  const hasDegradedSources = !pricesQuery.isPending && orderedAssets.some(
     (asset) => !healthyStatuses.has(asset.usdStatus) || !healthyStatuses.has(asset.tomanStatus)
   );
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('pricing-health', {
+        detail: { degraded: hasDegradedSources },
+      }));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [hasDegradedSources]);
+
   return (
     <div className="flex flex-col gap-4">
-
-      <div className={`flex flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between ${
-        isDark ? 'border-white/5 bg-[#0E0E0E]/60' : 'border-black/5 bg-white/60'
-      }`}>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className={`text-xs font-semibold ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>
-            {t.timeframe[language]}
-          </span>
-          <div className={`flex rounded-xl p-1 ${isDark ? 'bg-black/40' : 'bg-[#F6EBD0]'}`} dir="ltr">
-            {TIMEFRAMES.map((value) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setTimeframe(value)}
-                className={`min-w-12 rounded-lg px-2.5 py-1.5 text-xs font-bold transition ${
-                  timeframe === value
-                    ? 'bg-[#D4AF37] text-black shadow-sm'
-                    : isDark ? 'text-[#A89668] hover:text-white' : 'text-[#7A5E24] hover:text-[#3B2E13]'
-                }`}
-              >
-                {value}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[11px]">
-          <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold ${
-            socketStatus === 'live'
-              ? isDark ? 'bg-emerald-500/10 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
-              : socketStatus === 'connecting'
-                ? isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-100 text-amber-700'
-                : isDark ? 'bg-white/5 text-[#A89668]' : 'bg-black/5 text-[#7A5E24]'
-          }`}>
-            {socketStatus === 'live' ? <Radio size={12} /> : <WifiOff size={12} />}
-            {socketStatus === 'live' ? t.realtime[language] : socketStatus === 'connecting' ? t.connecting[language] : t.polling[language]}
-          </span>
-          {lastRefreshAt && (
-            <span className={`truncate ${isDark ? 'text-[#887850]' : 'text-[#8A6A25]'}`} dir="ltr">
-              {t.updatedAt[language]}: {new Date(lastRefreshAt).toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}
-            </span>
-          )}
-          <span className={`truncate ${isDark ? 'text-[#887850]' : 'text-[#8A6A25]'}`} dir="ltr" title={`${sourceLabel.usd} / ${sourceLabel.toman}`}>
-            {t.source[language]}: {sourceLabel.usd} / {sourceLabel.toman}
-          </span>
-        </div>
-      </div>
 
       {loadError && (
         <div className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-xs font-medium ${isDark ? 'border-red-500/20 bg-red-500/5 text-red-400' : 'border-red-300 bg-red-50 text-red-700'}`}>
@@ -770,14 +710,9 @@ export function DashboardView() {
         </div>
       )}
 
-      {hasDegradedSources && (
-        <div className={`rounded-2xl border px-4 py-3 text-xs font-medium ${isDark ? 'border-amber-500/20 bg-amber-500/5 text-amber-400' : 'border-amber-300 bg-amber-50 text-amber-700'}`}>
-          {t.degradedNotice[language]}
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {orderedAssets.map((asset, idx) => {
+        const assetTimeframe = timeframeByAsset[asset.id];
         const fallbackValue = currencyMode === 'usd'
           ? (asset.priceUsd ?? (asset.priceToman && usdToTomanRate ? asset.priceToman / usdToTomanRate : null))
           : (asset.priceToman ?? (asset.priceUsd && usdToTomanRate ? asset.priceUsd * usdToTomanRate : null));
@@ -1043,7 +978,32 @@ export function DashboardView() {
                     </motion.div>
                   )}
                 </AnimatePresence>
-                
+
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <span className={`text-xs font-semibold ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>
+                    {t.timeframe[language]}
+                  </span>
+                  <div className={`flex rounded-xl p-1 ${isDark ? 'bg-black/40' : 'bg-[#F6EBD0]'}`} dir="ltr">
+                    {TIMEFRAMES.map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setTimeframeByAsset((current) => ({
+                          ...current,
+                          [asset.id]: value,
+                        }))}
+                        className={`min-w-10 rounded-lg px-2 py-1.5 text-[11px] font-bold transition sm:min-w-12 sm:text-xs ${
+                          assetTimeframe === value
+                            ? 'bg-[#D4AF37] text-black shadow-sm'
+                            : isDark ? 'text-[#A89668] hover:text-white' : 'text-[#7A5E24] hover:text-[#3B2E13]'
+                        }`}
+                      >
+                        {value}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {showChartError ? (
                   <div className={`flex h-[400px] min-h-[400px] w-full flex-col items-center justify-center rounded-[1.5rem] border backdrop-blur-md ${
                     isDark ? 'border-red-500/20 bg-[#1A0B0B]/50' : 'border-red-200 bg-[#FFF0F0]/50'
