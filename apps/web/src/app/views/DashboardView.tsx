@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type UTCTimestamp } from 'lightweight-charts';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BellPlus, ArrowUpRight, ArrowDownRight, GripVertical, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, Radio, WifiOff, ChevronDown, Database, Clock3 } from 'lucide-react';
@@ -149,7 +149,7 @@ const EMPTY_ASSETS: PriceAsset[] = DEFAULT_ASSET_ORDER.map(buildPlaceholderAsset
 
 const normalizeStatus = (value: unknown): OperationalPriceStatus => {
   if (value === 'confirmed') return 'live';
-  return Object.prototype.hasOwnProperty.call(STATUS_COLORS, value)
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(STATUS_COLORS, value)
     ? value as OperationalPriceStatus
     : 'unavailable';
 };

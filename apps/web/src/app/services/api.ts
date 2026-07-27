@@ -473,6 +473,7 @@ export type PriceAsset = {
   candidate_price_usd?: number | null;
   candidate_price_toman?: number | null;
   candidate_provider?: string | null;
+  candidate_observed_at?: string | null;
   difference_percent?: number | null;
   verification_status?: string | null;
 };
