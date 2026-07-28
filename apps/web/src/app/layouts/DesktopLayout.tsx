@@ -118,9 +118,15 @@ export function DesktopLayout() {
     return <Navigate to="/auth" replace />;
   }
 
-  const SidebarContent = ({ collapsed = false }: { collapsed?: boolean }) => (
+  const SidebarContent = ({
+    collapsed = false,
+    canCollapse = false,
+  }: {
+    collapsed?: boolean;
+    canCollapse?: boolean;
+  }) => (
     <>
-      <div className="flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
+      <div className="group relative flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
         <NavLink
           to="/"
           onClick={() => setIsSidebarOpen(false)}
@@ -132,6 +138,29 @@ export function DesktopLayout() {
           className={`object-contain transition-all duration-300 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
         />
         </NavLink>
+        {canCollapse && (
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed((prev) => !prev)}
+            className={`absolute bottom-1 end-1 rounded-lg border p-1.5 opacity-0 shadow-lg backdrop-blur transition-all group-hover:opacity-100 group-focus-within:opacity-100 ${
+              isDark
+                ? 'border-white/10 bg-[#171717]/95 text-[#D4AF37] hover:bg-[#222222]'
+                : 'border-black/10 bg-[#FFF3D8]/95 text-[#8A6B20] hover:bg-[#F2E4BC]'
+            }`}
+            aria-label={
+              language === 'fa'
+                ? isSidebarCollapsed ? 'باز کردن منو' : 'بستن منو'
+                : isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
+            }
+            title={
+              language === 'fa'
+                ? isSidebarCollapsed ? 'باز کردن منو' : 'بستن منو'
+                : isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
+            }
+          >
+            {isSidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+          </button>
+        )}
       </div>
 
       <nav className="flex-1 space-y-2 p-4 overflow-y-auto">
@@ -235,7 +264,7 @@ export function DesktopLayout() {
           isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
         } will-change-[width]`}
       >
-        <SidebarContent collapsed={isSidebarCollapsed} />
+        <SidebarContent collapsed={isSidebarCollapsed} canCollapse />
       </motion.aside>
 
       {/* Mobile Drawer Overlay */}
@@ -284,18 +313,7 @@ export function DesktopLayout() {
             isDark ? 'bg-[#0B0B0B]/95' : 'bg-[#FFF3D8]/95'
           }`}
         >
-          <div className="hidden lg:flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-              className={`rounded-lg p-2 transition-colors ${
-                isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
-              }`}
-              aria-label={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {isSidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
-            </button>
-          </div>
+          <div className="hidden lg:block" aria-hidden="true" />
 
           <div className="flex items-center gap-4 lg:hidden">
              <button 

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type UTCTimestamp } from 'lightweight-charts';
+import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellPlus, ArrowUpRight, ArrowDownRight, GripVertical, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, Clock3 } from 'lucide-react';
+import { BellPlus, ArrowUpRight, ArrowDownRight, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -227,6 +227,48 @@ const formatAge = (seconds: number | null, language: 'fa' | 'en'): string => {
   return language === 'fa' ? `${Math.floor(rounded / 86400)} روز` : `${Math.floor(rounded / 86400)}d`;
 };
 
+const parseChartTimestamp = (timestamp: string): number => {
+  const value = timestamp.trim();
+  const hasTimeZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value);
+  return Date.parse(hasTimeZone ? value : `${value}Z`);
+};
+
+const chartTimeToDate = (time: Time): Date | null => {
+  if (typeof time === 'number') return new Date(time * 1_000);
+  if (typeof time === 'string') {
+    const milliseconds = parseChartTimestamp(time);
+    return Number.isFinite(milliseconds) ? new Date(milliseconds) : null;
+  }
+  return new Date(Date.UTC(time.year, time.month - 1, time.day));
+};
+
+const formatChartDateTime = (time: Time, language: 'fa' | 'en'): string => {
+  const date = chartTimeToDate(time);
+  if (!date) return '';
+  return new Intl.DateTimeFormat(language === 'fa' ? 'fa-IR' : 'en-GB', {
+    timeZone: 'Asia/Tehran',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date);
+};
+
+const formatChartTick = (time: Time, language: 'fa' | 'en'): string => {
+  const date = chartTimeToDate(time);
+  if (!date) return '';
+  return new Intl.DateTimeFormat(language === 'fa' ? 'fa-IR' : 'en-GB', {
+    timeZone: 'Asia/Tehran',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(date);
+};
+
 const toChartValue = (point: AssetPoint, mode: CurrencyMode, usdToTomanRate: number | null) => {
   const raw = mode === 'usd' ? point.value_usd : point.value_toman;
   if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw;
@@ -244,7 +286,7 @@ const toChartData = (
 ): LineData<UTCTimestamp>[] => {
   const unique = new Map<number, number>();
   for (const point of points) {
-    const milliseconds = Date.parse(point.timestamp);
+    const milliseconds = parseChartTimestamp(point.timestamp);
     const value = toChartValue(point, mode, usdToTomanRate);
     if (!Number.isFinite(milliseconds) || value === null) continue;
     unique.set(Math.floor(milliseconds / 1_000), value);
@@ -272,7 +314,7 @@ function FinancialChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
-  const [crosshairValue, setCrosshairValue] = useState<number | null>(null);
+  const [crosshairPoint, setCrosshairPoint] = useState<{ value: number; time: Time } | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -305,12 +347,14 @@ function FinancialChart({
         rightOffset: 3,
         barSpacing: 8,
         minBarSpacing: 2,
+        tickMarkFormatter: (time: Time) => formatChartTick(time, language),
       },
       handleScale: true,
       handleScroll: true,
       localization: {
         locale: language === 'fa' ? 'fa-IR' : 'en-US',
         priceFormatter: (value: number) => formatPrice(value, currencyMode, language),
+        timeFormatter: (time: Time) => formatChartDateTime(time, language),
       },
     });
     const series = chart.addSeries(LineSeries, {
@@ -324,7 +368,11 @@ function FinancialChart({
 
     chart.subscribeCrosshairMove((event) => {
       const point = event.seriesData.get(series);
-      setCrosshairValue(point && 'value' in point && typeof point.value === 'number' ? point.value : null);
+      setCrosshairPoint(
+        event.time && point && 'value' in point && typeof point.value === 'number'
+          ? { value: point.value, time: event.time }
+          : null,
+      );
     });
     chartRef.current = chart;
     seriesRef.current = series;
@@ -348,13 +396,16 @@ function FinancialChart({
   }, [data]);
 
   return (
-    <div className={`relative w-full ${className}`} dir="ltr">
+    <div className={`relative w-full ${className}`} dir="ltr" data-chart-interactive="true">
       <div ref={containerRef} className="h-full w-full" />
-      {crosshairValue !== null && (
+      {crosshairPoint && (
         <div className={`pointer-events-none absolute start-3 top-3 z-10 rounded-lg border px-2 py-1 text-xs font-bold backdrop-blur ${
           isDark ? 'border-white/10 bg-black/75 text-white' : 'border-black/10 bg-white/85 text-[#3B2E13]'
         }`}>
-          {formatPrice(crosshairValue, currencyMode, language)}
+          <div>{formatPrice(crosshairPoint.value, currencyMode, language)}</div>
+          <div className={`mt-0.5 text-[10px] font-medium ${isDark ? 'text-[#CDBB8C]' : 'text-[#7A5E24]'}`}>
+            {formatChartDateTime(crosshairPoint.time, language)}
+          </div>
         </div>
       )}
     </div>
@@ -376,6 +427,7 @@ export function DashboardView() {
   const [socketStatus, setSocketStatus] = useState<'connecting' | 'live' | 'fallback'>('connecting');
   const [draggedAssetId, setDraggedAssetId] = useState<AssetId | null>(null);
   const [dragOverAssetId, setDragOverAssetId] = useState<AssetId | null>(null);
+  const [dragReadyAssetId, setDragReadyAssetId] = useState<AssetId | null>(null);
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [selectedAssetForAlert, setSelectedAssetForAlert] = useState<AssetId>('gold');
   const [alertTargetPrice, setAlertTargetPrice] = useState('');
@@ -391,10 +443,15 @@ export function DashboardView() {
   const [sourceLoading, setSourceLoading] = useState<Partial<Record<AssetId, boolean>>>({});
   const [sourceErrors, setSourceErrors] = useState<Partial<Record<AssetId, string>>>({});
   const lastWsEventsRef = useRef(new Map<string, { sequence: number | null; timestamp: number | null }>());
+  const dragActivationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     window.localStorage.setItem(CHART_ORDER_STORAGE_KEY, JSON.stringify(assetOrder));
   }, [assetOrder]);
+
+  useEffect(() => () => {
+    if (dragActivationTimerRef.current) clearTimeout(dragActivationTimerRef.current);
+  }, []);
 
   const pricesQuery = useQuery({
     queryKey: queryKeys.prices,
@@ -640,6 +697,23 @@ export function DashboardView() {
     });
   };
 
+  const clearDragActivation = () => {
+    if (!dragActivationTimerRef.current) return;
+    clearTimeout(dragActivationTimerRef.current);
+    dragActivationTimerRef.current = null;
+  };
+
+  const armCardDrag = (assetId: AssetId, target: EventTarget | null) => {
+    const element = target instanceof Element ? target : null;
+    if (element?.closest('button, a, input, textarea, select, [data-chart-interactive="true"]')) return;
+    clearDragActivation();
+    setDragReadyAssetId(null);
+    dragActivationTimerRef.current = setTimeout(() => {
+      setDragReadyAssetId(assetId);
+      dragActivationTimerRef.current = null;
+    }, 450);
+  };
+
   const currentUsdt = orderedAssets.find((a) => a.id === 'usdt');
   // Derive the USD→Toman rate from Tether only when both legs are present and
   // non-zero. Falling back to 1 would silently render USD figures as Toman.
@@ -660,9 +734,6 @@ export function DashboardView() {
     cancel: { fa: 'انصراف', en: 'Cancel' },
     save: { fa: 'ذخیره', en: 'Save Alert' },
     alertSuccess: { fa: 'هشدار با موفقیت ثبت شد', en: 'Alert created successfully' },
-    dragToInspect: { fa: 'برای مشاهده قیمت در زمان‌های مختلف روی نمودار بکشید', en: 'Drag on chart to inspect history' },
-    cacheAge: { fa: 'عمر داده', en: 'Age' },
-    timeframe: { fa: 'بازه نمودار', en: 'Chart range' },
     retry: { fa: 'تلاش دوباره', en: 'Retry' },
   };
 
@@ -717,7 +788,6 @@ export function DashboardView() {
           ? (asset.priceUsd ?? (asset.priceToman && usdToTomanRate ? asset.priceToman / usdToTomanRate : null))
           : (asset.priceToman ?? (asset.priceUsd && usdToTomanRate ? asset.priceUsd * usdToTomanRate : null));
         const activeStatus = currencyMode === 'usd' ? asset.usdStatus : asset.tomanStatus;
-        const activeSource = currencyMode === 'usd' ? asset.sourceUsd : asset.sourceToman;
         const candidatePrice = currencyMode === 'usd' ? asset.candidatePriceUsd : asset.candidatePriceToman;
         const isAnomaly = activeStatus === 'verifying' || activeStatus === 'suspicious' || activeStatus === 'suspicious_unconfirmed';
         const sourceRows = [...(sourceDetails[asset.id]?.sources ?? [])].sort((left, right) => {
@@ -745,6 +815,8 @@ export function DashboardView() {
           <motion.div
             key={asset.id}
             layoutId={asset.id}
+            draggable
+            title={language === 'fa' ? 'برای جابه‌جایی کارت را نگه دارید و بکشید' : 'Hold, then drag to reorder'}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0, scale: dragOverAssetId === asset.id ? 1.02 : 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
@@ -753,6 +825,23 @@ export function DashboardView() {
               duration: 0.35,
               ease: [0.22, 1, 0.36, 1],
               layout: { type: 'spring', damping: 28, stiffness: 330 }
+            }}
+            onPointerDown={(event) => armCardDrag(asset.id, event.target)}
+            onPointerUp={() => {
+              clearDragActivation();
+              setDragReadyAssetId(null);
+            }}
+            onPointerCancel={() => {
+              clearDragActivation();
+              setDragReadyAssetId(null);
+            }}
+            onDragStartCapture={(event) => {
+              if (dragReadyAssetId !== asset.id) {
+                event.preventDefault();
+                return;
+              }
+              event.dataTransfer.effectAllowed = 'move';
+              setDraggedAssetId(asset.id);
             }}
             onDragOver={(event) => event.preventDefault()}
             onDragEnter={() => {
@@ -765,11 +854,13 @@ export function DashboardView() {
                 reorderAssets(draggedAssetId, asset.id);
                 setDraggedAssetId(null);
                 setDragOverAssetId(null);
+                setDragReadyAssetId(null);
               }
             }}
-            onDragEnd={() => {
+            onDragEndCapture={() => {
               setDraggedAssetId(null);
               setDragOverAssetId(null);
+              setDragReadyAssetId(null);
             }}
           >
             <Card
@@ -780,33 +871,13 @@ export function DashboardView() {
               } ${
                 dragOverAssetId === asset.id 
                   ? 'ring-2 ring-[#D4AF37]/50 shadow-[0_0_30px_rgba(212,175,55,0.3)] scale-[1.02]' 
-                  : ''
+                  : dragReadyAssetId === asset.id
+                    ? 'ring-1 ring-[#D4AF37]/40 cursor-grabbing'
+                    : 'cursor-grab'
               } hover:shadow-[0_8px_32px_rgba(212,175,55,0.15)] hover:-translate-y-1`}
             >
               <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-2">
-                  <button
-                    type="button"
-                    draggable
-                    onDragStart={(event) => {
-                      event.dataTransfer.effectAllowed = 'move';
-                      setDraggedAssetId(asset.id);
-                    }}
-                    onDragEnd={() => {
-                      setDraggedAssetId(null);
-                      setDragOverAssetId(null);
-                    }}
-                    className={`mt-1 inline-flex h-10 w-10 shrink-0 cursor-grab items-center justify-center rounded-xl border transition active:cursor-grabbing ${
-                      isDark
-                        ? 'border-white/10 text-[#D4AF37] hover:bg-white/5'
-                        : 'border-black/10 text-[#9D7A20] hover:bg-black/5'
-                    }`}
-                    aria-label="Reorder"
-                    title="Reorder"
-                  >
-                    <GripVertical size={18} />
-                  </button>
-                  
                   <div>
                     <CardTitle className={`flex items-center gap-2 text-lg font-semibold ${isDark ? 'text-[#E8D9AE]' : 'text-[#6A4D16]'}`}>
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#111111]" style={{ backgroundColor: chartColor }}>
@@ -832,23 +903,20 @@ export function DashboardView() {
                       >
                         Toman {statusLabel(asset.tomanStatus)}
                       </span>
-                      {asset.ageSeconds !== null ? (
-                        <span className={`${isDark ? 'text-[#BCA96F]' : 'text-[#7D6023]'}`}>
-                          {t.cacheAge[language]}: {formatAge(asset.ageSeconds, language)}
-                        </span>
-                      ) : null}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                   <div className={`flex items-center gap-1 rounded-2xl px-3 py-1.5 text-xs font-semibold backdrop-blur-md ${
-                    asset.isUp
-                      ? isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
-                      : isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-700'
+                    !Number.isFinite(asset.changePercent)
+                      ? isDark ? 'bg-white/5 text-[#CDBB8C]' : 'bg-black/5 text-[#7A5E24]'
+                      : asset.isUp
+                        ? isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
+                        : isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-700'
                   }`}>
                     {Number.isFinite(asset.changePercent) && (asset.isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
-                    <span dir="ltr">{Number.isFinite(asset.changePercent) ? `${Math.abs(asset.changePercent).toFixed(2)}%` : 'N/A'}</span>
+                    <span dir="ltr">{Number.isFinite(asset.changePercent) ? `${Math.abs(asset.changePercent).toFixed(2)}%` : '0%'}</span>
                   </div>
                   <Button
                     onClick={() => {
@@ -885,9 +953,6 @@ export function DashboardView() {
                       isDark ? STATUS_COLORS[activeStatus].dark : STATUS_COLORS[activeStatus].light
                     }`}>
                       <Database size={12} /> {statusLabel(activeStatus)}
-                    </span>
-                    <span className="inline-flex items-center gap-1" title={activeSource}>
-                      <Clock3 size={12} /> {formatAge(asset.ageSeconds, language)}
                     </span>
                     {(asset.canonicalAt || asset.observedAt) && (
                       <span dir="ltr">
@@ -979,10 +1044,7 @@ export function DashboardView() {
                   )}
                 </AnimatePresence>
 
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <span className={`text-xs font-semibold ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>
-                    {t.timeframe[language]}
-                  </span>
+                <div className="mb-3 flex flex-wrap items-center justify-end gap-2">
                   <div className={`flex rounded-xl p-1 ${isDark ? 'bg-black/40' : 'bg-[#F6EBD0]'}`} dir="ltr">
                     {TIMEFRAMES.map((value) => (
                       <button
@@ -1014,16 +1076,6 @@ export function DashboardView() {
                   </div>
                 ) : (
                   <>
-                    <div className={`mb-2 text-[10px] ${isDark ? 'text-[#887850]' : 'text-[#A8883A]'}`}
-                      dir="ltr" title={`USD source: ${asset.sourceUsd}\nToman source: ${asset.sourceToman}`}
-                    >
-                      USD: {asset.sourceUsd} | Toman: {asset.sourceToman}
-                    </div>
-                    <div className={`mb-2 text-xs ${isDark ? 'text-[#A89668]' : 'text-[#8A6A25]'}`}>
-                      {safeHistory.length <= 1
-                        ? (language === 'fa' ? '⏳ در حال جمع‌آوری داده‌های نمودار...' : '⏳ Building chart history...')
-                        : t.dragToInspect[language]}
-                    </div>
                     <div
                       className="relative"
                     >
@@ -1256,9 +1308,6 @@ export function DashboardView() {
                 language={language}
                 className={`h-[60vh] rounded-2xl border p-4 ${isDark ? 'border-white/5 bg-[#111111]/40' : 'border-black/5 bg-white/40'}`}
               />
-              <div className={`text-center text-xs ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                USD: {asset.sourceUsd} | Toman: {asset.sourceToman}
-              </div>
             </div>
           );
         })()}
