@@ -238,6 +238,18 @@ def set_basic_preference(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationPreferencesResponse:
+    if (
+        key == "push_app"
+        and payload.enabled
+        and not (settings.vapid_public_key and settings.vapid_private_key)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "push_unavailable",
+                "message": "Push delivery is not configured.",
+            },
+        )
     prefs = _prefs_for(db, current_user.id)
     setattr(prefs, key, payload.enabled)
     db.commit()
@@ -402,14 +414,10 @@ def confirm_telegram(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationPreferencesResponse:
-    if (
-        key == "push_app"
-        and payload.enabled
-        and not (settings.vapid_public_key and settings.vapid_private_key)
-    ):
+    if not settings.telegram_alert_delivery_enabled or not settings.telegram_bot_token:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Push delivery is not configured.",
+            detail="Telegram alert delivery is not configured.",
         )
     prefs = _prefs_for(db, current_user.id)
     if not prefs.telegram_id:

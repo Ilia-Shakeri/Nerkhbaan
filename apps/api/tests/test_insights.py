@@ -42,7 +42,9 @@ httpx_stub = types.SimpleNamespace(
     HTTPStatusError=_HTTPStatusError,
     TimeoutException=_TimeoutException,
 )
-sys.modules.setdefault("httpx", httpx_stub)
+previous_httpx = sys.modules.get("httpx")
+previous_config = sys.modules.get("app.config")
+sys.modules["httpx"] = httpx_stub
 
 settings_stub = types.SimpleNamespace(
     groq_api_base_url="https://api.groq.test/openai/v1",
@@ -53,9 +55,18 @@ settings_stub = types.SimpleNamespace(
     insight_api_key=None,
     deepseek_api_key=None,
 )
-sys.modules.setdefault("app.config", types.SimpleNamespace(settings=settings_stub))
+sys.modules["app.config"] = types.SimpleNamespace(settings=settings_stub)
 
 from app.services.insights import MarketInsightEngine, ProviderConfig
+
+if previous_httpx is None:
+    sys.modules.pop("httpx", None)
+else:
+    sys.modules["httpx"] = previous_httpx
+if previous_config is None:
+    sys.modules.pop("app.config", None)
+else:
+    sys.modules["app.config"] = previous_config
 
 
 class _ClientContext:
