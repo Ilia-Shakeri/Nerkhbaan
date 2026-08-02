@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-alpine AS builder
+FROM node:22.23.0-alpine3.24 AS builder
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ COPY apps/web ./apps/web
 
 RUN npm run build --workspace=nerkhbaan-web
 
-FROM nginx:alpine AS runtime
+FROM nginx:1.30.4-alpine3.24 AS runtime
 
 RUN rm -rf /usr/share/nginx/html/*
 

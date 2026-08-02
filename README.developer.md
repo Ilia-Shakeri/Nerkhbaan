@@ -27,8 +27,8 @@ Nerkhbaan/
 
 Ensure you have the following installed on your machine:
 
-* [Node.js 18+](https://nodejs.org/) & npm 9+
-* [Python 3.11+](https://www.python.org/)
+* Node.js 22.23.0 and npm 10.9.8 (pinned by `.nvmrc` and `package.json`)
+* Python 3.12 (the production image version)
 * [Docker Engine](https://docs.docker.com/get-docker/)
 
 ### 2. Environment Configuration
@@ -56,7 +56,7 @@ docker compose up -d postgres
 Install all Node modules across the monorepo workspaces:
 
 ```bash
-npm install
+npm ci
 ```
 
 Set up the Python virtual environment for the backend:
@@ -65,7 +65,7 @@ Set up the Python virtual environment for the backend:
 cd apps/api
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cd ../..
 ```
 

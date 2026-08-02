@@ -7,7 +7,7 @@ x-api-environment: &api-environment
 
 services:
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb:2.28.3-pg16
     container_name: nerkhbaan-postgres
     restart: unless-stopped
     environment:
@@ -45,7 +45,7 @@ services:
           memory: 1536M
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2.15-alpine3.21
     container_name: nerkhbaan-redis
     restart: unless-stopped
     command:
@@ -209,7 +209,7 @@ services:
           memory: 256M
 
   db-backup:
-    image: prodrigestivill/postgres-backup-local:16
+    image: prodrigestivill/postgres-backup-local:16-alpine-d257e5d
     container_name: nerkhbaan-db-backup
     restart: unless-stopped
     environment:

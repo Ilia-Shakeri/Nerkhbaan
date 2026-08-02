@@ -5,13 +5,12 @@ import hashlib
 import json
 import os
 import socket
-import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any, Callable
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from ..db import SessionLocal
 from .cache import PricingRedisStore, PricingRedisUnavailable, pricing_redis
@@ -32,8 +31,6 @@ from .models import (
     PersistenceStatus,
     ProviderQuote,
     VerificationDecision,
-    canonical_json,
-    json_number,
     utc_now,
 )
 from .registry import PROVIDERS

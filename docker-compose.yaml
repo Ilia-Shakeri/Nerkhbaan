@@ -7,7 +7,7 @@ x-api-environment: &api-environment
 
 services:
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    image: timescale/timescaledb:2.28.3-pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nerkhbaan}
@@ -25,7 +25,7 @@ services:
     networks: [nerkhbaan-network]
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2.15-alpine3.21
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
     volumes:
@@ -126,7 +126,7 @@ services:
     networks: [nerkhbaan-network]
 
   db-backup:
-    image: prodrigestivill/postgres-backup-local:16
+    image: prodrigestivill/postgres-backup-local:16-alpine-d257e5d
     restart: unless-stopped
     environment:
       POSTGRES_HOST: postgres

@@ -41,7 +41,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     let active = true;
     getStoredAccessToken()
       .then(async (token) => {
-        if (!token) return false;
+        if (!token) return null;
         const user = await api.auth.me();
         return user;
       })

@@ -146,7 +146,9 @@ const EMPTY_ASSETS: PriceAsset[] = DEFAULT_ASSET_ORDER.map(buildPlaceholderAsset
 
 const normalizeStatus = (value: unknown): OperationalPriceStatus => {
   if (value === 'confirmed') return 'live';
-  return Object.prototype.hasOwnProperty.call(STATUS_COLORS, value) ? value as OperationalPriceStatus : 'unavailable';
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(STATUS_COLORS, value)
+    ? value as OperationalPriceStatus
+    : 'unavailable';
 };
 
 const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, icon: LucideIcon): AssetCard => {

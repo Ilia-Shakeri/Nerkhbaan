@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import secrets
-from datetime import datetime
 from decimal import Decimal
 from typing import Any, Iterable
 
@@ -24,13 +23,12 @@ from .models import (
     ProviderRole,
     RequestPurpose,
     ValidationStatus,
-    ensure_utc,
     utc_now,
 )
 from .persistence import PricingPersistence, pricing_persistence
 from .operational import OperationalPricingSettings, operational_pricing_settings
 from .providers import ProviderQuoteCollector, QuoteFetchOutcome, provider_collector
-from .registry import PROVIDERS_BY_INSTRUMENT, ProviderDefinition, providers_for
+from .registry import PROVIDERS_BY_INSTRUMENT, ProviderDefinition
 from .source_policy import SourceEligibilityPolicy, source_eligibility_policy
 from .telegram import StoredTelegramQuoteRepository, stored_telegram_quotes
 

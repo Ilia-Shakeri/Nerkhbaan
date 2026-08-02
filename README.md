@@ -190,10 +190,12 @@ docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < app
 
 ## Local Development
 
+Use Node.js 22.23.0 with npm 10.9.8. The versions are pinned in `.nvmrc` and `package.json`. The production backend image uses Python 3.12.13.
+
 Install Node dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 Install backend dependencies:
@@ -202,7 +204,7 @@ Install backend dependencies:
 cd apps/api
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 Run services:
@@ -216,14 +218,14 @@ Run builds:
 
 ```bash
 npm run build:web
+npm run build:admin
 npm run build:desktop
 ```
 
 Run backend tests:
 
 ```bash
-cd apps/api
-python -m unittest discover -s tests
+npm run verify
 ```
 
 ## Frontend Container Build

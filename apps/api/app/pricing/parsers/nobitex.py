@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
-from ..models import Currency, WeightUnit
+from ..models import WeightUnit
 from .base import (
     ParsedProviderValue,
     ParserContext,

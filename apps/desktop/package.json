@@ -6,7 +6,7 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "build": "tsc && vite build",
+    "build": "tsc -b && vite build --configLoader runner",
     "preview": "vite preview"
   },
   "dependencies": {
