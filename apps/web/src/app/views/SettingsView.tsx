@@ -7,7 +7,7 @@ import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { useAppContext } from '../context/AppContext';
-import { api, type NotificationPreferences } from '../services/api';
+import { api, type NotificationPreferences, type TelegramDeepLink } from '../services/api';
 import { toast } from 'sonner';
 
 type OtpPanel = 'sms' | 'email' | null;
@@ -29,6 +29,7 @@ const emptyPrefs: NotificationPreferences = {
   email_available: false,
   sms_available: false,
   telegram_available: false,
+  telegram_deeplink_available: false,
 };
 
 export function SettingsView() {
@@ -44,6 +45,7 @@ export function SettingsView() {
   const [telegramId, setTelegramId] = useState('');
   const [telegramCode, setTelegramCode] = useState('');
   const [telegramCodeSent, setTelegramCodeSent] = useState(false);
+  const [telegramLink, setTelegramLink] = useState<TelegramDeepLink | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const t = {
@@ -71,6 +73,9 @@ export function SettingsView() {
     otpPlaceholder: { fa: 'کد تایید', en: 'Verification code' },
     telegramPlaceholder: { fa: '@username', en: '@username' },
     telegramHelp: { fa: 'ربات را start کنید؛ سپس کد تایید برای شما ارسال می‌شود.', en: 'Start the bot, then request a verification code.' },
+    telegramLinkHelp: { fa: 'ربات را باز کنید و دکمه شروع را بزنید. این صفحه خودکار بررسی می‌شود.', en: 'Open the bot and press Start. This page will check automatically.' },
+    openTelegram: { fa: 'باز کردن ربات', en: 'Open bot' },
+    telegramOpenFailed: { fa: 'باز کردن ربات ممکن نشد. دوباره تلاش کنید.', en: 'The bot could not be opened. Try again.' },
     verified: { fa: 'تایید شده', en: 'Verified' },
     pending: { fa: 'در انتظار تایید', en: 'Pending verification' },
     saved: { fa: 'ذخیره شد', en: 'Saved' },
@@ -83,6 +88,33 @@ export function SettingsView() {
       setTelegramId(value.telegram_id ?? '');
     }).catch((error) => toast.error(error instanceof Error ? error.message : 'Failed to load settings'));
   }, []);
+
+  useEffect(() => {
+    if (!telegramLink || prefs.telegram_verified) return;
+    let active = true;
+    const poll = async () => {
+      if (Date.now() >= Date.parse(telegramLink.expires_at)) {
+        if (active) setTelegramLink(null);
+        return;
+      }
+      try {
+        const value = await api.notifications.preferences();
+        if (!active) return;
+        setPrefs(value);
+        if (value.telegram_verified) {
+          setTelegramLink(null);
+          toast.success(t.verified[language]);
+        }
+      } catch {
+        // A later poll can recover from a short route failure.
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 2000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [language, prefs.telegram_verified, telegramLink]);
 
   const headingCls = `mb-4 flex items-center gap-2 text-xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-[#3B2E13]'}`;
   const cardCls = `divide-y ${isDark ? 'divide-white/5 border-white/5 bg-[#0E0E0E]/70' : 'divide-black/5 border-black/5 bg-white/80'} backdrop-blur-md rounded-2xl`;
@@ -141,6 +173,18 @@ export function SettingsView() {
       setPrefs(await api.notifications.disable('telegram'));
       setTelegramCodeSent(false);
       setTelegramCode('');
+      setTelegramLink(null);
+      return;
+    }
+    if (prefs.telegram_deeplink_available) {
+      setIsSaving(true);
+      try {
+        setTelegramLink(await api.notifications.createTelegramDeepLink());
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Failed to create Telegram link');
+      } finally {
+        setIsSaving(false);
+      }
       return;
     }
     if (!telegramId.trim() && !prefs.telegram_id) {
@@ -157,6 +201,12 @@ export function SettingsView() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const openTelegramLink = () => {
+    if (!telegramLink) return;
+    const opened = window.open(telegramLink.url, '_blank', 'noopener,noreferrer');
+    if (!opened) toast.error(t.telegramOpenFailed[language]);
   };
 
   const confirmTelegram = async () => {
@@ -237,11 +287,19 @@ export function SettingsView() {
           </div>
           <div>
             <div className={rowCls}>
-              <div className="flex min-w-0 flex-1 items-center gap-4"><div className={iconWrap('bg-sky-500/10 text-sky-400')}><Send size={20} /></div><div className="min-w-0 flex-1"><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.telegram[language]}</span><p className={`mt-1 text-xs ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{prefs.telegram_verified ? t.verified[language] : telegramCodeSent ? t.pending[language] : t.telegramHelp[language]}</p></div></div>
-              <Switch disabled={!prefs.telegram_available} checked={prefs.telegram_enabled && prefs.telegram_verified} onCheckedChange={enableTelegram} />
+              <div className="flex min-w-0 flex-1 items-center gap-4"><div className={iconWrap('bg-sky-500/10 text-sky-400')}><Send size={20} /></div><div className="min-w-0 flex-1"><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.telegram[language]}</span><p className={`mt-1 text-xs ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{prefs.telegram_verified ? t.verified[language] : telegramLink || telegramCodeSent ? t.pending[language] : prefs.telegram_deeplink_available ? t.telegramLinkHelp[language] : t.telegramHelp[language]}</p></div></div>
+              <Switch disabled={!prefs.telegram_available || isSaving} checked={(prefs.telegram_enabled && prefs.telegram_verified) || Boolean(telegramLink)} onCheckedChange={enableTelegram} />
             </div>
             <AnimatePresence>
-              {(!prefs.telegram_enabled && (telegramId || telegramCodeSent)) && (
+              {telegramLink && !prefs.telegram_verified && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                  <div className="flex flex-col gap-3 px-5 pb-5 sm:flex-row sm:items-center sm:justify-between" aria-live="polite">
+                    <p className={`text-sm ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{t.telegramLinkHelp[language]}</p>
+                    <Button onClick={openTelegramLink} className="shrink-0 bg-[#D4AF37] text-black">{t.openTelegram[language]}</Button>
+                  </div>
+                </motion.div>
+              )}
+              {!prefs.telegram_deeplink_available && (!prefs.telegram_enabled && (telegramId || telegramCodeSent)) && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
                   <div className="grid gap-3 px-5 pb-5 sm:grid-cols-[1fr_140px]">
                     <Input disabled={!prefs.telegram_available || telegramCodeSent} dir="ltr" value={telegramId} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setTelegramId(event.target.value)} placeholder={t.telegramPlaceholder[language]} />

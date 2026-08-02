@@ -81,6 +81,17 @@ This focused fix was committed before enabling the repository-wide lint gate bec
 - Added a reviewed, narrow, expiring exception policy for security scan findings. No exception is currently approved.
 - Removed dead Python imports exposed by the new lint gate without changing runtime behavior.
 
+### Phase 1: notification channel correctness
+
+- Added a backward-compatible Telegram bot deep-link handshake behind `TELEGRAM_DEEPLINK_ENABLED`.
+- The authenticated API creates a 48-character signed, short-lived start token, stores only its SHA-256 digest, and invalidates older pending tokens for the user.
+- The webhook requires Telegram's secret-token header, accepts only a private positive numeric chat, verifies the token signature, locks and consumes the challenge once, and persists the verified numeric chat ID.
+- Disabling Telegram invalidates every pending deep-link challenge for that user. Existing verified numeric IDs and the legacy username/code flow remain valid.
+- Added a compatible `telegram_deeplink_available` preference field so clients never claim the new flow is ready when operator configuration is incomplete.
+- Web and desktop settings display the bot link, poll the existing preference endpoint until verification or expiry, and preserve the current theme and legacy fallback.
+- Desktop external navigation goes through a narrow IPC operation that accepts only exact `https://t.me/<bot>?start=<48-char-token>` links.
+- Documented the bot username, feature flag, bounded link lifetime, signing secret, and independent webhook secret in `.env.example`.
+
 ## Migrations
 
 Pending. All database work must be forward-only and preserve existing rows.
@@ -101,6 +112,10 @@ Pending. All database work must be forward-only and preserve existing rows.
 | `python -m pyflakes app tests scripts` from `apps/api` | Passed after the confirmed notification crash fix and dead-import cleanup. |
 | `python -m unittest discover -s tests -v` before deep-link test implementation | Passed: 25 tests. |
 | `npm.cmd run verify` after the first notification, deep-link, and Phase 2 slices | Passed: compile, pyflakes, 51 tests, web build, admin build, and desktop build. |
+| `python -m unittest apps.api.tests.test_telegram_deeplink apps.api.tests.test_notifications` | Passed: 20 tests, including availability, one-use, expiry, tamper, replay, disable, and legacy compatibility cases. |
+| `node --check apps/desktop/electron/main.cjs` and `node --check apps/desktop/electron/preload.js` | Passed. |
+| `npm.cmd run build:web` after deep-link UI wiring | Passed; 3,979 modules transformed and PWA service worker generated. |
+| `npm.cmd run build:desktop` after deep-link UI and IPC wiring | Passed; 4,611 modules transformed. |
 | YAML parse of CI and both Compose files | Passed. |
 | PWA dimension check | Passed: `icon-192.png` is 192x192 and `icon-512.png` is 512x512. |
 | `git diff --check` | Passed; only host line-ending notices were printed. |
@@ -109,7 +124,8 @@ Docker is absent on this host. CI defines, but local work does not claim, image 
 
 ## Feature flags and rollback
 
-Pending. New source chains and policy changes will remain disabled or in shadow mode until promoted.
+- Telegram deep-link verification defaults off. Roll back by setting `TELEGRAM_DEEPLINK_ENABLED=false`; verified numeric chat IDs and the legacy flow remain available.
+- New source chains and policy changes will remain disabled or in shadow mode until promoted.
 
 ## Remaining risks and intentionally deferred work
 

@@ -190,6 +190,13 @@ export type NotificationPreferences = {
   email_available: boolean;
   sms_available: boolean;
   telegram_available: boolean;
+  telegram_deeplink_available: boolean;
+};
+
+export type TelegramDeepLink = {
+  url: string;
+  expires_at: string;
+  expires_in_seconds: number;
 };
 
 export type NotificationItem = {
@@ -363,6 +370,9 @@ export const api = {
     },
     async confirmTelegram(code: string): Promise<NotificationPreferences> {
       return (await apiInstance.post<NotificationPreferences>('notifications/telegram/confirm', { code })).data;
+    },
+    async createTelegramDeepLink(): Promise<TelegramDeepLink> {
+      return (await apiInstance.post<TelegramDeepLink>('notifications/telegram/deep-link')).data;
     },
     async disable(channel: 'sms' | 'email' | 'telegram'): Promise<NotificationPreferences> {
       return (await apiInstance.delete<NotificationPreferences>(`notifications/${channel}`)).data;

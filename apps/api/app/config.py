@@ -179,6 +179,18 @@ class Settings(BaseSettings):
 
     telegram_alert_delivery_enabled: bool = False
     telegram_bot_token: str | None = None
+    telegram_bot_username: str | None = None
+    telegram_deeplink_enabled: bool = False
+    telegram_deeplink_ttl_seconds: int = 600
+    telegram_deeplink_signing_secret: str | None = None
+    telegram_webhook_secret: str | None = None
+
+    @field_validator("telegram_deeplink_ttl_seconds")
+    @classmethod
+    def telegram_deeplink_ttl_must_be_short(cls, value: int) -> int:
+        if not 60 <= value <= 3600:
+            raise ValueError("TELEGRAM_DEEPLINK_TTL_SECONDS must be between 60 and 3600")
+        return value
 
     @field_validator("auth_refresh_days")
     @classmethod

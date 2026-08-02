@@ -214,6 +214,10 @@ export const api = {
       const { data } = await apiInstance.post<NotificationPreferences>('notifications/telegram/confirm', { code });
       return data;
     },
+    async createTelegramDeepLink(): Promise<TelegramDeepLink> {
+      const { data } = await apiInstance.post<TelegramDeepLink>('notifications/telegram/deep-link');
+      return data;
+    },
   },
   instruments: {
     async list(): Promise<InstrumentSummary[]> {
@@ -297,6 +301,13 @@ export type NotificationPreferences = {
   email_available: boolean;
   sms_available: boolean;
   telegram_available: boolean;
+  telegram_deeplink_available: boolean;
+};
+
+export type TelegramDeepLink = {
+  url: string;
+  expires_at: string;
+  expires_in_seconds: number;
 };
 
 export type NotificationItem = {

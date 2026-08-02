@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleMaximizeWindow: () => ipcRenderer.send('window-maximize-toggle'),
   closeWindow: () => ipcRenderer.send('window-close'),
   isWindowMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  openTelegramLink: (url) => ipcRenderer.invoke('open-telegram-link', url),
   auth: Object.freeze({
     getCredentials: () => ipcRenderer.invoke('auth-get-credentials'),
     setCredentials: (credentials) => ipcRenderer.invoke('auth-set-credentials', credentials),

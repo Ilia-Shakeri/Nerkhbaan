@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, safeStorage, session } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, session, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -30,6 +30,30 @@ const parseCredentials = (value) => {
   return { access_token: accessToken, refresh_token: refreshToken };
 };
 
+const parseTelegramDeepLink = (value) => {
+  if (typeof value !== 'string' || value.length > 256) return null;
+  try {
+    const parsed = new URL(value);
+    const queryKeys = [...parsed.searchParams.keys()];
+    const token = parsed.searchParams.get('start') || '';
+    if (
+      parsed.protocol !== 'https:' ||
+      parsed.hostname !== 't.me' ||
+      parsed.port ||
+      parsed.username ||
+      parsed.password ||
+      parsed.hash ||
+      !/^\/[A-Za-z][A-Za-z0-9_]{4,31}$/.test(parsed.pathname) ||
+      queryKeys.length !== 1 ||
+      queryKeys[0] !== 'start' ||
+      !/^[A-Za-z0-9_-]{48}$/.test(token)
+    ) return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+};
+
 ipcMain.handle('auth-get-credentials', async (event) => {
   if (!isTrustedRenderer(event) || !safeStorage.isEncryptionAvailable()) return null;
   try {
@@ -53,6 +77,18 @@ ipcMain.handle('auth-set-credentials', async (event, value) => {
 ipcMain.handle('auth-clear-credentials', async (event) => {
   if (!isTrustedRenderer(event)) throw new Error('Untrusted renderer');
   await fs.promises.rm(credentialsPath(), { force: true });
+});
+
+ipcMain.handle('open-telegram-link', async (event, value) => {
+  if (!isTrustedRenderer(event)) return false;
+  const safeUrl = parseTelegramDeepLink(value);
+  if (!safeUrl) return false;
+  try {
+    await shell.openExternal(safeUrl, { activate: true });
+    return true;
+  } catch {
+    return false;
+  }
 });
 
 function createWindow() {

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import logging
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, NoReturn
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field, TypeAdapter
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -23,8 +26,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 OTP_TTL_MINUTES = 10
+TELEGRAM_LINK_CHANNEL = "telegram_link"
 PHONE_RE = re.compile(r"^\+98\d{10}$")
 TELEGRAM_RE = re.compile(r"^(?:@?[A-Za-z][A-Za-z0-9_]{4,31}|-?\d{5,20})$")
+TELEGRAM_BOT_USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]{4,31}$")
+TELEGRAM_START_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{48}$")
+TELEGRAM_START_RE = re.compile(
+    r"^/start(?:@[A-Za-z][A-Za-z0-9_]{4,31})?\s+([A-Za-z0-9_-]{48})$"
+)
 EMAIL_ADAPTER = TypeAdapter(EmailStr)
 
 
@@ -45,6 +54,7 @@ class NotificationPreferencesResponse(BaseModel):
     email_available: bool
     sms_available: bool
     telegram_available: bool
+    telegram_deeplink_available: bool
 
 
 class BasicPreferenceRequest(BaseModel):
@@ -66,6 +76,27 @@ class TelegramRequest(BaseModel):
 
 class TelegramConfirmRequest(BaseModel):
     code: str = Field(pattern=r"^\d{6}$")
+
+
+class TelegramDeepLinkResponse(BaseModel):
+    url: str
+    expires_at: datetime
+    expires_in_seconds: int
+
+
+class TelegramWebhookChat(BaseModel):
+    id: int = Field(gt=0)
+    type: str = Field(min_length=1, max_length=32)
+
+
+class TelegramWebhookMessage(BaseModel):
+    chat: TelegramWebhookChat
+    text: str | None = Field(default=None, max_length=256)
+
+
+class TelegramWebhookUpdate(BaseModel):
+    update_id: int
+    message: TelegramWebhookMessage | None = None
 
 
 class NotificationItem(BaseModel):
@@ -112,6 +143,7 @@ def _to_response(prefs: NotificationPreference) -> NotificationPreferencesRespon
         telegram_available=bool(
             settings.telegram_alert_delivery_enabled and settings.telegram_bot_token
         ),
+        telegram_deeplink_available=_telegram_deeplink_config() is not None,
     )
 
 
@@ -138,6 +170,87 @@ def _normalize_telegram(destination: str) -> str:
     if value.lstrip("-").isdigit():
         return value
     return value if value.startswith("@") else f"@{value}"
+
+
+def _telegram_deeplink_unavailable() -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail={
+            "code": "telegram_deeplink_unavailable",
+            "message": "Telegram deep-link verification is not configured.",
+        },
+    )
+
+
+def _telegram_deeplink_invalid() -> NoReturn:
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={
+            "code": "telegram_deeplink_invalid",
+            "message": "Telegram verification link is invalid or expired.",
+        },
+    )
+
+
+def _telegram_bot_username() -> str | None:
+    username = (settings.telegram_bot_username or "").strip().lstrip("@")
+    if not TELEGRAM_BOT_USERNAME_RE.fullmatch(username) or not username.lower().endswith("bot"):
+        return None
+    return username
+
+
+def _telegram_deeplink_config() -> tuple[str, str, str] | None:
+    username = _telegram_bot_username()
+    bot_token = (settings.telegram_bot_token or "").strip()
+    signing_secret = (settings.telegram_deeplink_signing_secret or "").strip()
+    webhook_secret = (settings.telegram_webhook_secret or "").strip()
+    if not (
+        settings.telegram_deeplink_enabled
+        and settings.telegram_alert_delivery_enabled
+        and bot_token
+        and username
+        and len(signing_secret) >= 16
+        and len(webhook_secret) >= 16
+    ):
+        return None
+    return username, signing_secret, webhook_secret
+
+
+def _telegram_token_signature(nonce: str, signing_secret: str) -> str:
+    digest = hmac.new(
+        signing_secret.encode("utf-8"),
+        nonce.encode("ascii"),
+        hashlib.sha256,
+    ).digest()[:18]
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def _new_telegram_start_token(signing_secret: str) -> str:
+    nonce = secrets.token_urlsafe(18)
+    return f"{nonce}{_telegram_token_signature(nonce, signing_secret)}"
+
+
+def _valid_telegram_start_token(token: str, signing_secret: str) -> bool:
+    if not TELEGRAM_START_TOKEN_RE.fullmatch(token):
+        return False
+    nonce, signature = token[:24], token[24:]
+    expected = _telegram_token_signature(nonce, signing_secret)
+    return secrets.compare_digest(signature.encode("ascii"), expected.encode("ascii"))
+
+
+def _telegram_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("ascii")).hexdigest()
+
+
+def _prefs_for_transaction(db: Session, user_id: int) -> NotificationPreference:
+    prefs = db.scalar(
+        select(NotificationPreference).where(NotificationPreference.user_id == user_id)
+    )
+    if prefs is None:
+        prefs = NotificationPreference(user_id=user_id)
+        db.add(prefs)
+        db.flush()
+    return prefs
 
 
 def _send_telegram_verification(destination: str, code: str) -> None:
@@ -355,6 +468,111 @@ def confirm_otp(
     return _to_response(prefs)
 
 
+@router.post(
+    "/telegram/deep-link",
+    response_model=TelegramDeepLinkResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_telegram_deep_link(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TelegramDeepLinkResponse:
+    config = _telegram_deeplink_config()
+    if config is None:
+        _telegram_deeplink_unavailable()
+    username, signing_secret, _webhook_secret = config
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(seconds=settings.telegram_deeplink_ttl_seconds)
+    token = _new_telegram_start_token(signing_secret)
+    db.execute(
+        update(OtpVerification)
+        .where(
+            OtpVerification.user_id == current_user.id,
+            OtpVerification.channel == TELEGRAM_LINK_CHANNEL,
+            OtpVerification.used.is_(False),
+        )
+        .values(used=True)
+    )
+    db.add(
+        OtpVerification(
+            user_id=current_user.id,
+            channel=TELEGRAM_LINK_CHANNEL,
+            destination=username,
+            code_hash=_telegram_token_hash(token),
+            expires_at=expires_at,
+            used=False,
+        )
+    )
+    db.commit()
+    return TelegramDeepLinkResponse(
+        url=f"https://t.me/{username}?start={token}",
+        expires_at=expires_at,
+        expires_in_seconds=settings.telegram_deeplink_ttl_seconds,
+    )
+
+
+@router.post("/telegram/webhook")
+def handle_telegram_start(
+    payload: TelegramWebhookUpdate,
+    x_telegram_bot_api_secret_token: str | None = Header(
+        default=None,
+        alias="X-Telegram-Bot-Api-Secret-Token",
+    ),
+    db: Session = Depends(get_db),
+) -> dict[str, bool]:
+    config = _telegram_deeplink_config()
+    if config is None:
+        _telegram_deeplink_unavailable()
+    _username, signing_secret, webhook_secret = config
+    supplied_secret = x_telegram_bot_api_secret_token or ""
+    if not secrets.compare_digest(
+        supplied_secret.encode("utf-8"),
+        webhook_secret.encode("utf-8"),
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "code": "telegram_webhook_forbidden",
+                "message": "Telegram webhook authentication failed.",
+            },
+        )
+    message = payload.message
+    if message is None or message.chat.type != "private":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "telegram_private_chat_required",
+                "message": "Telegram verification requires a private chat.",
+            },
+        )
+    match = TELEGRAM_START_RE.fullmatch((message.text or "").strip())
+    if match is None:
+        _telegram_deeplink_invalid()
+    token = match.group(1)
+    if not _valid_telegram_start_token(token, signing_secret):
+        _telegram_deeplink_invalid()
+    now = datetime.now(UTC)
+    verification = db.scalar(
+        select(OtpVerification)
+        .where(
+            OtpVerification.channel == TELEGRAM_LINK_CHANNEL,
+            OtpVerification.code_hash == _telegram_token_hash(token),
+            OtpVerification.used.is_(False),
+        )
+        .with_for_update()
+    )
+    if verification is None or verification.expires_at <= now:
+        db.rollback()
+        _telegram_deeplink_invalid()
+    prefs = _prefs_for_transaction(db, verification.user_id)
+    verification.used = True
+    prefs.telegram_id = str(message.chat.id)
+    prefs.telegram_verified = True
+    prefs.telegram_enabled = True
+    db.commit()
+    return {"accepted": True}
+
+
 @router.post("/telegram", response_model=NotificationPreferencesResponse)
 def set_telegram(
     payload: TelegramRequest,
@@ -471,6 +689,15 @@ def disable_channel(
     else:
         prefs.telegram_enabled = False
         prefs.telegram_verified = False
+        db.execute(
+            update(OtpVerification)
+            .where(
+                OtpVerification.user_id == current_user.id,
+                OtpVerification.channel == TELEGRAM_LINK_CHANNEL,
+                OtpVerification.used.is_(False),
+            )
+            .values(used=True)
+        )
     db.commit()
     db.refresh(prefs)
     return _to_response(prefs)

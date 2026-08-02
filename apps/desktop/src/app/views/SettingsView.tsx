@@ -7,7 +7,7 @@ import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { toast } from 'sonner';
 import { useAppContext } from '../context/AppContext';
-import { api, type NotificationPreferences } from '../services/api';
+import { api, type NotificationPreferences, type TelegramDeepLink } from '../services/api';
 
 const emptyPreferences: NotificationPreferences = {
   push_app: false,
@@ -26,6 +26,7 @@ const emptyPreferences: NotificationPreferences = {
   email_available: false,
   sms_available: false,
   telegram_available: false,
+  telegram_deeplink_available: false,
 };
 
 type VerifyChannel = 'sms' | 'email';
@@ -44,6 +45,7 @@ export function SettingsView() {
   const [telegramId, setTelegramId] = useState('');
   const [telegramCode, setTelegramCode] = useState('');
   const [telegramCodeSent, setTelegramCodeSent] = useState(false);
+  const [telegramLink, setTelegramLink] = useState<TelegramDeepLink | null>(null);
 
   const t = {
     general: { fa: 'عمومی', en: 'General' },
@@ -55,6 +57,8 @@ export function SettingsView() {
     sms: { fa: 'پیامک', en: 'SMS' },
     email: { fa: 'ایمیل', en: 'Email' },
     telegram: { fa: 'تلگرام', en: 'Telegram' },
+    telegramLinkHelp: { fa: 'ربات را باز کنید و دکمه شروع را بزنید. این صفحه خودکار بررسی می‌شود.', en: 'Open the bot and press Start. This page will check automatically.' },
+    openTelegram: { fa: 'باز کردن ربات', en: 'Open bot' },
     silent: { fa: 'حالت بی‌صدا', en: 'Silent mode' },
     repeat: { fa: 'هشدار مکرر', en: 'Recurring alerts' },
     verified: { fa: 'تأیید شده', en: 'Verified' },
@@ -86,6 +90,33 @@ export function SettingsView() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!telegramLink || prefs.telegram_verified) return;
+    let active = true;
+    const poll = async () => {
+      if (Date.now() >= Date.parse(telegramLink.expires_at)) {
+        if (active) setTelegramLink(null);
+        return;
+      }
+      try {
+        const value = await api.notifications.preferences();
+        if (!active) return;
+        setPrefs(value);
+        if (value.telegram_verified) {
+          setTelegramLink(null);
+          toast.success(t.verified[language]);
+        }
+      } catch {
+        // A later poll can recover from a short route failure.
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 2000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [language, prefs.telegram_verified, telegramLink]);
+
   const setBasic = async (key: 'push_app' | 'silent_mode' | 'aggressive_alerts', enabled: boolean) => {
     const previous = prefs;
     setPrefs((current) => ({ ...current, [key]: enabled }));
@@ -100,9 +131,30 @@ export function SettingsView() {
   const disableChannel = async (channel: VerifyChannel | 'telegram') => {
     try {
       setPrefs(await api.notifications.disable(channel));
+      if (channel === 'telegram') {
+        setTelegramLink(null);
+        setTelegramCodeSent(false);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to disable channel');
     }
+  };
+
+  const createTelegramLink = async () => {
+    setIsSaving(true);
+    try {
+      setTelegramLink(await api.notifications.createTelegramDeepLink());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to create Telegram link');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openTelegramLink = async () => {
+    if (!telegramLink) return;
+    const opened = await window.electronAPI?.openTelegramLink(telegramLink.url);
+    if (!opened) toast.error('Telegram link could not be opened');
   };
 
   const startVerification = async () => {
@@ -211,8 +263,12 @@ export function SettingsView() {
           })}
           <div className={`${row} flex-wrap`}>
             <div className="flex items-center gap-3"><Send size={20} /><div><div className="font-semibold">{t.telegram[language]}</div><div className="text-xs text-slate-500">{prefs.telegram_verified ? t.verified[language] : t.unverified[language]}</div></div></div>
-            <div className="flex gap-2"><Input disabled={!prefs.telegram_available} value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="@username" dir="ltr" className="w-40" /><Button variant="ghost" disabled={isSaving || !prefs.telegram_available} onClick={() => prefs.telegram_enabled ? void disableChannel('telegram') : void saveTelegram()}>{prefs.telegram_enabled ? t.disable[language] : t.configure[language]}</Button></div>
-            {telegramCodeSent && <div className="flex w-full justify-end gap-2"><Input value={telegramCode} onChange={(event) => setTelegramCode(event.target.value)} placeholder="123456" dir="ltr" className="w-40" /><Button variant="primary" disabled={isSaving || !/^\d{6}$/.test(telegramCode)} onClick={() => void confirmTelegram()}>{t.confirm[language]}</Button></div>}
+            <div className="flex gap-2">
+              {!prefs.telegram_deeplink_available && <Input disabled={!prefs.telegram_available} value={telegramId} onChange={(event) => setTelegramId(event.target.value)} placeholder="@username" dir="ltr" className="w-40" />}
+              <Button variant="ghost" disabled={isSaving || !prefs.telegram_available} onClick={() => prefs.telegram_enabled || telegramLink ? void disableChannel('telegram') : prefs.telegram_deeplink_available ? void createTelegramLink() : void saveTelegram()}>{prefs.telegram_enabled || telegramLink ? t.disable[language] : t.configure[language]}</Button>
+            </div>
+            {telegramLink && !prefs.telegram_verified && <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end" aria-live="polite"><span className="text-sm text-slate-500">{t.telegramLinkHelp[language]}</span><Button variant="primary" onClick={() => void openTelegramLink()}>{t.openTelegram[language]}</Button></div>}
+            {!prefs.telegram_deeplink_available && telegramCodeSent && <div className="flex w-full justify-end gap-2"><Input value={telegramCode} onChange={(event) => setTelegramCode(event.target.value)} placeholder="123456" dir="ltr" className="w-40" /><Button variant="primary" disabled={isSaving || !/^\d{6}$/.test(telegramCode)} onClick={() => void confirmTelegram()}>{t.confirm[language]}</Button></div>}
           </div>
         </Card>
       </section>
