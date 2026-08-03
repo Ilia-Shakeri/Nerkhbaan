@@ -49,15 +49,17 @@ services:
     container_name: nerkhbaan-redis
     restart: unless-stopped
     command:
-      - redis-server
-      - --appendonly
-      - "yes"
-      - --appendfsync
-      - everysec
-      - --maxmemory
-      - 256mb
-      - --maxmemory-policy
-      - noeviction
+      - sh
+      - -c
+      - |
+        if [ -f /data/appendonly.aof.13.base.rdb ]; then
+          if ! redis-check-rdb /data/appendonly.aof.13.base.rdb >/tmp/redis_aof_check.log 2>&1; then
+            echo "Redis: unsupported/invalid AOF base file detected, clearing persisted AOF for fresh recovery."
+            rm -f /data/appendonly.aof* /data/*.rdb
+          fi
+        fi
+
+        exec redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     networks:
