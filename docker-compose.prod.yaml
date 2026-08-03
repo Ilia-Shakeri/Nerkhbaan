@@ -48,9 +48,8 @@ services:
     image: redis:7.2.15-alpine3.21
     container_name: nerkhbaan-redis
     restart: unless-stopped
+    entrypoint: ["sh", "-c"]
     command:
-      - sh
-      - -c
       - |
         if [ -f /data/appendonly.aof.13.base.rdb ]; then
           if ! redis-check-rdb /data/appendonly.aof.13.base.rdb >/tmp/redis_aof_check.log 2>&1; then
