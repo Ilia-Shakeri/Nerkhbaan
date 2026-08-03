@@ -30,13 +30,14 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - |
-        if [ -f /data/appendonly.aof.13.base.rdb ]; then
-          if ! redis-check-rdb /data/appendonly.aof.13.base.rdb >/tmp/redis_aof_check.log 2>&1; then
-            echo "Redis: unsupported/invalid AOF base file detected, clearing persisted AOF for fresh recovery."
-            rm -f /data/appendonly.aof* /data/*.rdb
-          fi
+        echo "Redis: clearing persisted AOF/RDB files before startup."
+        rm -f /data/appendonly.aof* /data/*.rdb /data/dump.rdb || true
+        if redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction; then
+          echo "Redis: appendonly startup succeeded."
+          exit 0
         fi
-        redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
+        echo "Redis: appendonly startup failed, retrying without append-only persistence."
+        exec redis-server --appendonly no --appendfsync no --maxmemory 256mb --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     healthcheck:
