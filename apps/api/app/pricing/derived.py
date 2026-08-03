@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Callable, Mapping
 
 from .instruments import get_instrument
@@ -9,7 +9,9 @@ from .models import (
     CanonicalQuote,
     CanonicalStatus,
     PersistenceStatus,
+    PriceSemantic,
     ProviderQuote,
+    SourceSemantic,
     SourceType,
     ValidationStatus,
     ensure_utc,
@@ -47,8 +49,10 @@ class DerivedPriceEngine:
             ),
             "SILVER_925_TOMAN_GRAM": (
                 ("SILVER_999_TOMAN_GRAM",),
-                "SILVER_999_TOMAN_GRAM * 0.925",
-                lambda values: values["SILVER_999_TOMAN_GRAM"].price * Decimal("0.925"),
+                "SILVER_999_TOMAN_GRAM * 0.925 / 0.999",
+                lambda values: values["SILVER_999_TOMAN_GRAM"].price
+                * Decimal("0.925")
+                / Decimal("0.999"),
             ),
             "BTC_TOMAN": (
                 ("BTC_USD", "USDT_TOMAN", "USDT_USD"),
@@ -72,16 +76,37 @@ class DerivedPriceEngine:
             raise DerivedPriceUnavailable("No derived formula is registered") from exc
         current = ensure_utc(now or utc_now())
         inputs: dict[str, CanonicalQuote] = {}
+        input_depths: dict[str, int] = {}
+        input_confidences: dict[str, Decimal] = {}
+        provenance: list[str] = []
         for input_id in input_ids:
             quote = canonical_quotes.get(input_id)
             if quote is None or not self._is_operationally_fresh(quote, current):
                 raise DerivedPriceUnavailable(f"Formula input is not fresh: {input_id}")
+            depth = self._derivation_depth(quote)
+            source_provenance = self._provenance(input_id, quote)
+            if normalized in source_provenance:
+                raise DerivedPriceUnavailable("Derived formula contains a cycle")
             inputs[input_id] = quote
+            input_depths[input_id] = depth
+            input_confidences[input_id] = self._confidence(quote)
+            for source in source_provenance:
+                if source not in provenance:
+                    provenance.append(source)
+        derivation_depth = max(input_depths.values(), default=0) + 1
+        if derivation_depth > 3:
+            raise DerivedPriceUnavailable("Derived formula exceeds maximum depth")
+        confidence_score = min(input_confidences.values(), default=Decimal(1)) * Decimal(
+            "0.90"
+        )
         price = calculate(inputs)
         instrument = get_instrument(normalized)
         if not instrument.accepts(price):
             raise DerivedPriceUnavailable("Derived value is outside instrument bounds")
         observed_at = min(quote.observed_at for quote in inputs.values())
+        input_live_eligible_until = min(
+            quote.valid_until for quote in inputs.values()
+        )
         return ProviderQuote.create(
             instrument_id=normalized,
             provider_id=f"derived:{normalized.lower()}",
@@ -94,10 +119,20 @@ class DerivedPriceEngine:
             received_at=current,
             parser_version="derived-formula/1.0.0",
             validation_status=ValidationStatus.ACCEPTED,
-            confidence_score=Decimal("0.70"),
+            confidence_score=confidence_score,
             is_direct=False,
             is_derived=True,
             is_suspicious=False,
+            source_semantic=SourceSemantic.DERIVED,
+            source_family="internal_formula",
+            venue="nerkhbaan",
+            selected_price_semantic=PriceSemantic.FORMULA,
+            original_currency=instrument.quote_currency.value,
+            original_value=price,
+            conversion_factor=Decimal(1),
+            route_id=f"formula:{normalized.lower()}",
+            derivation_depth=derivation_depth,
+            provenance=tuple(provenance),
             metadata={
                 "formula": formula,
                 "inputs": [
@@ -107,9 +142,16 @@ class DerivedPriceEngine:
                         "idempotency_key": inputs[input_id].idempotency_key,
                         "price": float(inputs[input_id].price),
                         "observed_at": inputs[input_id].observed_at.isoformat(),
+                        "valid_until": inputs[input_id].valid_until.isoformat(),
+                        "derivation_depth": input_depths[input_id],
+                        "confidence_score": float(input_confidences[input_id]),
+                        "provenance": self._provenance(input_id, inputs[input_id]),
                     }
                     for input_id in input_ids
                 ],
+                "derivation_depth": derivation_depth,
+                "provenance": provenance,
+                "input_live_eligible_until": input_live_eligible_until.isoformat(),
                 "theoretical_value": normalized.startswith("SILVER_"),
             },
             persistence_status=PersistenceStatus.UNPERSISTED,
@@ -123,12 +165,48 @@ class DerivedPriceEngine:
                 CanonicalStatus.LIVE,
                 CanonicalStatus.CONFIRMED,
                 CanonicalStatus.FRESH_CACHE,
-                CanonicalStatus.UNPERSISTED,
                 CanonicalStatus.DERIVED_FALLBACK,
             }
+            and quote.is_persisted
             and now <= quote.valid_until
             and now <= quote.expires_at
         )
+
+    @staticmethod
+    def _derivation_depth(quote: CanonicalQuote) -> int:
+        raw = quote.source_summary.get("derivation_depth")
+        if raw is None:
+            return 1 if quote.source_summary.get("derived", False) else 0
+        try:
+            depth = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise DerivedPriceUnavailable("Input derivation depth is invalid") from exc
+        if depth < 0:
+            raise DerivedPriceUnavailable("Input derivation depth is invalid")
+        return depth
+
+    @staticmethod
+    def _confidence(quote: CanonicalQuote) -> Decimal:
+        raw = quote.source_summary.get("confidence_score", 1)
+        try:
+            confidence = Decimal(str(raw))
+        except (InvalidOperation, TypeError, ValueError) as exc:
+            raise DerivedPriceUnavailable("Input confidence is invalid") from exc
+        if not confidence.is_finite() or not Decimal(0) <= confidence <= Decimal(1):
+            raise DerivedPriceUnavailable("Input confidence is invalid")
+        return confidence
+
+    @staticmethod
+    def _provenance(input_id: str, quote: CanonicalQuote) -> list[str]:
+        raw = quote.source_summary.get("provenance", [])
+        if not isinstance(raw, (list, tuple)):
+            raise DerivedPriceUnavailable("Input provenance is invalid")
+        result: list[str] = []
+        for value in (*raw, input_id):
+            normalized = str(value).strip().upper()
+            if normalized and normalized not in result:
+                result.append(normalized)
+        return result
 
 
 derived_price_engine = DerivedPriceEngine()

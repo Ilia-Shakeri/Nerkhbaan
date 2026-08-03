@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 
+from ..freshness import DEFAULT_FUTURE_CLOCK_SKEW_SECONDS
 from ..models import Currency, InstrumentDefinition, WeightUnit, ensure_utc
 
 _NUMBER_PATTERN = re.compile(r"^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$")
@@ -39,9 +40,14 @@ class ParserContext:
     instrument: InstrumentDefinition
     received_at: datetime
     maximum_timestamp_age_seconds: int
+    maximum_future_clock_skew_seconds: int = DEFAULT_FUTURE_CLOCK_SKEW_SECONDS
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "received_at", ensure_utc(self.received_at))
+        if self.maximum_timestamp_age_seconds <= 0:
+            raise ValueError("Maximum timestamp age must be positive")
+        if self.maximum_future_clock_skew_seconds < 0:
+            raise ValueError("Future clock skew allowance cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,9 +148,12 @@ def optional_timestamp(
     except (OSError, OverflowError, ValueError) as exc:
         raise ParserError("invalid_timestamp", f"{label} is invalid") from exc
     age = (context.received_at - result).total_seconds()
-    if age < -30 or age > context.maximum_timestamp_age_seconds:
+    if (
+        age < -context.maximum_future_clock_skew_seconds
+        or age > context.maximum_timestamp_age_seconds
+    ):
         raise ParserError("stale_timestamp", f"{label} is outside the allowed age")
-    return context.received_at if age < 0 else result
+    return result
 
 
 def validate_parsed_value(

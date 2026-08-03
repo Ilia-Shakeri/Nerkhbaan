@@ -13,12 +13,14 @@ from .budgets import RedisRequestBudget, pricing_budget
 from .cache import PricingRedisStore, PricingRedisUnavailable, pricing_redis
 from .canonical import CanonicalPricePolicy, canonical_policy
 from .derived import DerivedPriceEngine, DerivedPriceUnavailable, derived_price_engine
+from .freshness import FreshnessStatus
 from .history import HistoryResult, InternalPriceHistory, internal_history
 from .instruments import INSTRUMENTS, get_instrument
 from .locks import DistributedPricingLocks, pricing_locks
 from .models import (
     CanonicalQuote,
     CanonicalStatus,
+    PersistenceStatus,
     ProviderQuote,
     ProviderRole,
     RequestPurpose,
@@ -90,9 +92,7 @@ class InstrumentPricingService:
             ) as client:
                 primary = await self._normal_quote(instrument, client)
                 if primary is None or not primary.usable or primary.quote is None:
-                    primary = await self._fallback_quote(
-                        instrument, client, maximum_external_calls=1
-                    )
+                    primary = await self._fallback_quote(instrument, client)
 
                 if primary is None or not primary.usable or primary.quote is None:
                     telegram = await self._try_telegram_fallback(instrument, previous)
@@ -102,7 +102,11 @@ class InstrumentPricingService:
                     derived = await self._try_derived(instrument)
                     if derived is None:
                         return previous
-                    await self.persistence.persist_provider_quote(derived)
+                    persistence_result = await self.persistence.persist_provider_quote(
+                        derived
+                    )
+                    if not persistence_result.persisted:
+                        return previous
                     await self.store.set_provider_quote(
                         derived, instrument.operational_ttl_seconds
                     )
@@ -397,8 +401,17 @@ class InstrumentPricingService:
         )
         if not primaries:
             return None
-        return await self.collector.quote(
-            primaries[0], RequestPurpose.NORMAL, client=client, instrument=instrument
+        ranked = await self._rank_candidates(primaries, instrument)
+        maximum_external_calls = min(
+            len(ranked),
+            2 if instrument.importance >= 8 else 1,
+        )
+        return await self._first_usable(
+            ranked,
+            RequestPurpose.NORMAL,
+            client,
+            maximum_external_calls=maximum_external_calls,
+            instrument=instrument,
         )
 
     async def _fallback_quote(
@@ -406,16 +419,22 @@ class InstrumentPricingService:
         instrument: Any,
         client: httpx.AsyncClient,
         *,
-        maximum_external_calls: int,
+        maximum_external_calls: int | None = None,
     ) -> QuoteFetchOutcome | None:
         candidates = await self.operational.providers_for(
             instrument.instrument_id, ProviderRole.FALLBACK, ProviderRole.VERIFIER
         )
+        ranked = await self._rank_candidates(candidates, instrument)
+        call_limit = (
+            min(len(ranked), 2)
+            if maximum_external_calls is None
+            else min(len(ranked), max(0, maximum_external_calls))
+        )
         return await self._first_usable(
-            candidates,
+            ranked,
             RequestPurpose.FALLBACK,
             client,
-            maximum_external_calls=maximum_external_calls,
+            maximum_external_calls=call_limit,
             instrument=instrument,
         )
 
@@ -433,6 +452,7 @@ class InstrumentPricingService:
                 instrument_id, ProviderRole.VERIFIER, ProviderRole.COMPARE
             )
             if provider.provider_id != candidate.provider_id
+            and self._provider_is_independent(candidate, provider)
         )
         quotes: list[ProviderQuote] = []
         for provider in ranked:
@@ -488,6 +508,28 @@ class InstrumentPricingService:
             quotes.extend(accepted_telegram)
         return quotes
 
+    @staticmethod
+    def _provider_is_independent(
+        candidate: ProviderQuote,
+        provider: ProviderDefinition,
+    ) -> bool:
+        candidate_family = str(
+            candidate.source_family or candidate.provider_id
+        ).strip().lower()
+        candidate_venue = str(
+            candidate.venue or candidate.source_family or candidate.provider_id
+        ).strip().lower()
+        provider_family = str(
+            provider.source_family or provider.provider_id
+        ).strip().lower()
+        provider_venue = str(
+            provider.venue or provider.source_family or provider.provider_id
+        ).strip().lower()
+        return (
+            candidate_family != provider_family
+            and candidate_venue != provider_venue
+        )
+
     async def _rank_verifiers(
         self, providers: Iterable[ProviderDefinition]
     ) -> list[ProviderDefinition]:
@@ -520,19 +562,174 @@ class InstrumentPricingService:
         maximum_external_calls: int,
         instrument: Any,
     ) -> QuoteFetchOutcome | None:
+        candidates = list(providers)
+        trace: list[dict[str, object]] = []
+        for provider in candidates:
+            cache_reason = "no_live_cached_quote"
+            try:
+                cached = await self.store.get_provider_quote(
+                    provider.provider_id,
+                    provider.instrument_id,
+                )
+            except Exception:
+                cached = None
+                cache_result = "read_failed"
+                cache_reason = "cache_read_failed"
+            else:
+                cache_status = ProviderQuoteCollector._cache_status(
+                    cached,
+                    provider,
+                    instrument,
+                )
+                cache_result = cache_status.value if cache_status is not None else "miss"
+                provider_eligible = bool(
+                    provider.enabled and provider.configured(_settings_object())
+                )
+                if cache_status is FreshnessStatus.LIVE and not provider_eligible:
+                    cache_result = "ineligible"
+                    cache_reason = (
+                        "provider_disabled"
+                        if not provider.enabled
+                        else "disabled_missing_key"
+                    )
+                elif (
+                    cached is not None
+                    and cache_status is FreshnessStatus.LIVE
+                    and cached.persistence_status is not PersistenceStatus.PERSISTED
+                ):
+                    cache_result = "ineligible"
+                    cache_reason = "source_not_persisted"
+                if (
+                    cached is not None
+                    and cache_status is FreshnessStatus.LIVE
+                    and provider_eligible
+                    and cached.persistence_status is PersistenceStatus.PERSISTED
+                ):
+                    ProviderQuoteCollector._apply_current_live_boundary(
+                        cached,
+                        provider,
+                        instrument,
+                    )
+                    trace.append(
+                        {
+                            "provider_id": provider.provider_id,
+                            "stage": "cache",
+                            "result": "selected_live_cache",
+                            "reason": None,
+                        }
+                    )
+                    return QuoteFetchOutcome(
+                        quote=cached,
+                        usable=True,
+                        from_fresh_cache=True,
+                        external_called=False,
+                        failure_reason=None,
+                        cache_status=FreshnessStatus.LIVE,
+                        selection_trace=trace,
+                    )
+            trace.append(
+                {
+                    "provider_id": provider.provider_id,
+                    "stage": "cache",
+                    "result": cache_result,
+                    "reason": cache_reason,
+                }
+            )
+
         last: QuoteFetchOutcome | None = None
         external_calls = 0
-        for provider in providers:
+        for index, provider in enumerate(candidates):
+            if external_calls >= maximum_external_calls:
+                trace.extend(
+                    {
+                        "provider_id": skipped.provider_id,
+                        "stage": "external",
+                        "result": "skipped",
+                        "reason": "external_call_budget_exhausted",
+                    }
+                    for skipped in candidates[index:]
+                )
+                break
             outcome = await self.collector.quote(
                 provider, purpose, client=client, instrument=instrument
             )
             last = outcome
+            trace.append(
+                {
+                    "provider_id": provider.provider_id,
+                    "stage": "external",
+                    "result": "selected" if outcome.usable else "not_selected",
+                    "reason": outcome.failure_reason,
+                }
+            )
             if outcome.usable:
+                outcome.selection_trace = trace
                 return outcome
             external_calls += int(outcome.external_called)
-            if external_calls >= maximum_external_calls:
-                break
+        if last is not None:
+            last.selection_trace = trace
         return last
+
+    async def _rank_candidates(
+        self,
+        providers: Iterable[ProviderDefinition],
+        instrument: Any,
+    ) -> list[ProviderDefinition]:
+        ranked: list[tuple[tuple[float, ...], ProviderDefinition]] = []
+        for provider in providers:
+            try:
+                cached = await self.store.get_provider_quote(
+                    provider.provider_id,
+                    provider.instrument_id,
+                )
+                cache_status = ProviderQuoteCollector._cache_status(
+                    cached,
+                    provider,
+                    instrument,
+                )
+            except Exception:
+                cached = None
+                cache_status = None
+            try:
+                runtime = await self.store.get_provider_runtime(
+                    provider.provider_id,
+                    provider.instrument_id,
+                )
+                success_rate = float(runtime.success_rate)
+                circuit_ready = float(runtime.circuit_state.value != "open")
+            except Exception:
+                success_rate = 0.0
+                circuit_ready = 1.0
+            try:
+                pressure = float(await self.budgets.pressure(provider))
+            except Exception:
+                pressure = 1.0
+            freshness = cached.observed_at.timestamp() if cached is not None else 0.0
+            configured = float(
+                provider.enabled and provider.configured(_settings_object())
+            )
+            saved_cache = bool(
+                cached is not None
+                and cached.persistence_status is PersistenceStatus.PERSISTED
+            )
+            score = (
+                float(
+                    cache_status is FreshnessStatus.LIVE
+                    and configured == 1.0
+                    and saved_cache
+                ),
+                configured,
+                circuit_ready,
+                success_rate,
+                float(provider.trust_score),
+                -pressure,
+                freshness,
+                -float(provider.priority),
+                -float(provider.budget.estimated_request_cost),
+            )
+            ranked.append((score, provider))
+        ranked.sort(key=lambda item: (item[0], item[1].provider_id), reverse=True)
+        return [provider for _score, provider in ranked]
 
     async def _assess_candidate(
         self,

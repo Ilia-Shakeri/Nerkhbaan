@@ -136,7 +136,7 @@ def _health_payload(db: Session) -> dict[str, Any]:
         "dlq": safe_count(db, "alert_delivery_jobs", {"dead"}),
         "admin_jobs": safe_count(db, "admin_operational_jobs", {"pending", "retrying"}),
     }
-    anomaly_count = safe_count(db, "pricing_anomalies", {"open", "verifying", "unresolved"})
+    anomaly_count = safe_count(db, "pricing_anomalies", {"open"})
     telegram_count = safe_count(db, "telegram_sources")
     budget_usage: list[dict[str, Any]] = []
     redis_client = _redis_state()[1]

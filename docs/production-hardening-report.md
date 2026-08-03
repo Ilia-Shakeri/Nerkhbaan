@@ -94,7 +94,18 @@ This focused fix was committed before enabling the repository-wide lint gate bec
 
 ## Migrations
 
-Pending. All database work must be forward-only and preserve existing rows.
+- Added forward-only `20260802_001_alert_price_source_mode.sql`. Existing alert rows receive `ordinary`; the migration uses `ADD COLUMN IF NOT EXISTS`, restores the default and non-null invariant, and adds a bounded mode check without rewriting alert behavior.
+- Normalized provider source semantics and provenance use the existing `provider_quotes.metadata` JSONB field. A separate provider-quote column migration is intentionally deferred because no indexed/queryable column is required in this phase; adding duplicate columns would create schema drift without runtime benefit.
+
+### Phase 2: pricing semantics and alert eligibility
+
+- Added explicit, frozen-clock freshness boundaries for cache retention, live eligibility, stale display and expiry. Future timestamps retain their source time within a bounded skew and cannot extend the live window.
+- Added normalized source semantic, family, venue, selected-price, original-value, conversion, route, spread and provenance fields while deriving legacy `source_type` and `is_direct` compatibility fields.
+- Made source-family independence, successful source persistence and provider-bounded live eligibility mandatory for canonical selection. Duplicate endpoints from one venue do not add consensus weight, and robust median selection requires a tight majority inlier cluster.
+- Added live-cache-first traversal, two-source bounded fallback attempts, ranked external attempts, skip traces and bounded `Retry-After` handling without sleeps. Queued or failed source writes stay unavailable for live selection.
+- Corrected the Silver 925 fineness conversion, bounded derivation depth, rejected cycles, decayed confidence, retained complete input provenance and capped each derived live window at its weakest input.
+- Added explicit alert price source modes: `ordinary` remains the default for existing alerts; `reference` and `derived` require user opt-in. Queued snapshots and notification text include the selected status and source semantic.
+- Added per-input status, source semantic and source summary context to formula-alert snapshots, text and push payloads.
 
 ## Verification log
 
@@ -113,6 +124,8 @@ Pending. All database work must be forward-only and preserve existing rows.
 | `python -m unittest discover -s tests -v` before deep-link test implementation | Passed: 25 tests. |
 | `npm.cmd run verify` after the first notification, deep-link, and Phase 2 slices | Passed: compile, pyflakes, 51 tests, web build, admin build, and desktop build. |
 | `python -m unittest apps.api.tests.test_telegram_deeplink apps.api.tests.test_notifications` | Passed: 20 tests, including availability, one-use, expiry, tamper, replay, disable, and legacy compatibility cases. |
+| `python -m unittest discover -s tests -v` from `apps/api` after Phase 2 self-correction | Passed: 116 tests; one PostgreSQL concurrency test skipped because `TEST_DATABASE_URL` is not set. No external provider calls were made. |
+| `python -m compileall app` and `python -m pyflakes app tests scripts` from `apps/api` after Phase 2 self-correction | Passed. |
 | `node --check apps/desktop/electron/main.cjs` and `node --check apps/desktop/electron/preload.js` | Passed. |
 | `npm.cmd run build:web` after deep-link UI wiring | Passed; 3,979 modules transformed and PWA service worker generated. |
 | `npm.cmd run build:desktop` after deep-link UI and IPC wiring | Passed; 4,611 modules transformed. |
@@ -121,6 +134,10 @@ Pending. All database work must be forward-only and preserve existing rows.
 | `git diff --check` | Passed; only host line-ending notices were printed. |
 
 Docker is absent on this host. CI defines, but local work does not claim, image builds, Compose evaluation, service integration, or vulnerability scan results.
+
+### Handoff update
+
+- Current pass focus: editing-only continuation. No additional runtime verification was executed in this handoff.
 
 ## Feature flags and rollback
 

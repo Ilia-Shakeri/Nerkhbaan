@@ -297,7 +297,11 @@ def refresh_session(
     if not raw_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
     token_hash = hash_refresh_token(raw_token)
-    session = db.scalar(select(UserSession).where(UserSession.refresh_token_hash == token_hash))
+    session = db.scalar(
+        select(UserSession)
+        .where(UserSession.refresh_token_hash == token_hash)
+        .with_for_update()
+    )
     now = datetime.now(UTC)
     if not session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")

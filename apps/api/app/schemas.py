@@ -148,6 +148,7 @@ class AlertCreate(BaseModel):
     alert_type: Literal["price", "formula"] = "price"
     formula: str | None = Field(default=None, min_length=3, max_length=200)
     currency_mode: Literal["usd", "toman"] = "usd"
+    price_source_mode: Literal["ordinary", "reference", "derived"] = "ordinary"
     condition: Literal["above", "below"] = "above"
     notify_app: bool = True
     notify_email: bool = False
@@ -179,6 +180,7 @@ class AlertResponse(BaseModel):
     alert_type: str
     formula: str | None
     currency_mode: str
+    price_source_mode: str
     condition: str
     notify_app: bool
     notify_email: bool

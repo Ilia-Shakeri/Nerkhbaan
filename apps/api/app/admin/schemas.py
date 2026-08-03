@@ -181,8 +181,16 @@ class TelegramSourceCreate(BaseModel):
 
 
 class AnomalyReviewRequest(BaseModel):
-    status: Literal["reviewed", "confirmed", "dismissed"]
-    note: str = Field(default="", max_length=1000)
+    status: Literal["reviewed", "dismissed", "resolved"]
+    note: str = Field(min_length=3, max_length=1000)
+
+    @field_validator("note")
+    @classmethod
+    def clean_note(cls, value: str) -> str:
+        clean = value.strip()
+        if len(clean) < 3:
+            raise ValueError("Review note must contain at least 3 characters")
+        return clean
 
 
 class RefreshRequest(BaseModel):

@@ -23,6 +23,7 @@ from .health import health_snapshot
 from .migrations.state import assert_migrations_current
 from .pricing import db_models as pricing_models
 from .pricing.service import instrument_pricing_service
+from .request_body_limit import RequestBodyLimitMiddleware
 from .routers import (
     admin,
     alerts,
@@ -145,23 +146,6 @@ async def request_guard(request: Request, call_next):
         request_id = uuid.uuid4().hex
     request.state.request_id = request_id
 
-    content_length = request.headers.get("content-length")
-    if content_length:
-        try:
-            too_large = int(content_length) > settings.max_request_body_bytes
-        except ValueError:
-            return JSONResponse(
-                status_code=400,
-                content={"detail": "Invalid Content-Length header", "request_id": request_id},
-                headers={settings.request_id_header: request_id},
-            )
-        if too_large:
-            return JSONResponse(
-                status_code=413,
-                content={"detail": "Request body is too large", "request_id": request_id},
-                headers={settings.request_id_header: request_id},
-            )
-
     cookie_names = {
         settings.auth_cookie_name,
         settings.auth_refresh_cookie_name,
@@ -194,6 +178,13 @@ async def request_guard(request: Request, call_next):
     if request.url.scheme == "https" or forwarded_scheme == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
+
+
+app.add_middleware(
+    RequestBodyLimitMiddleware,
+    max_body_bytes=settings.max_request_body_bytes,
+    request_id_header=settings.request_id_header,
+)
 
 
 app.include_router(auth.router)

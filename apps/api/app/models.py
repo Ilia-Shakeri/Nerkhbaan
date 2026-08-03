@@ -52,6 +52,9 @@ class Alert(Base):
     alert_type: Mapped[str] = mapped_column(String(16), nullable=False, default="price")
     formula: Mapped[str | None] = mapped_column(Text, nullable=True)
     currency_mode: Mapped[str] = mapped_column(String(10), nullable=False, default="usd")
+    price_source_mode: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="ordinary"
+    )
     condition: Mapped[str] = mapped_column(String(10), nullable=False, default="above")
     notify_app: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     notify_email: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

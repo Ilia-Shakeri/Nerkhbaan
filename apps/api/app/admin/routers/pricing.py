@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import String, cast, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...db import get_db
+from ...pricing.db_models import PricingAnomalyRecord
 from ..audit import add_audit_event
 from ..dbtools import reflected_table, safe_rows, serialize_mapping
 from ..deps import AdminPrincipal, require_permission
-from ..models import AdminJob, AdminResourceReview
+from ..models import AdminJob
 from ..permissions import AdminPermissionKey
 from ..redaction import redact
 from ..schemas import AnomalyReviewRequest, RefreshRequest
@@ -99,15 +101,20 @@ _ANOMALY_COLUMNS = (
     "instrument_id",
     "candidate_quote_id",
     "previous_canonical_quote_id",
-    "candidate_price",
-    "previous_price",
     "deviation_percent",
     "dynamic_threshold_percent",
+    "severity",
     "status",
-    "decision_reason",
+    "reason",
+    "reviewed_by_admin_id",
+    "reviewed_at",
+    "review_note",
     "created_at",
-    "resolved_at",
 )
+_ANOMALY_REVIEW_TRANSITIONS = {
+    "open": frozenset({"reviewed", "dismissed", "resolved"}),
+}
+_MAX_BIGINT = 9_223_372_036_854_775_807
 _VERIFICATION_COLUMNS = (
     "id",
     "instrument_id",
@@ -150,16 +157,25 @@ def _rows_for(
     return [redact(serialize_mapping(dict(record))) for record in records]
 
 
-def _resource_exists(db: Session, table_name: str, resource_id: str) -> bool:
-    table = reflected_table(db, table_name)
-    if table is None or "id" not in table.c:
-        return False
-    return (
-        db.scalar(
-            select(table.c.id).where(cast(table.c.id, String) == resource_id).limit(1)
-        )
-        is not None
-    )
+def _anomaly_review_payload(row: dict[str, Any]) -> dict[str, Any] | None:
+    reviewed_at = row.get("reviewed_at")
+    if reviewed_at is None:
+        return None
+    return {
+        "status": row.get("status"),
+        "note": row.get("review_note") or "",
+        "reviewed_by": row.get("reviewed_by_admin_id"),
+        "reviewed_at": reviewed_at.isoformat() if isinstance(reviewed_at, datetime) else reviewed_at,
+    }
+
+
+def _anomaly_review_snapshot(anomaly: PricingAnomalyRecord) -> dict[str, Any]:
+    return {
+        "status": anomaly.status,
+        "reviewed_by_admin_id": anomaly.reviewed_by_admin_id,
+        "reviewed_at": anomaly.reviewed_at.isoformat() if anomaly.reviewed_at else None,
+        "review_note": anomaly.review_note,
+    }
 
 
 @router.get("/instruments")
@@ -260,25 +276,9 @@ def list_anomalies(
     rows = safe_rows(db, "pricing_anomalies", _ANOMALY_COLUMNS, limit=limit)
     if anomaly_status:
         rows = [row for row in rows if row.get("status") == anomaly_status]
-    resource_ids = {str(row.get("id")) for row in rows if row.get("id") is not None}
-    reviews = db.scalars(
-        select(AdminResourceReview).where(
-            AdminResourceReview.resource_type == "pricing_anomaly",
-            AdminResourceReview.resource_id.in_(resource_ids),
-        )
-    ).all() if resource_ids else []
-    review_by_id = {
-        review.resource_id: {
-            "status": review.status,
-            "note": review.note,
-            "reviewed_by": review.reviewed_by,
-            "reviewed_at": review.reviewed_at.isoformat(),
-        }
-        for review in reviews
-    }
     return {
         "items": [
-            {**row, "admin_review": review_by_id.get(str(row.get("id")))}
+            {**row, "admin_review": _anomaly_review_payload(row)}
             for row in rows
         ]
     }
@@ -292,41 +292,54 @@ def review_anomaly(
     principal: AdminPrincipal = Depends(require_permission(AdminPermissionKey.PRICING_MANAGE)),
     db: Session = Depends(get_db),
 ) -> dict:
-    if not _resource_exists(db, "pricing_anomalies", anomaly_id):
+    try:
+        anomaly_key = int(anomaly_id)
+    except ValueError:
+        anomaly_key = 0
+    if anomaly_key <= 0 or anomaly_key > _MAX_BIGINT:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pricing anomaly not found")
-    review = db.scalar(
-        select(AdminResourceReview).where(
-            AdminResourceReview.resource_type == "pricing_anomaly",
-            AdminResourceReview.resource_id == anomaly_id,
-        )
+    anomaly = db.scalar(
+        select(PricingAnomalyRecord)
+        .where(PricingAnomalyRecord.id == anomaly_key)
+        .with_for_update()
     )
-    before = None
-    if review is None:
-        review = AdminResourceReview(
+    if anomaly is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pricing anomaly not found")
+    if payload.status not in _ANOMALY_REVIEW_TRANSITIONS.get(anomaly.status, frozenset()):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Pricing anomaly must be open for review",
+        )
+
+    before = _anomaly_review_snapshot(anomaly)
+    reviewed_at = datetime.now(UTC)
+    try:
+        anomaly.status = payload.status
+        anomaly.reviewed_by_admin_id = principal.user.id
+        anomaly.reviewed_at = reviewed_at
+        anomaly.review_note = payload.note
+        response = {
+            "anomaly_id": anomaly_id,
+            "review_status": payload.status,
+            "reviewed_by_admin_id": principal.user.id,
+            "reviewed_at": reviewed_at.isoformat(),
+            "review_note": payload.note,
+        }
+        add_audit_event(
+            db,
+            request,
+            actor_admin_id=principal.user.id,
+            action="admin.pricing.anomaly_reviewed",
             resource_type="pricing_anomaly",
-            resource_id=anomaly_id,
-            status=payload.status,
-            note=payload.note.strip(),
-            reviewed_by=principal.user.id,
+            resource_id=anomaly.id,
+            before=before,
+            after=_anomaly_review_snapshot(anomaly),
         )
-        db.add(review)
-    else:
-        before = {"status": review.status, "note": review.note}
-        review.status = payload.status
-        review.note = payload.note.strip()
-        review.reviewed_by = principal.user.id
-    add_audit_event(
-        db,
-        request,
-        actor_admin_id=principal.user.id,
-        action="admin.pricing.anomaly_reviewed",
-        resource_type="pricing_anomaly",
-        resource_id=anomaly_id,
-        before=before,
-        after={"status": review.status, "note": review.note},
-    )
-    db.commit()
-    return {"anomaly_id": anomaly_id, "review_status": review.status}
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return response
 
 
 @router.post("/instruments/{instrument_id}/refresh", status_code=status.HTTP_202_ACCEPTED)

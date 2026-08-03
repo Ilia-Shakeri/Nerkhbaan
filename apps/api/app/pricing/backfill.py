@@ -21,6 +21,7 @@ from .models import (
     CanonicalQuote,
     CanonicalStatus,
     PersistenceStatus,
+    PriceSemantic,
     ProviderQuote,
     RequestPurpose,
     SourceType,
@@ -237,6 +238,19 @@ class PricingBackfillQueue:
                 confidence_score=provider.trust_score,
                 is_direct=True,
                 is_derived=False,
+                source_semantic=provider.source_semantic,
+                source_family=provider.source_family,
+                venue=provider.venue,
+                last=(
+                    point.price
+                    if provider.selected_price_semantic is PriceSemantic.LAST
+                    else None
+                ),
+                selected_price_semantic=provider.selected_price_semantic,
+                original_currency=instrument.quote_currency.value,
+                original_value=point.price,
+                conversion_factor=1,
+                route_id=f"{provider.route_id}:history",
                 metadata={
                     "quote_role": "backfill",
                     "provider_role": provider.role.value,

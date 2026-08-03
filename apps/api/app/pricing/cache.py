@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ..config import settings
+from .freshness import FreshnessPolicy, cache_retention_until
 from .instruments import get_instrument
 from .models import (
     CanonicalQuote,
@@ -87,7 +89,26 @@ class PricingRedisStore:
         operational_ttl_seconds: int,
     ) -> None:
         instrument = get_instrument(quote.instrument_id)
-        retention = max(operational_ttl_seconds, instrument.expire_after_seconds)
+        policy = FreshnessPolicy(
+            maximum_source_age_seconds=min(
+                operational_ttl_seconds,
+                instrument.operational_ttl_seconds,
+                instrument.expire_after_seconds,
+            ),
+            provider_live_ttl_seconds=operational_ttl_seconds,
+            instrument_operational_ttl_seconds=instrument.operational_ttl_seconds,
+            instrument_stale_after_seconds=instrument.stale_after_seconds,
+            instrument_expire_after_seconds=instrument.expire_after_seconds,
+        )
+        retained_until = cache_retention_until(
+            quote.observed_at,
+            quote.received_at,
+            policy,
+        )
+        retention = max(
+            1,
+            math.ceil((retained_until - datetime.now(UTC)).total_seconds()),
+        )
         key = self.provider_quote_key(quote.provider_id, quote.instrument_id)
         await self._set_json(key, quote.to_dict(authenticated=True), retention)
 

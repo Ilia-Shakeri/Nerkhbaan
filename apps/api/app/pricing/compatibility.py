@@ -100,7 +100,7 @@ class LegacyPricingAdapter:
             if quote is not None
         ]
         history = await self._short_history(usd_id, toman_id)
-        return {
+        payload = {
             "asset": asset,
             "label_fa": _LABELS[asset]["fa"],
             "label_en": _LABELS[asset]["en"],
@@ -116,6 +116,65 @@ class LegacyPricingAdapter:
             "stale_minutes": max(ages) if ages else None,
             "chart_error": usd is None and toman is None,
             "chart_error_message": _CHART_ERROR,
+        }
+        payload.update(self._quote_policy_fields("usd", usd))
+        payload.update(self._quote_policy_fields("toman", toman))
+        return payload
+
+    @staticmethod
+    def _quote_policy_fields(
+        prefix: str,
+        quote: CanonicalQuote | None,
+    ) -> dict[str, Any]:
+        if quote is None:
+            return {
+                f"{prefix}_is_persisted": False,
+                f"{prefix}_persistence_status": "unpersisted",
+                f"{prefix}_is_suspicious": False,
+                f"{prefix}_expired": True,
+                f"{prefix}_live_eligible": False,
+                f"{prefix}_source_semantic": "unknown",
+                f"{prefix}_spread_bps": None,
+                f"{prefix}_maximum_spread_bps": None,
+                f"{prefix}_derivation_depth": 0,
+                f"{prefix}_source_summary": {},
+            }
+        now = datetime.now(UTC)
+        effective = quote.effective_status(now)
+        summary = quote.source_summary
+        semantic = summary.get("source_semantic")
+        if semantic is None and quote.status is CanonicalStatus.DERIVED_FALLBACK:
+            semantic = "derived"
+        public_summary = {
+            key: summary[key]
+            for key in (
+                "source_semantic",
+                "source_family",
+                "venue",
+                "selected_price_semantic",
+                "spread_bps",
+                "derivation_depth",
+            )
+            if key in summary
+        }
+        return {
+            f"{prefix}_is_persisted": quote.is_persisted,
+            f"{prefix}_persistence_status": (
+                "persisted" if quote.is_persisted else "unpersisted"
+            ),
+            f"{prefix}_is_suspicious": effective
+            in {
+                CanonicalStatus.SUSPICIOUS,
+                CanonicalStatus.SUSPICIOUS_UNCONFIRMED,
+                CanonicalStatus.VERIFYING,
+            },
+            f"{prefix}_expired": effective is CanonicalStatus.EXPIRED,
+            f"{prefix}_live_eligible": now <= quote.valid_until,
+            f"{prefix}_source_semantic": str(semantic or "unknown"),
+            f"{prefix}_spread_bps": summary.get("spread_bps"),
+            f"{prefix}_maximum_spread_bps": summary.get("maximum_spread_bps"),
+            f"{prefix}_derivation_depth": summary.get("derivation_depth", 0),
+            f"{prefix}_source_summary": public_summary,
         }
 
     async def _paired_history(self, usd_id: str, toman_id: str, timeframe: str):

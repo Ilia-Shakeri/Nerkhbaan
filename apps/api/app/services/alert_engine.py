@@ -191,6 +191,7 @@ class Alert:
         webhook_url: str | None,
         alert_type: str = "price",
         formula: str | None = None,
+        price_source_mode: str = "ordinary",
     ):
         self.id = id
         self.user_id = user_id
@@ -205,6 +206,7 @@ class Alert:
         self.webhook_url = webhook_url
         self.alert_type = alert_type
         self.formula = formula
+        self.price_source_mode = price_source_mode
 
 
 class AlertEngine:
@@ -307,24 +309,109 @@ class AlertEngine:
             webhook_url=row.webhook_url,
             alert_type=row.alert_type,
             formula=row.formula,
+            price_source_mode=getattr(row, "price_source_mode", "ordinary"),
         )
 
     @staticmethod
     def _asset_status(asset: dict[str, Any], currency: str) -> str:
         return str(
-            asset.get("status")
-            or asset.get("usd_status" if currency == "usd" else "toman_status")
+            asset.get("usd_status" if currency == "usd" else "toman_status")
+            or asset.get("status")
             or "unavailable"
         ).lower()
 
-    def _asset_is_operational(self, asset: dict[str, Any], currency: str) -> bool:
-        return self._asset_status(asset, currency) in {
-            "live",
-            "confirmed",
-            "fresh_cache",
-            "derived_fallback",
-            "unpersisted",
+    @staticmethod
+    def _asset_policy_value(
+        asset: dict[str, Any],
+        currency: str,
+        key: str,
+        default: Any = None,
+    ) -> Any:
+        currency_key = f"{'usd' if currency == 'usd' else 'toman'}_{key}"
+        return asset.get(currency_key, asset.get(key, default))
+
+    @classmethod
+    def _asset_policy_flag(
+        cls,
+        asset: dict[str, Any],
+        currency: str,
+        key: str,
+        default: bool,
+    ) -> bool | None:
+        value = cls._asset_policy_value(asset, currency, key, default)
+        return value if isinstance(value, bool) else None
+
+    def _asset_is_operational(
+        self,
+        asset: dict[str, Any],
+        currency: str,
+        price_source_mode: str = "ordinary",
+    ) -> bool:
+        status_value = self._asset_status(asset, currency)
+        allowed_statuses = {"live", "confirmed", "fresh_cache"}
+        if price_source_mode == "derived":
+            allowed_statuses.add("derived_fallback")
+        if status_value not in allowed_statuses:
+            return False
+        if self._asset_policy_flag(
+            asset, currency, "live_eligible", False
+        ) is not True:
+            return False
+        if self._asset_policy_flag(asset, currency, "is_persisted", False) is not True:
+            return False
+        persistence_status = str(
+            self._asset_policy_value(asset, currency, "persistence_status", "unpersisted")
+        ).lower()
+        if persistence_status != "persisted":
+            return False
+        if self._asset_policy_flag(asset, currency, "is_suspicious", True) is not False:
+            return False
+        if self._asset_policy_flag(asset, currency, "expired", True) is not False:
+            return False
+        semantic = str(
+            self._asset_policy_value(asset, currency, "source_semantic", "")
+        ).lower()
+        try:
+            derivation_depth = int(
+                self._asset_policy_value(asset, currency, "derivation_depth", 0)
+            )
+        except (TypeError, ValueError):
+            return False
+        ordinary_semantics = {
+            "exchange_orderbook",
+            "exchange_trade",
+            "aggregator",
+            "physical_market_quote",
         }
+        if price_source_mode == "ordinary":
+            source_allowed = semantic in ordinary_semantics and derivation_depth == 0
+        elif price_source_mode == "reference":
+            source_allowed = semantic == "reference_rate" and derivation_depth == 0
+        elif price_source_mode == "derived":
+            source_allowed = semantic == "derived" and derivation_depth > 0
+        else:
+            source_allowed = False
+        if not source_allowed:
+            return False
+        spread = self._asset_policy_value(asset, currency, "spread_bps")
+        maximum_spread = self._asset_policy_value(
+            asset, currency, "maximum_spread_bps"
+        )
+        if spread is not None and maximum_spread is not None:
+            try:
+                spread_value = float(spread)
+                maximum_spread_value = float(maximum_spread)
+            except (TypeError, ValueError):
+                return False
+            if (
+                not math.isfinite(spread_value)
+                or not math.isfinite(maximum_spread_value)
+                or spread_value < 0
+                or maximum_spread_value < 0
+                or spread_value > maximum_spread_value
+            ):
+                return False
+        return True
 
     def _should_trigger_model(self, alert: AlertModel, current_prices: dict[str, Any]) -> bool:
         wrapper = self._delivery_alert(alert)
@@ -342,7 +429,11 @@ class AlertEngine:
         if not asset_data:
             return False
 
-        if not self._asset_is_operational(asset_data, alert.currency_mode):
+        if not self._asset_is_operational(
+            asset_data,
+            alert.currency_mode,
+            getattr(alert, "price_source_mode", "ordinary"),
+        ):
             return False
         if alert.currency_mode == "usd":
             price = asset_data.get("price_usd")
@@ -370,9 +461,19 @@ class AlertEngine:
             "refreshed_at": current_prices.get("refreshed_at"),
             "assets": current_prices.get("assets", []),
         }
+        delivery_alert = self._delivery_alert(alert)
+        snapshot["selected_price_context"] = self._selected_price_context(
+            delivery_alert,
+            snapshot,
+        )
+        if delivery_alert.alert_type == "formula":
+            snapshot["selected_price_contexts"] = self._formula_price_contexts(
+                delivery_alert,
+                snapshot,
+            )
         seed = f"{alert.id}|{now.isoformat()}|{alert.notifications_today}"
         event_key = hashlib.sha256(seed.encode("utf-8")).hexdigest()
-        current_price = self._current_price(self._delivery_alert(alert), snapshot)
+        current_price = self._current_price(delivery_alert, snapshot)
         event = AlertTriggerEvent(
             alert_id=alert.id,
             instrument_id=alert.instrument_id,
@@ -390,7 +491,7 @@ class AlertEngine:
             and self._push_is_enabled(preferences)
         )
         if in_app_delivered:
-            title, body = self._alert_summary(self._delivery_alert(alert), snapshot)
+            title, body = self._alert_summary(delivery_alert, snapshot)
             db.add(
                 UserNotification(
                     user_id=alert.user_id,
@@ -475,7 +576,11 @@ class AlertEngine:
             value = asset.get(price_key)
             if (
                 not asset_id
-                or not self._asset_is_operational(asset, alert.currency)
+                or not self._asset_is_operational(
+                    asset,
+                    alert.currency,
+                    alert.price_source_mode,
+                )
                 or not isinstance(value, (int, float))
                 or not math.isfinite(value)
             ):
@@ -528,17 +633,132 @@ class AlertEngine:
             return None
         return asset_data.get("price_usd") if alert.currency == "usd" else asset_data.get("price_toman")
 
+    def _selected_price_context(
+        self,
+        alert: Alert,
+        current_prices: dict[str, Any],
+    ) -> dict[str, Any]:
+        asset_data = next(
+            (
+                asset
+                for asset in current_prices.get("assets", [])
+                if asset.get("asset") == alert.asset_id
+            ),
+            None,
+        )
+        if asset_data is None:
+            return {
+                "status": "unavailable",
+                "source_semantic": "unknown",
+                "source_summary": {},
+                "price_source_mode": alert.price_source_mode,
+            }
+        source_summary = self._asset_policy_value(
+            asset_data,
+            alert.currency,
+            "source_summary",
+            {},
+        )
+        if not isinstance(source_summary, dict):
+            source_summary = {}
+        return {
+            "status": self._asset_status(asset_data, alert.currency),
+            "source_semantic": str(
+                self._asset_policy_value(
+                    asset_data,
+                    alert.currency,
+                    "source_semantic",
+                    "unknown",
+                )
+            ).lower(),
+            "source_summary": source_summary,
+            "price_source_mode": alert.price_source_mode,
+        }
+
+    def _formula_price_contexts(
+        self,
+        alert: Alert,
+        current_prices: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        if not alert.formula:
+            return []
+        try:
+            names = {
+                node.id.lower()
+                for node in ast.walk(_parse_formula(alert.formula))
+                if isinstance(node, ast.Name)
+            }
+        except FormulaValidationError:
+            return []
+        price_key = "price_usd" if alert.currency == "usd" else "price_toman"
+        source_key = "source_usd" if alert.currency == "usd" else "source_toman"
+        contexts: list[dict[str, Any]] = []
+        for asset in current_prices.get("assets", []):
+            asset_id = str(asset.get("asset", "")).lower()
+            if not asset_id or not self._asset_is_operational(
+                asset,
+                alert.currency,
+                alert.price_source_mode,
+            ):
+                continue
+            source_name = SOURCE_NAME_PATTERN.sub(
+                "_",
+                str(asset.get(source_key, "")).lower(),
+            ).strip("_")
+            aliases = {asset_id}
+            if source_name:
+                aliases.add(f"{asset_id}_{source_name}")
+            if asset_id == "usd":
+                aliases.add("dollar")
+            if names.isdisjoint(aliases):
+                continue
+            source_summary = self._asset_policy_value(
+                asset,
+                alert.currency,
+                "source_summary",
+                {},
+            )
+            if not isinstance(source_summary, dict):
+                source_summary = {}
+            contexts.append(
+                {
+                    "asset": asset_id,
+                    "price": asset.get(price_key),
+                    "status": self._asset_status(asset, alert.currency),
+                    "source_semantic": str(
+                        self._asset_policy_value(
+                            asset,
+                            alert.currency,
+                            "source_semantic",
+                            "unknown",
+                        )
+                    ).lower(),
+                    "source_summary": source_summary,
+                    "price_source_mode": alert.price_source_mode,
+                }
+            )
+        return contexts
+
     def _alert_summary(self, alert: Alert, current_prices: dict[str, Any]) -> tuple[str, str]:
         if alert.alert_type == "formula":
             title = "Nerkhbaan formula alert"
-            return title, f"Formula condition met: {alert.formula}"
+            contexts = self._formula_price_contexts(alert, current_prices)
+            source_text = "; ".join(
+                f"{context['asset'].upper()}(status={context['status']}, "
+                f"source={context['source_semantic']})"
+                for context in contexts
+            )
+            suffix = f" Sources: {source_text}." if source_text else ""
+            return title, f"Formula condition met: {alert.formula}.{suffix}"
         price = self._current_price(alert, current_prices)
         price_text = f"{price:,.2f}" if isinstance(price, (int, float)) else "-"
         unit = alert.currency.upper()
+        context = self._selected_price_context(alert, current_prices)
         title = f"Nerkhbaan alert: {alert.asset_id.upper()}"
         body = (
             f"{alert.asset_id.upper()} is now {price_text} {unit} "
-            f"({alert.condition} target {alert.target_price:,.2f} {unit})."
+            f"({alert.condition} target {alert.target_price:,.2f} {unit}; "
+            f"status={context['status']}; source={context['source_semantic']})."
         )
         return title, body
 
@@ -583,6 +803,14 @@ class AlertEngine:
                 "body": body,
                 "asset": alert.asset_id,
                 "silent": silent_mode,
+                "price_context": self._selected_price_context(
+                    alert,
+                    current_prices,
+                ),
+                "price_contexts": self._formula_price_contexts(
+                    alert,
+                    current_prices,
+                ),
             }
         )
         expired_endpoints: list[str] = []

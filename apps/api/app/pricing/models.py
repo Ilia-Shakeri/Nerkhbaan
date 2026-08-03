@@ -4,10 +4,12 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import Any
+
+from .freshness import DEFAULT_FUTURE_CLOCK_SKEW_SECONDS
 
 
 class Currency(StrEnum):
@@ -40,6 +42,27 @@ class SourceType(StrEnum):
     TELEGRAM = "telegram"
     DERIVED = "derived"
     LEGACY = "legacy"
+
+
+class SourceSemantic(StrEnum):
+    EXCHANGE_ORDERBOOK = "exchange_orderbook"
+    EXCHANGE_TRADE = "exchange_trade"
+    AGGREGATOR = "aggregator"
+    REFERENCE_RATE = "reference_rate"
+    PHYSICAL_MARKET_QUOTE = "physical_market_quote"
+    TELEGRAM_OBSERVATION = "telegram_observation"
+    DERIVED = "derived"
+    LEGACY = "legacy"
+
+
+class PriceSemantic(StrEnum):
+    BID = "bid"
+    ASK = "ask"
+    LAST = "last"
+    MIDPOINT = "midpoint"
+    REFERENCE = "reference"
+    PROVIDER_SELECTED = "provider_selected"
+    FORMULA = "formula"
 
 
 class ProviderRole(StrEnum):
@@ -233,16 +256,32 @@ class ProviderQuote:
     raw_payload_reference: str | None = None
     persistence_status: PersistenceStatus = PersistenceStatus.UNPERSISTED
     idempotency_key: str = ""
+    source_semantic: SourceSemantic | None = None
+    source_family: str | None = None
+    venue: str | None = None
+    last: Decimal | None = None
+    selected_price_semantic: PriceSemantic | None = None
+    original_currency: str | None = None
+    original_value: Decimal | None = None
+    conversion_factor: Decimal = Decimal("1")
+    route_id: str | None = None
+    spread_bps: Decimal | None = None
+    derivation_depth: int = 0
+    provenance: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
+        self.source_type = SourceType(self.source_type)
         self.observed_at = ensure_utc(self.observed_at)
         self.received_at = ensure_utc(self.received_at)
-        if self.received_at < self.observed_at:
+        if self.observed_at > self.received_at + timedelta(
+            seconds=DEFAULT_FUTURE_CLOCK_SKEW_SECONDS
+        ):
             raise ValueError("Quote receive time cannot precede observation time")
         if self.price is not None:
             self.price = decimal_value(self.price)
         self.bid = decimal_or_none(self.bid)
         self.ask = decimal_or_none(self.ask)
+        self.last = decimal_or_none(self.last)
         self.volume = decimal_or_none(self.volume)
         self.confidence_score = decimal_value(self.confidence_score, allow_zero=True)
         if self.confidence_score > 1:
@@ -253,6 +292,7 @@ class ProviderQuote:
             raise ValueError("Accepted quotes require a price")
         if self.validation_status is ValidationStatus.REJECTED and not self.rejection_reason:
             raise ValueError("Rejected quotes require a reason")
+        self._normalize_source_provenance()
         if not self.idempotency_key:
             raw = "|".join(
                 (
@@ -264,6 +304,116 @@ class ProviderQuote:
                 )
             )
             self.idempotency_key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+    def _normalize_source_provenance(self) -> None:
+        semantic_value = self.source_semantic or self.metadata.get("source_semantic")
+        if semantic_value is None:
+            semantic = _infer_source_semantic(self)
+        else:
+            semantic = SourceSemantic(semantic_value)
+        self.source_semantic = semantic
+        # Legacy source flags remain derived output; policy code uses the semantic.
+        self.source_type = _legacy_source_type(semantic)
+        self.is_direct = semantic in {
+            SourceSemantic.EXCHANGE_ORDERBOOK,
+            SourceSemantic.EXCHANGE_TRADE,
+            SourceSemantic.PHYSICAL_MARKET_QUOTE,
+        }
+        self.is_derived = semantic is SourceSemantic.DERIVED
+
+        self.source_family = _text_value(
+            self.source_family or self.metadata.get("source_family") or self.provider_id,
+            "Source family",
+        )
+        self.venue = _text_value(
+            self.venue or self.metadata.get("venue") or self.source_family,
+            "Venue",
+        )
+        if self.last is None and semantic is SourceSemantic.EXCHANGE_TRADE:
+            self.last = self.price
+
+        price_semantic_value = self.selected_price_semantic or self.metadata.get(
+            "selected_price_semantic"
+        )
+        self.selected_price_semantic = (
+            PriceSemantic(price_semantic_value)
+            if price_semantic_value is not None
+            else _infer_price_semantic(self)
+        )
+
+        self.conversion_factor = decimal_value(self.conversion_factor)
+        original_currency = (
+            self.original_currency
+            or self.metadata.get("original_currency")
+            or self.metadata.get("source_currency")
+            or self.currency.value
+        )
+        self.original_currency = _text_value(
+            str(original_currency).upper(), "Original currency"
+        )
+        original_value = self.original_value
+        if original_value is None:
+            original_value = self.metadata.get("original_value")
+        if original_value is None and self.price is not None:
+            original_value = self.price / self.conversion_factor
+        self.original_value = decimal_or_none(original_value)
+
+        self.route_id = _text_value(
+            self.route_id or self.metadata.get("route_id") or self.provider_id,
+            "Route ID",
+        )
+        spread_value = self.spread_bps
+        if spread_value is None:
+            spread_value = self.metadata.get("spread_bps")
+        if spread_value is None and self.bid is not None and self.ask is not None:
+            midpoint = (self.bid + self.ask) / Decimal(2)
+            spread_value = (self.ask - self.bid) / midpoint * Decimal(10_000)
+        self.spread_bps = (
+            decimal_value(spread_value, allow_zero=True)
+            if spread_value is not None
+            else None
+        )
+
+        depth_value = self.metadata.get("derivation_depth", self.derivation_depth)
+        try:
+            self.derivation_depth = int(depth_value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Derivation depth must be an integer") from exc
+        if self.derivation_depth < 0:
+            raise ValueError("Derivation depth cannot be negative")
+        if semantic is SourceSemantic.DERIVED and self.derivation_depth == 0:
+            self.derivation_depth = 1
+
+        provenance_value: object = self.provenance or self.metadata.get("provenance", ())
+        if not isinstance(provenance_value, (list, tuple)):
+            raise ValueError("Provenance must be a list or tuple")
+        normalized_provenance: list[str] = []
+        for value in (*provenance_value, self.source_family):
+            item = str(value).strip()
+            if item and item not in normalized_provenance:
+                normalized_provenance.append(item)
+        self.provenance = tuple(normalized_provenance)
+
+        normalized_metadata = {
+            "source_semantic": self.source_semantic.value,
+            "source_family": self.source_family,
+            "venue": self.venue,
+            "selected_price_semantic": self.selected_price_semantic.value,
+            "original_currency": self.original_currency,
+            "conversion_factor": str(self.conversion_factor),
+            "route_id": self.route_id,
+            "derivation_depth": self.derivation_depth,
+            "provenance": list(self.provenance),
+            "source_timestamp": self.observed_at.isoformat(),
+            "receive_timestamp": self.received_at.isoformat(),
+        }
+        if self.last is not None:
+            normalized_metadata["last"] = str(self.last)
+        if self.original_value is not None:
+            normalized_metadata["original_value"] = str(self.original_value)
+        if self.spread_bps is not None:
+            normalized_metadata["spread_bps"] = str(self.spread_bps)
+        self.metadata.update(normalized_metadata)
 
     @classmethod
     def create(cls, **values: Any) -> "ProviderQuote":
@@ -277,15 +427,29 @@ class ProviderQuote:
             "instrument_id": self.instrument_id,
             "provider_id": self.provider_id if authenticated else None,
             "source_type": self.source_type.value,
+            "source_semantic": self.source_semantic.value,
+            "source_family": self.source_family if authenticated else None,
+            "venue": self.venue if authenticated else None,
             "price": json_number(self.price),
             "currency": self.currency.value,
             "weight_unit": self.weight_unit.value,
             "purity": json_number(self.purity),
             "bid": json_number(self.bid),
             "ask": json_number(self.ask),
+            "last": json_number(self.last),
+            "selected_price_semantic": self.selected_price_semantic.value,
+            "original_currency": self.original_currency,
+            "original_value": json_number(self.original_value),
+            "conversion_factor": json_number(self.conversion_factor),
+            "route_id": self.route_id if authenticated else None,
+            "spread_bps": json_number(self.spread_bps),
+            "derivation_depth": self.derivation_depth,
+            "provenance": list(self.provenance),
             "volume": json_number(self.volume),
             "observed_at": self.observed_at.isoformat(),
             "received_at": self.received_at.isoformat(),
+            "source_timestamp": self.observed_at.isoformat(),
+            "receive_timestamp": self.received_at.isoformat(),
             "latency_ms": self.latency_ms,
             "http_status": self.http_status if authenticated else None,
             "parser_version": self.parser_version if authenticated else None,
@@ -307,20 +471,65 @@ class ProviderQuote:
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> "ProviderQuote":
+        metadata = dict(payload.get("metadata") or {})
         return cls(
             id=int(payload["id"]) if payload.get("id") is not None else None,
             instrument_id=str(payload["instrument_id"]),
             provider_id=str(payload["provider_id"]),
             source_type=SourceType(payload["source_type"]),
+            source_semantic=(
+                payload.get("source_semantic")
+                or metadata.get("source_semantic")
+            ),
+            source_family=payload.get("source_family") or metadata.get("source_family"),
+            venue=payload.get("venue") or metadata.get("venue"),
             price=decimal_or_none(payload.get("price")),
             currency=Currency(payload["currency"]),
             weight_unit=WeightUnit(payload["weight_unit"]),
             purity=decimal_or_none(payload.get("purity")),
             bid=decimal_or_none(payload.get("bid")),
             ask=decimal_or_none(payload.get("ask")),
+            last=decimal_or_none(payload.get("last", metadata.get("last"))),
+            selected_price_semantic=(
+                payload.get("selected_price_semantic")
+                or metadata.get("selected_price_semantic")
+            ),
+            original_currency=(
+                payload.get("original_currency")
+                or metadata.get("original_currency")
+            ),
+            original_value=decimal_or_none(
+                payload.get("original_value", metadata.get("original_value"))
+            ),
+            conversion_factor=decimal_value(
+                payload.get("conversion_factor", metadata.get("conversion_factor", 1))
+            ),
+            route_id=payload.get("route_id") or metadata.get("route_id"),
+            spread_bps=(
+                decimal_value(
+                    payload.get("spread_bps", metadata.get("spread_bps")),
+                    allow_zero=True,
+                )
+                if payload.get("spread_bps", metadata.get("spread_bps")) is not None
+                else None
+            ),
+            derivation_depth=int(
+                payload.get("derivation_depth", metadata.get("derivation_depth", 0))
+            ),
+            provenance=tuple(
+                payload.get("provenance") or metadata.get("provenance") or ()
+            ),
             volume=decimal_or_none(payload.get("volume")),
-            observed_at=parse_datetime(payload["observed_at"]),
-            received_at=parse_datetime(payload["received_at"]),
+            observed_at=parse_datetime(
+                payload.get("source_timestamp")
+                or metadata.get("source_timestamp")
+                or payload["observed_at"]
+            ),
+            received_at=parse_datetime(
+                payload.get("receive_timestamp")
+                or metadata.get("receive_timestamp")
+                or payload["received_at"]
+            ),
             latency_ms=payload.get("latency_ms"),
             http_status=payload.get("http_status"),
             parser_version=str(payload["parser_version"]),
@@ -332,13 +541,56 @@ class ProviderQuote:
             is_derived=bool(payload.get("is_derived", False)),
             is_suspicious=bool(payload.get("is_suspicious", False)),
             rejection_reason=payload.get("rejection_reason"),
-            metadata=dict(payload.get("metadata") or {}),
+            metadata=metadata,
             raw_payload_reference=payload.get("raw_payload_reference"),
             persistence_status=PersistenceStatus(
                 payload.get("persistence_status", PersistenceStatus.UNPERSISTED.value)
             ),
             idempotency_key=str(payload.get("idempotency_key") or ""),
         )
+
+
+def _infer_source_semantic(quote: ProviderQuote) -> SourceSemantic:
+    if quote.source_type is SourceType.DERIVED or quote.is_derived:
+        return SourceSemantic.DERIVED
+    if quote.source_type is SourceType.TELEGRAM:
+        return SourceSemantic.TELEGRAM_OBSERVATION
+    if quote.source_type is SourceType.LEGACY:
+        return SourceSemantic.LEGACY
+    if quote.bid is not None and quote.ask is not None:
+        return SourceSemantic.EXCHANGE_ORDERBOOK
+    if quote.is_direct:
+        return SourceSemantic.EXCHANGE_TRADE
+    return SourceSemantic.AGGREGATOR
+
+
+def _legacy_source_type(semantic: SourceSemantic) -> SourceType:
+    if semantic is SourceSemantic.DERIVED:
+        return SourceType.DERIVED
+    if semantic is SourceSemantic.TELEGRAM_OBSERVATION:
+        return SourceType.TELEGRAM
+    if semantic is SourceSemantic.LEGACY:
+        return SourceType.LEGACY
+    return SourceType.HTTP
+
+
+def _infer_price_semantic(quote: ProviderQuote) -> PriceSemantic:
+    if quote.source_semantic is SourceSemantic.DERIVED:
+        return PriceSemantic.FORMULA
+    if quote.source_semantic is SourceSemantic.EXCHANGE_ORDERBOOK:
+        return PriceSemantic.MIDPOINT
+    if quote.source_semantic is SourceSemantic.EXCHANGE_TRADE:
+        return PriceSemantic.LAST
+    if quote.source_semantic is SourceSemantic.REFERENCE_RATE:
+        return PriceSemantic.REFERENCE
+    return PriceSemantic.PROVIDER_SELECTED
+
+
+def _text_value(value: object, label: str) -> str:
+    result = str(value).strip()
+    if not result:
+        raise ValueError(f"{label} cannot be empty")
+    return result
 
 
 @dataclass(slots=True)

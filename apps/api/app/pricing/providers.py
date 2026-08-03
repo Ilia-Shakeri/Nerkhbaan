@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import json
+import math
 import time
-from dataclasses import dataclass
-from datetime import timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from decimal import Decimal
+from email.utils import parsedate_to_datetime
 
 import httpx
 
 from ..config import settings
 from .budgets import RedisRequestBudget, pricing_budget
 from .cache import PricingRedisStore, pricing_redis
+from .freshness import (
+    FreshnessPolicy,
+    FreshnessStatus,
+    freshness_boundaries,
+)
 from .instruments import get_instrument
 from .locks import DistributedPricingLocks, pricing_locks
 from .models import (
@@ -22,6 +29,7 @@ from .models import (
     RequestPurpose,
     SourceType,
     ValidationStatus,
+    ensure_utc,
     utc_now,
 )
 from .parsers import ParserContext, ParserError, build_parser
@@ -39,6 +47,9 @@ class QuoteFetchOutcome:
     failure_reason: str | None
     sanitized_payload: str | None = None
     content_type: str | None = None
+    cache_status: FreshnessStatus | None = None
+    selection_trace: list[dict[str, object]] = field(default_factory=list)
+    retry_after_seconds: int | None = None
 
 
 class ProviderCallFailure(RuntimeError):
@@ -50,6 +61,7 @@ class ProviderCallFailure(RuntimeError):
         http_status: int | None = None,
         payload: object | None = None,
         content_type: str | None = None,
+        retry_after_seconds: int | None = None,
     ) -> None:
         super().__init__(detail)
         self.code = code
@@ -57,6 +69,7 @@ class ProviderCallFailure(RuntimeError):
         self.http_status = http_status
         self.payload = payload
         self.content_type = content_type
+        self.retry_after_seconds = retry_after_seconds
 
 
 class ProviderQuoteCollector:
@@ -88,48 +101,113 @@ class ProviderQuoteCollector:
         cached = await self.store.get_provider_quote(
             provider.provider_id, provider.instrument_id
         )
-        if cached is not None and self._is_fresh(cached, provider, effective_instrument):
-            runtime = await self.store.get_provider_runtime(
-                provider.provider_id, provider.instrument_id
-            )
-            runtime.operational_status = "fresh_cache"
-            await self.store.set_provider_runtime(runtime)
-            return QuoteFetchOutcome(cached, True, True, False, None)
-
+        cached_status = self._cache_status(cached, provider, effective_instrument)
         runtime = await self.store.get_provider_runtime(
             provider.provider_id, provider.instrument_id
         )
         if not provider.enabled:
             runtime.operational_status = "disabled"
             await self.store.set_provider_runtime(runtime)
-            return QuoteFetchOutcome(cached, False, False, False, "provider_disabled")
+            return QuoteFetchOutcome(
+                cached,
+                False,
+                False,
+                False,
+                "provider_disabled",
+                cache_status=cached_status,
+            )
         if not provider.configured(settings):
             runtime.operational_status = "disabled_missing_key"
             runtime.last_error_code = "missing_key"
             await self.store.set_provider_runtime(runtime)
-            return QuoteFetchOutcome(cached, False, False, False, "disabled_missing_key")
+            return QuoteFetchOutcome(
+                cached,
+                False,
+                False,
+                False,
+                "disabled_missing_key",
+                cache_status=cached_status,
+            )
+        if (
+            cached is not None
+            and cached_status is FreshnessStatus.LIVE
+            and cached.persistence_status is PersistenceStatus.PERSISTED
+        ):
+            self._apply_current_live_boundary(
+                cached,
+                provider,
+                effective_instrument,
+            )
+            runtime.operational_status = "fresh_cache"
+            await self.store.set_provider_runtime(runtime)
+            return QuoteFetchOutcome(
+                cached,
+                True,
+                True,
+                False,
+                None,
+                cache_status=FreshnessStatus.LIVE,
+            )
         if self._circuit_open(runtime):
             runtime.operational_status = "circuit_open"
             await self.store.set_provider_runtime(runtime)
-            return QuoteFetchOutcome(cached, False, False, False, "circuit_open")
+            return QuoteFetchOutcome(
+                cached,
+                False,
+                False,
+                False,
+                "circuit_open",
+                cache_status=cached_status,
+            )
 
         async with self.locks.provider_lock(
             provider.provider_id, provider.instrument_id
         ) as lease:
             if lease is None:
-                return QuoteFetchOutcome(cached, False, False, False, "provider_refresh_locked")
+                return QuoteFetchOutcome(
+                    cached,
+                    False,
+                    False,
+                    False,
+                    "provider_refresh_locked",
+                    cache_status=cached_status,
+                )
             cached_after_lock = await self.store.get_provider_quote(
                 provider.provider_id, provider.instrument_id
             )
-            if cached_after_lock is not None and self._is_fresh(
+            locked_cache_status = self._cache_status(
                 cached_after_lock, provider, effective_instrument
+            )
+            if (
+                cached_after_lock is not None
+                and locked_cache_status is FreshnessStatus.LIVE
+                and cached_after_lock.persistence_status is PersistenceStatus.PERSISTED
             ):
-                return QuoteFetchOutcome(cached_after_lock, True, True, False, None)
+                self._apply_current_live_boundary(
+                    cached_after_lock,
+                    provider,
+                    effective_instrument,
+                )
+                return QuoteFetchOutcome(
+                    cached_after_lock,
+                    True,
+                    True,
+                    False,
+                    None,
+                    cache_status=FreshnessStatus.LIVE,
+                )
             budget = await self.budgets.consume(provider, purpose)
             if not budget.allowed:
                 runtime.operational_status = budget.reason
                 await self.store.set_provider_runtime(runtime)
-                return QuoteFetchOutcome(cached, False, False, False, budget.reason)
+                return QuoteFetchOutcome(
+                    cached_after_lock or cached,
+                    False,
+                    False,
+                    False,
+                    budget.reason,
+                    cache_status=locked_cache_status or cached_status,
+                )
             return await self._call_and_parse(
                 provider,
                 purpose,
@@ -166,9 +244,10 @@ class ProviderQuoteCollector:
                 ParserContext(
                     instrument=instrument,
                     received_at=received_at,
-                    maximum_timestamp_age_seconds=max(
-                        provider.operational_ttl_seconds * 2,
-                        instrument.stale_after_seconds,
+                    maximum_timestamp_age_seconds=min(
+                        provider.operational_ttl_seconds,
+                        instrument.operational_ttl_seconds,
+                        instrument.expire_after_seconds,
                     ),
                 ),
             )
@@ -194,14 +273,33 @@ class ProviderQuoteCollector:
                 is_direct=True,
                 is_derived=False,
                 is_suspicious=False,
+                source_semantic=provider.source_semantic,
+                source_family=provider.source_family,
+                venue=provider.venue,
+                last=(
+                    parsed.price
+                    if provider.selected_price_semantic.value == "last"
+                    else None
+                ),
+                selected_price_semantic=provider.selected_price_semantic,
+                original_currency=parsed.metadata.get("source_currency"),
+                original_value=parsed.metadata.get("original_value"),
+                conversion_factor=(
+                    Decimal("0.1")
+                    if parsed.metadata.get("normalization") == "rial_to_toman"
+                    else Decimal(str(parsed.metadata.get("conversion_factor", 1)))
+                ),
+                route_id=provider.route_id,
                 metadata={
                     **parsed.metadata,
                     "quote_role": purpose.value,
                     "provider_role": provider.role.value,
+                    "provider_live_ttl_seconds": provider.operational_ttl_seconds,
                 },
                 persistence_status=PersistenceStatus.UNPERSISTED,
             )
-            await self.persistence.persist_provider_quote(quote)
+            self._apply_current_live_boundary(quote, provider, instrument)
+            persistence_result = await self.persistence.persist_provider_quote(quote)
             await self.store.set_provider_quote(
                 quote, provider.operational_ttl_seconds
             )
@@ -209,12 +307,21 @@ class ProviderQuoteCollector:
             sanitized = sanitize_raw_payload(payload, provider.maximum_payload_bytes)
             return QuoteFetchOutcome(
                 quote,
-                True,
+                persistence_result.persisted,
                 False,
                 True,
-                None,
+                (
+                    None
+                    if persistence_result.persisted
+                    else (
+                        "source_persistence_queued"
+                        if persistence_result.queued
+                        else "source_persistence_failed"
+                    )
+                ),
                 sanitized_payload=sanitized,
                 content_type=content_type,
+                cache_status=FreshnessStatus.LIVE,
             )
         except ProviderCallFailure as exc:
             if exc.http_status == 429:
@@ -230,7 +337,12 @@ class ProviderQuoteCollector:
                 instrument,
             )
             await self._record_failure(
-                provider, runtime, exc.code, exc.http_status, started
+                provider,
+                runtime,
+                exc.code,
+                exc.http_status,
+                started,
+                retry_after_seconds=exc.retry_after_seconds,
             )
             return QuoteFetchOutcome(
                 rejected,
@@ -244,6 +356,7 @@ class ProviderQuoteCollector:
                     else None
                 ),
                 content_type=exc.content_type,
+                retry_after_seconds=exc.retry_after_seconds,
             )
         except ParserError as exc:
             rejected = await self._rejected_quote(
@@ -344,6 +457,9 @@ class ProviderQuoteCollector:
                         http_status=429,
                         payload=payload,
                         content_type=content_type,
+                        retry_after_seconds=self._parse_retry_after(
+                            response.headers.get("retry-after")
+                        ),
                     )
                 if response.status_code < 200 or response.status_code >= 300:
                     raise ProviderCallFailure(
@@ -407,6 +523,11 @@ class ProviderQuoteCollector:
             confidence_score=Decimal(0),
             is_direct=True,
             is_derived=False,
+            source_semantic=provider.source_semantic,
+            source_family=provider.source_family,
+            venue=provider.venue,
+            selected_price_semantic=provider.selected_price_semantic,
+            route_id=provider.route_id,
             rejection_reason=reason,
             raw_payload_reference=raw_reference,
             metadata={"quote_role": purpose.value, "provider_role": provider.role.value},
@@ -455,6 +576,7 @@ class ProviderQuoteCollector:
         error_code: str,
         http_status: int | None,
         started: float,
+        retry_after_seconds: int | None = None,
     ) -> None:
         now = utc_now()
         runtime.failure_count += 1
@@ -463,8 +585,12 @@ class ProviderQuoteCollector:
         runtime.last_error_code = error_code
         runtime.operational_status = "failed"
         if error_code == "rate_limited":
+            cooldown_seconds = max(
+                provider.budget.cooldown_after_429_seconds,
+                retry_after_seconds or 0,
+            )
             runtime.cooldown_until = now + timedelta(
-                seconds=provider.budget.cooldown_after_429_seconds
+                seconds=cooldown_seconds
             )
             runtime.operational_status = "cooldown"
         if runtime.consecutive_failures >= self.failure_threshold:
@@ -483,18 +609,104 @@ class ProviderQuoteCollector:
         )
 
     @staticmethod
+    def _parse_retry_after(
+        value: str | None,
+        *,
+        now: datetime | None = None,
+        maximum_seconds: int = 86_400,
+    ) -> int | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        if not normalized:
+            return None
+        if normalized.isdigit():
+            digits = normalized.lstrip("0") or "0"
+            if len(digits) > len(str(maximum_seconds)):
+                return maximum_seconds
+            return min(maximum_seconds, int(digits))
+        try:
+            retry_at = ensure_utc(parsedate_to_datetime(normalized))
+        except (TypeError, ValueError, OverflowError):
+            return None
+        current = ensure_utc(now or utc_now())
+        seconds = max(0, math.ceil((retry_at - current).total_seconds()))
+        return min(maximum_seconds, seconds)
+
+    @staticmethod
     def _is_fresh(
         quote: ProviderQuote,
         provider: ProviderDefinition,
         instrument: InstrumentDefinition,
     ) -> bool:
-        if quote.validation_status is not ValidationStatus.ACCEPTED or quote.price is None:
+        if (
+            quote.validation_status is not ValidationStatus.ACCEPTED
+            or quote.price is None
+            or quote.persistence_status is not PersistenceStatus.PERSISTED
+        ):
             return False
-        age = (utc_now() - quote.observed_at).total_seconds()
-        usable_window = min(
-            provider.operational_ttl_seconds, instrument.expire_after_seconds
+        return (
+            ProviderQuoteCollector._cache_status(quote, provider, instrument)
+            is FreshnessStatus.LIVE
         )
-        return 0 <= age <= usable_window
+
+    @staticmethod
+    def _cache_status(
+        quote: ProviderQuote | None,
+        provider: ProviderDefinition,
+        instrument: InstrumentDefinition,
+    ) -> FreshnessStatus | None:
+        if quote is None:
+            return None
+        if quote.validation_status is not ValidationStatus.ACCEPTED or quote.price is None:
+            return FreshnessStatus.EXPIRED
+        try:
+            boundaries = ProviderQuoteCollector._freshness_boundaries(
+                quote,
+                provider,
+                instrument,
+            )
+        except ValueError:
+            return FreshnessStatus.EXPIRED
+        return boundaries.status_at(utc_now())
+
+    @staticmethod
+    def _freshness_boundaries(
+        quote: ProviderQuote,
+        provider: ProviderDefinition,
+        instrument: InstrumentDefinition,
+    ):
+        policy = FreshnessPolicy(
+            maximum_source_age_seconds=min(
+                provider.operational_ttl_seconds,
+                instrument.operational_ttl_seconds,
+                instrument.expire_after_seconds,
+            ),
+            provider_live_ttl_seconds=provider.operational_ttl_seconds,
+            instrument_operational_ttl_seconds=instrument.operational_ttl_seconds,
+            instrument_stale_after_seconds=instrument.stale_after_seconds,
+            instrument_expire_after_seconds=instrument.expire_after_seconds,
+        )
+        return freshness_boundaries(
+            quote.observed_at,
+            quote.received_at,
+            policy,
+        )
+
+    @staticmethod
+    def _apply_current_live_boundary(
+        quote: ProviderQuote,
+        provider: ProviderDefinition,
+        instrument: InstrumentDefinition,
+    ) -> None:
+        boundaries = ProviderQuoteCollector._freshness_boundaries(
+            quote,
+            provider,
+            instrument,
+        )
+        quote.metadata["effective_live_eligible_until"] = (
+            boundaries.live_eligible_until.isoformat()
+        )
 
     @staticmethod
     def _circuit_open(runtime: ProviderRuntimeState) -> bool:

@@ -44,9 +44,24 @@ class SchemaMigrationTests(unittest.TestCase):
             'notify_webhook',
             'webhook_url',
             'enable_dlq',
+            'price_source_mode',
         ):
             self.assertIn(f'ADD COLUMN IF NOT EXISTS {column}', sql)
         self.assertIn('ALTER COLUMN target_price DROP NOT NULL', sql)
+
+    def test_price_source_mode_forward_migration_is_safe_for_existing_rows(self):
+        from pathlib import Path
+
+        migration = (
+            Path(__file__).resolve().parents[1]
+            / 'db'
+            / 'migrations'
+            / '20260802_001_alert_price_source_mode.sql'
+        ).read_text(encoding='utf-8')
+
+        self.assertIn('ADD COLUMN IF NOT EXISTS price_source_mode', migration)
+        self.assertIn("DEFAULT 'ordinary'", migration)
+        self.assertIn("'ordinary', 'reference', 'derived'", migration)
 
 
 if __name__ == '__main__':

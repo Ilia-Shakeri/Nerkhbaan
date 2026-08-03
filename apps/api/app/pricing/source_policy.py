@@ -8,6 +8,7 @@ from statistics import median
 from .models import (
     InstrumentDefinition,
     ProviderQuote,
+    SourceSemantic,
     SourceType,
     ValidationStatus,
     ensure_utc,
@@ -187,10 +188,10 @@ class SourceEligibilityPolicy:
             age_seconds = (current - quote.observed_at).total_seconds()
             if (
                 quote.source_type is not SourceType.TELEGRAM
+                or quote.source_semantic is not SourceSemantic.TELEGRAM_OBSERVATION
                 or quote.instrument_id != instrument.instrument_id
                 or quote.validation_status is not ValidationStatus.ACCEPTED
                 or quote.price is None
-                or not quote.is_direct
                 or quote.is_derived
                 or quote.is_suspicious
                 or not bool(quote.metadata.get("whitelisted", False))
