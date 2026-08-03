@@ -25,19 +25,20 @@ services:
     networks: [nerkhbaan-network]
 
   redis:
-    image: redis:7.2.15-alpine3.21
+    image: redis:7.4-alpine
     restart: unless-stopped
-    entrypoint: ["sh", "-c"]
     command:
+      - sh
+      - -c
       - |
-        echo "Redis: clearing persisted AOF/RDB files before startup."
-        rm -f /data/appendonly.aof* /data/*.rdb /data/dump.rdb || true
-        if redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction; then
-          echo "Redis: appendonly startup succeeded."
-          exit 0
+        if [ -f /data/appendonly.aof.13.base.rdb ]; then
+          if ! redis-check-rdb /data/appendonly.aof.13.base.rdb >/tmp/redis_aof_check.log 2>&1; then
+            echo "Redis: unreadable AOF base file at /data/appendonly.aof.13.base.rdb; keeping data untouched for manual recovery."
+            echo "Check /tmp/redis_aof_check.log inside container; manual restore required."
+            exit 1
+          fi
         fi
-        echo "Redis: appendonly startup failed, retrying without append-only persistence."
-        exec redis-server --appendonly no --appendfsync no --maxmemory 256mb --maxmemory-policy noeviction
+        exec redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     healthcheck:
