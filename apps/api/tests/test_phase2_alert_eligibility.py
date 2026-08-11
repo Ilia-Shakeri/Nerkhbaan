@@ -8,7 +8,7 @@ os.environ["DEBUG"] = "false"
 
 from app.schemas import AlertCreate
 from app.models import Alert as AlertModel, AlertTriggerEvent
-from app.services.alert_engine import Alert, AlertEngine
+from app.services.alert_engine import ALERT_SOURCE_ELIGIBILITY, Alert, AlertEngine
 
 
 def _asset(**overrides):
@@ -34,6 +34,20 @@ class DefaultAlertEligibilityTests(unittest.TestCase):
 
     def test_clean_direct_persisted_quote_is_operational(self) -> None:
         self.assertTrue(self.engine._asset_is_operational(_asset(), "usd"))
+
+    def test_alert_source_eligibility_matrix_is_explicit(self) -> None:
+        self.assertEqual(
+            set(ALERT_SOURCE_ELIGIBILITY),
+            {"ordinary", "reference", "derived"},
+        )
+        self.assertIn(
+            "exchange_trade",
+            ALERT_SOURCE_ELIGIBILITY["ordinary"]["source_semantics"],
+        )
+        self.assertEqual(
+            ALERT_SOURCE_ELIGIBILITY["derived"]["minimum_derivation_depth"],
+            1,
+        )
 
     def test_default_policy_rejects_derived_quote(self) -> None:
         self.assertFalse(

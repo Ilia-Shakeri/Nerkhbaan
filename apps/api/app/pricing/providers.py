@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import math
 import time
@@ -7,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlparse
 
 import httpx
 
@@ -230,7 +232,10 @@ class ProviderQuoteCollector:
         http_status: int | None = None
         owns_client = client is None
         request_client = client or httpx.AsyncClient(
-            timeout=httpx.Timeout(5.0, connect=3.0),
+            timeout=httpx.Timeout(
+                float(settings.pricing_provider_request_timeout_seconds),
+                connect=float(settings.pricing_provider_connect_timeout_seconds),
+            ),
             follow_redirects=False,
         )
         try:
@@ -410,17 +415,57 @@ class ProviderQuoteCollector:
     ) -> tuple[object, str | None, int]:
         headers = dict(provider.static_headers)
         params: dict[str, str] = {}
+        self._validate_destination(provider)
+        if provider.requires_https and provider.api_key_setting:
+            parsed = urlparse(provider.url)
+            if parsed.scheme != "https":
+                raise ProviderCallFailure(
+                    "insecure_http_blocked",
+                    "Provider credentials require HTTPS",
+                )
         if provider.api_key_setting:
             key = getattr(settings, provider.api_key_setting, None)
+            use_header = bool(provider.api_key_header)
+            if provider.provider_id.startswith("nerkh_io_") and not key:
+                key = getattr(settings, "nerkh_io_api_key", None)
+                provider_query_key = "x-api-key"
+                use_header = False
+            else:
+                provider_query_key = provider.api_key_query_parameter
             if not key:
                 raise ProviderCallFailure("missing_key", "Provider key is not configured")
-            if provider.api_key_header:
+            if use_header and provider.api_key_header:
                 value = str(key)
                 if provider.api_key_header.lower() == "authorization" and not value.lower().startswith("bearer "):
                     value = f"Bearer {value}"
                 headers[provider.api_key_header] = value
-            elif provider.api_key_query_parameter:
-                params[provider.api_key_query_parameter] = str(key)
+            elif provider_query_key:
+                params[provider_query_key] = str(key)
+        maximum_attempts = settings.pricing_provider_max_retries + 1
+        for attempt in range(maximum_attempts):
+            try:
+                return await self._request_once(client, provider, headers, params)
+            except ProviderCallFailure as exc:
+                retryable = (
+                    exc.code == "transport_error"
+                    or exc.http_status == 408
+                    or (exc.http_status is not None and exc.http_status >= 500)
+                )
+                if not retryable or attempt + 1 >= maximum_attempts:
+                    raise
+                delay = float(settings.pricing_provider_backoff_base_seconds) * (2 ** attempt)
+                if exc.retry_after_seconds is not None:
+                    delay = max(delay, float(exc.retry_after_seconds))
+                await asyncio.sleep(min(delay, 10.0))
+        raise ProviderCallFailure("transport_error", "Provider retry loop ended")
+
+    async def _request_once(
+        self,
+        client: httpx.AsyncClient,
+        provider: ProviderDefinition,
+        headers: dict[str, str],
+        params: dict[str, str],
+    ) -> tuple[object, str | None, int]:
         try:
             async with client.stream(
                 provider.method,
@@ -432,7 +477,11 @@ class ProviderQuoteCollector:
                 body = bytearray()
                 async for chunk in response.aiter_bytes():
                     body.extend(chunk)
-                    if len(body) > provider.maximum_payload_bytes:
+                    maximum_payload_bytes = min(
+                        provider.maximum_payload_bytes,
+                        settings.pricing_provider_max_response_bytes,
+                    )
+                    if len(body) > maximum_payload_bytes:
                         raise ProviderCallFailure(
                             "payload_too_large",
                             "Provider payload exceeded the configured bound",
@@ -479,6 +528,25 @@ class ProviderQuoteCollector:
                 return payload, content_type, response.status_code
         except httpx.HTTPError as exc:
             raise ProviderCallFailure("transport_error", "Provider request failed") from exc
+
+    @staticmethod
+    def _validate_destination(provider: ProviderDefinition) -> None:
+        parsed = urlparse(provider.url)
+        if not parsed.scheme or not parsed.hostname:
+            raise ProviderCallFailure("invalid_provider_url", "Provider URL is invalid")
+        if parsed.username or parsed.password:
+            raise ProviderCallFailure("url_credentials_blocked", "Provider URL credentials are not allowed")
+        query = parsed.query.lower()
+        if any(marker in query for marker in ("api_key=", "apikey=", "token=", "secret=", "password=")):
+            raise ProviderCallFailure("url_secret_blocked", "Provider URL cannot contain credentials")
+        allowed_hosts = {
+            host.strip().lower()
+            for host in settings.pricing_provider_allowed_hosts.split(",")
+            if host.strip()
+        }
+        hostname = parsed.hostname.lower()
+        if allowed_hosts and hostname not in allowed_hosts:
+            raise ProviderCallFailure("provider_host_not_allowed", "Provider host is not allowlisted")
 
     async def _rejected_quote(
         self,

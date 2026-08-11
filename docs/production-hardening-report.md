@@ -10,7 +10,7 @@ Captured on 2026-08-02 at 14:26:18 +03:30 before source changes.
 - Starting commit: `702f85f70cbcce6adc5c59aaf4b8f605fd040933`
 - Starting tree: `ce7c833cbee2ccda7f7e0fb79509f9a5d53d6b89`
 - Starting worktree: clean
-- Hardening branch: `codex/production-hardening`
+- Hardening branch: `production-hardening`
 - Tracked tree entries: 702
 - Top-level tracked entry counts: `apps` 635, `packages` 54, and 13 root/configuration entries
 - Exact tree command: `git ls-tree -r --name-only 702f85f70cbcce6adc5c59aaf4b8f605fd040933`
@@ -49,13 +49,13 @@ Build-generated, untracked `apps/admin-web/vite.config.js` and `vite.config.d.ts
 
 - The root `package-lock.json` already exists and is internally consistent.
 - `apps/web/Dockerfile` already copies the root lockfile and installs only the web and shared UI workspaces through the repository install script.
-- Admin and desktop TypeScript project files already exist, but their build paths are not yet passing.
-- `packages/ui/src/index.ts` is missing.
+- Admin and desktop TypeScript project files exist and now pass their build paths.
+- `packages/ui/src/index.ts` now exports the shared package surface.
 - Required 192px and 512px owned PWA icon files already exist.
-- No pull-request CI workflow exists.
-- No root one-command clean verification task exists.
-- No repository Node/npm pin file or separate Python development/test dependency file exists.
-- No `.editorconfig` exists.
+- Pull-request CI now covers builds, service integration, security scans, and image scans.
+- The root `verify` task now runs API checks, frontend contract tests, and all builds.
+- Node, npm, Python runtime, and development dependency inputs are pinned.
+- `.editorconfig` is present.
 
 ## Change log
 
@@ -70,7 +70,7 @@ This focused fix was committed before enabling the repository-wide lint gate bec
 
 ### Phase 0: deterministic tooling and release gates
 
-- Pinned Node.js 22.23.0, npm 10.9.8, Python image 3.12.13, TimescaleDB 2.28.3 on PostgreSQL 16, Redis 7.2.15, Nginx 1.30.4, and the backup image build.
+- Pinned Node.js 22.23.0, npm 10.9.8, Python image 3.12.13, TimescaleDB 2.28.3 on PostgreSQL 16, Redis 7.4, Nginx 1.30.4, and the backup image build.
 - Kept one authoritative root npm lockfile and removed two stale nested locks.
 - Added a separate Python development dependency file, root verification commands, `.editorconfig`, `.nvmrc`, and explicit shared UI exports.
 - Split desktop renderer and Node TypeScript projects and corrected strict renderer type errors.
@@ -133,11 +133,18 @@ This focused fix was committed before enabling the repository-wide lint gate bec
 | PWA dimension check | Passed: `icon-192.png` is 192x192 and `icon-512.png` is 512x512. |
 | `git diff --check` | Passed; only host line-ending notices were printed. |
 
+### Final local verification, 2026-08-09
+
+| Command | Outcome |
+| --- | --- |
+| `npm.cmd run verify` | Passed: API compile and lint, 144 API tests, 4 frontend contract tests, and web, admin, and desktop production builds. One PostgreSQL concurrency test was skipped because `TEST_DATABASE_URL` is not set locally. |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-operator-gates.ps1` | Passed with generated fresh production-shaped evidence. |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -EvidencePath docs/operator-gates.evidence.example.json` | Failed as required; the pending example cannot satisfy a production gate. |
+| CI workflow YAML parse | Passed. |
+
+The PostgreSQL race test now runs against the CI PostgreSQL service. Production provider canaries, restore proof, deployment health, and authenticated browser smoke proof remain operator gates and are not represented as local success.
+
 Docker is absent on this host. CI defines, but local work does not claim, image builds, Compose evaluation, service integration, or vulnerability scan results.
-
-### Handoff update
-
-- Current pass focus: editing-only continuation. No additional runtime verification was executed in this handoff.
 
 ## Feature flags and rollback
 

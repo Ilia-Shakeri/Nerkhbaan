@@ -56,7 +56,7 @@ class RetryAfterTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_429_response_carries_retry_after_without_sleep(self) -> None:
-        provider = PROVIDERS["coincap_btc"]
+        provider = PROVIDERS["coinbase_btc_usd"]
 
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(
@@ -72,7 +72,7 @@ class RetryAfterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.retry_after_seconds, 180)
 
     async def test_rate_limit_cooldown_uses_greater_retry_after(self) -> None:
-        provider = PROVIDERS["coincap_btc"]
+        provider = PROVIDERS["coinbase_btc_usd"]
         store = _RuntimeStore()
         collector = ProviderQuoteCollector(
             store=store,

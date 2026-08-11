@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Callable, Mapping
 
+from ..config import settings
 from .instruments import get_instrument
 from .models import (
     CanonicalQuote,
@@ -18,7 +19,9 @@ from .models import (
     utc_now,
 )
 
-TROY_OUNCE_GRAMS = Decimal("31.1034768")
+TROY_OUNCE_GRAMS = settings.troy_ounce_grams
+USDT_USD_SAFE_MIN = settings.usdt_usd_safe_min
+USDT_USD_SAFE_MAX = settings.usdt_usd_safe_max
 
 
 class DerivedPriceUnavailable(RuntimeError):
@@ -32,16 +35,20 @@ class DerivedPriceEngine:
             tuple[tuple[str, ...], str, Callable[[Mapping[str, CanonicalQuote]], Decimal]],
         ] = {
             "GOLD_18K_TOMAN_GRAM": (
+                ("GOLD_24K_TOMAN_GRAM",),
+                "GOLD_24K_TOMAN_GRAM * 0.75",
+                lambda values: values["GOLD_24K_TOMAN_GRAM"].price * Decimal("0.75"),
+            ),
+            "GOLD_24K_TOMAN_GRAM": (
                 ("XAU_USD_OZ", "USDT_TOMAN", "USDT_USD"),
-                "XAU_USD_OZ * (USDT_TOMAN / USDT_USD) / 31.1034768 * 0.75",
+                "XAU_USD_OZ * (USDT_TOMAN / USDT_USD) / TROY_OUNCE_GRAMS",
                 lambda values: values["XAU_USD_OZ"].price
                 * (values["USDT_TOMAN"].price / values["USDT_USD"].price)
-                / TROY_OUNCE_GRAMS
-                * Decimal("0.75"),
+                / TROY_OUNCE_GRAMS,
             ),
             "SILVER_999_TOMAN_GRAM": (
                 ("XAG_USD_OZ", "USDT_TOMAN", "USDT_USD"),
-                "XAG_USD_OZ * (USDT_TOMAN / USDT_USD) / 31.1034768 * 0.999",
+                "XAG_USD_OZ * (USDT_TOMAN / USDT_USD) / TROY_OUNCE_GRAMS * 0.999",
                 lambda values: values["XAG_USD_OZ"].price
                 * (values["USDT_TOMAN"].price / values["USDT_USD"].price)
                 / TROY_OUNCE_GRAMS
@@ -74,6 +81,17 @@ class DerivedPriceEngine:
             input_ids, formula, calculate = self._formulas[normalized]
         except KeyError as exc:
             raise DerivedPriceUnavailable("No derived formula is registered") from exc
+        if normalized == "GOLD_18K_TOMAN_GRAM" and "GOLD_24K_TOMAN_GRAM" not in canonical_quotes:
+            input_ids = ("XAU_USD_OZ", "USDT_TOMAN", "USDT_USD")
+            formula = "XAU_USD_OZ * (USDT_TOMAN / USDT_USD) / TROY_OUNCE_GRAMS * 0.75"
+
+            def calculate(values: Mapping[str, CanonicalQuote]) -> Decimal:
+                return (
+                    values["XAU_USD_OZ"].price
+                    * (values["USDT_TOMAN"].price / values["USDT_USD"].price)
+                    / TROY_OUNCE_GRAMS
+                    * Decimal("0.75")
+                )
         current = ensure_utc(now or utc_now())
         inputs: dict[str, CanonicalQuote] = {}
         input_depths: dict[str, int] = {}
@@ -99,6 +117,11 @@ class DerivedPriceEngine:
         confidence_score = min(input_confidences.values(), default=Decimal(1)) * Decimal(
             "0.90"
         )
+        usdt_quote = inputs.get("USDT_USD")
+        if usdt_quote is not None and not (
+            USDT_USD_SAFE_MIN <= usdt_quote.price <= USDT_USD_SAFE_MAX
+        ):
+            raise DerivedPriceUnavailable("USDT/USD input is outside the safe range")
         price = calculate(inputs)
         instrument = get_instrument(normalized)
         if not instrument.accepts(price):
@@ -140,11 +163,11 @@ class DerivedPriceEngine:
                         "instrument_id": input_id,
                         "canonical_id": inputs[input_id].id,
                         "idempotency_key": inputs[input_id].idempotency_key,
-                        "price": float(inputs[input_id].price),
+                        "price": str(inputs[input_id].price),
                         "observed_at": inputs[input_id].observed_at.isoformat(),
                         "valid_until": inputs[input_id].valid_until.isoformat(),
                         "derivation_depth": input_depths[input_id],
-                        "confidence_score": float(input_confidences[input_id]),
+                        "confidence_score": str(input_confidences[input_id]),
                         "provenance": self._provenance(input_id, inputs[input_id]),
                     }
                     for input_id in input_ids
@@ -152,7 +175,12 @@ class DerivedPriceEngine:
                 "derivation_depth": derivation_depth,
                 "provenance": provenance,
                 "input_live_eligible_until": input_live_eligible_until.isoformat(),
-                "theoretical_value": normalized.startswith("SILVER_"),
+                "theoretical_value": normalized in {
+                    "GOLD_18K_TOMAN_GRAM",
+                    "GOLD_24K_TOMAN_GRAM",
+                    "SILVER_999_TOMAN_GRAM",
+                    "SILVER_925_TOMAN_GRAM",
+                },
             },
             persistence_status=PersistenceStatus.UNPERSISTED,
         )

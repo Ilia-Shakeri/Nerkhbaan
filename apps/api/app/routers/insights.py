@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -58,6 +58,12 @@ class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1, max_length=20)
     language: Literal["fa", "en"] = "fa"
     session_id: int | None = None
+
+    @model_validator(mode="after")
+    def last_message_must_be_user(self) -> "ChatRequest":
+        if self.messages[-1].role != "user":
+            raise ValueError("Last chat message must come from the user")
+        return self
 
 
 class ChatResponse(BaseModel):
@@ -167,7 +173,7 @@ async def analyze_chart(
 
     try:
         analysis = await insight_engine.analyze_chart(
-            payload.asset, snapshot, payload.language
+            payload.asset, snapshot, payload.language, str(current_user.id)
         )
     except InsightUnavailableError as exc:
         raise HTTPException(
@@ -186,26 +192,25 @@ async def chat(
     _enforce_rate_limit(current_user.id)
     purge_expired_chat_history(db)
 
-    if payload.session_id is None:
-        first_user_message = next((message.content for message in payload.messages if message.role == "user"), "New chat")
-        session = AssistantChatSession(user_id=current_user.id, title=_make_title(first_user_message))
-        db.add(session)
-        db.commit()
-        db.refresh(session)
-    else:
+    session = None
+    if payload.session_id is not None:
         session = _owned_session(db, current_user.id, payload.session_id)
 
     messages = [{"role": message.role, "content": message.content} for message in payload.messages]
     try:
-        reply = await insight_engine.chat(messages, payload.language)
+        reply = await insight_engine.chat(messages, payload.language, str(current_user.id))
     except InsightUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
         ) from exc
 
+    if session is None:
+        first_user_message = next(message.content for message in payload.messages if message.role == "user")
+        session = AssistantChatSession(user_id=current_user.id, title=_make_title(first_user_message))
+        db.add(session)
+        db.flush()
     last_user = payload.messages[-1]
-    if last_user.role == "user":
-        db.add(AssistantChatMessage(session_id=session.id, role="user", content=last_user.content))
+    db.add(AssistantChatMessage(session_id=session.id, role="user", content=last_user.content))
     db.add(AssistantChatMessage(session_id=session.id, role="assistant", content=reply))
     session.updated_at = datetime.now(UTC)
     db.commit()

@@ -183,7 +183,7 @@ class ProviderFreshnessTests(unittest.IsolatedAsyncioTestCase):
 
 class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_first_external_primary_reaches_later_allowed_primary(self) -> None:
-        base = PROVIDERS["coincap_btc"]
+        base = PROVIDERS["coinbase_btc_usd"]
         first = replace(base, provider_id="phase2_primary_first", priority=1)
         second = replace(base, provider_id="phase2_primary_second", priority=2)
         failed = QuoteFetchOutcome(
@@ -226,7 +226,7 @@ class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_failed_first_fallback_reaches_later_allowed_fallback(self) -> None:
-        base = PROVIDERS["coincap_btc"]
+        base = PROVIDERS["coinbase_btc_usd"]
         first = replace(base, provider_id="phase2_fallback_first", priority=1)
         second = replace(base, provider_id="phase2_fallback_second", priority=2)
         failed = QuoteFetchOutcome(
@@ -265,7 +265,7 @@ class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(collector.calls, [first.provider_id, second.provider_id])
 
     async def test_later_live_cache_wins_before_any_external_call(self) -> None:
-        base = PROVIDERS["coincap_btc"]
+        base = PROVIDERS["coinbase_btc_usd"]
         first = replace(base, provider_id="phase2_external_first", priority=1)
         second = replace(base, provider_id="phase2_cached_second", priority=2)
         cached = _provider_quote(
@@ -311,7 +311,7 @@ class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_current_lower_provider_ttl_caps_cached_canonical_window(self) -> None:
         provider = replace(
-            PROVIDERS["coincap_btc"],
+            PROVIDERS["coinbase_btc_usd"],
             operational_ttl_seconds=10,
         )
         cached = _provider_quote(
@@ -349,7 +349,7 @@ class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(decision.canonical.valid_until, expected_live_until)
 
     async def test_queued_live_cache_has_true_skip_reason(self) -> None:
-        provider = PROVIDERS["coincap_btc"]
+        provider = PROVIDERS["coinbase_btc_usd"]
         cached = _provider_quote(
             observed_at=FROZEN_NOW,
             instrument_id="BTC_USD",
@@ -392,7 +392,7 @@ class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_external_bound_records_untried_provider_reason(self) -> None:
-        base = PROVIDERS["coincap_btc"]
+        base = PROVIDERS["coinbase_btc_usd"]
         providers = tuple(
             replace(base, provider_id=f"phase2_bound_{index}", priority=index)
             for index in (1, 2, 3)

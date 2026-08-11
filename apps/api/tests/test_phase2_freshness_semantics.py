@@ -178,7 +178,7 @@ class RetainedCacheTests(unittest.IsolatedAsyncioTestCase):
             operational_ttl_seconds=60,
         )
         provider = replace(
-            PROVIDERS["coincap_btc"],
+            PROVIDERS["coinbase_btc_usd"],
             enabled=False,
             api_key_setting=None,
             operational_ttl_seconds=120,
@@ -260,7 +260,7 @@ class RetainedCacheTests(unittest.IsolatedAsyncioTestCase):
                     metadata={},
                 )
 
-        provider = PROVIDERS["coincap_btc"]
+        provider = PROVIDERS["coinbase_btc_usd"]
         instrument = get_instrument(provider.instrument_id)
         store = CaptureStore()
         collector = ProviderQuoteCollector(

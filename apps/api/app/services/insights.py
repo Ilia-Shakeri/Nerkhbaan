@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -7,13 +9,15 @@ from typing import Any
 import httpx
 
 from ..config import settings
+from ..security import rate_limit_hit
 
 logger = logging.getLogger(__name__)
 
 # Upper bound on conversation turns accepted per request to cap token usage and
 # keep latency predictable under load.
 MAX_HISTORY_MESSAGES = 20
-REQUEST_TIMEOUT_SECONDS = 5
+REQUEST_TIMEOUT_SECONDS = 25
+DAILY_WINDOW_SECONDS = 24 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -21,6 +25,7 @@ class ProviderConfig:
     base_url: str
     model: str
     api_key: str | None
+    name: str = "provider"
 
 
 class InsightUnavailableError(RuntimeError):
@@ -36,18 +41,46 @@ class MarketInsightEngine:
     """
 
     def __init__(self) -> None:
-        self.providers = [
-            ProviderConfig(
-                base_url=settings.groq_api_base_url,
-                model=settings.groq_model,
-                api_key=settings.groq_api_key,
+        available = {
+            "groq": ProviderConfig(
+                settings.groq_api_base_url,
+                settings.groq_model,
+                settings.groq_api_key,
+                "groq",
             ),
-            ProviderConfig(
-                base_url=settings.insight_api_base_url,
-                model=settings.insight_model,
-                api_key=settings.insight_api_key or settings.deepseek_api_key,
+            "gemini": ProviderConfig(
+                settings.gemini_api_base_url,
+                settings.gemini_model,
+                settings.gemini_api_key,
+                "gemini",
             ),
-        ]
+            "openrouter": ProviderConfig(
+                settings.openrouter_api_base_url,
+                settings.openrouter_model or "openrouter/free",
+                settings.openrouter_api_key,
+                "openrouter",
+            ),
+            "deepseek": ProviderConfig(
+                settings.deepseek_api_base_url,
+                settings.deepseek_model,
+                settings.deepseek_api_key or settings.insight_api_key,
+                "deepseek",
+            ),
+        }
+        self.providers: list[ProviderConfig] = []
+        for raw_name in settings.ai_provider_order.split(","):
+            name = raw_name.strip().lower()
+            provider = available.get(name)
+            if provider is None:
+                logger.warning("Unknown reasoning provider skipped: %s", name)
+                continue
+            if (
+                provider.name == "openrouter"
+                and provider.model == "openrouter/free"
+                and not settings.ai_allow_openrouter_free
+            ):
+                continue
+            self.providers.append(provider)
 
     def is_configured(self) -> bool:
         return any(provider.api_key for provider in self.providers)
@@ -63,7 +96,8 @@ class MarketInsightEngine:
             raise InsightUnavailableError("Reasoning provider API key is not configured")
 
         last_error: Exception | None = None
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        timeout_seconds = float(getattr(settings, "ai_request_timeout_seconds", REQUEST_TIMEOUT_SECONDS))
+        async with httpx.AsyncClient(timeout=timeout_seconds) as client:
             for index, provider in enumerate(provider_chain):
                 url = f"{provider.base_url.rstrip('/')}/chat/completions"
                 headers = {
@@ -75,35 +109,54 @@ class MarketInsightEngine:
                     "messages": messages,
                     "temperature": temperature,
                     "stream": False,
+                    "max_tokens": settings.ai_max_tokens,
                 }
-                try:
-                    response = await client.post(url, headers=headers, json=body)
-                    response.raise_for_status()
-                    payload = response.json()
-                except (httpx.TimeoutException, httpx.HTTPStatusError) as exc:
-                    last_error = exc
-                    logger.warning(
-                        "Reasoning provider %s failed; trying fallback %s of %s",
-                        provider.base_url,
-                        index + 1,
-                        len(provider_chain),
-                    )
-                    continue
-                except httpx.HTTPError as exc:
-                    last_error = exc
-                    logger.error("Reasoning provider request failed: %s", exc)
+                maximum_attempts = settings.ai_max_retries + 1
+                for attempt in range(maximum_attempts):
+                    try:
+                        response = await client.post(url, headers=headers, json=body)
+                        response.raise_for_status()
+                        payload = response.json()
+                    except httpx.HTTPStatusError as exc:
+                        last_error = exc
+                        status_code = exc.response.status_code
+                        retryable = status_code == 408 or status_code >= 500
+                        if retryable and attempt + 1 < maximum_attempts:
+                            await asyncio.sleep(min(0.25 * (2 ** attempt), 1.0))
+                            continue
+                        break
+                    except httpx.HTTPError as exc:
+                        last_error = exc
+                        if attempt + 1 < maximum_attempts:
+                            await asyncio.sleep(min(0.25 * (2 ** attempt), 1.0))
+                            continue
+                        break
+                    except (TypeError, ValueError) as exc:
+                        last_error = exc
+                        break
+
+                    try:
+                        content = payload["choices"][0]["message"]["content"]
+                    except (KeyError, IndexError, TypeError) as exc:
+                        last_error = exc
+                        break
+
+                    text = (content or "").strip()
+                    if text:
+                        self.last_provider_metadata = {
+                            "provider": provider.name,
+                            "configured_model": provider.model,
+                            "response_model": str(payload.get("model") or provider.model),
+                        }
+                        return text
+                    last_error = InsightUnavailableError("Reasoning provider returned an empty response")
                     break
 
-                try:
-                    content = payload["choices"][0]["message"]["content"]
-                except (KeyError, IndexError, TypeError) as exc:
-                    logger.error("Unexpected reasoning provider payload: %s", payload)
-                    raise InsightUnavailableError("Reasoning provider returned an invalid response") from exc
-
-                text = (content or "").strip()
-                if text:
-                    return text
-                raise InsightUnavailableError("Reasoning provider returned an empty response")
+                logger.warning(
+                    "Reasoning provider failed; trying fallback %s of %s",
+                    index + 1,
+                    len(provider_chain),
+                )
 
         if isinstance(last_error, httpx.HTTPStatusError):
             raise InsightUnavailableError("All reasoning providers rejected the request") from last_error
@@ -114,6 +167,7 @@ class MarketInsightEngine:
         asset_id: str,
         snapshot: dict[str, Any],
         language: str,
+        user_id: str,
     ) -> str:
         """Produce a concise market read for a single asset snapshot."""
         lang_directive = (
@@ -143,15 +197,17 @@ class MarketInsightEngine:
             f"Recent history points: {compact_history}"
         )
 
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+        self._check_quota(user_id, messages)
         return await self._complete(
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages,
             temperature=0.4,
         )
 
-    async def chat(self, messages: list[dict[str, str]], language: str) -> str:
+    async def chat(self, messages: list[dict[str, str]], language: str, user_id: str) -> str:
         """Answer a free-form market question, grounded in the platform scope."""
         lang_directive = (
             "Reply in fluent Persian (Farsi)."
@@ -167,8 +223,44 @@ class MarketInsightEngine:
 
         # Keep only the trailing window of the dialog to bound token usage.
         trimmed = messages[-MAX_HISTORY_MESSAGES:]
+        self._check_quota(user_id, trimmed)
         conversation = [{"role": "system", "content": system_prompt}, *trimmed]
-        return await self._complete(conversation, temperature=0.7)
+        response = await self._complete(conversation, temperature=0.7)
+        disclaimer = (
+            "این پاسخ فقط اطلاعات عمومی است، ممکن است نادرست باشد، تضمین نیست و توصیه سرمایه‌گذاری شخصی محسوب نمی‌شود."
+            if language == "fa"
+            else "This is informational, may be inaccurate, is not guaranteed, and is not personalized investment advice."
+        )
+        return f"{response}\n\n{disclaimer}"
+
+    def _check_quota(self, user_id: str, messages: list[dict[str, str]]) -> None:
+        fingerprint = hashlib.sha256(
+            "|".join(str(item.get("content", ""))[:500] for item in messages).encode("utf-8")
+        ).hexdigest()
+        duplicate = rate_limit_hit(
+            "insight-dedup",
+            f"{user_id}:{fingerprint}",
+            1,
+            settings.ai_deduplication_window_seconds,
+        )
+        if duplicate.blocked:
+            raise InsightUnavailableError("Duplicate reasoning request was throttled")
+        user_state = rate_limit_hit(
+            "insight-user-daily",
+            user_id,
+            settings.ai_user_daily_request_limit,
+            DAILY_WINDOW_SECONDS,
+        )
+        if user_state.blocked:
+            raise InsightUnavailableError("User reasoning quota is exhausted")
+        global_state = rate_limit_hit(
+            "insight-global-daily",
+            "all-users",
+            settings.ai_global_daily_request_limit,
+            DAILY_WINDOW_SECONDS,
+        )
+        if global_state.blocked:
+            raise InsightUnavailableError("Reasoning quota is exhausted")
 
 
 insight_engine = MarketInsightEngine()

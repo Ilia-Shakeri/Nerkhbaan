@@ -5,16 +5,10 @@ Keep data safe by avoiding destructive cleanup by default.
 
 ## Normal deploy (safe)
 
-Use this command flow each time after `git pull`:
+Use the checked deploy script. It rejects tracked local edits, pulls by fast-forward only, validates production Compose, skips registry pulls for locally built app images, recreates the stack, and waits for health:
 
 ```bash
-cd /opt/Nerkhbaan
-git pull
-git status --short
-docker compose -f docker-compose.prod.yaml pull
-docker compose -f docker-compose.prod.yaml up -d --build --force-recreate
-docker compose -f docker-compose.prod.yaml ps
-docker compose -f docker-compose.prod.yaml logs -f backend frontend | sed -n '1,120p'
+cd /opt/Nerkhbaan && COMPOSE_FILE=docker-compose.prod.yaml sh scripts/deploy-nerkhbaan-prod.sh
 ```
 
 If backend and frontend are healthy, no recovery actions are needed.
@@ -84,10 +78,10 @@ docker compose -f docker-compose.prod.yaml logs -f nerkhbaan-redis --tail 80
 
 ## Recommended daily workflow
 
-1. `git pull`
-2. `docker compose -f docker-compose.prod.yaml up -d --build --force-recreate`
-3. if one service is unhealthy, inspect only that service log first.
-4. keep Redis recovery manual only; do not auto-delete data on normal deploy.
+1. Check `git status --short` and resolve tracked server edits.
+2. Run `cd /opt/Nerkhbaan && COMPOSE_FILE=docker-compose.prod.yaml sh scripts/deploy-nerkhbaan-prod.sh`.
+3. If one service is unhealthy, inspect only that service log first.
+4. Keep Redis recovery manual only; do not auto-delete data on normal deploy.
 
 ## One command for VPS deploy
 

@@ -22,7 +22,8 @@
     "build": "npm run build:web && npm run build:admin && npm run build:desktop",
     "check:api": "cd apps/api && python -m compileall app && python -m pyflakes app tests scripts",
     "test:api": "cd apps/api && python -m unittest discover -s tests -v",
+    "test:frontend": "node --test scripts/frontend-contracts.test.mjs",
     "test": "npm run test:api",
-    "verify": "npm run check:api && npm run test:api && npm run build"
+    "verify": "npm run check:api && npm run test:api && npm run test:frontend && npm run build"
   }
 }

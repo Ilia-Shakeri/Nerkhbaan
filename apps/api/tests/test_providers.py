@@ -3,14 +3,16 @@ from __future__ import annotations
 import tempfile
 import types
 import unittest
+import importlib.util
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 import sys
 from unittest.mock import patch
 
-if 'httpx' not in sys.modules:
-    sys.modules['httpx'] = types.SimpleNamespace(AsyncClient=object)
+if importlib.util.find_spec("httpx") is None:
+    if 'httpx' not in sys.modules:
+        sys.modules['httpx'] = types.SimpleNamespace(AsyncClient=object)
 
 from app.services.pricing_cache import PricingCacheStore
 from app.services.pricing_fetcher import PricingFetcher
@@ -32,7 +34,6 @@ class StartupValidationTests(unittest.TestCase):
 
         self.assertIn('metals_dev_api_key', checks['missing_env_keys'])
         self.assertIn('goldapi_api_key', checks['missing_env_keys'])
-        self.assertIn('exchangerate_api_key', checks['missing_env_keys'])
         self.assertIn('alanchand_api_token', checks['missing_optional_env_keys'])
         self.assertFalse(checks['ok'])
 
@@ -41,7 +42,7 @@ class StartupValidationTests(unittest.TestCase):
             pricing_require_provider_keys=False,
             metals_dev_api_key='metals-key',
             goldapi_api_key='gold-key',
-            exchangerate_api_key='fx-key',
+            exchangerate_api_key=None,
             alanchand_api_token=None,
         )
 

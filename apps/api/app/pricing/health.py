@@ -12,7 +12,8 @@ from .cache import PricingRedisStore, pricing_redis
 from .history import InternalPriceHistory, internal_history
 from .instruments import get_instrument
 from .models import utc_now
-from .registry import PROVIDERS_BY_INSTRUMENT
+from .registry import PROVIDERS, PROVIDERS_BY_INSTRUMENT
+from .contracts import provider_contract, provider_contract_inventory
 
 
 class PricingHealthService:
@@ -75,6 +76,7 @@ class PricingHealthService:
                     except Exception:
                         continue
             payload["providers"] = providers
+            payload["provider_canaries"] = self.provider_canaries(normalized)
             payload["migration_version"] = database["migration_version"]
         return payload
 
@@ -97,7 +99,44 @@ class PricingHealthService:
         if authenticated:
             payload["migration_version"] = database["migration_version"]
             payload["database_error"] = database["error"]
+            payload["provider_contracts"] = provider_contract_inventory()
+            payload["provider_canaries"] = self.provider_canaries()
         return payload
+
+    def provider_canaries(self, instrument_id: str | None = None) -> list[dict[str, Any]]:
+        providers = (
+            PROVIDERS_BY_INSTRUMENT.get(instrument_id, ())
+            if instrument_id
+            else tuple(PROVIDERS.values())
+        )
+        rows: list[dict[str, Any]] = []
+        from ..config import settings
+
+        for provider in providers:
+            contract = provider_contract(provider)
+            configured = provider.configured(settings)
+            if not provider.enabled:
+                status = "provider_disabled"
+            elif not configured:
+                status = "not_configured"
+            elif contract.tier == "B" and contract.commercial_status != "operator_rights_confirmed":
+                status = "rights_review_required"
+            else:
+                status = "eligible_for_live_canary"
+            rows.append(
+                {
+                    "provider_id": provider.provider_id,
+                    "instrument_id": provider.instrument_id,
+                    "status": status,
+                    "tier": contract.tier,
+                    "owner": contract.owner,
+                    "credential_placement": contract.credential_placement,
+                    "unit_contract": contract.unit_contract,
+                    "attribution_required": contract.attribution_required,
+                    "last_live_probe_at": None,
+                }
+            )
+        return rows
 
     @staticmethod
     def _database_probe() -> dict[str, Any]:

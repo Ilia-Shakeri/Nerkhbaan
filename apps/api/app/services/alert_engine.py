@@ -36,6 +36,28 @@ logger = logging.getLogger(__name__)
 MAX_FORMULA_NODES = 40
 FORMULA_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 SOURCE_NAME_PATTERN = re.compile(r"[^a-z0-9]+")
+ALERT_SOURCE_ELIGIBILITY = {
+    "ordinary": {
+        "statuses": ("live", "confirmed", "fresh_cache"),
+        "source_semantics": (
+            "exchange_orderbook",
+            "exchange_trade",
+            "aggregator",
+            "physical_market_quote",
+        ),
+        "requires_derivation_depth": 0,
+    },
+    "reference": {
+        "statuses": ("live", "confirmed", "fresh_cache"),
+        "source_semantics": ("reference_rate",),
+        "requires_derivation_depth": 0,
+    },
+    "derived": {
+        "statuses": ("live", "confirmed", "fresh_cache", "derived_fallback"),
+        "source_semantics": ("derived",),
+        "minimum_derivation_depth": 1,
+    },
+}
 
 
 class FormulaValidationError(ValueError):
@@ -348,9 +370,10 @@ class AlertEngine:
         price_source_mode: str = "ordinary",
     ) -> bool:
         status_value = self._asset_status(asset, currency)
-        allowed_statuses = {"live", "confirmed", "fresh_cache"}
-        if price_source_mode == "derived":
-            allowed_statuses.add("derived_fallback")
+        policy = ALERT_SOURCE_ELIGIBILITY.get(price_source_mode)
+        if policy is None:
+            return False
+        allowed_statuses = set(policy["statuses"])
         if status_value not in allowed_statuses:
             return False
         if self._asset_policy_flag(
@@ -377,18 +400,21 @@ class AlertEngine:
             )
         except (TypeError, ValueError):
             return False
-        ordinary_semantics = {
-            "exchange_orderbook",
-            "exchange_trade",
-            "aggregator",
-            "physical_market_quote",
-        }
         if price_source_mode == "ordinary":
-            source_allowed = semantic in ordinary_semantics and derivation_depth == 0
+            source_allowed = (
+                semantic in policy["source_semantics"]
+                and derivation_depth == policy["requires_derivation_depth"]
+            )
         elif price_source_mode == "reference":
-            source_allowed = semantic == "reference_rate" and derivation_depth == 0
+            source_allowed = (
+                semantic in policy["source_semantics"]
+                and derivation_depth == policy["requires_derivation_depth"]
+            )
         elif price_source_mode == "derived":
-            source_allowed = semantic == "derived" and derivation_depth > 0
+            source_allowed = (
+                semantic in policy["source_semantics"]
+                and derivation_depth >= policy["minimum_derivation_depth"]
+            )
         else:
             source_allowed = False
         if not source_allowed:

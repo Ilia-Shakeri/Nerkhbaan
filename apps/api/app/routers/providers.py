@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter
 
 from ..pricing.service import instrument_pricing_service
+from ..pricing.health import pricing_health_service
 from ..services.api_registry import API_REGISTRY
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
@@ -32,5 +33,6 @@ async def get_provider_catalog() -> dict:
         "_health": {
             "checked_at": datetime.now(UTC).isoformat(),
             "providers": providers,
+            "canaries": pricing_health_service.provider_canaries(),
         },
     }

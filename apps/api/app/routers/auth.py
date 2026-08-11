@@ -188,6 +188,14 @@ def _desktop_refresh_token(request: Request, refresh_token: str) -> str | None:
     return refresh_token if request.headers.get("x-client-type", "").lower() == "desktop" else None
 
 
+def _client_access_token(request: Request, access_token: str) -> str | None:
+    if not settings.auth_return_bearer_token:
+        return None
+    if not settings.auth_cookie_enabled:
+        return access_token
+    return access_token if request.headers.get("x-client-type", "").lower() == "desktop" else None
+
+
 @router.post("/signup", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def signup(
     payload: UserCreate,
@@ -219,7 +227,7 @@ def signup(
     db.refresh(user)
     _set_auth_cookies(response, token, refresh_token)
     return AuthResponse(
-        access_token=token,
+        access_token=_client_access_token(request, token),
         refresh_token=_desktop_refresh_token(request, refresh_token),
         user=UserResponse.model_validate(user),
     )
@@ -280,7 +288,7 @@ def signin(
     db.commit()
     _set_auth_cookies(response, token, refresh_token)
     return AuthResponse(
-        access_token=token,
+        access_token=_client_access_token(request, token),
         refresh_token=_desktop_refresh_token(request, refresh_token),
         user=UserResponse.model_validate(user),
     )
@@ -336,7 +344,7 @@ def refresh_session(
     db.commit()
     _set_auth_cookies(response, access_token, next_refresh_token)
     return AuthResponse(
-        access_token=access_token,
+        access_token=_client_access_token(request, access_token),
         refresh_token=_desktop_refresh_token(request, next_refresh_token),
         user=UserResponse.model_validate(user),
     )

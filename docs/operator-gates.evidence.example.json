@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "environment": "replace-with-production",
+  "provider_rights_signoff": {
+    "status": "pending",
+    "owner": "pricing-ops",
+    "checked_at": "",
+    "evidence_ref": ""
+  },
+  "provider_live_canary_schedule": {
+    "status": "pending",
+    "owner": "pricing-ops",
+    "checked_at": "",
+    "evidence_ref": ""
+  },
+  "secret_manager_activation": {
+    "status": "pending",
+    "owner": "platform-ops",
+    "checked_at": "",
+    "evidence_ref": ""
+  },
+  "navasan_transport_signoff": {
+    "status": "pending",
+    "owner": "pricing-ops",
+    "checked_at": "",
+    "evidence_ref": "",
+    "reason": ""
+  },
+  "brsapi_tsetmc_future_domain": {
+    "status": "pending",
+    "owner": "product-ops",
+    "checked_at": "",
+    "evidence_ref": "",
+    "reason": ""
+  },
+  "production_restore_proof": {
+    "status": "pending",
+    "owner": "platform-ops",
+    "checked_at": "",
+    "evidence_ref": ""
+  },
+  "production_deployment_proof": {
+    "status": "pending",
+    "owner": "platform-ops",
+    "checked_at": "",
+    "evidence_ref": ""
+  },
+  "browser_smoke_proof": {
+    "status": "pending",
+    "owner": "qa-ops",
+    "checked_at": "",
+    "evidence_ref": ""
+  }
+}

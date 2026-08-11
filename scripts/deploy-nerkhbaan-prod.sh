@@ -3,21 +3,39 @@
 set -eu
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yaml}"
-COMPOSE_CMD="docker compose -f ${COMPOSE_FILE}"
+DEPLOY_WAIT_SECONDS="${DEPLOY_WAIT_SECONDS:-240}"
+PREVIOUS_COMMIT="unknown"
 
 cd /opt/Nerkhbaan
 
-echo "==> Step 1/4: pull repository"
-git pull
+deploy_logs() {
+    docker compose -f "$COMPOSE_FILE" ps || true
+    docker compose -f "$COMPOSE_FILE" logs --tail 120 backend frontend redis postgres migrate || true
+}
 
-echo "==> Step 2/4: pull images"
-${COMPOSE_CMD} pull
+trap 'status=$?; if [ "$status" -ne 0 ]; then echo "Deploy failed. Prior commit: $PREVIOUS_COMMIT"; deploy_logs; fi; exit "$status"' EXIT
 
-echo "==> Step 3/4: rebuild and recreate stack"
-${COMPOSE_CMD} up -d --build --force-recreate
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo "Deploy stopped: tracked worktree changes exist."
+    exit 1
+fi
 
-echo "==> Step 4/4: show service states and recent logs"
-${COMPOSE_CMD} ps
-${COMPOSE_CMD} logs --tail 80 backend frontend redis postgres || true
+PREVIOUS_COMMIT="$(git rev-parse HEAD)"
+echo "==> Step 1/5: pull fast-forward source"
+git pull --ff-only
 
-echo "Deploy command finished. If a service is unhealthy, inspect service logs first."
+echo "==> Step 2/5: validate production Compose"
+docker compose -f "$COMPOSE_FILE" config --quiet
+
+echo "==> Step 3/5: pull service images"
+docker compose -f "$COMPOSE_FILE" pull --ignore-buildable
+
+echo "==> Step 4/5: rebuild, recreate, and wait for health"
+docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate --wait --wait-timeout "$DEPLOY_WAIT_SECONDS"
+
+echo "==> Step 5/5: show healthy service state"
+docker compose -f "$COMPOSE_FILE" ps
+docker compose -f "$COMPOSE_FILE" logs --tail 80 backend frontend redis postgres
+
+trap - EXIT
+echo "Deploy passed. Commit: $(git rev-parse HEAD)"

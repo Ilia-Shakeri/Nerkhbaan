@@ -43,9 +43,8 @@ function AppContent() {
     }
   }, [showSplash, isMobile]);
 
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showOfflineBanner, setShowOfflineBanner] = useState(false);
-  const stabilityTimer = useRef<NodeJS.Timeout | null>(null);
+  const stabilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSplashComplete = () => {
     sessionStorage.setItem('splash-shown', 'true');
@@ -56,17 +55,19 @@ function AppContent() {
     const handleOnline = () => {
       if (stabilityTimer.current) clearTimeout(stabilityTimer.current);
       stabilityTimer.current = setTimeout(() => {
-        setIsOnline(true);
         setShowOfflineBanner(false);
       }, 1500);
     };
     const handleOffline = () => {
-      setIsOnline(false);
       setShowOfflineBanner(true);
     };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      if (stabilityTimer.current) clearTimeout(stabilityTimer.current);
+    };
   }, []);
 
   return showSplash && !splashReady ? (
