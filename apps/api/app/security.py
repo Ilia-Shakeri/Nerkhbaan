@@ -235,17 +235,54 @@ def rate_limit_clear(bucket: str, identity: str) -> None:
         _memory_limits.pop(key, None)
 
 
+def trusted_proxy_networks(raw: str) -> tuple[Any, ...]:
+    """Parse a proxy allowlist that may mix plain addresses and CIDR blocks."""
+    networks: list[Any] = []
+    for item in raw.split(","):
+        clean = item.strip()
+        if not clean:
+            continue
+        try:
+            networks.append(ipaddress.ip_network(clean, strict=False))
+        except ValueError:
+            continue
+    return tuple(networks)
+
+
+def resolve_client_ip(peer: str, forwarded_header: str, trusted_raw: str) -> str:
+    """Return the closest address in the chain that a client could not forge.
+
+    ``X-Forwarded-For`` is caller-controlled on its left side: every proxy
+    appends, so only the rightmost entries were written by infrastructure we
+    trust. Walking right to left and stopping at the first address outside the
+    trusted set is therefore the only selection that cannot be spoofed by
+    sending a header of your own.
+    """
+    networks = trusted_proxy_networks(trusted_raw)
+    try:
+        peer_address = ipaddress.ip_address(peer)
+    except ValueError:
+        return peer
+    if not networks or not any(peer_address in network for network in networks):
+        return str(peer_address)
+    entries = [item.strip() for item in forwarded_header.split(",") if item.strip()]
+    for candidate in reversed(entries):
+        try:
+            address = ipaddress.ip_address(candidate)
+        except ValueError:
+            break
+        if not any(address in network for network in networks):
+            return str(address)
+    return str(peer_address)
+
+
 def get_client_ip(request: Any) -> str:
     peer = request.client.host if request.client else "unknown"
-    trusted = {item.strip() for item in settings.trusted_proxy_ips.split(",") if item.strip()}
-    if peer in trusted:
-        forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
-        if forwarded:
-            try:
-                return str(ipaddress.ip_address(forwarded))
-            except ValueError:
-                pass
-    return peer
+    return resolve_client_ip(
+        peer,
+        request.headers.get("x-forwarded-for", ""),
+        settings.trusted_proxy_ips,
+    )
 
 
 def validate_public_https_url(value: str, allowed_hosts: set[str] | None = None) -> str:

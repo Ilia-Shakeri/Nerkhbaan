@@ -24,3 +24,5 @@ gitea_data
 !.env.example
 
 full_Nerkhbaan_project_code.txt
+_export*.tar.gz
+_claude_tmp

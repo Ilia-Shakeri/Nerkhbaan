@@ -1,0 +1,15 @@
+# Normalise line endings in the repository so a Windows checkout cannot change
+# file content. Migration checksums in particular are content-addressed.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+*.pdf binary

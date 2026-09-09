@@ -1,27 +1,53 @@
 # Future Tasks
 
-## Repository Work
+Tracked work that is not yet done. For the full picture — what is complete, what
+is partial, and what production readiness still requires — see
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md).
 
-- [x] Provider request bounds, retry policy, parser contracts, and secret-safe canary.
-- [x] Smart Assistant user quota, shared rate limits, fallback, and chat transaction order.
-- [x] Production evidence schema and strict verifier.
-- [x] CI parity for Redis and refresh-token concurrency.
-- [x] Deployment health gate and web response guards.
-- [x] Local API, web, admin, desktop, dependency, and static checks.
+## Engineering
+
+- [ ] Extract the shared web/desktop React layer. `apps/desktop` currently
+      duplicates `apps/web`'s API client and views (~2,500 lines) and the two
+      have already drifted.
+- [ ] Route-level API tests. Every endpoint is exercised through units today;
+      none through an HTTP client against a real database.
+- [ ] Browser end-to-end coverage for sign-in, alert creation and delivery.
+- [ ] Structured JSON logging with the request id, so the id in an error
+      response is greppable in aggregation.
+- [ ] Prometheus counters for refresh outcome, provider latency and canonical
+      status. The endpoint exists; the metrics it declares are never
+      incremented.
+- [ ] A real free-market USD/Toman source. Without one, every Toman metal price
+      without a direct provider is bridged through USDT and runs percent-level
+      high.
+- [ ] Direct Iranian silver source. `SILVER_999_TOMAN_GRAM` has one key-gated
+      provider; `SILVER_925_TOMAN_GRAM` is formula-only.
 
 ## Operator Proof
 
+Evidence that cannot be produced from source control. Keep it out of the
+repository: start from `docs/operator-gates.evidence.example.json`, fill a
+private copy, then verify it.
+
 - [ ] Provider rights sign-off with contract or approval record.
 - [ ] Scheduled live canary proof from the production network.
-- [ ] Production secret-manager activation proof.
+- [ ] Production secret injection proof.
 - [ ] Navasan HTTPS proxy proof, or a signed disabled-route reason.
 - [ ] BRSAPI and TSETMC future-domain ownership record.
-- [ ] Disposable production-like restore drill proof.
+- [ ] Off-host backup and disposable restore-drill proof.
 - [ ] Production deployment and health proof.
 - [ ] Authenticated browser smoke proof.
-
-Keep proof out of source control. Start from `docs/operator-gates.evidence.example.json`, fill a private file, then run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -EvidencePath path\to\operator-gates.evidence.json
 ```
+
+## Completed
+
+- [x] Provider request bounds, retry policy, parser contracts, secret-safe canary.
+- [x] Assistant user quota, shared rate limits, provider fallback, chat transaction order.
+- [x] Production evidence schema and strict verifier.
+- [x] CI parity for Redis and refresh-token concurrency.
+- [x] Deployment health gate and web response guards.
+- [x] Local API, web, admin, desktop, dependency and static checks.
+- [x] Full production audit and remediation — see `PROJECT_STATUS.md`.

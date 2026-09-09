@@ -1,17 +1,34 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 
 class UserBase(BaseModel):
-    username: str = Field(min_length=3, max_length=50)
+    # Sign-in accepts either identifier against one column pair, so a username
+    # shaped like an email address makes the lookup ambiguous between two
+    # accounts. Restricting the charset removes the overlap entirely.
+    username: str = Field(min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9._-]+$")
     full_name: str = Field(min_length=2, max_length=120)
     email: EmailStr
 
 
 class UserCreate(UserBase):
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def password_must_be_mixed(cls, value: str) -> str:
+        classes = (
+            any(character.islower() for character in value),
+            any(character.isupper() for character in value),
+            any(character.isdigit() for character in value),
+        )
+        if not all(classes):
+            raise ValueError(
+                "Password must include lower case, upper case, and a digit"
+            )
+        return value
 
 
 class UserSignin(BaseModel):
@@ -54,12 +71,22 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
     code: str = Field(min_length=4, max_length=12)
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_must_be_mixed(cls, value: str) -> str:
+        return UserCreate.password_must_be_mixed(value)
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str = Field(min_length=1, max_length=128)
-    new_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def password_must_be_mixed(cls, value: str) -> str:
+        return UserCreate.password_must_be_mixed(value)
 
 
 class PricePoint(BaseModel):
@@ -80,12 +107,29 @@ class PriceHistoryResponse(BaseModel):
     status: str = "complete"
 
 
+class InstrumentUnit(BaseModel):
+    instrument_id: str
+    quote_currency: str
+    weight_unit: str
+    purity: float | None = None
+    market: str
+    display_decimals: int
+
+
 class AssetPrice(BaseModel):
     asset: str
     label_fa: str
     label_en: str
     price_usd: float | None
     price_toman: float | None
+    # The USD and Toman legs are separate instruments with their own unit and
+    # fineness; clients need both descriptors to label them honestly.
+    instrument_id_usd: str | None = None
+    instrument_id_toman: str | None = None
+    unit_usd: InstrumentUnit | None = None
+    unit_toman: InstrumentUnit | None = None
+    change_percent_usd: float | None = None
+    change_percent_toman: float | None = None
     change_percent: float | None
     trend: str
     history: list[PricePoint]
@@ -132,6 +176,8 @@ class PricingStartupChecks(BaseModel):
     optional_env_keys: list[str]
     missing_optional_env_keys: list[str]
     strict_mode: bool
+    instruments_without_direct_source: list[str] = []
+    instruments_unservable: list[str] = []
     ok: bool
 
 
@@ -171,6 +217,26 @@ class AlertCreate(BaseModel):
         if self.notify_webhook and not (self.webhook_url and self.webhook_url.strip()):
             raise ValueError("webhook_url is required when notify_webhook is enabled")
         return self
+
+
+class AlertUpdate(BaseModel):
+    """Partial update. Only supplied fields change."""
+
+    target_price: float | None = Field(default=None, gt=0)
+    formula: str | None = Field(default=None, min_length=3, max_length=200)
+    currency_mode: Literal["usd", "toman"] | None = None
+    price_source_mode: Literal["ordinary", "reference", "derived"] | None = None
+    condition: Literal["above", "below"] | None = None
+    notify_app: bool | None = None
+    notify_email: bool | None = None
+    notify_webhook: bool | None = None
+    webhook_url: str | None = Field(default=None, max_length=500)
+    enable_dlq: bool | None = None
+    mode: Literal["one_time", "recurring"] | None = None
+    cooldown_seconds: int | None = Field(default=None, ge=60, le=604800)
+    max_notifications_per_day: int | None = Field(default=None, ge=1, le=100)
+    notify_sms: bool | None = None
+    notify_telegram: bool | None = None
 
 
 class AlertResponse(BaseModel):

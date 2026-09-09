@@ -10,14 +10,17 @@ from .config import settings
 class Base(DeclarativeBase):
     pass
 
-# Keep the synchronous engine while endpoints move to AsyncSession in small steps.
+# Two engines share one PostgreSQL max_connections budget, and the sync engine
+# is also used from worker threads, so the pools are sized from configuration
+# rather than hardcoded. Total peak connections per process is
+# (sync_pool + sync_overflow) + (async_pool + async_overflow).
 engine = create_engine(
     settings.database_url,
     future=True,
     pool_pre_ping=True,
-    pool_size=8,
-    max_overflow=4,
-    pool_timeout=10,
+    pool_size=settings.database_pool_size,
+    max_overflow=settings.database_max_overflow,
+    pool_timeout=settings.database_pool_timeout_seconds,
     pool_recycle=1800,
 )
 
@@ -35,9 +38,9 @@ def _async_database_url(url: str) -> str:
 async_engine = create_async_engine(
     _async_database_url(settings.database_url),
     pool_pre_ping=True,
-    pool_size=8,
-    max_overflow=4,
-    pool_timeout=10,
+    pool_size=settings.database_async_pool_size,
+    max_overflow=settings.database_max_overflow,
+    pool_timeout=settings.database_pool_timeout_seconds,
     pool_recycle=1800,
 )
 AsyncSessionLocal = async_sessionmaker(
@@ -52,6 +55,12 @@ def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        # Close alone returns a connection with an open transaction to the
+        # pool; rolling back first makes the failure explicit and keeps a
+        # half-applied unit of work from being reused.
+        db.rollback()
+        raise
     finally:
         db.close()
 

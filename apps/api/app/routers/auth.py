@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -206,7 +207,12 @@ def signup(
     _enforce_request_limit(request, "signup", "account", 8, 60 * 60)
     existing_user = db.scalar(
         select(User).where(
-            (User.email == payload.email.lower()) | (User.username == payload.username.lower())
+            (User.email == payload.email.lower())
+            | (User.username == payload.username.lower())
+            # A username must not collide with somebody else's email either,
+            # because sign-in matches an identifier against both columns.
+            | (User.email == payload.username.lower())
+            | (User.username == payload.email.lower())
         )
     )
     if existing_user:
@@ -220,7 +226,16 @@ def signup(
         password_changed_at=datetime.now(UTC),
     )
     db.add(user)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Two concurrent signups both pass the pre-check; the unique index is
+        # the real arbiter, and losing that race is a conflict, not a fault.
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email or username is already registered",
+        ) from None
     token, refresh_token, _ = _issue_session(db, user, request)
     _record_security_event(db, request, "signup", "success", user.id)
     db.commit()

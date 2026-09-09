@@ -87,7 +87,10 @@ class InstrumentPricingService:
                 return await self.get_canonical(instrument.instrument_id)
             previous = await self.get_canonical(instrument.instrument_id)
             async with httpx.AsyncClient(
-                timeout=httpx.Timeout(5.0, connect=3.0),
+                timeout=httpx.Timeout(
+                    float(_settings().pricing_provider_request_timeout_seconds),
+                    connect=float(_settings().pricing_provider_connect_timeout_seconds),
+                ),
                 follow_redirects=False,
             ) as client:
                 primary = await self._normal_quote(instrument, client)
@@ -465,11 +468,7 @@ class InstrumentPricingService:
             if outcome.usable and outcome.quote is not None:
                 quotes.append(outcome.quote)
                 confirms = (
-                    outcome.quote.price is not None
-                    and candidate.price is not None
-                    and abs(outcome.quote.price - candidate.price)
-                    / outcome.quote.price
-                    * Decimal(100)
+                    self._difference_percent(candidate.price, outcome.quote.price)
                     <= assessment.dynamic_threshold_percent
                 )
                 if confirms:
@@ -484,9 +483,7 @@ class InstrumentPricingService:
                 break
         remaining = max(0, instrument.maximum_verification_depth - len(quotes))
         has_confirmation = any(
-            quote.price is not None
-            and candidate.price is not None
-            and abs(quote.price - candidate.price) / quote.price * Decimal(100)
+            self._difference_percent(candidate.price, quote.price)
             <= assessment.dynamic_threshold_percent
             for quote in quotes
         )
@@ -507,6 +504,18 @@ class InstrumentPricingService:
                 accepted_telegram = []
             quotes.extend(accepted_telegram)
         return quotes
+
+    @staticmethod
+    def _difference_percent(left: Decimal | None, right: Decimal | None) -> Decimal:
+        """Relative gap between two quotes, safe against absent or zero prices.
+
+        A provider that returns 0 is a data fault, not a match: treating it as
+        an infinite difference keeps it out of the confirming set instead of
+        raising DivisionByZero and aborting the refresh cycle.
+        """
+        if left is None or right is None or right <= 0:
+            return Decimal("999")
+        return abs(left - right) / right * Decimal(100)
 
     @staticmethod
     def _provider_is_independent(
@@ -897,9 +906,17 @@ def _settings_object() -> object:
     return settings
 
 
+def _settings():
+    from ..config import settings
+
+    return settings
+
+
 _REFRESH_ORDER = (
     "USDT_USD",
     "USDT_TOMAN",
+    # USD_TOMAN can fall back to the USDT pair, so it refreshes after both.
+    "USD_TOMAN",
     "BTC_USD",
     "XAU_USD_OZ",
     "XAG_USD_OZ",

@@ -144,6 +144,10 @@ export const api = {
       const { data } = await apiInstance.get<AlertResponse[]>('alerts');
       return data;
     },
+    async update(alertId: number, payload: AlertUpdate): Promise<AlertResponse> {
+      const { data } = await apiInstance.patch<AlertResponse>(`alerts/${alertId}`, payload);
+      return data;
+    },
     async remove(alertId: number): Promise<void> {
       await apiInstance.delete(`alerts/${alertId}`);
     },
@@ -412,19 +416,28 @@ export type InstrumentVerification = {
   updated_at?: string | null;
 };
 
+export type PriceSourceMode = 'ordinary' | 'reference' | 'derived';
+
 export type AlertCreate = {
   asset: string;
   target_price: number | null;
   alert_type?: 'price' | 'formula';
   formula?: string | null;
   currency_mode: CurrencyMode;
+  price_source_mode?: PriceSourceMode;
   condition: 'above' | 'below';
   notify_app: boolean;
   notify_email: boolean;
   notify_webhook: boolean;
   webhook_url: string | null;
   enable_dlq: boolean;
+  mode?: 'one_time' | 'recurring';
+  cooldown_seconds?: number;
+  max_notifications_per_day?: number;
+  notify_telegram?: boolean;
 };
+
+export type AlertUpdate = Partial<Omit<AlertCreate, 'asset' | 'alert_type'>>;
 
 export type AlertResponse = {
   id: number;
@@ -433,12 +446,20 @@ export type AlertResponse = {
   alert_type: 'price' | 'formula';
   formula: string | null;
   currency_mode: CurrencyMode;
+  price_source_mode: PriceSourceMode;
   condition: 'above' | 'below';
   notify_app: boolean;
   notify_email: boolean;
   notify_webhook: boolean;
   webhook_url: string | null;
   enable_dlq: boolean;
+  instrument_id: string | null;
+  mode: 'one_time' | 'recurring';
+  cooldown_seconds: number;
+  max_notifications_per_day: number;
+  notify_sms: boolean;
+  notify_telegram: boolean;
+  next_eligible_trigger_at: string | null;
   is_active: boolean;
   created_at: string;
 };
@@ -461,15 +482,33 @@ export type SupportMessage = {
 
 export type CurrencyMode = 'usd' | 'toman';
 
+export type InstrumentUnit = {
+  instrument_id: string;
+  quote_currency: string;
+  weight_unit: string;
+  purity: number | null;
+  market: string;
+  display_decimals: number;
+};
+
 export type PriceAsset = {
   asset: string;
   label_fa: string;
   label_en: string;
   price_usd: number | null;
   price_toman: number | null;
-  change_percent: number;
-  trend: 'up' | 'down';
-  history: any[];
+  // The USD and Toman legs are separate instruments — for gold, a troy ounce
+  // of 0.9999 versus a gram of 0.750 — so the UI must not present them as one
+  // asset in two currencies.
+  instrument_id_usd?: string | null;
+  instrument_id_toman?: string | null;
+  unit_usd?: InstrumentUnit | null;
+  unit_toman?: InstrumentUnit | null;
+  change_percent_usd?: number | null;
+  change_percent_toman?: number | null;
+  change_percent: number | null;
+  trend: 'up' | 'down' | 'neutral';
+  history: PricePoint[];
   source_usd: string;
   source_toman: string;
   usd_status: OperationalPriceStatus;

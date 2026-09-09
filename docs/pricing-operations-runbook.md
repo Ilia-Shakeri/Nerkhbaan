@@ -44,11 +44,29 @@ The example is a shape only and must fail validation. The private file must name
 
 ## Secret And Egress Rules
 
-- Use `SECRET_MANAGER_PROVIDER=external` for production once a vault is connected.
-- Keep all provider keys in the runtime secret store, not in source files.
+- Keep all provider keys in the runtime secret store or the deployment's `.env`,
+  never in source files. There is no in-application secret-manager integration;
+  injection is the deployment's responsibility.
 - Rotate every provider key after staff changes, suspected leak, vendor incident, or public artifact exposure.
 - Keep `PRICING_PROVIDER_ALLOWED_HOSTS` tight. Add hosts only after provider onboarding.
+  The allowlist is extended automatically with the hostname of every configured
+  provider base URL, so a proxy set through configuration stays reachable
+  without widening the list by hand.
 - `NAVASAN_ALLOW_INSECURE_HTTP=true` is rejected at startup. Use `NAVASAN_HTTPS_PROXY_BASE_URL` or leave Navasan disabled.
+
+## Source Coverage Gate
+
+An instrument with no configured provider still publishes a price — a formula
+result marked `derived_fallback`. That is legitimate, but it must be a known
+state, not a surprise. Before declaring a chain live:
+
+- check `startup.instruments_without_direct_source` in `GET /api/prices/health`;
+- confirm each entry there is intentional;
+- for Toman metals, check `fx_bridge_is_proxy` on the derived quote. A `true`
+  means the USD→Toman rate came from USDT, which carries a market premium; the
+  published value will run percent-level high.
+
+`instruments_unservable` must always be empty. CI fails if it is not.
 
 ## Readiness Rules
 
@@ -69,22 +87,37 @@ Before production enablement:
 
 ## Release Check Commands
 
-Run locally:
+One command from the repository root runs every gate — backend static checks,
+the backend suite, the frontend contract tests, and all three builds:
 
-```powershell
+```bash
+npm run verify
+```
+
+Individually, if you need to isolate a failure:
+
+```bash
 cd apps/api
-python -m compileall -q app tests
-python -m pyflakes app tests
-$env:JWT_SECRET_KEY='test-only-secret-key-that-is-long-enough'
-$env:DEBUG='false'
-python -m unittest discover -s tests -v
+python -m compileall -q app tests scripts
+python -m pyflakes app tests scripts
+JWT_SECRET_KEY='test-only-secret-key-that-is-long-enough' \
+DATABASE_URL='postgresql+psycopg://test:test@127.0.0.1:5432/test' \
+REDIS_URL='' python -m unittest discover -s tests -v
 ```
 
-Run frontend checks from the repo root:
-
-```powershell
-npm.cmd run build:web
-npm.cmd run build:admin
-npm.cmd run build:desktop
-npm.cmd run test:frontend
+```bash
+npm run test:frontend
+npm run build:web && npm run build:admin && npm run build:desktop
 ```
+
+The web build needs `VITE_VAPID_PUBLIC_KEY` set to produce an image with working
+web push. A build without it succeeds but ships push disabled.
+
+## Capacity Watchpoints
+
+| Signal | Threshold | Consequence of ignoring it |
+| --- | --- | --- |
+| Redis `used_memory` vs `REDIS_MAXMEMORY` | 80% | Policy is `noeviction`: a full Redis stops every price refresh |
+| PostgreSQL connections | `max_connections` | Peak per API process is `(pool + overflow) x 2`; migrate, backup and worker add more |
+| `dead_letter_backlog` | any sustained growth | Alerts are being generated and not delivered |
+| `anomaly_count` | any sustained growth | Anomalies are opening faster than they are reviewed |

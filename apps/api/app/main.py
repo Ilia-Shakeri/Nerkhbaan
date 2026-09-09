@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import re
 import uuid
@@ -18,10 +19,12 @@ from . import models
 from .admin import models as admin_models
 from .admin.worker import admin_operations_worker
 from .config import settings
-from .db import engine
+from .db import async_engine, engine
 from .health import health_snapshot
 from .migrations.state import assert_migrations_current
 from .pricing import db_models as pricing_models
+from .pricing.cache import pricing_redis
+from .pricing.compatibility import legacy_pricing_adapter
 from .pricing.service import instrument_pricing_service
 from .request_body_limit import RequestBodyLimitMiddleware
 from .routers import (
@@ -37,6 +40,7 @@ from .routers import (
     push,
     support,
 )
+from .security import trusted_proxy_networks
 from .services.background import background_runner
 
 _MODEL_REGISTRATION_MODULES = (models, admin_models, pricing_models)
@@ -97,6 +101,21 @@ async def lifespan(app: FastAPI):
     del app
     await asyncio.to_thread(assert_migrations_current, engine)
     await instrument_pricing_service.initialize()
+
+    # Surface unsourced instruments at startup instead of letting them serve
+    # formula output that reads like a market price.
+    coverage = legacy_pricing_adapter.startup_checks()
+    if coverage["instruments_unservable"]:
+        logger.error(
+            "Instruments have neither a configured source nor a formula: %s",
+            ", ".join(coverage["instruments_unservable"]),
+        )
+    if coverage["instruments_without_direct_source"]:
+        logger.warning(
+            "Instruments served from formula only: %s",
+            ", ".join(coverage["instruments_without_direct_source"]),
+        )
+
     await background_runner.start()
     await admin_operations_worker.start()
     logger.info("API startup complete")
@@ -105,6 +124,13 @@ async def lifespan(app: FastAPI):
     finally:
         await admin_operations_worker.stop()
         await background_runner.stop()
+        # Release the shared Redis connection pool rather than leaking it.
+        try:
+            await pricing_redis.close()
+        except Exception:
+            logger.warning("Redis connection pool did not close cleanly")
+        await async_engine.dispose()
+        await asyncio.to_thread(engine.dispose)
         logger.info("API shutdown complete")
 
 
@@ -118,25 +144,6 @@ app = FastAPI(
 )
 
 origins = _allowed_origins()
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=origins != ["*"],
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=[
-        "Accept",
-        "Authorization",
-        "Content-Type",
-        "If-None-Match",
-        "X-Client-Type",
-        "X-Request-ID",
-    ],
-    expose_headers=["ETag", "X-Request-ID"],
-)
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=_csv(settings.trusted_hosts),
-)
 
 
 @app.middleware("http")
@@ -150,7 +157,6 @@ async def request_guard(request: Request, call_next):
         settings.auth_cookie_name,
         settings.auth_refresh_cookie_name,
         settings.admin_cookie_name,
-        settings.admin_refresh_cookie_name,
     }
     cookie_authenticated = any(name in request.cookies for name in cookie_names)
     if request.method in _MUTATING_METHODS and cookie_authenticated:
@@ -180,10 +186,34 @@ async def request_guard(request: Request, call_next):
     return response
 
 
+# Starlette applies middleware outermost-last-added. CORS must wrap everything
+# so that rejections raised by the guards below still carry CORS headers;
+# without that a browser reports them as opaque network failures rather than
+# the 403/413 the API actually returned.
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=_csv(settings.trusted_hosts),
+)
 app.add_middleware(
     RequestBodyLimitMiddleware,
     max_body_bytes=settings.max_request_body_bytes,
     request_id_header=settings.request_id_header,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=origins != ["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Accept",
+        "Authorization",
+        "Content-Type",
+        "If-None-Match",
+        "X-Client-Type",
+        "X-CSRF-Token",
+        "X-Request-ID",
+    ],
+    expose_headers=["ETag", "X-Request-ID"],
 )
 
 
@@ -219,8 +249,28 @@ def detailed_health() -> JSONResponse:
 
 
 @app.get("/metrics", tags=["system"])
-def metrics() -> Response:
+def metrics(request: Request) -> Response:
+    """Prometheus exposition, restricted to the internal network.
+
+    Metrics name every provider and instrument and expose refresh cadence, so
+    this is reconnaissance material rather than public data. The edge proxy
+    also blocks it; this check makes the backend safe on its own.
+    """
+    if not _metrics_caller_is_internal(request):
+        return JSONResponse(status_code=404, content={"detail": "Not found"})
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+def _metrics_caller_is_internal(request: Request) -> bool:
+    peer = request.client.host if request.client else ""
+    try:
+        address = ipaddress.ip_address(peer)
+    except ValueError:
+        return False
+    if address.is_loopback or address.is_private:
+        return True
+    networks = trusted_proxy_networks(settings.metrics_allowed_networks)
+    return any(address in network for network in networks)
 
 
 @app.exception_handler(Exception)

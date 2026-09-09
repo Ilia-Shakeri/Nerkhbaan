@@ -53,6 +53,7 @@ def build_parser(parser_id: str) -> ExplicitParser:
         "tala_usdt_toman_v1": lambda: TalaRatesParser(key=os.getenv("TALA_USDT_TOMAN_KEY", "usdt_irt")),
         "tala_gold18_toman_v1": lambda: TalaRatesParser(key=os.getenv("TALA_GOLD18_TOMAN_KEY", "geram18k")),
         "tala_gold24_toman_v1": lambda: TalaRatesParser(key=os.getenv("TALA_GOLD24_TOMAN_KEY", "geram24k")),
+        "tala_silver999_toman_v1": lambda: TalaRatesParser(key=os.getenv("TALA_SILVER999_TOMAN_KEY", "")),
         "ticaro_usdt_toman_v1": lambda: TicaroPricesParser(pair=os.getenv("TICARO_USDT_TOMAN_PAIR", "USDT/TMN")),
         "ticaro_btc_toman_v1": lambda: TicaroPricesParser(pair=os.getenv("TICARO_BTC_TOMAN_PAIR", "BTC/TMN")),
         "ticaro_gold18_toman_v1": lambda: TicaroPricesParser(pair=os.getenv("TICARO_GOLD18_TOMAN_PAIR", "GOLD18/TMN")),

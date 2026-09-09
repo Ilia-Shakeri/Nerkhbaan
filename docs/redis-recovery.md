@@ -3,6 +3,32 @@
 This project uses compose `redis` with AOF persistence.
 Keep data safe by avoiding destructive cleanup by default.
 
+## Why Redis is not optional
+
+Redis holds the distributed refresh leases, the per-provider request budgets,
+the WebSocket fan-out and the persistence outbox. It is not a cache you can drop
+and degrade gracefully around: with Redis down, price refreshes are suspended
+and the API reports `degraded`. Stored values keep serving; new ones do not
+arrive.
+
+## Memory policy
+
+The eviction policy is `noeviction` on purpose. Evicting a budget counter or an
+outbox entry would silently lose writes, so the deployment prefers to fail
+loudly instead.
+
+That makes `used_memory` an operational signal, not a curiosity:
+
+```bash
+docker compose exec redis redis-cli info memory | grep -E 'used_memory_human|maxmemory_human'
+```
+
+Alert at 80% of `REDIS_MAXMEMORY` (default `384mb`). The dominant consumer is
+the short volatility history, bounded by
+`PRICING_SHORT_HISTORY_RETENTION_HOURS` (6) and
+`PRICING_SHORT_HISTORY_MAX_ENTRIES` (240) per instrument. Durable history lives
+in TimescaleDB, so lengthening the Redis window buys nothing and costs memory.
+
 ## Normal deploy (safe)
 
 Use the checked deploy script. It rejects tracked local edits, pulls by fast-forward only, validates production Compose, skips registry pulls for locally built app images, recreates the stack, and waits for health:

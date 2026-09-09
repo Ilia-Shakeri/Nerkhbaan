@@ -184,6 +184,9 @@ class InstrumentDefinition:
     maximum_verification_depth: int
     enabled: bool = True
     allow_derived_fallback: bool = False
+    # Widest order-book spread that may still back an alert. Without a value
+    # here the alert engine's spread check silently never ran.
+    maximum_spread_bps: Decimal = Decimal("150")
 
     def __post_init__(self) -> None:
         if not self.instrument_id or self.instrument_id != self.instrument_id.upper():
@@ -200,6 +203,8 @@ class InstrumentDefinition:
             raise ValueError("Instrument sanity bounds are invalid")
         if self.base_anomaly_threshold_percent > self.maximum_dynamic_threshold_percent:
             raise ValueError("Instrument anomaly thresholds are invalid")
+        if not self.maximum_spread_bps.is_finite() or self.maximum_spread_bps <= 0:
+            raise ValueError("Instrument maximum spread must be finite and positive")
 
     def accepts(self, price: Decimal) -> bool:
         return price.is_finite() and self.minimum_price <= price <= self.maximum_price
@@ -225,6 +230,7 @@ class InstrumentDefinition:
             ),
             "importance": self.importance,
             "enabled": self.enabled,
+            "maximum_spread_bps": json_number(self.maximum_spread_bps),
         }
 
 
@@ -444,7 +450,9 @@ class ProviderQuote:
             "route_id": self.route_id if authenticated else None,
             "spread_bps": json_number(self.spread_bps),
             "derivation_depth": self.derivation_depth,
-            "provenance": list(self.provenance),
+            # Provenance carries source-family names, so redacting provider_id
+            # while publishing this told an anonymous caller the same thing.
+            "provenance": list(self.provenance) if authenticated else [],
             "volume": json_number(self.volume),
             "observed_at": self.observed_at.isoformat(),
             "received_at": self.received_at.isoformat(),

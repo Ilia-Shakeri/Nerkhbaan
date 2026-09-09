@@ -1,5 +1,14 @@
 # Production Hardening Report
 
+> **Historical record.** This captures the state of the repository on
+> 2026-08-02 and the hardening pass performed then. It is deliberately not
+> updated — it is evidence of what was true at that point.
+>
+> For the current state, see [`../PROJECT_STATUS.md`](../PROJECT_STATUS.md).
+> Several findings recorded here were superseded by the audit of 2026-08-20,
+> which removed the legacy `app/services/pricing*` modules this report refers
+> to.
+
 ## Baseline
 
 Captured on 2026-08-02 at 14:26:18 +03:30 before source changes.

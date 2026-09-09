@@ -1,7 +1,13 @@
 import axios from 'axios';
 
+// A packaged build has no dev server to talk to, so falling back to localhost
+// shipped an app that could not reach anything. Production defaults to the
+// hosted API and VITE_API_URL still overrides it for local work.
 const envApiUrl = import.meta.env.VITE_API_URL;
-const cleanApiUrl = envApiUrl ? envApiUrl.replace(/\/$/, '') : 'http://127.0.0.1:8000';
+const defaultApiUrl = import.meta.env.DEV
+  ? 'http://127.0.0.1:8000'
+  : 'https://nerkhbaan.ir';
+const cleanApiUrl = (envApiUrl || defaultApiUrl).replace(/\/$/, '');
 const baseURL = `${cleanApiUrl.replace(/\/api$/, '')}/api/`;
 
 export type SessionCredentials = {

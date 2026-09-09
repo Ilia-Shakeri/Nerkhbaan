@@ -4,12 +4,26 @@ x-api-environment: &api-environment
   API_HOST: 0.0.0.0
   API_PORT: 8000
   FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,172.28.0.0/24}
+  # Must match FORWARDED_ALLOW_IPS: both layers decide which hop may set
+  # X-Forwarded-For, and a mismatch silently reintroduces IP spoofing.
+  TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1,::1,172.28.0.0/24}
+  ADMIN_TRUSTED_PROXY_IPS: ${ADMIN_TRUSTED_PROXY_IPS:-127.0.0.1,::1,172.28.0.0/24}
 
 services:
   postgres:
     image: timescale/timescaledb:2.28.3-pg16
     container_name: nerkhbaan-postgres
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-nerkhbaan}
       POSTGRES_USER: ${POSTGRES_USER:-nerkhbaan}
@@ -48,6 +62,14 @@ services:
     image: redis:7.4-alpine
     container_name: nerkhbaan-redis
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
     command:
       - sh
       - -c
@@ -59,7 +81,7 @@ services:
             exit 1
           fi
         fi
-        exec redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
+        exec redis-server --appendonly yes --appendfsync everysec --maxmemory ${REDIS_MAXMEMORY:-384mb} --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     networks:
@@ -73,7 +95,7 @@ services:
       resources:
         limits:
           cpus: "0.25"
-          memory: 320M
+          memory: 512M
 
   migrate:
     image: nerkhbaan-api:${APP_IMAGE_TAG:-local}
@@ -82,6 +104,10 @@ services:
       dockerfile: Dockerfile
     container_name: nerkhbaan-migrate
     restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
       - ./.env
     environment:
@@ -103,6 +129,10 @@ services:
     image: nerkhbaan-api:${APP_IMAGE_TAG:-local}
     container_name: nerkhbaan-backend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
       - ./.env
     environment:
@@ -140,8 +170,20 @@ services:
         NPM_REGISTRY_PRIMARY: ${NPM_REGISTRY_PRIMARY:-https://package-mirror.liara.ir/repository/npm/}
         NPM_REGISTRY_SECONDARY: ${NPM_REGISTRY_SECONDARY:-https://mirror2.chabokan.net/npm/}
         NPM_REGISTRY_FALLBACK: ${NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org/}
+        # Baked at build time: the browser needs the public key to subscribe.
+        VITE_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
     container_name: nerkhbaan-frontend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
     ports:
       - "127.0.0.1:3000:80"
     depends_on:
@@ -162,13 +204,23 @@ services:
           memory: 160M
 
   admin-frontend:
-    profiles: ["admin"]
+    profiles: ["admin", "edge"]
     image: nerkhbaan-admin-web:${APP_IMAGE_TAG:-local}
     build:
       context: .
       dockerfile: apps/admin-web/Dockerfile
     container_name: nerkhbaan-admin-frontend
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
     ports:
       - "127.0.0.1:3001:80"
     depends_on:
@@ -195,6 +247,10 @@ services:
     image: nerkhbaan-telegram-worker:${APP_IMAGE_TAG:-local}
     container_name: nerkhbaan-telegram-worker
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     env_file:
       - ./.env
     environment:
@@ -210,10 +266,64 @@ services:
           cpus: "0.25"
           memory: 256M
 
+  # TLS termination, HSTS, edge rate limits and the admin vhost. Not started by
+  # default because it needs certificates on the host:
+  #   docker compose --profile edge up -d
+  edge:
+    profiles: ["edge"]
+    image: nginx:1.30.4-alpine3.24
+    container_name: nerkhbaan-edge
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+      - NET_BIND_SERVICE
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/security-headers.inc:/etc/nginx/security-headers.inc:ro
+      - ./nginx/security-headers-admin.inc:/etc/nginx/security-headers-admin.inc:ro
+      - ${LETSENCRYPT_DIR:-/etc/letsencrypt}:/etc/nginx/ssl:ro
+      - ${CERTBOT_WEBROOT:-./certbot-webroot}:/var/www/certbot:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      admin-frontend:
+        condition: service_healthy
+    networks:
+      - nerkhbaan-network
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 192M
+
   db-backup:
     image: prodrigestivill/postgres-backup-local:16-alpine-d257e5d
     container_name: nerkhbaan-db-backup
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_DB: ${POSTGRES_DB:-nerkhbaan}

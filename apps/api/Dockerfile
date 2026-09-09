@@ -23,5 +23,9 @@ USER deploy
 EXPOSE 8000
 
 # Proxy trust comes from FORWARDED_ALLOW_IPS in the deployment environment.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+# Bind address and port come from API_HOST/API_PORT so the values Compose sets
+# are the values the server actually uses.
+ENV API_HOST=0.0.0.0
+ENV API_PORT=8000
+CMD ["sh", "-c", "exec uvicorn app.main:app --host \"$API_HOST\" --port \"$API_PORT\" --proxy-headers"]
 

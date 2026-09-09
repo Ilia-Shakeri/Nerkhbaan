@@ -52,10 +52,64 @@ def _canonical(instrument_id: str, price: str, provenance: list[str] | None = No
 
 
 class PricingProviderRepairTests(unittest.TestCase):
-    def test_ten_instruments_include_gold_24k_and_keep_silver_925(self) -> None:
-        self.assertEqual(len(INSTRUMENTS), 10)
-        self.assertIn("GOLD_24K_TOMAN_GRAM", INSTRUMENTS)
-        self.assertIn("SILVER_925_TOMAN_GRAM", INSTRUMENTS)
+    def test_catalogue_covers_every_published_chain(self) -> None:
+        # A count assertion only proves the number did not change; assert the
+        # instruments the product actually publishes are present.
+        for instrument_id in (
+            "GOLD_18K_TOMAN_GRAM",
+            "GOLD_24K_TOMAN_GRAM",
+            "SILVER_999_TOMAN_GRAM",
+            "SILVER_925_TOMAN_GRAM",
+            "XAU_USD_OZ",
+            "XAG_USD_OZ",
+            "USD_TOMAN",
+            "USDT_TOMAN",
+            "USDT_USD",
+            "BTC_TOMAN",
+            "BTC_USD",
+        ):
+            self.assertIn(instrument_id, INSTRUMENTS)
+
+    def test_every_instrument_can_produce_a_price(self) -> None:
+        """No instrument may be published with neither a source nor a formula.
+
+        Silver in Toman shipped with zero providers and no way to notice.
+        """
+        from app.config import settings
+        from app.pricing.registry import instrument_source_coverage
+
+        unservable = [
+            instrument_id
+            for instrument_id, row in instrument_source_coverage(settings).items()
+            if row["unservable"]
+        ]
+        self.assertEqual(unservable, [])
+
+    def test_every_instrument_is_refreshed(self) -> None:
+        from app.pricing.service import _REFRESH_ORDER
+
+        self.assertEqual(set(_REFRESH_ORDER), set(INSTRUMENTS))
+
+    def test_every_provider_host_is_allowlisted(self) -> None:
+        """A provider whose host is not allowlisted can never succeed."""
+        from urllib.parse import urlparse
+
+        from app.config import settings
+
+        allowed = {
+            item.strip().lower()
+            for item in settings.pricing_provider_allowed_hosts.split(",")
+            if item.strip()
+        }
+        for provider in PROVIDERS.values():
+            host = (urlparse(provider.url).hostname or "").lower()
+            self.assertIn(host, allowed, f"{provider.provider_id} host {host}")
+
+    def test_every_provider_parser_is_registered(self) -> None:
+        from app.pricing.parsers import build_parser
+
+        for provider in PROVIDERS.values():
+            build_parser(provider.parser_id)
 
     def test_coincap_is_disabled_and_not_primary(self) -> None:
         self.assertFalse(PROVIDERS["coincap_btc"].enabled)

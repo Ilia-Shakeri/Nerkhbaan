@@ -28,7 +28,33 @@ class DerivedPriceUnavailable(RuntimeError):
     pass
 
 
+def _purity_ratio(target_instrument_id: str, source_instrument_id: str) -> Decimal:
+    """Fineness conversion between two instruments of the same metal.
+
+    Converting 24K to 18K with a flat 0.75 ignores that the 24K reference is
+    quoted at 0.9999 fine, not 1.0. Deriving the factor from the instrument
+    definitions keeps every metal conversion consistent instead of relying on
+    a constant that happens to be right for one pair and wrong for another.
+    """
+    target = get_instrument(target_instrument_id).purity or Decimal(1)
+    source = get_instrument(source_instrument_id).purity or Decimal(1)
+    return target / source
+
+
 class DerivedPriceEngine:
+    """Formula fallback for instruments with no live direct source.
+
+    Every Toman metal needs a USD->Toman rate. ``USD_TOMAN`` is the correct
+    bridge; ``USDT_TOMAN / USDT_USD`` is only a stand-in, and in this market it
+    runs at a premium, so results carry the bridge they used in metadata.
+    """
+
+    #: Preferred FX bridge first, stand-in second.
+    _FX_BRIDGES: tuple[tuple[str, tuple[str, ...]], ...] = (
+        ("usd_toman", ("USD_TOMAN",)),
+        ("usdt_proxy", ("USDT_TOMAN", "USDT_USD")),
+    )
+
     def __init__(self) -> None:
         self._formulas: dict[
             str,
@@ -36,38 +62,58 @@ class DerivedPriceEngine:
         ] = {
             "GOLD_18K_TOMAN_GRAM": (
                 ("GOLD_24K_TOMAN_GRAM",),
-                "GOLD_24K_TOMAN_GRAM * 0.75",
-                lambda values: values["GOLD_24K_TOMAN_GRAM"].price * Decimal("0.75"),
-            ),
-            "GOLD_24K_TOMAN_GRAM": (
-                ("XAU_USD_OZ", "USDT_TOMAN", "USDT_USD"),
-                "XAU_USD_OZ * (USDT_TOMAN / USDT_USD) / TROY_OUNCE_GRAMS",
-                lambda values: values["XAU_USD_OZ"].price
-                * (values["USDT_TOMAN"].price / values["USDT_USD"].price)
-                / TROY_OUNCE_GRAMS,
-            ),
-            "SILVER_999_TOMAN_GRAM": (
-                ("XAG_USD_OZ", "USDT_TOMAN", "USDT_USD"),
-                "XAG_USD_OZ * (USDT_TOMAN / USDT_USD) / TROY_OUNCE_GRAMS * 0.999",
-                lambda values: values["XAG_USD_OZ"].price
-                * (values["USDT_TOMAN"].price / values["USDT_USD"].price)
-                / TROY_OUNCE_GRAMS
-                * Decimal("0.999"),
+                "GOLD_24K_TOMAN_GRAM * purity(18K)/purity(24K)",
+                lambda values: values["GOLD_24K_TOMAN_GRAM"].price
+                * _purity_ratio("GOLD_18K_TOMAN_GRAM", "GOLD_24K_TOMAN_GRAM"),
             ),
             "SILVER_925_TOMAN_GRAM": (
                 ("SILVER_999_TOMAN_GRAM",),
-                "SILVER_999_TOMAN_GRAM * 0.925 / 0.999",
+                "SILVER_999_TOMAN_GRAM * purity(925)/purity(999)",
                 lambda values: values["SILVER_999_TOMAN_GRAM"].price
-                * Decimal("0.925")
-                / Decimal("0.999"),
+                * _purity_ratio("SILVER_925_TOMAN_GRAM", "SILVER_999_TOMAN_GRAM"),
             ),
-            "BTC_TOMAN": (
-                ("BTC_USD", "USDT_TOMAN", "USDT_USD"),
-                "BTC_USD * (USDT_TOMAN / USDT_USD)",
-                lambda values: values["BTC_USD"].price
-                * (values["USDT_TOMAN"].price / values["USDT_USD"].price),
+            # Stand-in for a free-market USD rate. Approximating it once here
+            # keeps a single, inspectable place where the USDT premium enters
+            # the system rather than burying it in every metal formula.
+            "USD_TOMAN": (
+                ("USDT_TOMAN", "USDT_USD"),
+                "USDT_TOMAN / USDT_USD",
+                lambda values: values["USDT_TOMAN"].price / values["USDT_USD"].price,
             ),
         }
+        #: Instruments derived from a USD reference through an FX bridge.
+        self._fx_formulas: dict[str, tuple[str, Decimal]] = {
+            "GOLD_24K_TOMAN_GRAM": (
+                "XAU_USD_OZ",
+                _purity_ratio("GOLD_24K_TOMAN_GRAM", "XAU_USD_OZ") / TROY_OUNCE_GRAMS,
+            ),
+            "SILVER_999_TOMAN_GRAM": (
+                "XAG_USD_OZ",
+                _purity_ratio("SILVER_999_TOMAN_GRAM", "XAG_USD_OZ") / TROY_OUNCE_GRAMS,
+            ),
+            "BTC_TOMAN": ("BTC_USD", Decimal(1)),
+        }
+
+    def _fx_plan(
+        self,
+        canonical_quotes: Mapping[str, CanonicalQuote],
+        current: datetime,
+    ) -> tuple[str, tuple[str, ...]] | None:
+        """Pick the first FX bridge whose inputs are all operationally fresh."""
+        for name, inputs in self._FX_BRIDGES:
+            if all(
+                self._is_operationally_fresh(quote, current)
+                for quote in (canonical_quotes.get(item) for item in inputs)
+                if quote is not None
+            ) and all(item in canonical_quotes for item in inputs):
+                return name, inputs
+        return None
+
+    @staticmethod
+    def _fx_rate(bridge: str, values: Mapping[str, CanonicalQuote]) -> Decimal:
+        if bridge == "usd_toman":
+            return values["USD_TOMAN"].price
+        return values["USDT_TOMAN"].price / values["USDT_USD"].price
 
     def derive(
         self,
@@ -77,22 +123,11 @@ class DerivedPriceEngine:
         now: datetime | None = None,
     ) -> ProviderQuote:
         normalized = instrument_id.upper()
-        try:
-            input_ids, formula, calculate = self._formulas[normalized]
-        except KeyError as exc:
-            raise DerivedPriceUnavailable("No derived formula is registered") from exc
-        if normalized == "GOLD_18K_TOMAN_GRAM" and "GOLD_24K_TOMAN_GRAM" not in canonical_quotes:
-            input_ids = ("XAU_USD_OZ", "USDT_TOMAN", "USDT_USD")
-            formula = "XAU_USD_OZ * (USDT_TOMAN / USDT_USD) / TROY_OUNCE_GRAMS * 0.75"
-
-            def calculate(values: Mapping[str, CanonicalQuote]) -> Decimal:
-                return (
-                    values["XAU_USD_OZ"].price
-                    * (values["USDT_TOMAN"].price / values["USDT_USD"].price)
-                    / TROY_OUNCE_GRAMS
-                    * Decimal("0.75")
-                )
         current = ensure_utc(now or utc_now())
+        plan = self._resolve_formula(normalized, canonical_quotes, current)
+        if plan is None:
+            raise DerivedPriceUnavailable("No derived formula is available")
+        input_ids, formula, calculate, fx_bridge = plan
         inputs: dict[str, CanonicalQuote] = {}
         input_depths: dict[str, int] = {}
         input_confidences: dict[str, Decimal] = {}
@@ -174,6 +209,12 @@ class DerivedPriceEngine:
                 ],
                 "derivation_depth": derivation_depth,
                 "provenance": provenance,
+                "fx_bridge": fx_bridge,
+                # A USDT-bridged Toman metal price is not the same quality as
+                # one bridged through a free-market USD rate; consumers need to
+                # be able to tell them apart. A USD_TOMAN input that was itself
+                # derived is still the proxy, one level down.
+                "fx_bridge_is_proxy": self._bridge_is_proxy(fx_bridge, inputs),
                 "input_live_eligible_until": input_live_eligible_until.isoformat(),
                 "theoretical_value": normalized in {
                     "GOLD_18K_TOMAN_GRAM",
@@ -184,6 +225,68 @@ class DerivedPriceEngine:
             },
             persistence_status=PersistenceStatus.UNPERSISTED,
         )
+
+    def _resolve_formula(
+        self,
+        normalized: str,
+        quotes: Mapping[str, CanonicalQuote],
+        current: datetime,
+    ):
+        """Choose the cheapest formula whose inputs are all currently usable.
+
+        Same-metal chains are preferred (18K from 24K keeps the local market's
+        own premium); only when that chain is cold do we reconstruct the price
+        from the international reference through an FX bridge.
+        """
+        direct = self._formulas.get(normalized)
+        if direct is not None:
+            input_ids, formula, calculate = direct
+            if all(
+                quotes.get(item) is not None
+                and self._is_operationally_fresh(quotes[item], current)
+                for item in input_ids
+            ):
+                return input_ids, formula, calculate, None
+
+        fx = self._fx_formulas.get(normalized)
+        if fx is None and normalized == "GOLD_18K_TOMAN_GRAM":
+            # The 24K chain is cold, so go straight from the ounce reference.
+            fx = (
+                "XAU_USD_OZ",
+                _purity_ratio("GOLD_18K_TOMAN_GRAM", "XAU_USD_OZ") / TROY_OUNCE_GRAMS,
+            )
+        if fx is None:
+            return None
+        reference_id, factor = fx
+        bridge = self._fx_plan(quotes, current)
+        if bridge is None:
+            return None
+        bridge_name, bridge_inputs = bridge
+
+        def calculate(
+            values: Mapping[str, CanonicalQuote],
+            _reference: str = reference_id,
+            _factor: Decimal = factor,
+            _bridge: str = bridge_name,
+        ) -> Decimal:
+            return values[_reference].price * self._fx_rate(_bridge, values) * _factor
+
+        formula = f"{reference_id} * fx[{bridge_name}] * {factor}"
+        return (reference_id, *bridge_inputs), formula, calculate, bridge_name
+
+    @staticmethod
+    def _bridge_is_proxy(
+        fx_bridge: str | None,
+        inputs: Mapping[str, CanonicalQuote],
+    ) -> bool:
+        if fx_bridge is None:
+            return False
+        if fx_bridge != "usd_toman":
+            return True
+        bridge_quote = inputs.get("USD_TOMAN")
+        if bridge_quote is None:
+            return True
+        return bool(bridge_quote.source_summary.get("derived", False))
 
     @staticmethod
     def _is_operationally_fresh(quote: CanonicalQuote, now: datetime) -> bool:

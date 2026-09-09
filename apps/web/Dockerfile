@@ -27,12 +27,18 @@ RUN --mount=type=cache,id=nerkhbaan-web-npm,target=/root/.npm,sharing=locked \
 COPY packages/ui ./packages/ui
 COPY apps/web ./apps/web
 
+# Vite inlines VITE_* at build time. Without the public VAPID key in the bundle
+# the browser cannot subscribe, so web push is dead in the built image.
+ARG VITE_VAPID_PUBLIC_KEY=""
+ENV VITE_VAPID_PUBLIC_KEY=$VITE_VAPID_PUBLIC_KEY
+
 RUN npm run build --workspace=nerkhbaan-web
 
 FROM nginx:1.30.4-alpine3.24 AS runtime
 
 RUN rm -rf /usr/share/nginx/html/*
 
+COPY apps/web/security-headers.conf /etc/nginx/security-headers.inc
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
 

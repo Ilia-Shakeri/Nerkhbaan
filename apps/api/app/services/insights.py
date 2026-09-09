@@ -32,6 +32,14 @@ class InsightUnavailableError(RuntimeError):
     """Raised when the reasoning provider is not configured or unreachable."""
 
 
+class InsightQuotaExceeded(InsightUnavailableError):
+    """Raised when a caller has spent its reasoning allowance.
+
+    Distinct from an outage: the caller should retry later, and the API should
+    answer 429 rather than implying the service is broken.
+    """
+
+
 class MarketInsightEngine:
     """Bridges market data and a remote reasoning provider.
 
@@ -244,7 +252,7 @@ class MarketInsightEngine:
             settings.ai_deduplication_window_seconds,
         )
         if duplicate.blocked:
-            raise InsightUnavailableError("Duplicate reasoning request was throttled")
+            raise InsightQuotaExceeded("Duplicate reasoning request was throttled")
         user_state = rate_limit_hit(
             "insight-user-daily",
             user_id,
@@ -252,7 +260,7 @@ class MarketInsightEngine:
             DAILY_WINDOW_SECONDS,
         )
         if user_state.blocked:
-            raise InsightUnavailableError("User reasoning quota is exhausted")
+            raise InsightQuotaExceeded("User reasoning quota is exhausted")
         global_state = rate_limit_hit(
             "insight-global-daily",
             "all-users",
@@ -260,7 +268,7 @@ class MarketInsightEngine:
             DAILY_WINDOW_SECONDS,
         )
         if global_state.blocked:
-            raise InsightUnavailableError("Reasoning quota is exhausted")
+            raise InsightQuotaExceeded("Reasoning quota is exhausted")
 
 
 insight_engine = MarketInsightEngine()

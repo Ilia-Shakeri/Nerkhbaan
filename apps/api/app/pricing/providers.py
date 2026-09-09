@@ -40,6 +40,15 @@ from .persistence import PricingPersistence, pricing_persistence
 from .registry import ProviderDefinition
 
 
+def _raw_payload_bound(provider: ProviderDefinition) -> int:
+    """Byte ceiling for a stored raw payload.
+
+    Stored payloads are diagnostic evidence, not the transfer bound, so they
+    are capped well below what the provider is allowed to send.
+    """
+    return min(provider.maximum_payload_bytes, settings.raw_provider_payload_max_bytes)
+
+
 @dataclass(slots=True)
 class QuoteFetchOutcome:
     quote: ProviderQuote | None
@@ -309,7 +318,7 @@ class ProviderQuoteCollector:
                 quote, provider.operational_ttl_seconds
             )
             await self._record_success(provider, runtime, latency_ms, http_status)
-            sanitized = sanitize_raw_payload(payload, provider.maximum_payload_bytes)
+            sanitized = sanitize_raw_payload(payload, _raw_payload_bound(provider))
             return QuoteFetchOutcome(
                 quote,
                 persistence_result.persisted,
@@ -356,7 +365,7 @@ class ProviderQuoteCollector:
                 True,
                 exc.code,
                 sanitized_payload=(
-                    sanitize_raw_payload(exc.payload, provider.maximum_payload_bytes)
+                    sanitize_raw_payload(exc.payload, _raw_payload_bound(provider))
                     if exc.payload is not None
                     else None
                 ),

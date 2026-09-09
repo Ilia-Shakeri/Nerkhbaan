@@ -83,9 +83,10 @@ def signin(
             headers={"Retry-After": str(limit.retry_after)},
         )
 
+    identifier = payload.identifier.strip().lower()
     user = db.scalar(
         select(User).where(
-            (User.email == payload.identifier) | (User.username == payload.identifier)
+            (User.email == identifier) | (User.username == identifier)
         )
     )
     password_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH

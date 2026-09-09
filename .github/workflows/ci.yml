@@ -186,7 +186,16 @@ jobs:
           cp .env.example .env
           trap 'rm -f .env' EXIT
           docker compose --profile admin --profile telegram -f docker-compose.yaml config --quiet
-          docker compose --profile admin --profile telegram -f docker-compose.prod.yaml config --quiet
+          docker compose --profile admin --profile telegram --profile edge -f docker-compose.prod.yaml config --quiet
+
+      - name: Validate nginx configurations
+        run: |
+          # The edge config is mounted at runtime, so a syntax error would only
+          # surface on deploy. Check every proxy config against real nginx.
+          docker run --rm             -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro"             -v "$PWD/nginx/security-headers.inc:/etc/nginx/security-headers.inc:ro"             -v "$PWD/nginx/security-headers-admin.inc:/etc/nginx/security-headers-admin.inc:ro"             --entrypoint sh nginx:1.30.4-alpine3.24 -c             'mkdir -p /etc/nginx/ssl/live/nerkhbaan.ir /etc/nginx/ssl/live/admin.nerkhbaan.ir              && for host in nerkhbaan.ir admin.nerkhbaan.ir; do                   openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=$host"                     -keyout "/etc/nginx/ssl/live/$host/privkey.pem"                     -out "/etc/nginx/ssl/live/$host/fullchain.pem" >/dev/null 2>&1;                 done              && nginx -t'
+          for app in web admin-web; do
+            docker run --rm               -v "$PWD/apps/$app/nginx.conf:/etc/nginx/conf.d/default.conf:ro"               -v "$PWD/apps/$app/security-headers.conf:/etc/nginx/security-headers.inc:ro"               nginx:1.30.4-alpine3.24 nginx -t
+          done
 
   repository-security:
     name: Repository security scans
@@ -265,6 +274,7 @@ jobs:
           docker build
           --pull
           --file "${{ matrix.dockerfile }}"
+          --build-arg VITE_VAPID_PUBLIC_KEY=ci-build-placeholder
           --tag "nerkhbaan-${{ matrix.component }}:${GITHUB_SHA}"
           "${{ matrix.context }}"
 

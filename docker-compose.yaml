@@ -4,6 +4,10 @@ x-api-environment: &api-environment
   API_HOST: 0.0.0.0
   API_PORT: 8000
   FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,172.28.0.0/24}
+  # Must match FORWARDED_ALLOW_IPS: both layers decide which hop may set
+  # X-Forwarded-For, and a mismatch reintroduces client IP spoofing.
+  TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1,::1,172.28.0.0/24}
+  ADMIN_TRUSTED_PROXY_IPS: ${ADMIN_TRUSTED_PROXY_IPS:-127.0.0.1,::1,172.28.0.0/24}
 
 services:
   postgres:

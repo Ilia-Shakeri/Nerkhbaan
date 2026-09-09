@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 from sqlalchemy import and_, func, or_, select
 
+from ..config import settings
 from ..db import SessionLocal
 from .budgets import RedisRequestBudget, pricing_budget
 from .cache import PricingRedisStore, pricing_redis
@@ -62,6 +63,7 @@ class PricingBackfillQueue:
         self.locks = locks
         self.persistence = persistence
         self.operational = operational
+        self.batch_size = settings.pricing_backfill_batch_size
         self.maximum_length = _positive_int_env("PRICING_BACKFILL_STREAM_MAXLEN", 10_000)
         self.maximum_attempts = _positive_int_env("PRICING_BACKFILL_MAX_ATTEMPTS", 5)
 
@@ -221,6 +223,7 @@ class PricingBackfillQueue:
         points = parser.parse(
             payload, instrument, job["range_start"], job["range_end"]
         )
+        points = points[: self.batch_size]
         for point in points:
             quote = ProviderQuote.create(
                 instrument_id=instrument.instrument_id,
