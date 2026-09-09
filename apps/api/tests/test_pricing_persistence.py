@@ -12,9 +12,11 @@ if config_module is not None:
     config_module.settings.redis_url = None
 
 from app.pricing.db_models import (
+    InstrumentRecord,
     InstrumentProviderConfigRecord,
     PricingProviderRecord,
 )
+from app.pricing.instruments import INSTRUMENTS
 from app.pricing.persistence import PricingPersistence
 from app.pricing.history import InternalPriceHistory
 from app.pricing.registry import PROVIDERS
@@ -22,8 +24,10 @@ from app.pricing.registry import PROVIDERS
 
 class _CatalogSession:
     def __init__(self) -> None:
+        self.added_instruments: list[InstrumentRecord] = []
         self.added_providers: list[PricingProviderRecord] = []
         self.added_configs: list[InstrumentProviderConfigRecord] = []
+        self.locked = False
         self.parents_flushed = False
         self.committed = False
         self.rolled_back = False
@@ -33,6 +37,9 @@ class _CatalogSession:
         return None
 
     def add(self, record) -> None:
+        if isinstance(record, InstrumentRecord):
+            self.added_instruments.append(record)
+            return
         if isinstance(record, PricingProviderRecord):
             self.added_providers.append(record)
             return
@@ -40,6 +47,10 @@ class _CatalogSession:
             if not self.parents_flushed:
                 raise AssertionError("Provider configs were added before providers were flushed")
             self.added_configs.append(record)
+
+    def execute(self, query, parameters):
+        self.locked = "pg_advisory_xact_lock" in str(query)
+        self.asserted_lock_id = parameters["lock_id"]
 
     def flush(self) -> None:
         self.parents_flushed = True
@@ -62,7 +73,10 @@ class PricingPersistenceCatalogTests(unittest.TestCase):
             PricingPersistence._sync_provider_catalog()
 
         self.assertEqual(len(session.added_providers), len(PROVIDERS))
+        self.assertEqual(len(session.added_instruments), len(INSTRUMENTS))
         self.assertEqual(len(session.added_configs), len(PROVIDERS))
+        self.assertTrue(session.locked)
+        self.assertGreater(session.asserted_lock_id, 0)
         self.assertTrue(session.parents_flushed)
         self.assertTrue(session.committed)
         self.assertFalse(session.rolled_back)

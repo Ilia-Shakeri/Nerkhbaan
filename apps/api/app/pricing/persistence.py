@@ -10,13 +10,14 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import Any, Callable
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from ..config import settings
 from ..db import SessionLocal
 from .cache import PricingRedisStore, PricingRedisUnavailable, pricing_redis
 from .db_models import (
     CanonicalQuoteRecord,
+    InstrumentRecord,
     InstrumentProviderConfigRecord,
     PricingAnomalyRecord,
     PricingPersistenceEventRecord,
@@ -26,6 +27,7 @@ from .db_models import (
     ProviderRuntimeEventRecord,
     RawProviderPayloadRecord,
 )
+from .instruments import INSTRUMENTS
 from .models import (
     CanonicalQuote,
     CanonicalStatus,
@@ -528,6 +530,45 @@ class PricingPersistence:
     def _sync_provider_catalog() -> None:
         db = SessionLocal()
         try:
+            # Every API replica runs startup. Serialize catalog reconciliation so
+            # two fresh replicas cannot race while inserting the same parent rows.
+            db.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                {"lock_id": 5640009418248479041},
+            )
+
+            for instrument in INSTRUMENTS.values():
+                instrument_record = db.get(InstrumentRecord, instrument.instrument_id)
+                values = {
+                    "base_asset": instrument.base_asset,
+                    "quote_currency": instrument.quote_currency.value,
+                    "market": instrument.market.value,
+                    "region": instrument.region.value,
+                    "weight_unit": instrument.weight_unit.value,
+                    "purity": str(instrument.purity) if instrument.purity is not None else None,
+                    "display_decimals": instrument.display_decimals,
+                    "operational_ttl_seconds": instrument.operational_ttl_seconds,
+                    "stale_after_seconds": instrument.stale_after_seconds,
+                    "expire_after_seconds": instrument.expire_after_seconds,
+                    "base_anomaly_threshold_percent": instrument.base_anomaly_threshold_percent,
+                    "maximum_dynamic_threshold_percent": instrument.maximum_dynamic_threshold_percent,
+                    "minimum_sanity_price": instrument.minimum_price,
+                    "maximum_sanity_price": instrument.maximum_price,
+                    "importance": instrument.importance,
+                    "enabled": instrument.enabled,
+                    "allow_derived_fallback": instrument.allow_derived_fallback,
+                }
+                if instrument_record is None:
+                    db.add(
+                        InstrumentRecord(
+                            instrument_id=instrument.instrument_id,
+                            **values,
+                        )
+                    )
+                else:
+                    for field, value in values.items():
+                        setattr(instrument_record, field, value)
+
             for provider in PROVIDERS.values():
                 budget = provider.budget
                 provider_record = db.get(PricingProviderRecord, provider.provider_id)
@@ -572,8 +613,8 @@ class PricingPersistence:
                     provider_record.cooldown_after_429_seconds = budget.cooldown_after_429_seconds
                     provider_record.estimated_request_cost = budget.estimated_request_cost
 
-            # Provider configs reference pricing_providers. Flush every new parent row
-            # before adding configs so PostgreSQL can enforce the foreign key safely.
+            # Provider configs reference both parent catalogs. Flush every new
+            # parent row before adding configs so PostgreSQL can enforce both keys.
             db.flush()
 
             for provider in PROVIDERS.values():
