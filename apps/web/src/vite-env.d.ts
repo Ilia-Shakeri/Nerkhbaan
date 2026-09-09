@@ -11,7 +11,6 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
-// Electron API types (optional, only available in Electron environment)
 interface Window {
   electronAPI?: {
     minimizeWindow?: () => void;
@@ -19,5 +18,11 @@ interface Window {
     toggleMaximizeWindow?: () => void;
     closeWindow?: () => void;
     isWindowMaximized?: () => Promise<boolean>;
+    openTelegramLink?: (url: string) => Promise<boolean>;
+    auth?: {
+      getCredentials: () => Promise<{ access_token: string; refresh_token: string | null } | null>;
+      setCredentials: (value: { access_token: string; refresh_token: string | null }) => Promise<void>;
+      clearCredentials: () => Promise<void>;
+    };
   };
 }

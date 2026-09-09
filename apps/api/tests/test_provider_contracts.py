@@ -5,7 +5,7 @@ import unittest
 from decimal import Decimal
 from types import SimpleNamespace
 from urllib.parse import urlparse
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enough")
 os.environ["DEBUG"] = "false"
@@ -125,6 +125,28 @@ class _StreamClient:
 
 
 class ProviderRetryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_relay_request_gets_shared_header(self) -> None:
+        provider = SimpleNamespace(
+            static_headers=(),
+            url="https://relay.example.com/coinbase/products/BTC-USD/ticker",
+            requires_https=False,
+            api_key_setting=None,
+        )
+        collector = ProviderQuoteCollector()
+        request_once = AsyncMock(return_value=({"price": "100"}, "application/json", 200))
+        provider_settings = __import__("app.pricing.providers", fromlist=["settings"]).settings
+        with patch.object(provider_settings, "pricing_relay_base_url", "https://relay.example.com"), patch.object(
+            provider_settings, "pricing_relay_shared_token", "x" * 48
+        ), patch.object(
+            provider_settings,
+            "pricing_provider_allowed_hosts",
+            f"{provider_settings.pricing_provider_allowed_hosts},relay.example.com",
+        ), patch.object(collector, "_request_once", request_once):
+            await collector._request_payload(SimpleNamespace(), provider)
+
+        sent_headers = request_once.await_args.args[2]
+        self.assertEqual(sent_headers["X-Relay-Token"], "x" * 48)
+
     async def test_server_fault_retries_then_returns_payload(self) -> None:
         provider = PROVIDERS["coinbase_btc_usd"]
         client = _StreamClient(

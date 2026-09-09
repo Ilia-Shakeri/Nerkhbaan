@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 import httpx
 
 from ..config import settings
+from ..observability import provider_request_duration_seconds, provider_request_total
 from .budgets import RedisRequestBudget, pricing_budget
 from .cache import PricingRedisStore, pricing_redis
 from .freshness import (
@@ -425,6 +426,15 @@ class ProviderQuoteCollector:
         headers = dict(provider.static_headers)
         params: dict[str, str] = {}
         self._validate_destination(provider)
+        if settings.pricing_relay_base_url:
+            relay_host = urlparse(settings.pricing_relay_base_url).hostname
+            provider_host = urlparse(provider.url).hostname
+            if relay_host and provider_host == relay_host:
+                if not settings.pricing_relay_shared_token:
+                    raise ProviderCallFailure(
+                        "missing_relay_token", "Relay token is not configured"
+                    )
+                headers["X-Relay-Token"] = settings.pricing_relay_shared_token
         if provider.requires_https and provider.api_key_setting:
             parsed = urlparse(provider.url)
             if parsed.scheme != "https":
@@ -645,6 +655,15 @@ class ProviderQuoteCollector:
             latency_ms=latency_ms,
             http_status=http_status,
         )
+        provider_request_total.labels(
+            provider=provider.provider_id,
+            instrument=provider.instrument_id,
+            status="success",
+        ).inc()
+        provider_request_duration_seconds.labels(
+            provider=provider.provider_id,
+            instrument=provider.instrument_id,
+        ).observe(latency_ms / 1000)
 
     async def _record_failure(
         self,
@@ -656,6 +675,7 @@ class ProviderQuoteCollector:
         retry_after_seconds: int | None = None,
     ) -> None:
         now = utc_now()
+        latency_ms = max(0, int((time.monotonic() - started) * 1000))
         runtime.failure_count += 1
         runtime.consecutive_failures += 1
         runtime.last_failure_at = now
@@ -680,10 +700,19 @@ class ProviderQuoteCollector:
             instrument_id=provider.instrument_id,
             event_type="request",
             status="failed",
-            latency_ms=max(0, int((time.monotonic() - started) * 1000)),
+            latency_ms=latency_ms,
             http_status=http_status,
             sanitized_error=error_code,
         )
+        provider_request_total.labels(
+            provider=provider.provider_id,
+            instrument=provider.instrument_id,
+            status=error_code,
+        ).inc()
+        provider_request_duration_seconds.labels(
+            provider=provider.provider_id,
+            instrument=provider.instrument_id,
+        ).observe(latency_ms / 1000)
 
     @staticmethod
     def _parse_retry_after(

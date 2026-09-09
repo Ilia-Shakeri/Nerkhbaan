@@ -1,4 +1,4 @@
-import { BrowserRouter, useNavigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, useNavigate } from "react-router-dom";
 import { AppRouter } from "@/app/router/AppRouter";
 import { AppProvider, useAppContext } from "@/app/context/AppContext";
 import { Toaster } from "sonner";
@@ -112,13 +112,14 @@ function AppContent() {
 }
 
 export function App() {
+  const Router = window.electronAPI ? HashRouter : BrowserRouter;
   return (
     <AppProvider>
-      <BrowserRouter>
+      <Router>
         <AuthEventsBridge />
         <AppContent />
         <Toaster position="top-center" richColors />
-      </BrowserRouter>
+      </Router>
     </AppProvider>
   );
 }

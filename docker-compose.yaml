@@ -31,20 +31,12 @@ services:
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
-    command:
-      - sh
-      - -c
-      - |
-        if [ -f /data/appendonly.aof.13.base.rdb ]; then
-          if ! redis-check-rdb /data/appendonly.aof.13.base.rdb >/tmp/redis_aof_check.log 2>&1; then
-            echo "Redis: unreadable AOF base file at /data/appendonly.aof.13.base.rdb; keeping data untouched for manual recovery."
-            echo "Check /tmp/redis_aof_check.log inside container; manual restore required."
-            exit 1
-          fi
-        fi
-        exec redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
+    command: ["sh", "/usr/local/bin/redis-safe-start.sh"]
+    environment:
+      REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-256mb}
     volumes:
       - redis_data:/data
+      - ./scripts/redis-safe-start.sh:/usr/local/bin/redis-safe-start.sh:ro
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

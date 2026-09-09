@@ -9,6 +9,7 @@ from sqlalchemy import text
 from .config import settings
 from .db import engine
 from .migrations.state import migration_state
+from .observability import set_queue_depths
 from .pricing.cache import PricingRedisStore
 
 
@@ -122,6 +123,15 @@ def health_snapshot() -> dict[str, Any]:
     database_ok = database["status"] == "connected"
     cache_ok = cache["status"] == "connected"
     fully_operational = database_ok and cache_ok and migration_ok
+    set_queue_depths(
+        {
+            "persistence": database["backlog"].get("persistence", cache["persistence_stream"]),
+            "backfill": database["backlog"].get("backfill"),
+            "dead_letters": database["backlog"].get("dead_letters"),
+            "anomalies": database["backlog"].get("anomalies"),
+            "pricing_events": cache["event_stream"],
+        }
+    )
     # Readiness requires the database. Authentication, alerts and admin all go
     # through PostgreSQL, so a cache-only instance cannot serve the product and
     # must not be handed traffic.

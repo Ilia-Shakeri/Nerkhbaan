@@ -89,9 +89,10 @@ test("edge proxy keeps metrics off the public host", () => {
   assert.match(config, /location\s+\^~\s+\/api\/admin\s*\{\s*return 404;\s*\}/);
 });
 
-test("web session stays in secure cookies", () => {
+test("web keeps cookies while desktop uses secure native storage", () => {
   const api = read("apps/web/src/app/services/api.ts");
-  assert.match(api, /withCredentials:\s*true/);
+  assert.match(api, /withCredentials:\s*!isDesktop/);
+  assert.match(api, /electronAPI\.auth\.setCredentials/);
   assert.doesNotMatch(api, /localStorage\.setItem\([^,]*(token|session)/i);
 });
 

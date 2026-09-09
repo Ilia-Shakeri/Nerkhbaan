@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import secrets
+import time
 from decimal import Decimal
 from typing import Any, Iterable
 
 import httpx
+
+from ..observability import (
+    canonical_age_seconds,
+    pricing_refresh_duration_seconds,
+    pricing_refresh_total,
+    set_canonical_status,
+)
 
 from .anomaly import AnomalyAssessment, DynamicAnomalyDetector, anomaly_detector
 from .backfill import PricingBackfillQueue, backfill_queue
@@ -198,17 +206,38 @@ class InstrumentPricingService:
             return {instrument_id: "suspended_redis_unavailable" for instrument_id in INSTRUMENTS}
         results: dict[str, str] = {}
         for instrument_id in _REFRESH_ORDER:
+            started = time.monotonic()
             current = await self.get_canonical(instrument_id)
             if current is not None and utc_now() <= current.valid_until:
                 results[instrument_id] = "fresh"
+                self._record_refresh_metrics(instrument_id, "fresh", started, current)
                 continue
             try:
                 refreshed = await self.refresh_instrument(instrument_id)
                 results[instrument_id] = refreshed.effective_status().value if refreshed else "unavailable"
+                self._record_refresh_metrics(instrument_id, results[instrument_id], started, refreshed)
             except Exception as exc:
                 results[instrument_id] = f"failed:{type(exc).__name__}"
+                self._record_refresh_metrics(instrument_id, "failed", started, current)
             await asyncio.sleep(secrets.randbelow(250) / 1000)
         return results
+
+    @staticmethod
+    def _record_refresh_metrics(
+        instrument_id: str,
+        status: str,
+        started: float,
+        quote: CanonicalQuote | None,
+    ) -> None:
+        pricing_refresh_total.labels(instrument=instrument_id, status=status).inc()
+        set_canonical_status(instrument_id, status)
+        pricing_refresh_duration_seconds.labels(instrument=instrument_id).observe(
+            max(0.0, time.monotonic() - started)
+        )
+        if quote is not None:
+            canonical_age_seconds.labels(instrument=instrument_id).set(
+                max(0.0, (utc_now() - quote.observed_at).total_seconds())
+            )
 
     async def get_canonical(self, instrument_id: str) -> CanonicalQuote | None:
         normalized = get_instrument(instrument_id).instrument_id

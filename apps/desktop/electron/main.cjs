@@ -97,11 +97,10 @@ function createWindow() {
     height: 800,
     minWidth: 1024,
     minHeight: 700,
-    frame: false,
-    titleBarStyle: 'hidden',
+    frame: true,
     autoHideMenuBar: true,
     backgroundColor: '#060606',
-    icon: path.join(__dirname, '../src/logo/logo.png'),
+    icon: path.join(__dirname, '../dist/icons/logo.png'),
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,

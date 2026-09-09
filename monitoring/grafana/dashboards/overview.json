@@ -1,0 +1,19 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "panels": [
+    {"type":"stat","title":"API target","gridPos":{"h":6,"w":6,"x":0,"y":0},"targets":[{"expr":"up{job=\"nerkhbaan-api\"}"}]},
+    {"type":"timeseries","title":"Provider failures","gridPos":{"h":8,"w":18,"x":6,"y":0},"targets":[{"expr":"sum by (provider, status) (rate(nerkhbaan_provider_request_total{status!=\"success\"}[5m]))"}]},
+    {"type":"timeseries","title":"Canonical age","gridPos":{"h":8,"w":12,"x":0,"y":8},"targets":[{"expr":"nerkhbaan_canonical_age_seconds"}]},
+    {"type":"timeseries","title":"Queue depth","gridPos":{"h":8,"w":12,"x":12,"y":8},"targets":[{"expr":"nerkhbaan_queue_depth"}]},
+    {"type":"timeseries","title":"Alert delivery","gridPos":{"h":8,"w":12,"x":0,"y":16},"targets":[{"expr":"sum by (channel, status) (rate(nerkhbaan_alert_delivery_total[5m]))"}]},
+    {"type":"timeseries","title":"Redis memory","gridPos":{"h":8,"w":12,"x":12,"y":16},"targets":[{"expr":"redis_memory_used_bytes"},{"expr":"redis_memory_max_bytes"}]}
+  ],
+  "schemaVersion": 39,
+  "tags": ["nerkhbaan"],
+  "templating": {"list": []},
+  "time": {"from":"now-6h","to":"now"},
+  "title": "Nerkhbaan Overview",
+  "uid": "nerkhbaan-overview",
+  "version": 1
+}

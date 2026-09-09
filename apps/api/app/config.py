@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     debug: bool = False
+    background_tasks_enabled: bool = True
 
     database_url: str = Field(
         default="postgresql+psycopg://nerkhbaan:nerkhbaan@localhost:5432/nerkhbaan"
@@ -131,6 +132,8 @@ class Settings(BaseSettings):
     pricing_provider_backoff_base_seconds: Decimal = Decimal("0.5")
     pricing_provider_aggregate_cache_seconds: int = 5
     pricing_provider_max_response_bytes: int = 262_144
+    pricing_relay_base_url: str | None = None
+    pricing_relay_shared_token: str | None = None
     pricing_provider_allowed_hosts: str = (
         "api.alanchand.com,api.gold-api.com,www.goldapi.io,api.metals.dev,"
         "api.exchange.coinbase.com,api.coingecko.com,api.coincap.io,"
@@ -277,6 +280,7 @@ class Settings(BaseSettings):
             if item.strip()
         }
         for name in (
+            "pricing_relay_base_url",
             "navasan_https_proxy_base_url",
             "alanchand_api_base_url",
             "goldapi_api_base_url",
@@ -299,6 +303,12 @@ class Settings(BaseSettings):
             if hostname:
                 hosts.add(hostname.strip().lower())
         self.pricing_provider_allowed_hosts = ",".join(sorted(hosts))
+        if self.pricing_relay_base_url:
+            parsed = urlsplit(self.pricing_relay_base_url)
+            if parsed.scheme != "https" or not parsed.hostname:
+                raise ValueError("PRICING_RELAY_BASE_URL must be an HTTPS origin")
+            if not self.pricing_relay_shared_token or len(self.pricing_relay_shared_token) < 32:
+                raise ValueError("PRICING_RELAY_SHARED_TOKEN must contain at least 32 characters")
         return self
 
     @field_validator(

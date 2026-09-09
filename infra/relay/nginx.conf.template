@@ -1,0 +1,62 @@
+map $http_x_relay_token $relay_token_ok {
+    default 0;
+    "${RELAY_SHARED_TOKEN}" 1;
+}
+
+server {
+    listen 443 ssl;
+    server_tokens off;
+    ssl_certificate /etc/nginx/tls/fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 1k;
+
+    location = /healthz { return 200 "ok\n"; }
+    location / {
+        allow ${CORE_IP_CIDR};
+        deny all;
+        if ($relay_token_ok = 0) { return 401; }
+        return 404;
+    }
+
+    location /coinbase/ {
+        allow ${CORE_IP_CIDR}; deny all;
+        if ($relay_token_ok = 0) { return 401; }
+        proxy_ssl_server_name on;
+        proxy_set_header Host api.exchange.coinbase.com;
+        proxy_set_header X-Relay-Token "";
+        proxy_pass https://api.exchange.coinbase.com/;
+    }
+    location /coingecko/ {
+        allow ${CORE_IP_CIDR}; deny all;
+        if ($relay_token_ok = 0) { return 401; }
+        proxy_ssl_server_name on;
+        proxy_set_header Host api.coingecko.com;
+        proxy_set_header X-Relay-Token "";
+        proxy_pass https://api.coingecko.com/;
+    }
+    location /goldapi/ {
+        allow ${CORE_IP_CIDR}; deny all;
+        if ($relay_token_ok = 0) { return 401; }
+        proxy_ssl_server_name on;
+        proxy_set_header Host www.goldapi.io;
+        proxy_set_header X-Relay-Token "";
+        proxy_pass https://www.goldapi.io/;
+    }
+    location /gold-api/ {
+        allow ${CORE_IP_CIDR}; deny all;
+        if ($relay_token_ok = 0) { return 401; }
+        proxy_ssl_server_name on;
+        proxy_set_header Host api.gold-api.com;
+        proxy_set_header X-Relay-Token "";
+        proxy_pass https://api.gold-api.com/;
+    }
+    location /metals/ {
+        allow ${CORE_IP_CIDR}; deny all;
+        if ($relay_token_ok = 0) { return 401; }
+        proxy_ssl_server_name on;
+        proxy_set_header Host api.metals.dev;
+        proxy_set_header X-Relay-Token "";
+        proxy_pass https://api.metals.dev/;
+    }
+}

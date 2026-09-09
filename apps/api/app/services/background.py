@@ -12,6 +12,7 @@ from ..config import settings
 from ..models import AssistantChatMessage, AssistantChatSession
 from ..pricing.compatibility import legacy_pricing_adapter
 from ..pricing.service import instrument_pricing_service
+from ..observability import background_failures_total
 from .alert_engine import AlertEngine
 from .dlq_worker import DLQWorker
 
@@ -72,6 +73,7 @@ class BackgroundRunner:
                     )
                 )
             except Exception as exc:
+                background_failures_total.labels(loop="pricing_refresh").inc()
                 logger.error("Pricing refresh failed error_type=%s", type(exc).__name__)
             await asyncio.sleep(self._next_delay(self.interval))
 
@@ -82,6 +84,7 @@ class BackgroundRunner:
                     prices = await legacy_pricing_adapter.get_prices()
                     await self.alert_engine.evaluate_alerts(prices)
             except Exception as exc:
+                background_failures_total.labels(loop="alert_evaluation").inc()
                 logger.error(
                     "Alert evaluation failed error_type=%s", type(exc).__name__
                 )
@@ -99,6 +102,7 @@ class BackgroundRunner:
                             settings.pricing_backfill_max_jobs_per_cycle
                         )
             except Exception as exc:
+                background_failures_total.labels(loop="pricing_maintenance").inc()
                 logger.error(
                     "Pricing maintenance failed error_type=%s", type(exc).__name__
                 )
@@ -111,6 +115,7 @@ class BackgroundRunner:
             try:
                 await asyncio.to_thread(self._purge_expired_chat_history)
             except Exception as exc:
+                background_failures_total.labels(loop="chat_purge").inc()
                 logger.error(f"Chat history purge failed: {exc}")
             await asyncio.sleep(CHAT_PURGE_INTERVAL_SECONDS)
 

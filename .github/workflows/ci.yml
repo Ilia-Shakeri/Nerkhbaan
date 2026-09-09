@@ -63,6 +63,24 @@ jobs:
       - name: Run frontend contract tests
         run: npm run test:frontend
 
+  desktop-package:
+    name: Desktop package
+    runs-on: windows-2025
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked workspaces
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build unpacked desktop package
+        run: npm run package:dir --workspace=nerkhbaan-desktop
+
   python-unit:
     name: Python static and unit checks
     runs-on: ubuntu-24.04
@@ -166,10 +184,32 @@ jobs:
       - name: Smoke test Timescale and Redis
         run: python tests/ci_service_smoke.py
 
+      - name: Prove multi-replica lease exclusion and handover
+        run: python tests/ci_multi_replica_check.py
+
       - name: Prove refresh-token rotation under PostgreSQL race
         env:
           TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5432/nerkhbaan_ci
         run: python -m unittest tests.test_auth_refresh_rotation.RefreshRotationPostgresTests -v
+
+      - name: Run route-level integration smoke
+        env:
+          BACKGROUND_TASKS_ENABLED: "false"
+        run: |
+          python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/nerkhbaan-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true; cat /tmp/nerkhbaan-api.log' EXIT
+          python scripts/integration_smoke_test.py --base-url http://127.0.0.1:8000
+
+      - name: Prove PostgreSQL backup restore
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGUSER: nerkhbaan
+          PGPASSWORD: ci-database-password
+          SOURCE_DATABASE: nerkhbaan_ci
+          RESTORE_DATABASE: nerkhbaan_restore_ci
+        run: bash ../../scripts/ci-restore-drill.sh
 
   compose:
     name: Compose configuration
@@ -182,11 +222,18 @@ jobs:
       - name: Validate development and production Compose files
         env:
           POSTGRES_PASSWORD: ci-compose-password
+          GRAFANA_ADMIN_PASSWORD: ci-grafana-password
+          ALERTMANAGER_WEBHOOK_URL_FILE: /tmp/ci-alert-webhook-url
         run: |
           cp .env.example .env
           trap 'rm -f .env' EXIT
           docker compose --profile admin --profile telegram -f docker-compose.yaml config --quiet
-          docker compose --profile admin --profile telegram --profile edge -f docker-compose.prod.yaml config --quiet
+          docker compose --profile admin --profile telegram --profile edge --profile monitoring -f docker-compose.prod.yaml config --quiet
+
+      - name: Validate monitoring configurations
+        run: |
+          docker run --rm --entrypoint /bin/promtool -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v3.5.0 check config /etc/prometheus/prometheus.yml
+          docker run --rm --entrypoint /bin/amtool -v "$PWD/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro" prom/alertmanager:v0.28.1 check-config /etc/alertmanager/alertmanager.yml
 
       - name: Validate nginx configurations
         run: |
@@ -196,6 +243,83 @@ jobs:
           for app in web admin-web; do
             docker run --rm               -v "$PWD/apps/$app/nginx.conf:/etc/nginx/conf.d/default.conf:ro"               -v "$PWD/apps/$app/security-headers.conf:/etc/nginx/security-headers.inc:ro"               nginx:1.30.4-alpine3.24 nginx -t
           done
+
+      - name: Validate relay configuration
+        run: |
+          mkdir -p /tmp/relay-tls
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=relay.example.com" -keyout /tmp/relay-tls/privkey.pem -out /tmp/relay-tls/fullchain.pem >/dev/null 2>&1
+          docker run --rm \
+            -e CORE_IP_CIDR=203.0.113.10/32 \
+            -e RELAY_SHARED_TOKEN=ci-relay-token-not-for-runtime-000000000000 \
+            -e 'NGINX_ENVSUBST_FILTER=^(CORE_IP_CIDR|RELAY_SHARED_TOKEN)$' \
+            -v "$PWD/infra/relay/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro" \
+            -v "/tmp/relay-tls:/etc/nginx/tls:ro" \
+            nginx:1.30.4-alpine3.24 nginx -t
+
+  browser-e2e:
+    name: Browser auth and alerts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: timescale/timescaledb:2.28.3-pg16
+        env:
+          POSTGRES_DB: nerkhbaan_e2e
+          POSTGRES_USER: nerkhbaan
+          POSTGRES_PASSWORD: ci-browser-password
+          TIMESCALEDB_TELEMETRY: "off"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nerkhbaan -d nerkhbaan_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-browser-password@127.0.0.1:5432/nerkhbaan_e2e
+      REDIS_URL: redis://127.0.0.1:6379/1
+      JWT_SECRET_KEY: ci-browser-key-not-for-runtime-0000000000000000
+      MIGRATIONS_DIR: ${{ github.workspace }}/apps/api/db/migrations
+      PRICING_REQUIRE_PROVIDER_KEYS: "false"
+      BACKGROUND_TASKS_ENABLED: "false"
+      ALLOWED_ORIGINS: http://127.0.0.1:4173
+      PUBLIC_FRONTEND_ORIGIN: http://127.0.0.1:4173
+      AUTH_COOKIE_SECURE: "false"
+      TRUSTED_HOSTS: 127.0.0.1,localhost
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.6.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/api/requirements.txt
+      - name: Install locked dependencies
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          python -m pip install --disable-pip-version-check -r apps/api/requirements.txt
+          npx playwright install --with-deps chromium
+      - name: Apply migrations
+        working-directory: apps/api
+        run: python -m app.migrations.runner
+      - name: Run browser test
+        run: npm run test:e2e
 
   repository-security:
     name: Repository security scans
@@ -208,6 +332,14 @@ jobs:
       - name: Test operator evidence verifier
         shell: pwsh
         run: ./scripts/test-operator-gates.ps1
+
+      - name: Test portable operator evidence verifier
+        run: |
+          python scripts/test_verify_operator_gates.py
+          if python scripts/verify_operator_gates.py docs/operator-gates.evidence.example.json; then
+            echo "Example evidence must not pass"
+            exit 1
+          fi
 
       - name: Prove example evidence cannot pass
         shell: bash

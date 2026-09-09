@@ -18,6 +18,9 @@ node_modules/
 
 # Build outputs
 dist/
+apps/desktop/release/
+test-results/
+playwright-report/
 build/
 out/
 apps/web/dev-dist/

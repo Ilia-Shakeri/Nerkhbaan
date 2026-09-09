@@ -12,7 +12,6 @@ x-api-environment: &api-environment
 services:
   postgres:
     image: timescale/timescaledb:2.28.3-pg16
-    container_name: nerkhbaan-postgres
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -60,7 +59,6 @@ services:
 
   redis:
     image: redis:7.4-alpine
-    container_name: nerkhbaan-redis
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -70,20 +68,12 @@ services:
       - CHOWN
       - SETGID
       - SETUID
-    command:
-      - sh
-      - -c
-      - |
-        if [ -f /data/appendonly.aof.13.base.rdb ]; then
-          if ! redis-check-rdb /data/appendonly.aof.13.base.rdb >/tmp/redis_aof_check.log 2>&1; then
-            echo "Redis: unreadable AOF base file at /data/appendonly.aof.13.base.rdb; keeping data untouched for manual recovery."
-            echo "Check /tmp/redis_aof_check.log inside container; manual restore required."
-            exit 1
-          fi
-        fi
-        exec redis-server --appendonly yes --appendfsync everysec --maxmemory ${REDIS_MAXMEMORY:-384mb} --maxmemory-policy noeviction
+    command: ["sh", "/usr/local/bin/redis-safe-start.sh"]
+    environment:
+      REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-384mb}
     volumes:
       - redis_data:/data
+      - ./scripts/redis-safe-start.sh:/usr/local/bin/redis-safe-start.sh:ro
     networks:
       - nerkhbaan-network
     healthcheck:
@@ -102,7 +92,6 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    container_name: nerkhbaan-migrate
     restart: "no"
     security_opt:
       - no-new-privileges:true
@@ -127,7 +116,6 @@ services:
 
   backend:
     image: nerkhbaan-api:${APP_IMAGE_TAG:-local}
-    container_name: nerkhbaan-backend
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -137,8 +125,8 @@ services:
       - ./.env
     environment:
       <<: *api-environment
-    ports:
-      - "127.0.0.1:8000:8000"
+    expose:
+      - "8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -172,7 +160,6 @@ services:
         NPM_REGISTRY_FALLBACK: ${NPM_REGISTRY_FALLBACK:-https://registry.npmjs.org/}
         # Baked at build time: the browser needs the public key to subscribe.
         VITE_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
-    container_name: nerkhbaan-frontend
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -184,8 +171,8 @@ services:
       - SETGID
       - SETUID
       - NET_BIND_SERVICE
-    ports:
-      - "127.0.0.1:3000:80"
+    expose:
+      - "80"
     depends_on:
       backend:
         condition: service_healthy
@@ -209,7 +196,6 @@ services:
     build:
       context: .
       dockerfile: apps/admin-web/Dockerfile
-    container_name: nerkhbaan-admin-frontend
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -221,8 +207,8 @@ services:
       - SETGID
       - SETUID
       - NET_BIND_SERVICE
-    ports:
-      - "127.0.0.1:3001:80"
+    expose:
+      - "80"
     depends_on:
       backend:
         condition: service_healthy
@@ -245,7 +231,6 @@ services:
       context: ./apps/telegram_worker
       dockerfile: Dockerfile
     image: nerkhbaan-telegram-worker:${APP_IMAGE_TAG:-local}
-    container_name: nerkhbaan-telegram-worker
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -272,7 +257,6 @@ services:
   edge:
     profiles: ["edge"]
     image: nginx:1.30.4-alpine3.24
-    container_name: nerkhbaan-edge
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -285,8 +269,8 @@ services:
       - SETUID
       - NET_BIND_SERVICE
     ports:
-      - "80:80"
-      - "443:443"
+      - "${EDGE_HTTP_PORT:-80}:80"
+      - "${EDGE_HTTPS_PORT:-443}:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/security-headers.inc:/etc/nginx/security-headers.inc:ro
@@ -313,7 +297,6 @@ services:
 
   db-backup:
     image: prodrigestivill/postgres-backup-local:16-alpine-d257e5d
-    container_name: nerkhbaan-db-backup
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -349,6 +332,81 @@ services:
           cpus: "0.25"
           memory: 256M
 
+  redis-exporter:
+    profiles: ["monitoring"]
+    image: oliver006/redis_exporter:v1.77.0
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [nerkhbaan-network]
+
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    user: "65534:65534"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis-exporter:
+        condition: service_started
+    networks: [nerkhbaan-network]
+
+  alertmanager:
+    profiles: ["monitoring"]
+    image: prom/alertmanager:v0.28.1
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    user: "65534:65534"
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ${ALERTMANAGER_WEBHOOK_URL_FILE:?Set ALERTMANAGER_WEBHOOK_URL_FILE}:/run/secrets/alert_webhook_url:ro
+      - alertmanager_data:/alertmanager
+    networks: [nerkhbaan-network]
+
+  grafana:
+    profiles: ["monitoring"]
+    image: grafana/grafana:12.1.1
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_HTTP_ADDR: 0.0.0.0
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3002}:3000"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks: [nerkhbaan-network]
+
 networks:
   nerkhbaan-network:
     driver: bridge
@@ -360,3 +418,6 @@ volumes:
   postgres_data:
   redis_data:
   db_backups:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:

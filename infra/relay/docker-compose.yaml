@@ -1,0 +1,23 @@
+services:
+  relay:
+    image: nginx:1.30.4-alpine3.24
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: ["ALL"]
+    cap_add: ["CHOWN", "DAC_OVERRIDE", "SETGID", "SETUID", "NET_BIND_SERVICE"]
+    environment:
+      CORE_IP_CIDR: ${CORE_IP_CIDR:?Set CORE_IP_CIDR}
+      RELAY_SHARED_TOKEN: ${RELAY_SHARED_TOKEN:?Set RELAY_SHARED_TOKEN}
+      NGINX_ENVSUBST_FILTER: ^(CORE_IP_CIDR|RELAY_SHARED_TOKEN)$
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${RELAY_CERT_PATH:?Set RELAY_CERT_PATH}:/etc/nginx/tls/fullchain.pem:ro
+      - ${RELAY_KEY_PATH:?Set RELAY_KEY_PATH}:/etc/nginx/tls/privkey.pem:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-check-certificate -q -O /dev/null https://127.0.0.1/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+

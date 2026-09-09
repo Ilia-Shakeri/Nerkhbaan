@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -22,6 +22,7 @@ from .config import settings
 from .db import async_engine, engine
 from .health import health_snapshot
 from .migrations.state import assert_migrations_current
+from .observability import configure_logging, request_id_context
 from .pricing import db_models as pricing_models
 from .pricing.cache import pricing_redis
 from .pricing.compatibility import legacy_pricing_adapter
@@ -45,21 +46,8 @@ from .services.background import background_runner
 
 _MODEL_REGISTRATION_MODULES = (models, admin_models, pricing_models)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-)
+configure_logging()
 logger = logging.getLogger(__name__)
-
-price_fetches_total = Counter(
-    "price_fetches_total", "Total price fetches", ["instrument", "status"]
-)
-cache_staleness_seconds = Gauge(
-    "cache_staleness_seconds", "Cache staleness in seconds", ["instrument"]
-)
-price_fetch_duration_seconds = Histogram(
-    "price_fetch_duration_seconds", "Price fetch duration", ["instrument"]
-)
 
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,128}$")
 _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
@@ -116,14 +104,16 @@ async def lifespan(app: FastAPI):
             ", ".join(coverage["instruments_without_direct_source"]),
         )
 
-    await background_runner.start()
-    await admin_operations_worker.start()
+    if settings.background_tasks_enabled:
+        await background_runner.start()
+        await admin_operations_worker.start()
     logger.info("API startup complete")
     try:
         yield
     finally:
-        await admin_operations_worker.stop()
-        await background_runner.stop()
+        if settings.background_tasks_enabled:
+            await admin_operations_worker.stop()
+            await background_runner.stop()
         # Release the shared Redis connection pool rather than leaking it.
         try:
             await pricing_redis.close()
@@ -152,6 +142,7 @@ async def request_guard(request: Request, call_next):
     if not _REQUEST_ID_PATTERN.fullmatch(request_id):
         request_id = uuid.uuid4().hex
     request.state.request_id = request_id
+    request_context_token = request_id_context.set(request_id)
 
     cookie_names = {
         settings.auth_cookie_name,
@@ -162,13 +153,17 @@ async def request_guard(request: Request, call_next):
     if request.method in _MUTATING_METHODS and cookie_authenticated:
         request_origin = _origin(request.headers.get("origin", ""))
         if request_origin not in origins:
+            request_id_context.reset(request_context_token)
             return JSONResponse(
                 status_code=403,
                 content={"detail": "Request origin is not allowed", "request_id": request_id},
                 headers={settings.request_id_header: request_id},
             )
 
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_context.reset(request_context_token)
     response.headers[settings.request_id_header] = request_id
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -288,6 +283,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         request_id,
         type(exc).__name__,
         exc_info=True,
+        extra={"request_id": request_id, "error_type": type(exc).__name__},
     )
     return JSONResponse(
         status_code=500,
