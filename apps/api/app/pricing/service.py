@@ -210,7 +210,12 @@ class InstrumentPricingService:
             current = await self.get_canonical(instrument_id)
             if current is not None and utc_now() <= current.valid_until:
                 results[instrument_id] = "fresh"
-                self._record_refresh_metrics(instrument_id, "fresh", started, current)
+                self._record_refresh_metrics(
+                    instrument_id,
+                    current.effective_status().value,
+                    started,
+                    current,
+                )
                 continue
             try:
                 refreshed = await self.refresh_instrument(instrument_id)
