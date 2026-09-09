@@ -60,14 +60,11 @@ services:
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
+    user: "999:1000"
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    cap_add:
-      - CHOWN
-      - SETGID
-      - SETUID
     command: ["sh", "/usr/local/bin/redis-safe-start.sh"]
     environment:
       REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-384mb}
