@@ -1,9 +1,10 @@
-import { BrowserRouter, useNavigate } from "react-router-dom";
+import { BrowserRouter, HashRouter, useNavigate } from "react-router-dom";
 import { AppRouter } from "@/app/router/AppRouter";
 import { AppProvider, useAppContext } from "@/app/context/AppContext";
 import { Toaster } from "sonner";
 import { useEffect, useState, useRef } from "react";
 import { SplashScreen } from "@/app/components/SplashScreen";
+import { applyPendingUpdate } from "@/pwa/registerServiceWorker";
 import { motion, AnimatePresence } from "motion/react";
 
 function AuthEventsBridge() {
@@ -23,33 +24,40 @@ function AuthEventsBridge() {
   return null;
 }
 
+// The splash is branding, not a loading gate. A live price dashboard that
+// blocks for seconds on every session start is worse than one that shows data
+// immediately, so it is capped short and only shown once per session.
+const SPLASH_DURATION_MS = 1200;
+
 function AppContent() {
-  const [isMobile, setIsMobile] = useState(false);
   const [showSplash, setShowSplash] = useState(() => {
     return !sessionStorage.getItem('splash-shown');
   });
   const { language, theme } = useAppContext();
-  const [splashReady, setSplashReady] = useState(false);
 
   useEffect(() => {
-    const checkMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    setIsMobile(checkMobile);
-
-    if (showSplash) {
-      const readyTimer = setTimeout(() => {
-        setSplashReady(true);
-      }, isMobile ? 4500 : 3000);
-      return () => clearTimeout(readyTimer);
-    }
-  }, [showSplash, isMobile]);
+    if (!showSplash) return;
+    const readyTimer = setTimeout(() => {
+      sessionStorage.setItem('splash-shown', 'true');
+      setShowSplash(false);
+    }, SPLASH_DURATION_MS);
+    return () => clearTimeout(readyTimer);
+  }, [showSplash]);
 
   const [showOfflineBanner, setShowOfflineBanner] = useState(false);
+  const [updateReady, setUpdateReady] = useState(false);
   const stabilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleSplashComplete = () => {
     sessionStorage.setItem('splash-shown', 'true');
     setShowSplash(false);
   };
+
+  useEffect(() => {
+    const onUpdate = () => setUpdateReady(true);
+    window.addEventListener('app-update-available', onUpdate);
+    return () => window.removeEventListener('app-update-available', onUpdate);
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -70,7 +78,7 @@ function AppContent() {
     };
   }, []);
 
-  return showSplash && !splashReady ? (
+  return showSplash ? (
     <SplashScreen onComplete={handleSplashComplete} language={language} theme={theme} />
   ) : (
     <>
@@ -85,6 +93,18 @@ function AppContent() {
             {language === 'fa' ? 'شما آفلاین هستید' : 'You are offline'}
           </motion.div>
         )}
+        {updateReady && (
+          <motion.button
+            type="button"
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            onClick={() => { void applyPendingUpdate(); }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full bg-emerald-600 text-white text-sm font-semibold shadow-lg"
+          >
+            {language === 'fa' ? 'نسخه جدید آماده است — بازخوانی' : 'New version ready — reload'}
+          </motion.button>
+        )}
       </AnimatePresence>
       <AppRouter />
     </>
@@ -92,13 +112,14 @@ function AppContent() {
 }
 
 export function App() {
+  const Router = window.electronAPI ? HashRouter : BrowserRouter;
   return (
     <AppProvider>
-      <BrowserRouter>
+      <Router>
         <AuthEventsBridge />
         <AppContent />
         <Toaster position="top-center" richColors />
-      </BrowserRouter>
+      </Router>
     </AppProvider>
   );
 }

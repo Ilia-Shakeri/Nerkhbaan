@@ -114,8 +114,18 @@ export function ChartAnalysisView() {
                   <div className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
                     {language === 'fa' ? asset.label_fa : asset.label_en}
                   </div>
-                  <div className={`text-xs mt-1 ${asset.trend === 'up' ? 'text-emerald-500' : 'text-red-500'}`}>
-                    {asset.change_percent > 0 ? '+' : ''}{asset.change_percent}%
+                  <div
+                    className={`text-xs mt-1 ${
+                      asset.change_percent === null || asset.change_percent === undefined
+                        ? isDark ? 'text-white/40' : 'text-black/40'
+                        : asset.trend === 'up'
+                          ? 'text-emerald-500'
+                          : 'text-red-500'
+                    }`}
+                  >
+                    {asset.change_percent === null || asset.change_percent === undefined
+                      ? '—'
+                      : `${asset.change_percent > 0 ? '+' : ''}${asset.change_percent}%`}
                   </div>
                 </motion.button>
               ))}

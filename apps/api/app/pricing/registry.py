@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
 
+from ..config import settings
 from .instruments import INSTRUMENTS
 from .models import PriceSemantic, ProviderRole, RequestPurpose, SourceSemantic
 
@@ -63,8 +64,15 @@ class ProviderDefinition:
     symbol_or_pair: str | None = None
     selected_price_semantic_contract: str | None = None
     independence_group: str | None = None
+    required_settings: tuple[str, ...] = ()
 
     def configured(self, settings: object) -> bool:
+        # A key alone is not enough when the provider also needs a symbol or a
+        # proxy base; without this the provider looks healthy and then fails
+        # every call with an opaque parser error.
+        for name in self.required_settings:
+            if not getattr(settings, name, None):
+                return False
         if self.provider_id.startswith("navasan_"):
             proxy = getattr(settings, "navasan_https_proxy_base_url", None)
             if not proxy:
@@ -102,25 +110,27 @@ def _bool_env(name: str, default: bool = True) -> bool:
 
 
 def _setting_url(base_setting: str, path: str) -> str:
-    defaults = {
-        "alanchand_api_base_url": "https://api.alanchand.com",
-        "goldapi_api_base_url": "https://www.goldapi.io/api",
-        "gold_api_base_url": "https://api.gold-api.com",
-        "metals_dev_api_base_url": "https://api.metals.dev/v1",
-        "nobitex_api_base_url": "https://api.nobitex.ir",
-        "tetherland_api_base_url": "https://api.tetherland.com",
-        "coinbase_api_base_url": "https://api.exchange.coinbase.com",
-        "coingecko_api_base_url": "https://api.coingecko.com/api/v3",
-        "coincap_api_base_url": "https://api.coincap.io/v2",
-        "wallex_api_base_url": "https://api.wallex.ir",
-        "tala_api_base_url": "https://api.tala.ir",
-        "navasan_api_base_url": "http://api.navasan.tech",
-        "navasan_https_proxy_base_url": "",
-        "nerkh_io_api_base_url": "https://api.nerkh.io",
-        "servix_api_base_url": "https://servix.cc",
-    }
-    base = os.getenv(base_setting.upper(), defaults[base_setting])
-    return urljoin(base.rstrip("/") + "/", path.lstrip("/"))
+    """Resolve a provider endpoint from its configured base URL.
+
+    Read through Settings rather than os.environ: pydantic-settings loads the
+    `.env` file without exporting it, so an os.getenv lookup here silently used
+    the built-in default while the rest of the application saw the configured
+    value. That divergence only appeared outside Docker, which is exactly where
+    it is hardest to notice.
+    """
+    base = getattr(settings, base_setting, None) or ""
+    if not base:
+        return ""
+    return urljoin(str(base).rstrip("/") + "/", path.lstrip("/"))
+
+
+def _navasan_base() -> str:
+    """Prefer the HTTPS proxy; the direct base is plain HTTP and carries a key."""
+    return (
+        "navasan_https_proxy_base_url"
+        if settings.navasan_https_proxy_base_url
+        else "navasan_api_base_url"
+    )
 
 
 def _env(name: str, default: str) -> str:
@@ -185,6 +195,7 @@ def _provider(
     symbol_or_pair: str | None = None,
     selected_price_semantic_contract: str | None = None,
     independence_group: str | None = None,
+    required_settings: tuple[str, ...] = (),
 ) -> ProviderDefinition:
     enabled = _bool_env(f"PRICING_PROVIDER_{provider_id.upper()}_ENABLED", enabled_default)
     return ProviderDefinition(
@@ -217,6 +228,7 @@ def _provider(
         symbol_or_pair=symbol_or_pair,
         selected_price_semantic_contract=selected_price_semantic_contract,
         independence_group=independence_group,
+        required_settings=required_settings,
     )
 
 
@@ -225,7 +237,7 @@ _NOBITEX_HEADERS = (("User-Agent", "Nerkhbaan-Pricing/2"),)
 _PROVIDERS = (
     _provider(
         "alanchand_gold18", "Alanchand Gold 18K", "GOLD_18K_TOMAN_GRAM",
-        ProviderRole.FALLBACK, 20, "0.80", _setting_url("alanchand_api_base_url", "/v1/markets/gold"),
+        ProviderRole.PRIMARY, 1, "0.80", _setting_url("alanchand_api_base_url", "/v1/markets/gold"),
         "alanchand_gold18_v1", "alanchand-gold18/1.0.0", 7200,
         rpm=2, rph=20, rpd=200, interval=7200,
         api_key_setting="alanchand_api_token", api_key_header="Authorization",
@@ -412,7 +424,7 @@ _PROVIDERS = (
         symbol_or_pair="BTCTMN",
     ),
     _provider(
-        "tala_gold24_toman", "TALA 24K Gold", "GOLD_24K_TOMAN_GRAM", ProviderRole.FALLBACK, 10,
+        "tala_gold24_toman", "TALA 24K Gold", "GOLD_24K_TOMAN_GRAM", ProviderRole.PRIMARY, 1,
         "0.78", _setting_url("tala_api_base_url", "/v1/rates"), "tala_gold24_toman_v1",
         "tala-rates/1.0.0", 60, rpm=4, rph=80, rpd=1000, interval=60,
         api_key_setting="tala_api_key", api_key_header="x-api-key",
@@ -422,9 +434,24 @@ _PROVIDERS = (
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
         symbol_or_pair=_env("TALA_GOLD24_TOMAN_KEY", "geram24k"),
+        required_settings=("tala_gold24_toman_key",),
     ),
     _provider(
-        "tala_gold18_toman", "TALA 18K Gold", "GOLD_18K_TOMAN_GRAM", ProviderRole.FALLBACK, 10,
+        "tala_silver999_toman", "TALA 999 Silver", "SILVER_999_TOMAN_GRAM",
+        ProviderRole.PRIMARY, 1, "0.78", _setting_url("tala_api_base_url", "/v1/rates"),
+        "tala_silver999_toman_v1", "tala-rates/1.0.0", 120,
+        rpm=4, rph=80, rpd=1000, interval=120,
+        api_key_setting="tala_api_key", api_key_header="x-api-key",
+        enabled_default=False,
+        source_semantic=SourceSemantic.AGGREGATOR,
+        source_family="tala", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        credential_placement="header",
+        symbol_or_pair=_env("TALA_SILVER999_TOMAN_KEY", ""),
+        required_settings=("tala_silver999_toman_key",),
+    ),
+    _provider(
+        "tala_gold18_toman", "TALA 18K Gold", "GOLD_18K_TOMAN_GRAM", ProviderRole.VERIFIER, 10,
         "0.78", _setting_url("tala_api_base_url", "/v1/rates"), "tala_gold18_toman_v1",
         "tala-rates/1.0.0", 60, rpm=4, rph=80, rpd=1000, interval=60,
         api_key_setting="tala_api_key", api_key_header="x-api-key",
@@ -434,6 +461,7 @@ _PROVIDERS = (
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
         symbol_or_pair=_env("TALA_GOLD18_TOMAN_KEY", "geram18k"),
+        required_settings=("tala_gold18_toman_key",),
     ),
     _provider(
         "tala_usdt_toman", "TALA USDT-Toman", "USDT_TOMAN", ProviderRole.FALLBACK, 10,
@@ -446,10 +474,39 @@ _PROVIDERS = (
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
         symbol_or_pair=_env("TALA_USDT_TOMAN_KEY", "usdt_irt"),
+        required_settings=("tala_usdt_toman_key",),
+    ),
+    _provider(
+        "navasan_usd_toman", "Navasan Free-Market USD", "USD_TOMAN",
+        ProviderRole.PRIMARY, 1, "0.72",
+        _setting_url(_navasan_base(), "/latest/"),
+        "navasan_usd_v1", "navasan-latest/1.0.0", 300,
+        rpm=2, rph=60, rpd=500, interval=300,
+        api_key_setting="navasan_api_key", api_key_query_parameter="api_key",
+        enabled_default=False,
+        source_semantic=SourceSemantic.AGGREGATOR,
+        source_family="navasan", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        requires_https=True,
+        credential_placement="query",
+        symbol_or_pair=_env("NAVASAN_USD_ITEM", "usd_sell"),
+    ),
+    _provider(
+        "servix_usd_toman", "Servix Free-Market USD", "USD_TOMAN",
+        ProviderRole.FALLBACK, 10, "0.70", _setting_url("servix_api_base_url", "/api/v1/assets"),
+        "servix_usd_rls_v1", "servix-assets/1.0.0", 300,
+        rpm=4, rph=80, rpd=1000, interval=300,
+        api_key_setting="servix_api_key", api_key_header="X-API-Key",
+        enabled_default=False,
+        source_semantic=SourceSemantic.AGGREGATOR,
+        source_family="servix", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        credential_placement="header",
+        symbol_or_pair="USD_RLS",
     ),
     _provider(
         "navasan_usdt", "Navasan USDT", "USDT_TOMAN", ProviderRole.FALLBACK, 20,
-        "0.72", _setting_url("navasan_https_proxy_base_url" if os.getenv("NAVASAN_HTTPS_PROXY_BASE_URL") else "navasan_api_base_url", "/latest/"), "navasan_usdt_v1",
+        "0.72", _setting_url(_navasan_base(), "/latest/"), "navasan_usdt_v1",
         "navasan-latest/1.0.0", 120, rpm=2, rph=60, rpd=500, interval=120,
         api_key_setting="navasan_api_key", api_key_query_parameter="api_key",
         enabled_default=False,
@@ -530,6 +587,41 @@ def providers_for(
         return providers
     allowed = set(roles)
     return tuple(provider for provider in providers if provider.role in allowed)
+
+
+def instrument_source_coverage(settings: object) -> dict[str, dict[str, object]]:
+    """Report which instruments actually have a usable direct source.
+
+    Silver in Toman shipped with no provider at all and quietly served formula
+    output as if it were a market price. Coverage is therefore computed rather
+    than assumed, so a missing chain shows up in health output instead of
+    looking like a healthy derived value.
+    """
+    coverage: dict[str, dict[str, object]] = {}
+    for instrument_id, instrument in INSTRUMENTS.items():
+        providers = PROVIDERS_BY_INSTRUMENT.get(instrument_id, ())
+        configured = [
+            provider.provider_id
+            for provider in providers
+            if provider.enabled and provider.configured(settings)
+        ]
+        coverage[instrument_id] = {
+            "registered": [provider.provider_id for provider in providers],
+            "configured": configured,
+            "has_direct_source": bool(configured),
+            "derived_fallback_allowed": instrument.allow_derived_fallback,
+            # Nothing can produce a value for this instrument at all.
+            "unservable": not configured and not instrument.allow_derived_fallback,
+        }
+    return coverage
+
+
+def missing_source_instruments(settings: object) -> list[str]:
+    return sorted(
+        instrument_id
+        for instrument_id, row in instrument_source_coverage(settings).items()
+        if not row["has_direct_source"]
+    )
 
 
 def purpose_role(purpose: RequestPurpose) -> tuple[ProviderRole, ...]:

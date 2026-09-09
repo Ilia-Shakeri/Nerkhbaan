@@ -2,7 +2,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
+    "@/*": ["../web/src/*"],
       "@nerkhbaan/ui/*": ["../../packages/ui/src/*"]
     },
     "target": "ES2020",
@@ -21,5 +21,5 @@
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src", "../web/src"]
 }

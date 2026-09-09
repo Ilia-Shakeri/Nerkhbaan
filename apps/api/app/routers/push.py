@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
@@ -8,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..db import get_db
-from ..models import PushSubscription
-from ..security import decode_access_token, get_client_ip, rate_limit_hit, validate_public_https_url
+from ..models import PushSubscription, User, UserSession
+from ..security import decode_access_claims, get_client_ip, rate_limit_hit, validate_public_https_url
 
 router = APIRouter(prefix="/api/push", tags=["push"])
 
@@ -19,6 +21,7 @@ _optional_bearer = HTTPBearer(auto_error=False)
 def _optional_user_id(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+    db: Session = Depends(get_db),
 ) -> int | None:
     """Resolve the user id when a valid token is present, otherwise None.
 
@@ -28,10 +31,31 @@ def _optional_user_id(
     token = credentials.credentials if credentials else request.cookies.get(settings.auth_cookie_name)
     if not token:
         return None
-    subject = decode_access_token(token)
-    if subject and subject.isdigit():
-        return int(subject)
-    return None
+    claims = decode_access_claims(token)
+    if not claims:
+        return None
+    subject = str(claims.get("sub") or "")
+    if not subject.isdigit():
+        return None
+    # A subscription binds future alert deliveries to an account, so it must be
+    # checked against the same revocation state as any other authenticated
+    # call rather than trusting an unexpired signature alone.
+    user = db.get(User, int(subject))
+    if not user or not user.is_active:
+        return None
+    if int(claims.get("sv", 1)) != user.security_version:
+        return None
+    session_id = claims.get("sid")
+    if session_id:
+        session = db.scalar(
+            select(UserSession).where(
+                UserSession.id == str(session_id),
+                UserSession.user_id == user.id,
+            )
+        )
+        if not session or session.revoked_at is not None or session.expires_at <= datetime.now(UTC):
+            return None
+    return user.id
 
 
 class PushKeys(BaseModel):
@@ -40,7 +64,9 @@ class PushKeys(BaseModel):
 
 
 class PushSubscriptionPayload(BaseModel):
-    endpoint: str = Field(min_length=12, max_length=2048)
+    # Bounded by the push_subscriptions.endpoint column; accepting more only
+    # moved the failure to a 500 at insert time.
+    endpoint: str = Field(min_length=12, max_length=500)
     keys: PushKeys
 
     @field_validator("endpoint")
@@ -52,6 +78,10 @@ class PushSubscriptionPayload(BaseModel):
             if item.strip()
         }
         return validate_public_https_url(value, allowed_hosts=allowed_hosts)
+
+
+class PushUnsubscribeRequest(BaseModel):
+    endpoint: str = Field(min_length=12, max_length=500)
 
 
 @router.post("/subscribe", status_code=status.HTTP_201_CREATED)
@@ -73,16 +103,13 @@ def subscribe(
         select(PushSubscription).where(PushSubscription.endpoint == payload.endpoint)
     )
     if existing:
-        if existing.user_id is not None and existing.user_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Subscription is already registered.",
-            )
-        # Keep the stored keys and ownership current on re-subscription.
+        # A browser endpoint belongs to the device, not to an account. Refusing
+        # to re-bind it left the second user of a shared device permanently
+        # unable to enable push, and left anonymous subscriptions - created
+        # before sign-in - orphaned so alerts never reached them.
         existing.p256dh = payload.keys.p256dh
         existing.auth = payload.keys.auth
-        if user_id is not None:
-            existing.user_id = user_id
+        existing.user_id = user_id
     else:
         db.add(
             PushSubscription(
@@ -94,3 +121,27 @@ def subscribe(
         )
     db.commit()
     return {"status": "subscribed"}
+
+
+@router.post(
+    "/unsubscribe",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    response_class=Response,
+)
+def unsubscribe(
+    payload: PushUnsubscribeRequest,
+    db: Session = Depends(get_db),
+) -> Response:
+    """Drop a browser subscription.
+
+    Signing out has to be able to detach the endpoint, otherwise the next user
+    of the device inherits the previous account's notifications.
+    """
+    subscription = db.scalar(
+        select(PushSubscription).where(PushSubscription.endpoint == payload.endpoint)
+    )
+    if subscription is not None:
+        db.delete(subscription)
+        db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -12,6 +12,7 @@ from typing import Any, Callable
 
 from sqlalchemy import select
 
+from ..config import settings
 from ..db import SessionLocal
 from .cache import PricingRedisStore, PricingRedisUnavailable, pricing_redis
 from .db_models import (
@@ -49,12 +50,11 @@ class PricingPersistence:
 
     def __init__(self, store: PricingRedisStore = pricing_redis) -> None:
         self.store = store
-        self.stream_max_length = _positive_int_env(
-            "PRICING_PERSISTENCE_STREAM_MAXLEN", 50_000
-        )
-        self.raw_retention_days = _positive_int_env(
-            "PRICING_RAW_PAYLOAD_RETENTION_DAYS", 30
-        )
+        # Read through Settings so a .env file and the process environment
+        # cannot disagree; these were previously separate os.environ lookups
+        # with their own defaults, which made the declared settings dead.
+        self.stream_max_length = settings.pricing_persistence_stream_maxlen
+        self.raw_retention_days = settings.raw_provider_payload_retention_days
         self.consumer_name = f"{socket.gethostname()}-{os.getpid()}"
 
     async def sync_provider_catalog(self) -> None:

@@ -4,9 +4,17 @@ set -eu
 
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yaml}"
 DEPLOY_WAIT_SECONDS="${DEPLOY_WAIT_SECONDS:-240}"
+BACKEND_REPLICAS="${BACKEND_REPLICAS:-2}"
+OPERATOR_EVIDENCE_PATH="${OPERATOR_EVIDENCE_PATH:-}"
 PREVIOUS_COMMIT="unknown"
 
 cd /opt/Nerkhbaan
+
+if [ -z "$OPERATOR_EVIDENCE_PATH" ]; then
+    echo "Deploy stopped: OPERATOR_EVIDENCE_PATH is required."
+    exit 1
+fi
+python scripts/verify_operator_gates.py "$OPERATOR_EVIDENCE_PATH"
 
 deploy_logs() {
     docker compose -f "$COMPOSE_FILE" ps || true
@@ -31,7 +39,7 @@ echo "==> Step 3/5: pull service images"
 docker compose -f "$COMPOSE_FILE" pull --ignore-buildable
 
 echo "==> Step 4/5: rebuild, recreate, and wait for health"
-docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate --wait --wait-timeout "$DEPLOY_WAIT_SECONDS"
+docker compose -f "$COMPOSE_FILE" up -d --build --force-recreate --wait --wait-timeout "$DEPLOY_WAIT_SECONDS" --scale "backend=$BACKEND_REPLICAS"
 
 echo "==> Step 5/5: show healthy service state"
 docker compose -f "$COMPOSE_FILE" ps

@@ -13,13 +13,18 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      // injectManifest, not generateSW: the app needs its own push and
+      // notificationclick handlers, which a generated worker does not have.
+      strategies: "injectManifest",
+      srcDir: "src/pwa",
+      filename: "sw.ts",
+      registerType: "prompt",
       injectRegister: false,
       includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
       manifest: {
         name: "Nerkhbaan",
         short_name: "Nerkhbaan",
-        description: "Secure cyberpunk market monitoring dashboard.",
+        description: "Live gold, silver, currency and crypto prices.",
         theme_color: "#051024",
         background_color: "#020817",
         display: "standalone",
@@ -41,15 +46,17 @@ export default defineConfig({
           }
         ]
       },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,png,svg,ico,woff2}"],
-        navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\//],
-        clientsClaim: true,
-        skipWaiting: true
+      injectManifest: {
+        // Precache only what the app actually loads. The previous glob pulled
+        // in every weight of every bundled font family plus large images, so a
+        // first visit downloaded megabytes before the dashboard was usable.
+        globPatterns: ["**/*.{js,css,html,ico}"],
+        globIgnores: ["**/fonts/**", "**/node_modules/**"],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024
       },
       devOptions: {
-        enabled: true
+        // A worker running in dev serves stale bundles and hides real changes.
+        enabled: false
       }
     })
   ],

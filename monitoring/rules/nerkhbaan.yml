@@ -1,0 +1,39 @@
+groups:
+  - name: nerkhbaan
+    rules:
+      - alert: NerkhbaanApiDown
+        expr: up{job="nerkhbaan-api"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: API metrics target is down
+      - alert: NerkhbaanPriceUnavailable
+        expr: max by (instrument) (nerkhbaan_canonical_status{status=~"expired|unavailable|failed"}) == 1
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Price is not usable for {{ $labels.instrument }}
+      - alert: NerkhbaanProviderFailureRate
+        expr: sum by (provider) (rate(nerkhbaan_provider_request_total{status!="success"}[10m])) / clamp_min(sum by (provider) (rate(nerkhbaan_provider_request_total[10m])), 0.001) > 0.25
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: Provider failure rate is high for {{ $labels.provider }}
+      - alert: NerkhbaanDeadLetters
+        expr: nerkhbaan_queue_depth{queue="dead_letters"} > 0
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Alert dead-letter queue is not empty
+      - alert: NerkhbaanPersistenceBacklog
+        expr: nerkhbaan_queue_depth{queue="persistence"} >= 10000
+        for: 5m
+        labels: {severity: critical}
+        annotations:
+          summary: Pricing persistence backlog reached its health cap
+      - alert: NerkhbaanRedisMemoryHigh
+        expr: redis_memory_used_bytes / clamp_min(redis_memory_max_bytes, 1) > 0.8
+        for: 5m
+        labels: {severity: warning}
+        annotations:
+          summary: Redis memory is above 80 percent

@@ -39,7 +39,9 @@ type AssetCard = {
   label: { fa: string; en: string };
   priceUsd: number | null;
   priceToman: number | null;
-  changePercent: number;
+  // Null whenever no 24h baseline exists yet — a new instrument, or a chain
+  // that has not produced two comparable points.
+  changePercent: number | null;
   isUp: boolean;
   history: AssetPoint[];
   sourceUsd: string;
@@ -105,6 +107,10 @@ const ASSET_LABELS: Record<AssetId, { fa: string; en: string }> = {
   usdt: { fa: 'تتر', en: 'Tether' },
   btc: { fa: 'بیت کوین', en: 'Bitcoin' }
 };
+
+/** Narrow an optional change percentage to a usable number. */
+const hasChange = (value: number | null | undefined): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
 
 const getInitialAssetOrder = (): AssetId[] => {
   if (typeof window === 'undefined') {
@@ -457,7 +463,11 @@ export function DashboardView() {
     queryKey: queryKeys.prices,
     queryFn: ({ signal }) => getPrices(signal),
     placeholderData: keepPreviousData,
-    refetchInterval: socketStatus === 'live' ? false : 15_000,
+    // Never stop polling entirely. The socket only pushes when a canonical
+    // value changes, so a stalled pricing pipeline would otherwise leave the
+    // last price on screen — with a "live" badge — indefinitely. A slow poll
+    // while connected keeps freshness and status honest.
+    refetchInterval: socketStatus === 'live' ? 60_000 : 15_000,
     refetchIntervalInBackground: false,
   });
 
@@ -574,8 +584,16 @@ export function DashboardView() {
           const base = byId.get(assetId) ?? fallback;
           if (base) byId.set(assetId, { ...base, ...next } as PriceAsset);
         }
+        // Only advance refreshed_at when the event actually carried one.
+        // Stamping the receive time made a cached or stale quote read as
+        // "just refreshed" every time any unrelated event arrived.
+        const refreshedAt = typeof payload.refreshed_at === 'string'
+          ? payload.refreshed_at
+          : typeof payload.canonical_at === 'string'
+            ? payload.canonical_at
+            : current?.refreshed_at ?? new Date().toISOString();
         return {
-          refreshed_at: typeof payload.refreshed_at === 'string' ? payload.refreshed_at : new Date().toISOString(),
+          refreshed_at: refreshedAt,
           source: payload.source && typeof payload.source === 'object'
             ? payload.source as PricesResponse['source']
             : current?.source ?? {},
@@ -909,14 +927,18 @@ export function DashboardView() {
 
                 <div className="flex items-center gap-3">
                   <div className={`flex items-center gap-1 rounded-2xl px-3 py-1.5 text-xs font-semibold backdrop-blur-md ${
-                    !Number.isFinite(asset.changePercent)
+                    !hasChange(asset.changePercent)
                       ? isDark ? 'bg-white/5 text-[#CDBB8C]' : 'bg-black/5 text-[#7A5E24]'
                       : asset.isUp
                         ? isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
                         : isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-700'
                   }`}>
-                    {Number.isFinite(asset.changePercent) && (asset.isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
-                    <span dir="ltr">{Number.isFinite(asset.changePercent) ? `${Math.abs(asset.changePercent).toFixed(2)}%` : '0%'}</span>
+                    {hasChange(asset.changePercent) && (asset.isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
+                    <span dir="ltr">
+                      {/* An unknown change is shown as unknown. Rendering it as
+                          0% claimed the price had not moved. */}
+                      {hasChange(asset.changePercent) ? `${Math.abs(asset.changePercent).toFixed(2)}%` : '—'}
+                    </span>
                   </div>
                   <Button
                     onClick={() => {

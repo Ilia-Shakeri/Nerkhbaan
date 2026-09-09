@@ -451,13 +451,19 @@ class CanonicalPricePolicy:
         )
         if source_live_eligible_until is not None:
             valid_until = min(valid_until, ensure_utc(source_live_eligible_until))
+        # Carry the instrument's spread bound with the quote so downstream
+        # eligibility checks have something to compare against.
+        summary = dict(source_summary)
+        summary.setdefault(
+            "maximum_spread_bps", json_number(instrument.maximum_spread_bps)
+        )
         return CanonicalQuote.create(
             instrument_id=instrument.instrument_id,
             price=price,
             status=status,
             primary_quote_id=primary_quote_id,
             verification_quote_ids=verification_quote_ids,
-            source_summary=source_summary,
+            source_summary=summary,
             observed_at=observed_at,
             canonical_at=current,
             valid_until=valid_until,

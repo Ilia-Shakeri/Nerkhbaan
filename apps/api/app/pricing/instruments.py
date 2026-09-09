@@ -90,6 +90,16 @@ _DEFAULT_INSTRUMENTS = {
         Region.GLOBAL, WeightUnit.TROY_OUNCE, "0.9999", 3,
         300, 900, 3600, "2", "7", "5", "500", 7, 2,
     ),
+    # Free-market USD/Toman. Metals are quoted against the dollar, so deriving
+    # them through USDT — which carries a persistent premium in Iran — biases
+    # every Toman metal price. This instrument is the correct bridge when an
+    # operator configures a source for it; USDT stays the fallback.
+    "USD_TOMAN": _instrument(
+        "USD_TOMAN", "USD", Currency.TOMAN, Market.IRAN_EXCHANGE,
+        Region.IRAN, WeightUnit.UNIT, None, 0,
+        60, 180, 900, "1", "4", "1000", "1000000", 9, 2,
+        derived_fallback=True,
+    ),
     "USDT_TOMAN": _instrument(
         "USDT_TOMAN", "USDT", Currency.TOMAN, Market.IRAN_EXCHANGE,
         Region.IRAN, WeightUnit.UNIT, None, 0,
@@ -164,6 +174,9 @@ def _apply_environment(definition: InstrumentDefinition) -> InstrumentDefinition
             definition.maximum_dynamic_threshold_percent,
         ),
     )
+    spread = _decimal_override(
+        f"PRICING_MAX_SPREAD_BPS_{prefix}", definition.maximum_spread_bps
+    )
     return replace(
         definition,
         operational_ttl_seconds=ttl,
@@ -171,6 +184,7 @@ def _apply_environment(definition: InstrumentDefinition) -> InstrumentDefinition
         expire_after_seconds=expire,
         base_anomaly_threshold_percent=base,
         maximum_dynamic_threshold_percent=maximum,
+        maximum_spread_bps=spread,
     )
 
 

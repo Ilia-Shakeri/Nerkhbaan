@@ -9,6 +9,7 @@ import React, {
   useState
 } from 'react';
 import { api, type UserProfile } from '../services/api';
+import { disablePushNotifications, syncPushSubscription } from '@/pwa/push';
 
 type Language = 'fa' | 'en';
 type Theme = 'dark' | 'light';
@@ -63,6 +64,9 @@ export function AppProvider({
         if (active) {
           setIsAuthenticated(true);
           setMustChangePassword(user.must_change_password);
+          // A subscription created before sign-in is stored with no account
+          // attached, so re-send it once we know who the user is.
+          void syncPushSubscription();
         }
       })
       .catch(() => {
@@ -103,12 +107,16 @@ export function AppProvider({
     setIsAuthenticated(true);
     setMustChangePassword(user.must_change_password);
     setAuthReady(true);
+    void syncPushSubscription();
   }, []);
 
   const logout = useCallback(async () => {
     setIsAuthenticated(false);
     setMustChangePassword(false);
     setAuthReady(true);
+    // Release the browser endpoint before the session goes away, so the next
+    // person to use this device does not inherit the previous user's alerts.
+    await disablePushNotifications();
     try {
       await api.auth.signout();
     } catch {

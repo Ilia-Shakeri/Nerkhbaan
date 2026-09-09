@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BellRing, BellOff, Trash2, Search, Plus, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
+import { BellRing, BellOff, Trash2, Pencil, Search, Plus, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
@@ -26,6 +26,8 @@ export function AlertsView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // Null while creating; an id while editing an existing alert.
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const [formAsset, setFormAsset] = useState('gold');
   const [formCondition, setFormCondition] = useState<'above' | 'below'>('above');
@@ -52,6 +54,10 @@ export function AlertsView() {
     deleteFail: { fa: 'خطا در حذف هشدار',        en: 'Failed to remove'   },
     createOk:   { fa: 'هشدار ایجاد شد',         en: 'Alert created'      },
     createFail: { fa: 'خطا در ایجاد هشدار',      en: 'Failed to create'   },
+    updateOk:   { fa: 'هشدار به‌روزرسانی شد',    en: 'Alert updated'      },
+    updateFail: { fa: 'خطا در به‌روزرسانی',       en: 'Failed to update'   },
+    editAlert:  { fa: 'ویرایش هشدار',           en: 'Edit Alert'         },
+    save:       { fa: 'ذخیره',                  en: 'Save'               },
     notifyApp:  { fa: 'اعلان درون‌برنامه',       en: 'In-App Notification'},
     notifyEmail:{ fa: 'ایمیل',                  en: 'Email'              },
     create:     { fa: 'ایجاد',                  en: 'Create'             },
@@ -81,27 +87,65 @@ export function AlertsView() {
     }
   };
 
-  const handleCreate = async () => {
+  const openCreate = () => {
+    setEditingId(null);
+    setFormAsset('gold');
+    setFormCondition('above');
+    setFormTargetPrice('');
+    setFormCurrencyMode(currencyMode);
+    setFormNotifyApp(true);
+    setFormNotifyEmail(false);
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (alert: AlertResponse) => {
+    setEditingId(alert.id);
+    setFormAsset(alert.asset);
+    setFormCondition(alert.condition);
+    setFormTargetPrice(alert.target_price != null ? String(alert.target_price) : '');
+    setFormCurrencyMode(alert.currency_mode);
+    setFormNotifyApp(alert.notify_app);
+    setFormNotifyEmail(alert.notify_email);
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async () => {
     if (!formTargetPrice) return;
     setIsSaving(true);
     try {
-      const created = await api.alerts.create({
-        asset: formAsset,
-        target_price: parseFloat(formTargetPrice),
-        currency_mode: formCurrencyMode,
-        condition: formCondition,
-        notify_app: formNotifyApp,
-        notify_email: formNotifyEmail,
-        notify_webhook: false,
-        webhook_url: null,
-        enable_dlq: false,
-      });
-      setAlerts((prev) => [created, ...prev]);
-      toast.success(t.createOk[language]);
+      if (editingId !== null) {
+        // Editing in place keeps the alert's cooldown and trigger history,
+        // which deleting and recreating threw away.
+        const updated = await api.alerts.update(editingId, {
+          target_price: parseFloat(formTargetPrice),
+          currency_mode: formCurrencyMode,
+          condition: formCondition,
+          notify_app: formNotifyApp,
+          notify_email: formNotifyEmail,
+        });
+        setAlerts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
+        toast.success(t.updateOk[language]);
+      } else {
+        const created = await api.alerts.create({
+          asset: formAsset,
+          target_price: parseFloat(formTargetPrice),
+          currency_mode: formCurrencyMode,
+          condition: formCondition,
+          notify_app: formNotifyApp,
+          notify_email: formNotifyEmail,
+          notify_webhook: false,
+          webhook_url: null,
+          enable_dlq: false,
+        });
+        setAlerts((prev) => [created, ...prev]);
+        toast.success(t.createOk[language]);
+      }
       setIsModalOpen(false);
       setFormTargetPrice('');
-    } catch {
-      toast.error(t.createFail[language]);
+      setEditingId(null);
+    } catch (error) {
+      const fallback = editingId !== null ? t.updateFail[language] : t.createFail[language];
+      toast.error(error instanceof Error ? error.message : fallback);
     } finally {
       setIsSaving(false);
     }
@@ -130,7 +174,7 @@ export function AlertsView() {
           />
         </div>
         <Button
-          onClick={() => setIsModalOpen(true)}
+          onClick={openCreate}
           className={`shrink-0 gap-2 rounded-xl font-semibold ${isDark ? 'bg-[#D4AF37] text-black hover:bg-[#E8C45A]' : 'bg-[#D4AF37] text-black hover:bg-[#C49A20]'}`}
         >
           <Plus size={16} />
@@ -216,6 +260,16 @@ export function AlertsView() {
                         <Button
                           variant="ghost"
                           size="icon"
+                          aria-label={t.editAlert[language]}
+                          onClick={() => openEdit(alert)}
+                          className={`h-9 w-9 rounded-lg ${isDark ? 'text-[#5A4E35] hover:bg-[#D4AF37]/10 hover:text-[#D4AF37]' : 'text-[#C0A050] hover:bg-[#D4AF37]/15 hover:text-[#8A6A20]'}`}
+                        >
+                          <Pencil size={16} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t.deleteOk[language]}
                           onClick={() => handleDelete(alert.id)}
                           className={`h-9 w-9 rounded-lg ${isDark ? 'text-[#5A4E35] hover:bg-red-500/10 hover:text-red-400' : 'text-[#C0A050] hover:bg-red-50 hover:text-red-600'}`}
                         >
@@ -231,7 +285,11 @@ export function AlertsView() {
         </div>
       )}
 
-      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={t.newAlert[language]}>
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => { setIsModalOpen(false); setEditingId(null); }}
+        title={editingId !== null ? t.editAlert[language] : t.newAlert[language]}
+      >
         <div className="space-y-5 pt-2">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
@@ -299,16 +357,18 @@ export function AlertsView() {
             <Button
               variant="outline"
               className={`flex-1 rounded-xl ${isDark ? 'border-white/10 text-[#A89668]' : 'border-black/10 text-[#8A6A25]'}`}
-              onClick={() => setIsModalOpen(false)}
+              onClick={() => { setIsModalOpen(false); setEditingId(null); }}
             >
               {t.cancel[language]}
             </Button>
             <Button
               disabled={isSaving || !formTargetPrice}
-              onClick={handleCreate}
+              onClick={handleSave}
               className="flex-1 rounded-xl bg-[#D4AF37] font-semibold text-black hover:bg-[#E8C45A] disabled:opacity-50"
             >
-              {isSaving ? <Loader2 size={16} className="animate-spin" /> : t.create[language]}
+              {isSaving
+                ? <Loader2 size={16} className="animate-spin" />
+                : editingId !== null ? t.save[language] : t.create[language]}
             </Button>
           </div>
         </div>

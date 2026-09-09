@@ -37,4 +37,4 @@ ReactDOM.createRoot(rootElement).render(
 );
 
 // Initialize service worker for PWA functionality
-registerServiceWorker();
+if (!window.electronAPI) registerServiceWorker();

@@ -40,6 +40,7 @@ RUN npm run build --workspace=nerkhbaan-admin-web
 FROM nginx:1.30.4-alpine3.24 AS runtime
 
 RUN rm -rf /usr/share/nginx/html/*
+COPY apps/admin-web/security-headers.conf /etc/nginx/security-headers.inc
 COPY apps/admin-web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/apps/admin-web/dist /usr/share/nginx/html
 

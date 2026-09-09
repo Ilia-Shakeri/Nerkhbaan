@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import UTC, datetime
 from typing import Any
+
+from ..config import settings
 
 from .history import TIMEFRAMES
 from .instruments import LEGACY_ASSET_MAPPING
@@ -24,8 +28,33 @@ _CHART_ERROR = {
 class LegacyPricingAdapter:
     def __init__(self, service: InstrumentPricingService = instrument_pricing_service) -> None:
         self.service = service
+        self._cache: tuple[float, dict[str, Any]] | None = None
+        self._cache_lock = asyncio.Lock()
 
     async def get_prices(self) -> dict[str, Any]:
+        """Aggregate snapshot for the public price endpoint.
+
+        Built from ten canonical reads plus eight short-history reads, so it is
+        cached for a couple of seconds. Recomputing it per request made an
+        unauthenticated endpoint the heaviest Redis consumer in the system, and
+        the underlying data cannot change faster than the refresh interval.
+        """
+        ttl = max(1, settings.pricing_provider_aggregate_cache_seconds)
+        now = time.monotonic()
+        cached = self._cache
+        if cached is not None and now - cached[0] < ttl:
+            return cached[1]
+        async with self._cache_lock:
+            # Re-check: concurrent callers should share one rebuild.
+            cached = self._cache
+            now = time.monotonic()
+            if cached is not None and now - cached[0] < ttl:
+                return cached[1]
+            payload = await self._build_prices()
+            self._cache = (time.monotonic(), payload)
+            return payload
+
+    async def _build_prices(self) -> dict[str, Any]:
         snapshots = await self.service.get_all_canonical()
         assets = [
             await self._asset_payload(asset, snapshots)
@@ -72,16 +101,52 @@ class LegacyPricingAdapter:
         return {
             "checked_at": datetime.now(UTC).isoformat(),
             "last_refresh_at": max(times).isoformat() if times else None,
-            "startup": {
-                "checked_at": datetime.now(UTC).isoformat(),
-                "required_env_keys": [],
-                "missing_env_keys": [],
-                "optional_env_keys": [],
-                "missing_optional_env_keys": [],
-                "strict_mode": False,
-                "ok": True,
-            },
+            "startup": self.startup_checks(),
             "chains": chains,
+        }
+
+    @staticmethod
+    def startup_checks() -> dict[str, Any]:
+        """Real provider-key and coverage state, not a placeholder.
+
+        This block previously reported ``ok: True`` with empty key lists no
+        matter what was configured, which made a completely unsourced
+        instrument look healthy.
+        """
+        from .registry import PROVIDERS, instrument_source_coverage
+
+        coverage = instrument_source_coverage(settings)
+        missing_sources = sorted(
+            instrument_id
+            for instrument_id, row in coverage.items()
+            if not row["has_direct_source"]
+        )
+        unservable = sorted(
+            instrument_id
+            for instrument_id, row in coverage.items()
+            if row["unservable"]
+        )
+        key_settings = sorted(
+            {
+                provider.api_key_setting
+                for provider in PROVIDERS.values()
+                if provider.api_key_setting
+            }
+        )
+        missing_keys = [
+            name for name in key_settings if not getattr(settings, name, None)
+        ]
+        strict = bool(settings.pricing_require_provider_keys)
+        return {
+            "checked_at": datetime.now(UTC).isoformat(),
+            "required_env_keys": key_settings if strict else [],
+            "missing_env_keys": missing_keys if strict else [],
+            "optional_env_keys": [] if strict else key_settings,
+            "missing_optional_env_keys": [] if strict else missing_keys,
+            "strict_mode": strict,
+            "instruments_without_direct_source": missing_sources,
+            "instruments_unservable": unservable,
+            "ok": not unservable and not (strict and missing_keys),
         }
 
     async def _asset_payload(
@@ -106,6 +171,16 @@ class LegacyPricingAdapter:
             "label_en": _LABELS[asset]["en"],
             "price_usd": float(usd.price) if usd else None,
             "price_toman": float(toman.price) if toman else None,
+            # The two legs are different instruments, not one asset in two
+            # currencies: gold is a troy ounce of 0.9999 in USD and a gram of
+            # 0.750 in Toman. Publishing the descriptors stops the client from
+            # rendering them as if they were interchangeable.
+            "instrument_id_usd": usd_id,
+            "instrument_id_toman": toman_id,
+            "unit_usd": self._unit_descriptor(usd_id),
+            "unit_toman": self._unit_descriptor(toman_id),
+            "change_percent_usd": float(usd.change_24h) if usd and usd.change_24h is not None else None,
+            "change_percent_toman": float(toman.change_24h) if toman and toman.change_24h is not None else None,
             "change_percent": float(change) if change is not None else None,
             "trend": "neutral" if change is None else ("up" if change >= 0 else "down"),
             "history": history,
@@ -120,6 +195,20 @@ class LegacyPricingAdapter:
         payload.update(self._quote_policy_fields("usd", usd))
         payload.update(self._quote_policy_fields("toman", toman))
         return payload
+
+    @staticmethod
+    def _unit_descriptor(instrument_id: str) -> dict[str, Any]:
+        from .instruments import get_instrument
+
+        definition = get_instrument(instrument_id)
+        return {
+            "instrument_id": definition.instrument_id,
+            "quote_currency": definition.quote_currency.value,
+            "weight_unit": definition.weight_unit.value,
+            "purity": float(definition.purity) if definition.purity is not None else None,
+            "market": definition.market.value,
+            "display_decimals": definition.display_decimals,
+        }
 
     @staticmethod
     def _quote_policy_fields(
@@ -178,8 +267,6 @@ class LegacyPricingAdapter:
         }
 
     async def _paired_history(self, usd_id: str, toman_id: str, timeframe: str):
-        import asyncio
-
         return await asyncio.gather(
             self.service.canonical_history(usd_id, timeframe),
             self.service.canonical_history(toman_id, timeframe),
@@ -188,8 +275,6 @@ class LegacyPricingAdapter:
     async def _short_history(
         self, usd_id: str, toman_id: str
     ) -> list[dict[str, Any]]:
-        import asyncio
-
         try:
             usd_quotes, toman_quotes = await asyncio.gather(
                 self.service.store.recent_canonical(usd_id, limit=48),

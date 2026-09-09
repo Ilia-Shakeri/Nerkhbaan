@@ -18,6 +18,9 @@ node_modules/
 
 # Build outputs
 dist/
+apps/desktop/release/
+test-results/
+playwright-report/
 build/
 out/
 apps/web/dev-dist/
@@ -54,6 +57,8 @@ full_project_code.txt
 full_Nerkhbaan_project_code.txt
 code_dumper.py
 apps/api/price_cache.json
+_export*.tar.gz
+_claude_tmp/
 
 # Private operational notes and credentials
 ALERT_SETUP.md

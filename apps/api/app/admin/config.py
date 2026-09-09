@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Literal
 
+from ..config import settings
+
 
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
@@ -45,42 +47,54 @@ class AdminRuntimeConfig:
 
 @lru_cache(maxsize=1)
 def get_admin_config() -> AdminRuntimeConfig:
-    same_site_raw = os.getenv("ADMIN_COOKIE_SAMESITE", "strict").strip().lower()
+    """Admin runtime settings.
+
+    Values come from the shared Settings object so that a `.env` file and the
+    process environment cannot disagree. Reading os.environ directly here meant
+    the admin layer silently used its own defaults whenever the application was
+    started outside Docker, including a frontend origin that did not match the
+    one CORS allowed.
+    """
+    same_site_raw = os.getenv(
+        "ADMIN_COOKIE_SAMESITE", settings.auth_cookie_samesite
+    ).strip().lower()
     same_site: Literal["lax", "strict", "none"] = (
         same_site_raw if same_site_raw in {"lax", "strict", "none"} else "strict"
     )
-    cookie_secure = _env_bool("ADMIN_COOKIE_SECURE", True)
+    cookie_secure = _env_bool("ADMIN_COOKIE_SECURE", settings.auth_cookie_secure)
     if same_site == "none" and not cookie_secure:
         same_site = "strict"
-    domain = os.getenv("ADMIN_COOKIE_DOMAIN", "").strip() or None
+    domain = (settings.admin_cookie_domain or "").strip() or None
     return AdminRuntimeConfig(
-        frontend_origin=os.getenv("ADMIN_FRONTEND_ORIGIN", "http://localhost:4174").rstrip("/"),
-        cookie_name=os.getenv("ADMIN_COOKIE_NAME", "nerkhbaan_admin_session").strip()
-        or "nerkhbaan_admin_session",
+        frontend_origin=settings.admin_frontend_origin.rstrip("/"),
+        cookie_name=settings.admin_cookie_name.strip() or "nerkhbaan_admin_session",
         cookie_secure=cookie_secure,
         cookie_samesite=same_site,
         cookie_domain=domain,
         session_duration_minutes=_env_int(
             "ADMIN_SESSION_DURATION_MINUTES",
-            _env_int("ADMIN_SESSION_MINUTES", 30, 5, 480),
+            settings.admin_session_minutes,
             5,
-            480,
+            240,
         ),
         reauthentication_minutes=_env_int(
             "ADMIN_REAUTH_DURATION_MINUTES",
-            _env_int("ADMIN_REAUTH_MINUTES", 5, 1, 15),
+            settings.admin_reauth_minutes,
             1,
             15,
         ),
-        ip_allowlist=os.getenv("ADMIN_IP_ALLOWLIST", "").strip(),
+        ip_allowlist=settings.admin_ip_allowlist.strip(),
         trusted_proxy_ips=os.getenv(
-            "ADMIN_TRUSTED_PROXY_IPS",
-            os.getenv("TRUSTED_PROXY_IPS", "127.0.0.1,::1"),
+            "ADMIN_TRUSTED_PROXY_IPS", settings.trusted_proxy_ips
         ).strip(),
         bind_ip=_env_bool("ADMIN_SESSION_BIND_IP", False),
         bind_user_agent=_env_bool("ADMIN_SESSION_BIND_USER_AGENT", True),
-        frontend_enabled=_env_bool("ADMIN_FRONTEND_ENABLED", True),
-        private_network_only=_env_bool("ADMIN_PRIVATE_NETWORK_ONLY", False),
-        login_failure_limit=_env_int("ADMIN_LOGIN_FAILURE_LIMIT", 5, 3, 10),
-        lockout_minutes=_env_int("ADMIN_LOCKOUT_MINUTES", 30, 5, 1440),
+        frontend_enabled=settings.admin_frontend_enabled,
+        private_network_only=settings.admin_private_network_only,
+        login_failure_limit=_env_int(
+            "ADMIN_LOGIN_FAILURE_LIMIT", settings.admin_login_failure_limit, 3, 10
+        ),
+        lockout_minutes=_env_int(
+            "ADMIN_LOCKOUT_MINUTES", settings.admin_lockout_minutes, 5, 1440
+        ),
     )

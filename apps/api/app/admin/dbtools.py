@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from datetime import date, datetime
 from typing import Any, Iterable
 
@@ -10,13 +11,28 @@ from .redaction import redact
 
 
 def has_table(db: Session, table_name: str) -> bool:
-    return bool(db.bind and inspect(db.bind).has_table(table_name))
+    return reflected_table(db, table_name) is not None
+
+
+#: Reflection issues several catalogue queries per call. The schema does not
+#: change while the process runs, so each table is reflected once and reused.
+_reflected: dict[str, Table | None] = {}
+_reflection_lock = threading.Lock()
 
 
 def reflected_table(db: Session, table_name: str) -> Table | None:
-    if not db.bind or not inspect(db.bind).has_table(table_name):
-        return None
-    return Table(table_name, MetaData(), autoload_with=db.bind)
+    if table_name in _reflected:
+        return _reflected[table_name]
+    with _reflection_lock:
+        if table_name in _reflected:
+            return _reflected[table_name]
+        table: Table | None = None
+        if db.bind is not None and inspect(db.bind).has_table(table_name):
+            table = Table(table_name, MetaData(), autoload_with=db.bind)
+        # A missing table is cached too: the answer will not change until the
+        # next migration, which requires a restart to pick up anyway.
+        _reflected[table_name] = table
+        return table
 
 
 def safe_rows(

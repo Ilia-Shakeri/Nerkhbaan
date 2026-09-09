@@ -140,7 +140,10 @@ def _enforce_origin(request: Request) -> None:
         return
     origin = request.headers.get("origin")
     configured = get_admin_config().frontend_origin
-    if origin and origin.rstrip("/") != configured:
+    # Fail closed. Treating a missing Origin as acceptable leaves the check
+    # dependent on the CSRF header alone; requiring it costs nothing because
+    # the admin UI is a browser client that always sends one.
+    if not origin or origin.rstrip("/") != configured:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin origin denied")
 
 

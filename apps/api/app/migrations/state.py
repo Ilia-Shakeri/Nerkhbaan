@@ -7,14 +7,30 @@ from pathlib import Path
 from sqlalchemy import Engine, text
 
 
-def expected_migrations() -> dict[str, str]:
+def migration_checksum(path: Path) -> str:
+    """Checksum a migration independently of how the file was checked out.
+
+    The applier and the verifier previously hashed different byte streams -
+    one decoded text, one raw bytes - so a CRLF checkout made every applied
+    migration look modified and the API refused to start. Normalising line
+    endings makes the checksum describe the SQL, not the checkout.
+    """
+    text = path.read_text(encoding="utf-8")
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+def migrations_root() -> Path:
     root = Path(os.getenv("MIGRATIONS_DIR", "/app/db/migrations"))
     if not root.is_dir():
-        local_root = Path(__file__).resolve().parents[2] / "db" / "migrations"
-        root = local_root
+        root = Path(__file__).resolve().parents[2] / "db" / "migrations"
+    return root
+
+
+def expected_migrations() -> dict[str, str]:
     return {
-        path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in sorted(root.glob("*.sql"))
+        path.name: migration_checksum(path)
+        for path in sorted(migrations_root().glob("*.sql"))
     }
 
 

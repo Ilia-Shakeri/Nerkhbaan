@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 
 from ...db import get_db
 from ...models import TelegramSource
-from ...services.pricing_registry import PRICE_REGISTRY
+from ...config import settings
+from ...pricing.registry import PROVIDERS
 from ..audit import add_audit_event
 from ..dbtools import reflected_table, safe_rows
 from ..deps import (
@@ -88,36 +89,43 @@ def _provider_overrides(db: Session) -> dict[str, dict[str, Any]]:
     }
 
 
-def _legacy_providers() -> list[dict[str, Any]]:
+def _catalogue_providers() -> list[dict[str, Any]]:
+    """Fallback view built from the live provider registry.
+
+    Used before the database catalogue has been populated. It previously read a
+    separate legacy registry that the running pricing engine no longer used, so
+    the admin screen described providers that were never called.
+    """
     providers: list[dict[str, Any]] = []
-    for asset_id, regions in PRICE_REGISTRY.items():
-        for region_id, policy in regions.items():
-            for position, provider in enumerate(policy.get("providers", []), start=1):
-                auth = provider.get("auth") or {}
-                secret_env_name = auth.get("key_source")
-                secret_status = masked_secret_status(
-                    os.getenv(str(secret_env_name)) if secret_env_name else None
-                )
-                providers.append(
-                    {
-                        "provider_id": str(provider.get("id")),
-                        "name": str(provider.get("id")),
-                        "asset": asset_id,
-                        "region": region_id,
-                        "enabled": True,
-                        "role": "primary" if position == 1 else "fallback",
-                        "priority": int(provider.get("priority", position)),
-                        "trust_score": float(provider.get("trust_score", 0.75 if position == 1 else 0.6)),
-                        "minimum_interval_seconds": int(provider.get("min_interval_seconds", 60)),
-                        "operational_ttl_seconds": int(
-                            provider.get("operational_ttl_seconds", provider.get("min_interval_seconds", 60) * 2)
-                        ),
-                        "parser_version": str(provider.get("parser_version", "legacy-explicit")),
-                        "health_status": "configured" if secret_status["configured"] or not secret_env_name else "disabled_missing_key",
-                        "circuit_state": "unknown",
-                        "credential_status": secret_status,
-                    }
-                )
+    for provider in PROVIDERS.values():
+        secret_status = masked_secret_status(
+            getattr(settings, provider.api_key_setting, None)
+            if provider.api_key_setting
+            else None
+        )
+        configured = provider.configured(settings)
+        providers.append(
+            {
+                "provider_id": provider.provider_id,
+                "name": provider.display_name,
+                "asset": provider.instrument_id,
+                "region": "iran" if provider.instrument_id.endswith("TOMAN") else "international",
+                "enabled": provider.enabled,
+                "role": provider.role.value,
+                "priority": provider.priority,
+                "trust_score": float(provider.trust_score),
+                "minimum_interval_seconds": provider.budget.minimum_interval_seconds,
+                "operational_ttl_seconds": provider.operational_ttl_seconds,
+                "parser_version": provider.parser_version,
+                "health_status": (
+                    "configured"
+                    if provider.enabled and configured
+                    else "disabled" if not provider.enabled else "disabled_missing_key"
+                ),
+                "circuit_state": "unknown",
+                "credential_status": secret_status,
+            }
+        )
     return providers
 
 
@@ -164,7 +172,7 @@ def _db_providers(db: Session) -> list[dict[str, Any]]:
 
 def _provider_inventory(db: Session) -> list[dict[str, Any]]:
     database_rows = _db_providers(db)
-    source_rows = database_rows if database_rows else _legacy_providers()
+    source_rows = database_rows if database_rows else _catalogue_providers()
     overrides = _provider_overrides(db)
     return [
         {**provider, **overrides.get(str(provider.get("provider_id")), {})}

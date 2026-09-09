@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
@@ -14,13 +14,16 @@ from ..models import AssistantChatMessage, AssistantChatSession, User
 from ..pricing.compatibility import legacy_pricing_adapter
 from ..pricing.instruments import LEGACY_ASSET_MAPPING
 from ..security import rate_limit_hit
-from ..services.insights import InsightUnavailableError, insight_engine
+from ..services.insights import (
+    InsightQuotaExceeded,
+    InsightUnavailableError,
+    insight_engine,
+)
 
 router = APIRouter(prefix="/api/insights", tags=["insights"])
 
 _RATE_LIMIT_WINDOW_SECONDS = 60
 _RATE_LIMIT_MAX_REQUESTS = 15
-CHAT_RETENTION_DAYS = 31
 _ASSET_IDS = {asset for asset, _currency in LEGACY_ASSET_MAPPING}
 
 
@@ -84,18 +87,6 @@ class ChatSessionDetail(ChatSessionSummary):
 
 class ChatTitleRequest(BaseModel):
     title: str = Field(min_length=1, max_length=120)
-
-
-def purge_expired_chat_history(db: Session) -> None:
-    cutoff = datetime.now(UTC) - timedelta(days=CHAT_RETENTION_DAYS)
-    expired_ids = db.scalars(
-        select(AssistantChatSession.id).where(AssistantChatSession.updated_at < cutoff)
-    ).all()
-    if not expired_ids:
-        return
-    db.execute(delete(AssistantChatMessage).where(AssistantChatMessage.session_id.in_(expired_ids)))
-    db.execute(delete(AssistantChatSession).where(AssistantChatSession.id.in_(expired_ids)))
-    db.commit()
 
 
 def _session_summary(session: AssistantChatSession) -> ChatSessionSummary:
@@ -175,6 +166,10 @@ async def analyze_chart(
         analysis = await insight_engine.analyze_chart(
             payload.asset, snapshot, payload.language, str(current_user.id)
         )
+    except InsightQuotaExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)
+        ) from exc
     except InsightUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
@@ -190,7 +185,6 @@ async def chat(
     db: Session = Depends(get_db),
 ) -> ChatResponse:
     _enforce_rate_limit(current_user.id)
-    purge_expired_chat_history(db)
 
     session = None
     if payload.session_id is not None:
@@ -199,6 +193,10 @@ async def chat(
     messages = [{"role": message.role, "content": message.content} for message in payload.messages]
     try:
         reply = await insight_engine.chat(messages, payload.language, str(current_user.id))
+    except InsightQuotaExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(exc)
+        ) from exc
     except InsightUnavailableError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
@@ -223,7 +221,6 @@ def list_chat_sessions(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[ChatSessionSummary]:
-    purge_expired_chat_history(db)
     sessions = db.scalars(
         select(AssistantChatSession)
         .where(AssistantChatSession.user_id == current_user.id)
@@ -238,7 +235,6 @@ def get_chat_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ChatSessionDetail:
-    purge_expired_chat_history(db)
     session = _owned_session(db, current_user.id, session_id)
     rows = db.scalars(
         select(AssistantChatMessage)

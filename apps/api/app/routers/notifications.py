@@ -7,12 +7,13 @@ import logging
 import re
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Literal, NoReturn
+from typing import Annotated, Literal, NoReturn
 
 import httpx
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import BaseModel, EmailStr, Field, TypeAdapter
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -118,7 +119,20 @@ def _prefs_for(db: Session, user_id: int) -> NotificationPreference:
         return prefs
     prefs = NotificationPreference(user_id=user_id)
     db.add(prefs)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Two concurrent requests can both find no row; the unique index
+        # decides, and the loser simply reads what the winner inserted.
+        db.rollback()
+        prefs = db.scalar(
+            select(NotificationPreference).where(
+                NotificationPreference.user_id == user_id
+            )
+        )
+        if prefs is None:
+            raise
+        return prefs
     db.refresh(prefs)
     return prefs
 
@@ -284,15 +298,25 @@ def _send_telegram_verification(destination: str, code: str) -> None:
 
 @router.get("", response_model=list[NotificationItem])
 def list_notifications(
+    limit: Annotated[int, Query(ge=1, le=200)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    unread_only: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[UserNotification]:
+    statement = select(UserNotification).where(
+        UserNotification.user_id == current_user.id
+    )
+    if unread_only:
+        statement = statement.where(UserNotification.read_at.is_(None))
     return list(
         db.scalars(
-            select(UserNotification)
-            .where(UserNotification.user_id == current_user.id)
-            .order_by(UserNotification.created_at.desc())
-            .limit(100)
+            statement
+            # Tie-break on id: created_at alone is not unique, so pages could
+            # repeat or skip rows written in the same instant.
+            .order_by(UserNotification.created_at.desc(), UserNotification.id.desc())
+            .limit(limit)
+            .offset(offset)
         ).all()
     )
 
@@ -393,6 +417,18 @@ def start_otp(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="SMS delivery is not configured.",
+        )
+    # Without a global ceiling this endpoint will happily mail a code to any
+    # address an authenticated caller names, which is a spam relay with extra
+    # steps. Per-user limits alone do not stop a handful of throwaway accounts.
+    destination_state = rate_limit_hit(
+        "notification-otp-destination", destination, 3, 60 * 60
+    )
+    if destination_state.blocked:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many verification requests for this destination.",
+            headers={"Retry-After": str(destination_state.retry_after)},
         )
     code = f"{secrets.randbelow(1_000_000):06d}"
     verification = OtpVerification(

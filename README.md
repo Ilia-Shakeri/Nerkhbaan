@@ -1,295 +1,390 @@
 # Nerkhbaan
 
-Nerkhbaan is a full-stack market price tracking platform for gold, silver, USDT, and Bitcoin prices across Iranian and international markets. It includes a FastAPI backend, TimescaleDB time-series storage, Redis caching, a React PWA, an Electron desktop shell, alert delivery, provider health reporting, and an optional Telegram MTProto ingestion worker.
+Live gold, silver, currency and crypto prices for the Iranian and international
+markets, with verified pricing, price alerts and a market assistant.
 
-## Production Stack
+[![CI](https://github.com/your-org/nerkhbaan/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 
-- FastAPI backend with SQLAlchemy and JWT authentication
-- TimescaleDB on PostgreSQL 16 for tick storage and OHLCV rollups
-- Redis for shared price cache and fast fallback reads
-- React + Vite web app served by Nginx
-- Optional Electron desktop app
-- Optional Telegram MTProto worker using Telethon
-- Prometheus metrics endpoint at `/metrics`
+---
 
-## Repository Structure
+## What it does
 
-```text
-Nerkhbaan/
-├── apps/
-│   ├── api/
-│   │   ├── app/
-│   │   │   ├── routers/
-│   │   │   ├── services/
-│   │   │   ├── config.py
-│   │   │   ├── db.py
-│   │   │   ├── main.py
-│   │   │   └── models.py
-│   │   ├── db/
-│   │   │   ├── init/
-│   │   │   └── migrations/
-│   │   ├── tests/
-│   │   ├── Dockerfile
-│   │   └── requirements.txt
-│   ├── desktop/
-│   │   ├── electron/
-│   │   └── src/
-│   ├── telegram_worker/
-│   │   ├── app/
-│   │   ├── Dockerfile
-│   │   ├── login.py
-│   │   └── telegram_setup_guide.txt
-│   └── web/
-│       ├── public/
-│       ├── src/
-│       ├── Dockerfile
-│       └── nginx.conf
-├── nginx/
-├── packages/
-│   └── ui/
-├── API_DOCUMENTATION.md
-├── docker-compose.prod.yaml
-├── docker-compose.yaml
-├── package.json
-└── README.md
+Nerkhbaan publishes a **canonical price** per instrument: one value, with a
+recorded reason for why it was chosen, where it came from, and how much to trust
+it right now.
+
+That last part is the point. A price platform that shows a number without
+saying whether it is a live trade, a cached value, a disputed candidate or
+arithmetic is worse than useless to someone about to trade on it. Every price
+this API returns carries its status, its age, its source semantics and whether
+it was observed or computed.
+
+- **Multi-source verification.** Providers are ranked per refresh. A candidate
+  that deviates beyond a volatility-adaptive threshold is not published — it is
+  checked against independent sources first, and the previous value is held
+  while that happens.
+- **Explicit units.** Gold in USD is a troy ounce at 0.9999 fine on the global
+  spot market. Gold in Toman is one gram at 0.750 fine in the Iranian physical
+  market. These are different instruments and the API says so.
+- **Honest degradation.** When no direct source is available, values are derived
+  from a formula and marked as such. Nothing is dressed up as an observation.
+- **Durable alerts.** Triggers are idempotent, delivery is a work queue with
+  backoff, retry and a dead-letter path, and an alert never fires on a
+  suspicious, expired or unpersisted price.
+
+---
+
+## Contents
+
+- [Architecture](#architecture)
+- [Quick start](#quick-start)
+- [Production deployment](#production-deployment)
+- [Configuration](#configuration)
+- [Operating it](#operating-it)
+- [Reading a price correctly](#reading-a-price-correctly)
+- [Documentation](#documentation)
+
+---
+
+## Architecture
+
+```
+                    ┌──────────────────────────────────────┐
+   browser  ───────▶│  edge (nginx)                        │
+   admin    ───────▶│  TLS · HSTS · CSP · rate limits      │
+                    └───┬──────────────┬───────────────┬───┘
+                        │              │               │
+                 ┌──────▼─────┐  ┌─────▼──────┐  ┌─────▼────────┐
+                 │  web PWA   │  │ admin SPA  │  │  backend     │
+                 │  (nginx)   │  │  (nginx)   │  │  (FastAPI)   │
+                 └────────────┘  └────────────┘  └───┬──────┬───┘
+                                                     │      │
+                                      ┌──────────────▼──┐ ┌─▼──────────┐
+                                      │ PostgreSQL 16   │ │  Redis 7   │
+                                      │ + TimescaleDB   │ │            │
+                                      │ prices, alerts, │ │ cache      │
+                                      │ audit, history  │ │ locks      │
+                                      └─────────────────┘ │ budgets    │
+                                                          │ fan-out    │
+                                                          │ outbox     │
+                                                          └────────────┘
 ```
 
-## Required Environment Variables
+**PostgreSQL** is the system of record — canonical quotes, provider quotes,
+alerts, deliveries, audit. TimescaleDB hypertables carry the time series.
 
-Create a `.env` file in the repository root before starting Docker. Use `.env.example` as the template.
+**Redis is required, not a cache layer you can drop.** It holds the distributed
+refresh leases, the per-provider request budgets, the WebSocket fan-out and the
+persistence outbox. Its eviction policy is `noeviction`: if it fills, refreshes
+stop rather than silently losing writes.
 
-Minimum production values:
+Background work runs as three independent loops — price refresh, alert
+evaluation, and maintenance — so a slow upstream provider cannot stall alert
+delivery.
 
-```env
-COMPOSE_FILE=docker-compose.prod.yaml
+---
 
-POSTGRES_USER=nerkhbaan
-POSTGRES_DB=nerkhbaan
-POSTGRES_PASSWORD=replace-with-a-long-random-password
-DATABASE_URL=postgresql+psycopg://nerkhbaan:replace-with-a-long-random-password@postgres:5432/nerkhbaan
+## Quick start
 
-JWT_SECRET_KEY=replace-with-a-random-secret-at-least-32-characters
-ADMIN_BOOTSTRAP_USERNAME=admin
-ADMIN_BOOTSTRAP_EMAIL=admin@your-domain.example
-ADMIN_BOOTSTRAP_PASSWORD=Change-This-Strong-Password-14!
-ADMIN_BOOTSTRAP_FULL_NAME=System Administrator
-ALLOWED_ORIGINS=https://your-domain.example,https://www.your-domain.example
-
-REDIS_URL=redis://redis:6379/0
-VITE_API_URL=
-```
-
-Optional provider keys:
-
-```env
-GOLDAPI_API_KEY=
-METALS_DEV_API_KEY=
-EXCHANGERATE_API_KEY=
-ALANCHAND_API_TOKEN=
-```
-
-Optional Telegram ingestion values:
-
-```env
-TELEGRAM_API_ID=
-TELEGRAM_API_HASH=
-TELEGRAM_SESSION_STRING=
-TELEGRAM_CHANNELS=
-```
-
-See `apps/telegram_worker/telegram_setup_guide.txt` before enabling the Telegram worker.
-
-## Fresh Linux VPS Deployment Guide
-
-These steps assume Ubuntu 22.04 or 24.04 with a non-root sudo user.
-
-### 1. Install system packages
+Local development, five minutes:
 
 ```bash
-sudo apt update
-sudo apt install -y ca-certificates curl git ufw
+git clone <repository-url> Nerkhbaan && cd Nerkhbaan
+cp .env.example .env
 ```
 
-### 2. Install Docker Engine and Compose
+Set `POSTGRES_PASSWORD`, a matching `DATABASE_URL`, and a `JWT_SECRET_KEY` of at
+least 32 random characters. Then:
 
 ```bash
+docker compose up -d postgres redis
+npm ci
+
+cd apps/api
+python -m venv venv && source venv/bin/activate
+pip install -r requirements-dev.txt
+MIGRATIONS_DIR="$PWD/db/migrations" python -m app.migrations.runner
+cd ../..
+
+npm run dev:api    # http://127.0.0.1:8000
+npm run dev:web    # http://127.0.0.1:5173
+```
+
+Full setup, conventions and troubleshooting: [`README.developer.md`](README.developer.md).
+
+---
+
+## Production deployment
+
+Ubuntu 22.04 or 24.04, non-root sudo user.
+
+### 1. System packages and Docker
+
+```bash
+sudo apt update && sudo apt install -y ca-certificates curl git ufw
 curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker "$USER"
-newgrp docker
-docker --version
+sudo usermod -aG docker "$USER" && newgrp docker
 docker compose version
 ```
 
-### 3. Clone the repository
+### 2. Clone and configure
 
 ```bash
-git clone <your-repository-url> Nerkhbaan
-cd Nerkhbaan
+git clone <repository-url> Nerkhbaan && cd Nerkhbaan
+cp .env.example .env && nano .env
 ```
 
-### 4. Configure environment
+**Required before first start:**
+
+| Variable | Notes |
+| --- | --- |
+| `COMPOSE_FILE=docker-compose.prod.yaml` | Keeps Compose on the production stack |
+| `POSTGRES_PASSWORD` | Long and random |
+| `DATABASE_URL` | Must carry the same password |
+| `JWT_SECRET_KEY` | ≥32 random characters. Startup fails otherwise. |
+| `ALLOWED_ORIGINS` | Exact public origins |
+| `ADMIN_FRONTEND_ORIGIN` | The admin host. A mismatch 403s every admin write. |
+| `TRUSTED_PROXY_IPS` | **Must match `FORWARDED_ALLOW_IPS`** — see below |
+| `ADMIN_BOOTSTRAP_*` | All four, or none |
+
+> ### Set `VAPID_PUBLIC_KEY` before you build
+>
+> It is compiled into the web bundle at **image build time**, not read at
+> runtime. A frontend image built without it has web push permanently disabled
+> until the image is rebuilt.
+>
+> ```bash
+> docker run --rm python:3.12-slim sh -c \
+>   "pip install -q py-vapid && vapid --gen --applicationServerKey" 
+> ```
+
+> ### `TRUSTED_PROXY_IPS` must match `FORWARDED_ALLOW_IPS`
+>
+> Both decide which hop may set `X-Forwarded-For`, and that value drives rate
+> limiting, the admin IP allowlist, and the hashed IP in the audit trail. If
+> they disagree, either every client shares one bucket or a caller can choose
+> their own address. The Compose network is `172.28.0.0/24`.
+>
+> If you terminate TLS yourself instead of using the `edge` service, your proxy
+> must set `X-Forwarded-For` **by replacement**. `$proxy_add_x_forwarded_for`
+> appends to whatever the caller sent, leaving the head of the chain under their
+> control.
+
+### 3. Start
 
 ```bash
-cp .env.example .env
-nano .env
+docker compose up -d --build
 ```
 
-Set at least:
+Brings up `postgres`, `redis`, `migrate` (runs once), `backend`, `frontend` and
+`db-backup`. `backend` waits for migrations to complete successfully.
 
-- `POSTGRES_PASSWORD`
-- `DATABASE_URL` with the same password
-- `JWT_SECRET_KEY`
-- all four `ADMIN_BOOTSTRAP_*` identity values
-- `ALLOWED_ORIGINS`
+### 4. TLS and the admin host
 
-Keep `COMPOSE_FILE=docker-compose.prod.yaml` in `.env` so Docker uses the production stack by default.
-
-### 5. Start the production stack
-
-Run this exact command from the repository root:
+`frontend` and `backend` publish on loopback only and speak plain HTTP. The
+`edge` service terminates TLS, sets HSTS and the browser security headers,
+applies rate limits and serves the admin vhost. It is profile-gated because it
+needs certificates:
 
 ```bash
-docker compose up -d --build --force-recreate
+docker compose --profile edge up -d
 ```
 
-This starts:
+It expects Let's Encrypt material at `/etc/letsencrypt` (`LETSENCRYPT_DIR`) and
+an ACME webroot at `./certbot-webroot` (`CERTBOT_WEBROOT`). Enabling the profile
+also starts `admin-frontend`.
 
-- `postgres` with TimescaleDB
-- `redis`
-- `backend`
-- `frontend`
-- `db-backup`
-
-The Telegram worker is defined but not started by default because it requires MTProto credentials.
-
-### 6. Verify deployment
+### 5. Verify
 
 ```bash
 docker compose ps
-curl -f http://127.0.0.1:8000/api/health
-curl -f http://127.0.0.1:8000/api/prices
+curl -fsS http://127.0.0.1:8000/api/health/ready | jq
+curl -fsS http://127.0.0.1:8000/api/prices/health | jq .startup
 ```
 
-Open the frontend through your reverse proxy or local tunnel. For the default compose port mapping, the web container is published on `127.0.0.1:3000`.
+`ready` is `503` unless the database is reachable **and** migrations are
+current. Check `startup.instruments_without_direct_source` — anything listed
+there is publishing formula output rather than an observed market price.
 
-### 7. Enable Telegram ingestion
+### 6. First administrator
 
-After generating `TELEGRAM_SESSION_STRING` and setting `TELEGRAM_CHANNELS`, start the profile:
+Created by the migration job from `ADMIN_BOOTSTRAP_*` when no super
+administrator exists. It is created with `must_change_password` set; sign in at
+the admin host and change it immediately.
+
+### 7. Optional: Telegram ingestion
 
 ```bash
 docker compose --profile telegram up -d --build telegram-worker
 ```
 
-### 8. Apply TimescaleDB migration to an existing database
+Requires MTProto credentials. See
+[`apps/telegram_worker/telegram_setup_guide.txt`](apps/telegram_worker/telegram_setup_guide.txt).
 
-New Docker volumes run `apps/api/db/init/001_timescale_market_prices.sql` automatically. Existing databases must run:
+---
 
-```bash
-docker compose exec -T postgres psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" < apps/api/db/migrations/20260705_timescale_market_prices.sql
+## Configuration
+
+Every setting is declared in [`apps/api/app/config.py`](apps/api/app/config.py)
+and documented in [`.env.example`](.env.example). The ones most likely to matter:
+
+### Security
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `JWT_SECRET_KEY` | — | ≥32 chars. Rotating invalidates all sessions. |
+| `JWT_EXPIRE_MINUTES` | `15` | Access token lifetime |
+| `AUTH_REFRESH_DAYS` | `30` | Refresh token lifetime |
+| `AUTH_COOKIE_SECURE` | `true` | Never `false` in production |
+| `AUTH_COOKIE_SAMESITE` | `strict` | |
+| `TRUSTED_PROXY_IPS` | loopback | Which hops may set `X-Forwarded-For` |
+| `METRICS_ALLOWED_NETWORKS` | loopback | `/metrics` is `404` elsewhere |
+| `ADMIN_IP_ALLOWLIST` | empty | CIDR list; empty means no IP restriction |
+| `ADMIN_SESSION_MINUTES` | `30` | 5–240 |
+| `ADMIN_REAUTH_MINUTES` | `10` | Window for destructive operations |
+
+### Pricing
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `PRICING_REFRESH_INTERVAL_SECONDS` | `20` | Refresh cadence |
+| `PRICING_LOCK_TTL_SECONDS` | `45` | Lease, renewed while held |
+| `PRICING_SHORT_HISTORY_RETENTION_HOURS` | `6` | Redis volatility window |
+| `PRICING_PROVIDER_ALLOWED_HOSTS` | see config | Egress allowlist |
+| `PRICING_REQUIRE_PROVIDER_KEYS` | `false` | `true` fails startup on missing keys |
+| `REDIS_MAXMEMORY` | `384mb` | Policy is `noeviction` |
+
+### Capacity
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `DATABASE_POOL_SIZE` | `5` | Sync pool |
+| `DATABASE_ASYNC_POOL_SIZE` | `5` | Async pool |
+| `DATABASE_MAX_OVERFLOW` | `3` | Applies to both |
+
+Peak connections per API process ≈ `(pool + overflow) × 2`. Keep the total
+across all services under the server's `max_connections` (60 in the shipped
+Compose file).
+
+### Optional providers
+
+Without these, Iranian metal chains fall back to formula values:
+
+```env
+GOLDAPI_API_KEY=            # XAU/XAG spot
+METALS_DEV_API_KEY=         # spot fallback
+ALANCHAND_API_TOKEN=        # 18K gold, Toman
+TALA_API_KEY=               # Toman metals
+TALA_SILVER999_TOMAN_KEY=   # required for a real silver price
+NAVASAN_API_KEY=            # free-market USD/Toman
+NAVASAN_HTTPS_PROXY_BASE_URL=
 ```
 
-## Local Development
+---
 
-Use Node.js 22.23.0 with npm 10.9.8. The versions are pinned in `.nvmrc` and `package.json`. The production backend image uses Python 3.12.13.
+## Operating it
 
-Install Node dependencies:
+### Health
 
-```bash
-npm ci
-```
+| Endpoint | Use |
+| --- | --- |
+| `/api/health/live` | Liveness. Process is up. |
+| `/api/health/ready` | Readiness. Gates traffic. |
+| `/api/health` | Database, Redis, migration version, backlogs |
+| `/api/prices/health` | Per-chain status and source coverage |
+| `/metrics` | Prometheus, private networks only |
 
-Install backend dependencies:
+### Watch these
 
-```bash
-cd apps/api
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements-dev.txt
-```
+| Signal | Why |
+| --- | --- |
+| Redis `used_memory` vs `REDIS_MAXMEMORY` | `noeviction` means a full Redis stops refreshes |
+| `startup.instruments_without_direct_source` | Those chains are publishing arithmetic |
+| `dead_letter_backlog` | Alerts that exhausted retries |
+| `anomaly_count` | Open, unreviewed pricing anomalies |
+| `migration_current` | `false` means the backend will not restart cleanly |
 
-Run services:
+### Backups
 
-```bash
-npm run dev:api
-npm run dev:web
-```
+`db-backup` writes nightly to the `db_backups` volume with 7-day, 2-week and
+2-month retention. **Copy them off the host** — a volume on the same machine is
+not a backup. Restore drills are in the operator gate list.
 
-Run builds:
+### Redis recovery
 
-```bash
-npm run build:web
-npm run build:admin
-npm run build:desktop
-```
+[`docs/redis-recovery.md`](docs/redis-recovery.md). Redis refuses to start
+rather than silently discard an unreadable AOF file — that is deliberate.
 
-Run backend tests:
-
-```bash
-npm run verify
-```
-
-## Frontend Container Build
-
-The web image installs only `nerkhbaan-web` and `@nerkhbaan/ui` from the root lockfile. Desktop and Electron dependencies are not installed in this image.
-
-The registry order is:
-
-1. `https://package-mirror.liara.ir/repository/npm/`
-2. `https://mirror2.chabokan.net/npm/`
-3. `https://registry.npmjs.org/` as the final fallback
-
-Each registry is checked before use. A failed deterministic `npm ci` attempt moves to the next registry, while package integrity stays enforced by `package-lock.json`. BuildKit keeps the npm download cache between builds.
-
-Build with full logs:
-
-```bash
-DOCKER_BUILDKIT=1 docker compose build --no-cache --progress=plain frontend
-```
-
-Build again with layer and npm cache reuse:
-
-```bash
-DOCKER_BUILDKIT=1 docker compose build --progress=plain frontend
-```
-
-Start or recreate the stack:
-
-```bash
-docker compose up -d --force-recreate
-```
-
-Registry URLs can be overridden without editing the Dockerfile:
-
-```bash
-NPM_REGISTRY_PRIMARY=https://package-mirror.liara.ir/repository/npm/ \
-NPM_REGISTRY_SECONDARY=https://mirror2.chabokan.net/npm/ \
-docker compose build --progress=plain frontend
-```
-
-When dependency manifests change, regenerate the lockfile with the repository npm settings so registry-specific tarball URLs are not stored:
-
-```bash
-npm config set omit-lockfile-registry-resolved true --location=project
-npm install --package-lock-only
-```
-
-## API Endpoints
-
-- `GET /api/health`
-- `GET /api/prices`
-- `GET /api/prices/health`
-- `GET /api/providers`
-- `POST /api/auth/signup`
-- `POST /api/auth/signin`
-- `GET /api/auth/me`
-- `GET /metrics`
-
-Detailed provider documentation is in `API_DOCUMENTATION.md`.
-
-## Operations Notes
+### Routine notes
 
 - Keep `.env` out of version control.
-- Rotate `JWT_SECRET_KEY` only with a planned user-session invalidation window.
-- Keep TimescaleDB backups in the `db_backups` Docker volume or export them to external object storage.
-- Monitor `/api/prices/health` for provider degradation.
-- If Redis is unavailable, the backend falls back to file cache behavior, but Redis is recommended for multi-worker deployments.
+- Rotate `JWT_SECRET_KEY` only during a planned session-invalidation window.
+- Migrations run as a separate job; the backend verifies and refuses to start if
+  they are not current. Never apply them from the running API.
+
+---
+
+## Reading a price correctly
+
+If you are integrating against this API, three things matter.
+
+**1. Check the status.** Only `live`, `confirmed` and `fresh_cache` are safe to
+treat as a market price. `derived_fallback` is arithmetic. `suspicious`,
+`verifying`, `stale` and `expired` are not tradeable.
+
+**2. Check the unit.** `price_usd` and `price_toman` on the same row are
+different instruments. Use `unit_usd` and `unit_toman`.
+
+**3. Check the FX bridge on derived values.** Toman metal prices with no direct
+source are reconstructed from the international reference through a USD/Toman
+rate. When no free-market USD source is configured, USDT stands in — and USDT
+trades at a persistent premium in Iran. Those values carry:
+
+```json
+{ "fx_bridge": "usdt_proxy", "fx_bridge_is_proxy": true }
+```
+
+In a representative case that is a **3.4%** difference. Treat proxy-bridged
+values as indicative, and configure a real USD/Toman source for anything else.
+
+Full detail: [`apps/api/PRICING_SOURCES.md`](apps/api/PRICING_SOURCES.md).
+
+---
+
+## Documentation
+
+| Document | Covers |
+| --- | --- |
+| [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | What is done, what is not, what production readiness still needs |
+| [`README.developer.md`](README.developer.md) | Local setup, layout, conventions, verification |
+| [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) | Every endpoint, auth, errors, rate limits |
+| [`apps/api/PRICING_SOURCES.md`](apps/api/PRICING_SOURCES.md) | Instruments, providers, verification, derived pricing |
+| [`docs/pricing-operations-runbook.md`](docs/pricing-operations-runbook.md) | Provider onboarding gate, canary, operator evidence |
+| [`docs/redis-recovery.md`](docs/redis-recovery.md) | Redis data safety and recovery |
+| [`docs/production-hardening-report.md`](docs/production-hardening-report.md) | Historical hardening record |
+| [`.github/security-exceptions/POLICY.md`](.github/security-exceptions/POLICY.md) | CI scan exception policy |
+
+### API surface
+
+```
+GET    /api/prices                       aggregate snapshot
+GET    /api/prices/{asset}/history       ?timeframe=1h|24h|7d|30d|1y
+GET    /api/prices/health                chain status and source coverage
+GET    /api/instruments[/{id}]           canonical instrument data
+WS     /api/ws/prices                    live canonical updates
+POST   /api/auth/signup|signin|refresh   authentication
+GET    /api/alerts                       price alerts (CRUD)
+GET    /api/providers                    provider catalogue
+GET    /api/health[/live|/ready]         health
+GET    /metrics                          Prometheus (private networks)
+```
+
+---
+
+## Licence and disclaimer
+
+Nerkhbaan reports market data from third-party sources. Prices may be delayed,
+incorrect or unavailable, and derived values are explicitly theoretical. Nothing
+this platform produces is investment advice. Provider redistribution rights are
+the operator's responsibility — see the onboarding gate in the operations
+runbook.

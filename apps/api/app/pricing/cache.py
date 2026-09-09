@@ -145,9 +145,18 @@ class PricingRedisStore:
         return result
 
     async def append_short_history(self, quote: CanonicalQuote) -> None:
+        """Keep a short volatility window only.
+
+        TimescaleDB owns durable history; this set exists so anomaly detection
+        has a few recent prices without a database round trip. Retaining weeks
+        of full canonical payloads here is what drove Redis into its memory
+        ceiling, and with ``noeviction`` a full Redis stops every refresh.
+        """
         key = self.history_key(quote.instrument_id)
         score = quote.canonical_at.timestamp()
-        cutoff = (datetime.now(UTC) - timedelta(days=31)).timestamp()
+        retention_seconds = settings.pricing_short_history_retention_hours * 3600
+        cutoff = (datetime.now(UTC) - timedelta(seconds=retention_seconds)).timestamp()
+        maximum_entries = settings.pricing_short_history_max_entries
         encoded = canonical_json(
             quote.to_dict(authenticated=True, evaluate_status=False)
         )
@@ -155,7 +164,10 @@ class PricingRedisStore:
         async with client.pipeline(transaction=True) as pipe:
             pipe.zadd(key, {encoded: score})
             pipe.zremrangebyscore(key, "-inf", cutoff)
-            pipe.expire(key, 32 * 24 * 60 * 60)
+            # Second bound so a burst of updates inside the window cannot grow
+            # the set without limit either.
+            pipe.zremrangebyrank(key, 0, -(maximum_entries + 1))
+            pipe.expire(key, retention_seconds + 3600)
             await pipe.execute()
 
     async def recent_canonical(
@@ -206,7 +218,7 @@ class PricingRedisStore:
             stream_id = await client.xadd(
                 self.events_stream,
                 {"payload": encoded, "instrument_id": quote.instrument_id},
-                maxlen=10_000,
+                maxlen=max(1_000, settings.pricing_event_stream_maxlen),
                 approximate=True,
             )
             await client.publish(self.events_channel, encoded)

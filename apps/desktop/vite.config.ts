@@ -2,22 +2,10 @@ import { defineConfig } from 'vite'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
 const appDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(appDir, '../..')
-
-// Custom plugin to resolve Figma-specific assets
-function figmaAssetResolver() {
-  return {
-    name: 'figma-asset-resolver',
-    resolveId(id: string) {
-      if (id.startsWith('figma:asset/')) {
-        const assetPath = id.replace('figma:asset/', '')
-        return path.resolve(appDir, 'src/assets', assetPath)
-      }
-    }
-  }
-}
 
 export default defineConfig({
   // Force Vite to load environment variables from the monorepo root
@@ -25,12 +13,12 @@ export default defineConfig({
   // Force relative paths to ensure successful asset loading in Electron's file:// protocol
   base: './', 
   plugins: [
-    figmaAssetResolver(),
-    react()
+    react(),
+    VitePWA({ disable: true })
   ],
   resolve: {
     alias: {
-      '@': path.resolve(appDir, 'src'),
+      '@': path.resolve(repoRoot, 'apps/web/src'),
       '@nerkhbaan/ui': path.resolve(repoRoot, 'packages/ui/src')
     }
   },
@@ -47,6 +35,7 @@ export default defineConfig({
       }
     }
   },
+  publicDir: path.resolve(repoRoot, 'apps/web/public'),
   assetsInclude: ['**/*.svg', '**/*.csv'],
   server: {
     port: 5173,

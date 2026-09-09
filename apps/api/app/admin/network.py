@@ -4,32 +4,17 @@ import ipaddress
 
 from fastapi import HTTPException, Request, status
 
+from ..security import resolve_client_ip
 from .config import get_admin_config
 
 
 def admin_client_ip(request: Request) -> str:
     peer = request.client.host if request.client else "unknown"
-    config = get_admin_config()
-    trusted: set[ipaddress._BaseNetwork] = set()
-    for item in config.trusted_proxy_ips.split(","):
-        clean = item.strip()
-        if not clean:
-            continue
-        try:
-            trusted.add(ipaddress.ip_network(clean, strict=False))
-        except ValueError:
-            continue
-    try:
-        peer_address = ipaddress.ip_address(peer)
-    except ValueError:
-        return peer
-    if any(peer_address in network for network in trusted):
-        forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
-        try:
-            return str(ipaddress.ip_address(forwarded)) if forwarded else str(peer_address)
-        except ValueError:
-            return str(peer_address)
-    return str(peer_address)
+    return resolve_client_ip(
+        peer,
+        request.headers.get("x-forwarded-for", ""),
+        get_admin_config().trusted_proxy_ips,
+    )
 
 
 def enforce_admin_network(request: Request) -> None:

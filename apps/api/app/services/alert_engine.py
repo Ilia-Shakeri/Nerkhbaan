@@ -68,7 +68,13 @@ class PermanentDeliveryError(RuntimeError):
     pass
 
 
-def validate_webhook_url(url: str, *, resolve_dns: bool = False) -> None:
+def validate_webhook_url(url: str, *, resolve_dns: bool = False) -> set[str]:
+    """Validate a webhook target and, when resolving, return its vetted IPs.
+
+    Returning the resolved set matters: validating a hostname and then letting
+    the HTTP client resolve it again leaves a window in which DNS can be
+    re-pointed at a private address between the check and the request.
+    """
     parsed = urlsplit(url.strip())
     if parsed.scheme != "https" or not parsed.hostname:
         raise ValueError("Webhook URL must use HTTPS and include a host")
@@ -88,6 +94,8 @@ def validate_webhook_url(url: str, *, resolve_dns: bool = False) -> None:
             }
         except socket.gaierror as exc:
             raise ValueError("Webhook host cannot be resolved") from exc
+        if not hosts:
+            raise ValueError("Webhook host cannot be resolved")
 
     for host in hosts:
         try:
@@ -98,6 +106,7 @@ def validate_webhook_url(url: str, *, resolve_dns: bool = False) -> None:
             continue
         if not address.is_global:
             raise ValueError("Webhook host must resolve to a public address")
+    return hosts if resolve_dns else set()
 
 
 def _parse_formula(formula: str) -> ast.Expression:
@@ -315,6 +324,36 @@ class AlertEngine:
         finally:
             db.close()
 
+    @classmethod
+    def _relevant_assets(
+        cls,
+        alert: AlertModel,
+        current_prices: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        """Trim the snapshot to the assets the alert refers to, without history."""
+        wanted: set[str] = {str(alert.asset).lower()}
+        if alert.alert_type == "formula" and alert.formula:
+            try:
+                wanted |= {
+                    node.id.lower()
+                    for node in ast.walk(_parse_formula(alert.formula))
+                    if isinstance(node, ast.Name)
+                }
+            except FormulaValidationError:
+                pass
+        trimmed: list[dict[str, Any]] = []
+        for asset in current_prices.get("assets", []):
+            asset_id = str(asset.get("asset", "")).lower()
+            if not asset_id:
+                continue
+            # Formula names may be "<asset>_<source>", so match on the prefix.
+            if not any(name == asset_id or name.startswith(f"{asset_id}_") for name in wanted):
+                continue
+            trimmed.append(
+                {key: value for key, value in asset.items() if key != "history"}
+            )
+        return trimmed
+
     @staticmethod
     def _delivery_alert(row: AlertModel) -> Alert:
         return Alert(
@@ -483,9 +522,12 @@ class AlertEngine:
         preferences: NotificationPreference | None,
         push_available: bool,
     ) -> None:
+        # Only the assets this alert actually references are retained. Storing
+        # every asset with its full history array turned each trigger row into
+        # hundreds of kilobytes of JSON that is re-read on every retry.
         snapshot = {
             "refreshed_at": current_prices.get("refreshed_at"),
-            "assets": current_prices.get("assets", []),
+            "assets": self._relevant_assets(alert, current_prices),
         }
         delivery_alert = self._delivery_alert(alert)
         snapshot["selected_price_context"] = self._selected_price_context(
@@ -910,17 +952,28 @@ class AlertEngine:
         message.set_content(body)
 
         def _smtp_send() -> None:
-            if settings.smtp_use_tls:
-                with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
+            # Port 465 is implicit TLS; everything else negotiates STARTTLS.
+            # The previous branch used SMTP_SSL when TLS was *disabled*, which
+            # hung against the default STARTTLS port.
+            if settings.smtp_port == 465:
+                with smtplib.SMTP_SSL(
+                    settings.smtp_host,
+                    settings.smtp_port,
+                    timeout=15,
+                    context=ssl.create_default_context(),
+                ) as server:
+                    if settings.smtp_username and settings.smtp_password:
+                        server.login(settings.smtp_username, settings.smtp_password)
+                    server.send_message(message)
+                return
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
+                server.ehlo()
+                if settings.smtp_use_tls:
                     server.starttls(context=ssl.create_default_context())
-                    if settings.smtp_username and settings.smtp_password:
-                        server.login(settings.smtp_username, settings.smtp_password)
-                    server.send_message(message)
-            else:
-                with smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15) as server:
-                    if settings.smtp_username and settings.smtp_password:
-                        server.login(settings.smtp_username, settings.smtp_password)
-                    server.send_message(message)
+                    server.ehlo()
+                if settings.smtp_username and settings.smtp_password:
+                    server.login(settings.smtp_username, settings.smtp_password)
+                server.send_message(message)
 
         await asyncio.to_thread(_smtp_send)
         logger.info("Email sent for alert_id=%s", alert.id)
@@ -928,10 +981,15 @@ class AlertEngine:
     async def _send_webhook(self, alert: Alert, current_prices: dict[str, Any]) -> None:
         if not alert.webhook_url:
             return
-        
+
         try:
-            await asyncio.to_thread(validate_webhook_url, alert.webhook_url, resolve_dns=True)
-            async with httpx.AsyncClient(timeout=5.0, follow_redirects=False) as client:
+            vetted = await asyncio.to_thread(
+                validate_webhook_url, alert.webhook_url, resolve_dns=True
+            )
+            async with httpx.AsyncClient(
+                timeout=5.0,
+                follow_redirects=False,
+            ) as client:
                 payload = {
                     "alert_id": alert.id,
                     "asset": alert.asset_id,
@@ -939,9 +997,14 @@ class AlertEngine:
                     "condition": alert.condition,
                     "currency": alert.currency,
                     "triggered_at": datetime.now(UTC).isoformat(),
-                    "current_prices": current_prices
+                    # Only the triggering price. The full snapshot carried
+                    # internal source metadata for every asset to a third-party
+                    # endpoint chosen by the user.
+                    "price": self._current_price(alert, current_prices),
+                    "price_context": self._selected_price_context(alert, current_prices),
                 }
                 response = await client.post(alert.webhook_url, json=payload)
+                self._assert_peer_was_vetted(response, vetted)
                 if 400 <= response.status_code < 500 and response.status_code != 429:
                     raise PermanentDeliveryError(f"Webhook rejected request with status {response.status_code}")
                 response.raise_for_status()
@@ -951,6 +1014,27 @@ class AlertEngine:
         except Exception as e:
             logger.error("Webhook failed for alert_id=%s: %s", alert.id, e)
             raise
+
+    @staticmethod
+    def _assert_peer_was_vetted(response: httpx.Response, vetted: set[str]) -> None:
+        """Reject a response served from an address that was never validated.
+
+        Closes the gap between resolving the host for validation and the client
+        resolving it again for the actual connection.
+        """
+        if not vetted:
+            return
+        network_stream = response.extensions.get("network_stream")
+        if network_stream is None:
+            return
+        try:
+            peer_address = network_stream.get_extra_info("server_addr")
+        except Exception:
+            return
+        if not peer_address:
+            return
+        if str(peer_address[0]) not in vetted:
+            raise PermanentDeliveryError("Webhook host changed address mid-request")
 
     async def _send_telegram(self, alert: Alert, current_prices: dict[str, Any]) -> None:
         if not settings.telegram_alert_delivery_enabled or not settings.telegram_bot_token:

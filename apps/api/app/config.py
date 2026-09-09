@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -10,10 +11,17 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     debug: bool = False
+    background_tasks_enabled: bool = True
 
     database_url: str = Field(
         default="postgresql+psycopg://nerkhbaan:nerkhbaan@localhost:5432/nerkhbaan"
     )
+    # Peak connections per process is roughly
+    # (pool + overflow) * 2 because a sync and an async engine both exist.
+    database_pool_size: int = 5
+    database_async_pool_size: int = 5
+    database_max_overflow: int = 3
+    database_pool_timeout_seconds: int = 10
 
     jwt_secret_key: str = Field(default="change-me-in-production")
 
@@ -71,20 +79,15 @@ class Settings(BaseSettings):
     goldapi_api_base_url: str = "https://www.goldapi.io/api"
     alanchand_api_base_url: str = "https://api.alanchand.com"
     alanchand_api_token: str | None = None
-    tgju_api_base_url: str = "https://api.tgju.org/v1"
     nobitex_api_base_url: str = "https://api.nobitex.ir"
     wallex_api_base_url: str = "https://api.wallex.ir"
     tetherland_api_base_url: str = "https://api.tetherland.com"
-    bonbast_api_base_url: str = "https://www.bonbast.com"
     coinbase_api_base_url: str = "https://api.exchange.coinbase.com"
     coingecko_api_base_url: str = "https://api.coingecko.com/api/v3"
     coincap_api_base_url: str = "https://api.coincap.io/v2"
     metals_dev_api_base_url: str = "https://api.metals.dev/v1"
     metals_dev_api_key: str | None = None
     goldapi_api_key: str | None = None
-    exchangerate_api_base_url: str = "https://v6.exchangerate-api.com/v6"
-    exchangerate_api_key: str | None = None
-    frankfurter_api_base_url: str = "https://api.frankfurter.app"
     servix_api_base_url: str = "https://servix.cc"
     servix_api_key: str | None = None
     tala_api_base_url: str = "https://api.tala.ir"
@@ -95,20 +98,12 @@ class Settings(BaseSettings):
     tala_gold18_toman_key: str = "geram18k"
     tala_gold24_toman_key: str = "geram24k"
     tala_silver999_toman_key: str | None = None
-    ticaro_api_base_url: str = "https://ticaro.ir"
-    ticaro_api_key: str | None = None
-    ticaro_usdt_toman_pair: str = "USDT/TMN"
-    ticaro_btc_toman_pair: str = "BTC/TMN"
-    ticaro_gold18_toman_pair: str = "GOLD18/TMN"
-    ticaro_gold24_toman_pair: str | None = None
-    ticaro_silver999_toman_pair: str | None = None
-    arzbin_api_base_url: str = "https://hub.arzbin.com"
-    arzbin_api_key: str | None = None
-    arzbin_local_unit: Literal["RIAL", "TOMAN"] = "TOMAN"
-    arzbin_price_semantic: Literal["buy", "sell", "midpoint"] = "sell"
     navasan_api_base_url: str = "http://api.navasan.tech"
     navasan_https_proxy_base_url: str | None = None
     navasan_api_key: str | None = None
+    # Tripwire, not a feature: a model validator rejects startup if this is
+    # ever turned on. Kept so an old .env fails loudly instead of silently
+    # sending an API key over plaintext HTTP.
     navasan_allow_insecure_http: bool = False
     navasan_usd_item: str = "usd_sell"
     navasan_usdt_item: str = "usdt"
@@ -137,31 +132,29 @@ class Settings(BaseSettings):
     pricing_provider_backoff_base_seconds: Decimal = Decimal("0.5")
     pricing_provider_aggregate_cache_seconds: int = 5
     pricing_provider_max_response_bytes: int = 262_144
+    pricing_relay_base_url: str | None = None
+    pricing_relay_shared_token: str | None = None
     pricing_provider_allowed_hosts: str = (
-        "api.gold-api.com,www.goldapi.io,api.metals.dev,api.exchange.coinbase.com,"
-        "api.coingecko.com,api.nobitex.ir,api.wallex.ir,api.tetherland.com,"
-        "servix.cc,api.tala.ir,ticaro.ir,hub.arzbin.com,api.navasan.tech,"
-        "api.nerkh.io"
+        "api.alanchand.com,api.gold-api.com,www.goldapi.io,api.metals.dev,"
+        "api.exchange.coinbase.com,api.coingecko.com,api.coincap.io,"
+        "api.nobitex.ir,api.wallex.ir,api.tetherland.com,"
+        "servix.cc,api.tala.ir,api.navasan.tech,api.nerkh.io"
     )
-    secret_manager_provider: Literal["env", "file", "external"] = "env"
-    secret_rotation_runbook_url: str | None = None
-    price_cache_file: str = "price_cache.json"
     pricing_require_provider_keys: bool = False
-    pricing_provider_budget_overrides: str = "{}"
-    pricing_instrument_ttl_overrides: str = "{}"
-    pricing_anomaly_threshold_overrides: str = "{}"
     pricing_lock_ttl_seconds: int = 45
     pricing_refresh_interval_seconds: int = 20
     pricing_refresh_jitter_seconds: int = 8
-    pricing_provider_cache_grace_seconds: int = 300
     pricing_derived_fallback_enabled: bool = True
     pricing_backfill_enabled: bool = True
     pricing_backfill_batch_size: int = 500
     pricing_backfill_max_jobs_per_cycle: int = 2
     pricing_persistence_flush_batch_size: int = 200
     pricing_persistence_flush_interval_seconds: int = 5
-    pricing_persistence_stream_maxlen: int = 100_000
+    pricing_persistence_stream_maxlen: int = 50_000
     pricing_event_stream_maxlen: int = 20_000
+    # Redis keeps only a short volatility window; TimescaleDB owns real history.
+    pricing_short_history_retention_hours: int = 6
+    pricing_short_history_max_entries: int = 240
     raw_provider_payload_max_bytes: int = 16_384
     raw_provider_payload_retention_days: int = 30
     websocket_heartbeat_seconds: int = 20
@@ -170,11 +163,13 @@ class Settings(BaseSettings):
     websocket_max_connections_per_worker: int = 1000
 
     # Fallback exchange rate provider (USD -> IRR)
-    exchange_rate_api_base_url: str = "https://open.er-api.com/v6/latest"
     
     # Redis configuration
     redis_url: str | None = None
     trusted_proxy_ips: str = "127.0.0.1,::1"
+
+    # Networks allowed to scrape /metrics in addition to loopback/private.
+    metrics_allowed_networks: str = "127.0.0.1/32,::1/128"
 
     migration_advisory_lock_id: int = 7_265_172_091
     migration_connect_timeout_seconds: int = 10
@@ -182,10 +177,8 @@ class Settings(BaseSettings):
 
     admin_frontend_enabled: bool = True
     admin_cookie_name: str = "nerkhbaan_admin_session"
-    admin_refresh_cookie_name: str = "nerkhbaan_admin_refresh"
     admin_cookie_domain: str | None = None
     admin_session_minutes: int = 30
-    admin_refresh_hours: int = 12
     admin_ip_allowlist: str = ""
     admin_private_network_only: bool = False
     admin_reauth_minutes: int = 10
@@ -202,16 +195,13 @@ class Settings(BaseSettings):
     alert_delivery_backoff_max_seconds: int = 3600
 
     # Remote reasoning providers use the standard chat-completions protocol.
-    insight_api_base_url: str = "https://api.deepseek.com"
     insight_api_key: str | None = None
-    insight_model: str = "deepseek-v4-flash"
     deepseek_api_key: str | None = None
     groq_api_base_url: str = "https://api.groq.com/openai/v1"
     groq_api_key: str | None = None
     groq_model: str = "openai/gpt-oss-120b"
     openrouter_api_base_url: str = "https://openrouter.ai/api/v1"
     openrouter_api_key: str | None = None
-    ai_model: str | None = None
     ai_max_tokens: int = 600
     ai_provider_order: str = "groq,gemini,openrouter,deepseek"
     gemini_api_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai"
@@ -237,7 +227,6 @@ class Settings(BaseSettings):
     @field_validator(
         "pricing_provider_connect_timeout_seconds",
         "pricing_provider_request_timeout_seconds",
-        "pricing_provider_cache_grace_seconds",
         "pricing_provider_aggregate_cache_seconds",
         "pricing_provider_max_response_bytes",
         "ai_request_timeout_seconds",
@@ -275,6 +264,63 @@ class Settings(BaseSettings):
         if self.navasan_allow_insecure_http:
             raise ValueError("NAVASAN_ALLOW_INSECURE_HTTP is no longer supported; use an HTTPS proxy")
         return self
+
+    @model_validator(mode="after")
+    def provider_allowlist_must_cover_configured_bases(self) -> "Settings":
+        """Keep operator-configured provider base URLs reachable.
+
+        A proxy or mirror set through configuration is useless when the egress
+        allowlist still only names the upstream vendor host, so fold the hosts
+        of every configured base URL into the allowlist instead of failing the
+        call later with an opaque provider_host_not_allowed.
+        """
+        hosts = {
+            item.strip().lower()
+            for item in self.pricing_provider_allowed_hosts.split(",")
+            if item.strip()
+        }
+        for name in (
+            "pricing_relay_base_url",
+            "navasan_https_proxy_base_url",
+            "alanchand_api_base_url",
+            "goldapi_api_base_url",
+            "gold_api_base_url",
+            "metals_dev_api_base_url",
+            "nobitex_api_base_url",
+            "tetherland_api_base_url",
+            "coinbase_api_base_url",
+            "coingecko_api_base_url",
+            "coincap_api_base_url",
+            "wallex_api_base_url",
+            "tala_api_base_url",
+            "nerkh_io_api_base_url",
+            "servix_api_base_url",
+        ):
+            value = getattr(self, name, None)
+            if not value:
+                continue
+            hostname = urlsplit(str(value)).hostname
+            if hostname:
+                hosts.add(hostname.strip().lower())
+        self.pricing_provider_allowed_hosts = ",".join(sorted(hosts))
+        if self.pricing_relay_base_url:
+            parsed = urlsplit(self.pricing_relay_base_url)
+            if parsed.scheme != "https" or not parsed.hostname:
+                raise ValueError("PRICING_RELAY_BASE_URL must be an HTTPS origin")
+            if not self.pricing_relay_shared_token or len(self.pricing_relay_shared_token) < 32:
+                raise ValueError("PRICING_RELAY_SHARED_TOKEN must contain at least 32 characters")
+        return self
+
+    @field_validator(
+        "pricing_short_history_retention_hours",
+        "pricing_short_history_max_entries",
+        "pricing_lock_ttl_seconds",
+    )
+    @classmethod
+    def cache_windows_must_be_positive(cls, value: int) -> int:
+        if value <= 0:
+            raise ValueError("Cache window settings must be positive")
+        return value
 
     push_allowed_hosts: str = (
         "fcm.googleapis.com,updates.push.services.mozilla.com,"

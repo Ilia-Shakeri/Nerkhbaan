@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import os
 import time
@@ -10,6 +9,7 @@ import psycopg
 from sqlalchemy.engine import make_url
 
 from ..config import settings
+from .state import migration_checksum, migrations_root
 
 logger = logging.getLogger("nerkhbaan.migrations")
 
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS public.schema_migrations (
 
 
 def _migration_files() -> list[Path]:
-    root = Path(os.getenv("MIGRATIONS_DIR", "/app/db/migrations")).resolve()
+    root = migrations_root().resolve()
     if not root.is_dir():
         raise RuntimeError(f"Migration directory does not exist: {root}")
     files = sorted(path for path in root.iterdir() if path.is_file() and path.suffix == ".sql")
@@ -50,7 +50,7 @@ def _connect() -> psycopg.Connection:
 
 def _apply_file(connection: psycopg.Connection, path: Path) -> None:
     sql = path.read_text(encoding="utf-8")
-    checksum = hashlib.sha256(sql.encode("utf-8")).hexdigest()
+    checksum = migration_checksum(path)
     with connection.cursor() as cursor:
         cursor.execute(
             "SELECT checksum FROM public.schema_migrations WHERE version = %s",

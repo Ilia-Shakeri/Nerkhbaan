@@ -11,6 +11,7 @@ from sqlalchemy import func, or_, select, update
 from ..config import settings
 from ..db import SessionLocal
 from ..models import Alert, AlertDeliveryJob, AlertTriggerEvent
+from ..observability import alert_delivery_total, background_failures_total
 from .alert_engine import PermanentDeliveryError
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ class DLQWorker:
             except asyncio.CancelledError:
                 raise
             except Exception:
+                background_failures_total.labels(loop="alert_delivery").inc()
                 logger.exception("Alert delivery worker cycle failed")
                 await asyncio.sleep(settings.alert_worker_poll_seconds)
 
@@ -88,9 +90,23 @@ class DLQWorker:
         try:
             summary = await self.alert_engine.deliver_job(job_id)
         except Exception as exc:
+            channel = await asyncio.to_thread(self._job_channel, job_id)
+            alert_delivery_total.labels(channel=channel, status="failed").inc()
             await asyncio.to_thread(self._mark_failed, job_id, exc)
             return
+        alert_delivery_total.labels(
+            channel=str(summary.get("channel", "unknown")), status="delivered"
+        ).inc()
         await asyncio.to_thread(self._mark_delivered, job_id, summary)
+
+    @staticmethod
+    def _job_channel(job_id: int) -> str:
+        db = SessionLocal()
+        try:
+            job = db.get(AlertDeliveryJob, job_id)
+            return job.channel if job else "unknown"
+        finally:
+            db.close()
 
     def _mark_delivered(self, job_id: int, summary: dict) -> None:
         db = SessionLocal()

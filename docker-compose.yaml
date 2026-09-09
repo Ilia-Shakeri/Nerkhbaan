@@ -4,6 +4,10 @@ x-api-environment: &api-environment
   API_HOST: 0.0.0.0
   API_PORT: 8000
   FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1,172.28.0.0/24}
+  # Must match FORWARDED_ALLOW_IPS: both layers decide which hop may set
+  # X-Forwarded-For, and a mismatch reintroduces client IP spoofing.
+  TRUSTED_PROXY_IPS: ${TRUSTED_PROXY_IPS:-127.0.0.1,::1,172.28.0.0/24}
+  ADMIN_TRUSTED_PROXY_IPS: ${ADMIN_TRUSTED_PROXY_IPS:-127.0.0.1,::1,172.28.0.0/24}
 
 services:
   postgres:
@@ -27,20 +31,12 @@ services:
   redis:
     image: redis:7.4-alpine
     restart: unless-stopped
-    command:
-      - sh
-      - -c
-      - |
-        if [ -f /data/appendonly.aof.13.base.rdb ]; then
-          if ! redis-check-rdb /data/appendonly.aof.13.base.rdb >/tmp/redis_aof_check.log 2>&1; then
-            echo "Redis: unreadable AOF base file at /data/appendonly.aof.13.base.rdb; keeping data untouched for manual recovery."
-            echo "Check /tmp/redis_aof_check.log inside container; manual restore required."
-            exit 1
-          fi
-        fi
-        exec redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy noeviction
+    command: ["sh", "/usr/local/bin/redis-safe-start.sh"]
+    environment:
+      REDIS_MAXMEMORY: ${REDIS_MAXMEMORY:-256mb}
     volumes:
       - redis_data:/data
+      - ./scripts/redis-safe-start.sh:/usr/local/bin/redis-safe-start.sh:ro
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
