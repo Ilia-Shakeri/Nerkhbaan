@@ -66,7 +66,11 @@ class RedisRequestBudget:
             budget.requests_per_hour,
             budget.requests_per_day,
         ]
-        if purpose in {RequestPurpose.NORMAL, RequestPurpose.BACKFILL}:
+        if purpose in {
+            RequestPurpose.NORMAL,
+            RequestPurpose.BACKFILL,
+            RequestPurpose.FALLBACK,
+        }:
             provider_limits[0] = max(1, math.floor(provider_limits[0] * 0.8))
             provider_limits[1] = max(1, math.floor(provider_limits[1] * 0.8))
             provider_limits[2] = max(
@@ -118,16 +122,9 @@ class RedisRequestBudget:
                     172800,
                 )
             )
-        elif purpose is RequestPurpose.FALLBACK:
-            if budget.reserved_fallback_requests <= 0:
-                return BudgetDecision(False, "no_reserved_fallback_budget", 0)
-            key_limits.append(
-                (
-                    f"pricing:budget:{provider.provider_id}:fallback:day:{day_bucket}",
-                    budget.reserved_fallback_requests,
-                    172800,
-                )
-            )
+        # A route with the FALLBACK role is often the only reachable route
+        # during an upstream outage. Its normal refresh must use the bounded
+        # provider budget, not stop after the small reserve was consumed.
 
         keys = [item[0] for item in key_limits]
         arguments: list[int] = []

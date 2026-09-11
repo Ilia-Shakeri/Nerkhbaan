@@ -78,6 +78,9 @@ state, not a surprise. Before declaring a chain live:
 - An expired canonical quote is not an anomaly baseline. A new valid provider
   quote must be assessed like an initial quote, not held against an old market
   level that can no longer be displayed or used by alerts.
+- A reachable fallback route consumes the same bounded per-provider budget as
+  normal refresh work. Do not use a tiny reserved fallback allowance as a hard
+  daily ceiling when it is the only reachable route.
 - Provider canary output is operational evidence, not licensing evidence.
 - A local unit-test pass is not a production deploy proof.
 

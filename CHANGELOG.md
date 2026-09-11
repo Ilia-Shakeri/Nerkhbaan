@@ -2,6 +2,12 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.5] - 2026-09-11
+
+### Fixed
+
+- A reachable fallback provider now uses its bounded normal provider budget instead of stopping after the small reserved fallback allowance.
+
 ## [2.0.4] - 2026-09-11
 
 ### Fixed
