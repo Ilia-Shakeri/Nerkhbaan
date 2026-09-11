@@ -94,7 +94,13 @@ class OperationalPricingSettings:
                             role=ProviderRole(row["role"]),
                             priority=int(row["priority"]),
                             trust_score=Decimal(str(row["trust_score"])),
-                            enabled=bool(row["provider_enabled"] and row["config_enabled"]),
+                            # Registry defaults are a safety ceiling. An older database row
+                            # must not revive a route that code has quarantined.
+                            enabled=bool(
+                                provider.enabled
+                                and row["provider_enabled"]
+                                and row["config_enabled"]
+                            ),
                             operational_ttl_seconds=int(
                                 row["operational_ttl_seconds"]
                                 or provider.operational_ttl_seconds

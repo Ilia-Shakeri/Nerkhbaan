@@ -81,6 +81,11 @@ state, not a surprise. Before declaring a chain live:
 - A reachable fallback route consumes the same bounded per-provider budget as
   normal refresh work. Do not use a tiny reserved fallback allowance as a hard
   daily ceiling when it is the only reachable route.
+- `tetherland_btc`, `wallex_usdt_toman`, and `wallex_btc_toman` are quarantined
+  by default after live canaries found a missing contract field or an oversized
+  response. A database enable flag cannot override this safety default. Re-enable
+  only with the route-specific environment flag after a new canary and parser
+  fixture prove the exact endpoint contract.
 - Provider canary output is operational evidence, not licensing evidence.
 - A local unit-test pass is not a production deploy proof.
 

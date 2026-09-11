@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
+from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enough")
 
@@ -12,9 +14,11 @@ from app.pricing.instruments import INSTRUMENTS
 from app.pricing.models import (
     CanonicalQuote,
     CanonicalStatus,
+    ProviderRole,
     SourceSemantic,
     SourceType,
 )
+from app.pricing.operational import OperationalPricingSettings
 from app.pricing.parsers import ParserContext, ParserError, build_parser
 from app.pricing.registry import PROVIDERS, PROVIDERS_BY_INSTRUMENT
 
@@ -174,6 +178,42 @@ class PricingProviderRepairTests(unittest.TestCase):
         provider = PROVIDERS["navasan_usdt"]
         self.assertFalse(provider.enabled)
         self.assertFalse(provider.configured(__import__("app.config").config.settings))
+
+    def test_quarantined_routes_stay_disabled_when_database_rows_are_enabled(self) -> None:
+        for provider_id in (
+            "tetherland_btc",
+            "wallex_usdt_toman",
+            "wallex_btc_toman",
+        ):
+            self.assertFalse(PROVIDERS[provider_id].enabled)
+
+        row = {
+            "provider_id": "tetherland_btc",
+            "role": ProviderRole.FALLBACK.value,
+            "priority": 3,
+            "trust_score": "0.84",
+            "provider_enabled": True,
+            "config_enabled": True,
+            "operational_ttl_seconds": 60,
+            "requests_per_minute": 6,
+            "requests_per_hour": 120,
+            "requests_per_day": 1500,
+            "reserved_anomaly_requests": 0,
+            "reserved_fallback_requests": 0,
+            "minimum_interval_seconds": 60,
+            "cooldown_after_429_seconds": 300,
+            "estimated_request_cost": "1",
+        }
+        with patch(
+            "app.pricing.operational.asyncio.to_thread",
+            new=AsyncMock(return_value=[row]),
+        ):
+            providers = asyncio.run(
+                OperationalPricingSettings().providers_for("BTC_TOMAN")
+            )
+
+        resolved = next(item for item in providers if item.provider_id == "tetherland_btc")
+        self.assertFalse(resolved.enabled)
 
 
 if __name__ == "__main__":

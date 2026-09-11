@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.6] - 2026-09-11
+
+### Fixed
+
+- Quarantined three live-proven broken fallback routes so they no longer spend refresh budget or create repeated failures.
+- Registry safety defaults now remain effective when an older operational database row still says a provider is enabled.
+
 ## [2.0.5] - 2026-09-11
 
 ### Fixed
