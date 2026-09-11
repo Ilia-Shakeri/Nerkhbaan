@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.3] - 2026-09-11
+
+### Fixed
+
+- Empty price charts no longer render a made-up point from the current quote.
+- Chart loading, no-history, and request-failure states now explain the state and provide a retry action.
+
 ## [2.0.2] - 2026-09-11
 
 ### Fixed

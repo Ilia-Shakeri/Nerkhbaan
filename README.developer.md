@@ -258,3 +258,7 @@ manifest versions and `apps/api/app/release.py` in one commit.
 Run `npm run check:release` before committing. It rejects mismatched versions.
 For a material release, update every affected Markdown document in the same
 commit and record the release in `CHANGELOG.md`.
+
+Price charts use only recorded history. Do not turn a current quote into a
+chart point: show an explicit unavailable state and retry action until the
+history API returns real points.

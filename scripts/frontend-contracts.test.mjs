@@ -181,3 +181,14 @@ test("web image installer falls back only to its locked npm cache", () => {
   assert.match(installer, /npm ci[\s\\]+--workspace=nerkhbaan-web[\s\\]+--workspace=@nerkhbaan\/ui[\s\\]+--include-workspace-root=false[\s\\]+--offline/);
   assert.match(installer, /Offline npm cache does not contain the locked dependency set/);
 });
+
+test("dashboard never makes a chart point from a live quote", () => {
+  const dashboard = read("apps/web/src/app/views/DashboardView.tsx");
+  assert.doesNotMatch(
+    dashboard,
+    /timestamp:\s*new Date\(\)\.toISOString\(\),\s*value_usd:\s*asset\.priceUsd/,
+    "a live quote is not historical chart data",
+  );
+  assert.match(dashboard, /function ChartUnavailableState/);
+  assert.match(dashboard, /historyQuery\?\.refetch/);
+});

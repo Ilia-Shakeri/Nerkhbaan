@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellPlus, ArrowUpRight, ArrowDownRight, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database } from 'lucide-react';
+import { BellPlus, ArrowUpRight, ArrowDownRight, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -301,6 +301,42 @@ const toChartData = (
     .sort(([left], [right]) => left - right)
     .map(([time, value]) => ({ time: time as UTCTimestamp, value }));
 };
+
+function ChartUnavailableState({
+  isDark,
+  language,
+  isRetrying,
+  error,
+  onRetry,
+  className = 'h-[400px] min-h-[400px]',
+}: {
+  isDark: boolean;
+  language: 'fa' | 'en';
+  isRetrying: boolean;
+  error: Error | null;
+  onRetry: () => void;
+  className?: string;
+}) {
+  const title = error
+    ? language === 'fa' ? 'دریافت داده نمودار ناموفق بود' : 'Chart data could not be loaded'
+    : language === 'fa' ? 'برای این بازه داده نمودار وجود ندارد' : 'No chart data exists for this range';
+  const detail = error
+    ? language === 'fa' ? 'ارتباط با سرور را بررسی کنید و دوباره تلاش کنید.' : 'Check the server connection and try again.'
+    : language === 'fa' ? 'با رسیدن داده جدید، نمودار اینجا نمایش داده می‌شود.' : 'The chart will appear here when recorded data is available.';
+
+  return (
+    <div className={`flex w-full flex-col items-center justify-center gap-3 rounded-[1.5rem] border px-6 text-center backdrop-blur-md ${className} ${
+      isDark ? 'border-red-500/20 bg-[#1A0B0B]/50' : 'border-red-200 bg-[#FFF0F0]/50'
+    }`}>
+      <div className={`text-sm font-semibold ${isDark ? 'text-red-400' : 'text-red-600'}`}>{title}</div>
+      <div className={`max-w-sm text-xs ${isDark ? 'text-[#CDBB8C]' : 'text-[#7A5E24]'}`}>{detail}</div>
+      <Button type="button" variant="outline" size="sm" disabled={isRetrying} onClick={onRetry} className="gap-2">
+        <RefreshCw size={14} className={isRetrying ? 'animate-spin' : ''} />
+        {language === 'fa' ? 'تلاش دوباره' : 'Retry'}
+      </Button>
+    </div>
+  );
+}
 
 function FinancialChart({
   data,
@@ -816,18 +852,12 @@ export function DashboardView() {
         });
 
         const safeHistory = Array.isArray(asset.history) ? asset.history : [];
-        const resolvedHistory = safeHistory.length > 0 ? [...safeHistory] : [
-          { timestamp: new Date().toISOString(), value_usd: asset.priceUsd, value_toman: asset.priceToman }
-        ];
-
-        const chartData = toChartData(resolvedHistory, currencyMode, usdToTomanRate);
+        const historyQuery = historyQueries[DEFAULT_ASSET_ORDER.indexOf(asset.id)];
+        const historyError = historyQuery?.error instanceof Error ? historyQuery.error : null;
+        const chartData = toChartData(safeHistory, currencyMode, usdToTomanRate);
         const chartColor = isDark ? CHART_COLORS[asset.id].dark : CHART_COLORS[asset.id].light;
-
-        const chartErrorMsg = typeof asset.chartErrorMessage === 'string' 
-            ? asset.chartErrorMessage 
-            : (asset.chartErrorMessage?.[language] || 'امکان دریافت اطلاعات نمودار وجود ندارد');
-
-        const showChartError = asset.chartError && safeHistory.length === 0 && asset.priceUsd === null && asset.priceToman === null;
+        const showChartUnavailable = !historyQuery?.isPending && chartData.length === 0;
+        const retryHistory = () => void historyQuery?.refetch();
 
         return (
           <motion.div
@@ -1088,14 +1118,14 @@ export function DashboardView() {
                   </div>
                 </div>
 
-                {showChartError ? (
-                  <div className={`flex h-[400px] min-h-[400px] w-full flex-col items-center justify-center rounded-[1.5rem] border backdrop-blur-md ${
-                    isDark ? 'border-red-500/20 bg-[#1A0B0B]/50' : 'border-red-200 bg-[#FFF0F0]/50'
-                  }`}>
-                    <div className={`text-sm font-semibold ${isDark ? 'text-red-400' : 'text-red-600'}`}>
-                      {chartErrorMsg}
-                    </div>
-                  </div>
+                {showChartUnavailable ? (
+                  <ChartUnavailableState
+                    isDark={isDark}
+                    language={language}
+                    isRetrying={Boolean(historyQuery?.isFetching)}
+                    error={historyError}
+                    onRetry={retryHistory}
+                  />
                 ) : (
                   <>
                     <div
@@ -1310,10 +1340,9 @@ export function DashboardView() {
           if (!asset) return null;
           
           const safeHistory = Array.isArray(asset.history) ? asset.history : [];
-          const resolvedHistory = safeHistory.length > 0 ? [...safeHistory] : [
-            { timestamp: new Date().toISOString(), value_usd: asset.priceUsd, value_toman: asset.priceToman }
-          ];
-          const chartData = toChartData(resolvedHistory, currencyMode, usdToTomanRate);
+          const historyQuery = historyQueries[DEFAULT_ASSET_ORDER.indexOf(asset.id)];
+          const historyError = historyQuery?.error instanceof Error ? historyQuery.error : null;
+          const chartData = toChartData(safeHistory, currencyMode, usdToTomanRate);
           
           const chartColor = CHART_COLORS[asset.id][isDark ? 'dark' : 'light'];
           
@@ -1322,14 +1351,27 @@ export function DashboardView() {
               <div className={`text-center text-4xl font-bold ${isDark ? 'text-[#D4AF37]' : 'text-[#8A6B20]'}`}>
                 {formatPrice(currencyMode === 'usd' ? asset.priceUsd : asset.priceToman, currencyMode, language)}
               </div>
-              <FinancialChart
-                data={chartData}
-                color={chartColor}
-                isDark={isDark}
-                currencyMode={currencyMode}
-                language={language}
-                className={`h-[60vh] rounded-2xl border p-4 ${isDark ? 'border-white/5 bg-[#111111]/40' : 'border-black/5 bg-white/40'}`}
-              />
+              {historyQuery?.isPending ? (
+                <div className={`h-[60vh] animate-pulse rounded-2xl ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
+              ) : chartData.length === 0 ? (
+                <ChartUnavailableState
+                  isDark={isDark}
+                  language={language}
+                  isRetrying={Boolean(historyQuery?.isFetching)}
+                  error={historyError}
+                  onRetry={() => void historyQuery?.refetch()}
+                  className="h-[60vh]"
+                />
+              ) : (
+                <FinancialChart
+                  data={chartData}
+                  color={chartColor}
+                  isDark={isDark}
+                  currencyMode={currencyMode}
+                  language={language}
+                  className={`h-[60vh] rounded-2xl border p-4 ${isDark ? 'border-white/5 bg-[#111111]/40' : 'border-black/5 bg-white/40'}`}
+                />
+              )}
             </div>
           );
         })()}
