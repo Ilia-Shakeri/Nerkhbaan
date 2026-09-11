@@ -2,6 +2,12 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.4] - 2026-09-11
+
+### Fixed
+
+- An expired canonical quote no longer marks a fresh provider quote as suspicious only because the old market level differs.
+
 ## [2.0.3] - 2026-09-11
 
 ### Fixed

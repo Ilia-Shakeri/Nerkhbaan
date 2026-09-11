@@ -26,7 +26,7 @@ const PARTICLES = Array.from({ length: 28 }, (_, i) => ({
   duration: 4.5 + (i % 5) * 0.6,
 }));
 
-const APP_VERSION = 'v2.0.3';
+const APP_VERSION = 'v2.0.4';
 
 const LOADING_LABELS = {
   fa: 'در حال راه‌اندازی...',

@@ -793,7 +793,14 @@ class InstrumentPricingService:
         previous: CanonicalQuote | None,
         instrument: Any,
     ) -> AnomalyAssessment | None:
-        if previous is None or candidate.price is None:
+        # An expired canonical quote is not a safe anomaly baseline. Comparing
+        # a new direct quote to an old market price can permanently trap an
+        # instrument in suspicious_unconfirmed when every verifier is down.
+        if (
+            previous is None
+            or candidate.price is None
+            or utc_now() > previous.expires_at
+        ):
             return None
         try:
             recent = [quote.price for quote in await self.store.recent_canonical(candidate.instrument_id)]

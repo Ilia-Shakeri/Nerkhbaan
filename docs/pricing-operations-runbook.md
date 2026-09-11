@@ -75,6 +75,9 @@ state, not a surprise. Before declaring a chain live:
 - `/api/prices/health` includes refresh-loop state. `degraded` means no usable
   canonical result in the last completed cycle. `failed` means the cycle itself
   raised an error. Check this before changing a provider.
+- An expired canonical quote is not an anomaly baseline. A new valid provider
+  quote must be assessed like an initial quote, not held against an old market
+  level that can no longer be displayed or used by alerts.
 - Provider canary output is operational evidence, not licensing evidence.
 - A local unit-test pass is not a production deploy proof.
 

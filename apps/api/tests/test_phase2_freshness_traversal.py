@@ -15,6 +15,8 @@ from app.pricing.anomaly import AnomalyAssessment
 from app.pricing.canonical import CanonicalPricePolicy
 from app.pricing.freshness import FreshnessStatus
 from app.pricing.models import (
+    CanonicalQuote,
+    CanonicalStatus,
     PersistenceStatus,
     ProviderQuote,
     ProviderRuntimeState,
@@ -179,6 +181,37 @@ class ProviderFreshnessTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(outcome.usable)
         self.assertEqual(outcome.failure_reason, "provider_disabled")
         self.assertIs(outcome.cache_status, FreshnessStatus.LIVE)
+
+
+class ExpiredCanonicalAssessmentTests(unittest.IsolatedAsyncioTestCase):
+    async def test_expired_canonical_quote_is_not_an_anomaly_baseline(self) -> None:
+        instrument = get_instrument("XAU_USD_OZ")
+        candidate = _provider_quote(observed_at=FROZEN_NOW)
+        previous = CanonicalQuote.create(
+            instrument_id=instrument.instrument_id,
+            price=Decimal("2000"),
+            status=CanonicalStatus.LIVE,
+            primary_quote_id=1,
+            verification_quote_ids=[],
+            source_summary={},
+            observed_at=FROZEN_NOW - timedelta(hours=2),
+            canonical_at=FROZEN_NOW - timedelta(hours=2),
+            valid_until=FROZEN_NOW - timedelta(hours=1, minutes=59),
+            stale_at=FROZEN_NOW - timedelta(hours=1, minutes=58),
+            expires_at=FROZEN_NOW - timedelta(hours=1),
+            is_persisted=True,
+            decision_reason="expired_test_quote",
+        )
+        service = InstrumentPricingService(store=object())
+
+        with patch("app.pricing.service.utc_now", return_value=FROZEN_NOW):
+            assessment = await service._assess_candidate(
+                candidate,
+                previous,
+                instrument,
+            )
+
+        self.assertIsNone(assessment)
 
 
 class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
