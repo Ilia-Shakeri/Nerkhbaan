@@ -42,3 +42,9 @@ Before deploy, record the current commit and database backup. After deploy, chec
 `infra/relay` is a separate stateless stack. It accepts TLS from only the core IP range and requires `X-Relay-Token`. The core adds that header only when `PRICING_RELAY_BASE_URL` matches a configured provider URL host. Point only affected provider base URLs at the matching relay path, add the relay host to the provider allowlist, and set a secret-store token of at least 32 characters.
 
 This relay solves reachability only. It does not grant redistribution rights or override vendor terms. Those remain hard launch gates.
+# Offline package build fallback
+
+The frontend image installer tries configured npm registries first. If every
+registry is unavailable, it retries with the BuildKit npm cache and the locked
+dependency set. A cache miss remains a hard failure; never replace the lockfile
+or install unpinned packages during a production deploy.

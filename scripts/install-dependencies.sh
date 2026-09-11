@@ -43,6 +43,17 @@ install_from_registry() {
         --no-fund
 }
 
+install_from_cache() {
+    echo "No registry is reachable. Trying the verified local npm cache..."
+    npm ci \
+        --workspace=nerkhbaan-web \
+        --workspace=@nerkhbaan/ui \
+        --include-workspace-root=false \
+        --offline \
+        --no-audit \
+        --no-fund
+}
+
 echo "Checking npm mirrors..."
 
 for registry in "$PRIMARY_REGISTRY" "$SECONDARY_REGISTRY" "$FALLBACK_REGISTRY"; do
@@ -63,5 +74,11 @@ for registry in "$PRIMARY_REGISTRY" "$SECONDARY_REGISTRY" "$FALLBACK_REGISTRY"; 
     fi
 done
 
-echo "All npm registries failed. No dependency set was installed." >&2
+echo "All npm registries failed." >&2
+if install_from_cache; then
+    echo "Offline dependency install complete."
+    exit 0
+fi
+
+echo "Offline npm cache does not contain the locked dependency set." >&2
 exit 1

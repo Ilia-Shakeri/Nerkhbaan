@@ -174,3 +174,10 @@ test("desktop renderer keeps process and network guards", () => {
   assert.match(main, /webSecurity:\s*true/);
   assert.match(main, /setWindowOpenHandler\(\(\) => \(\{ action: 'deny' \}\)\)/);
 });
+
+test("web image installer falls back only to its locked npm cache", () => {
+  const installer = read("scripts/install-dependencies.sh");
+  assert.match(installer, /install_from_cache\(\)/);
+  assert.match(installer, /npm ci[\s\\]+--workspace=nerkhbaan-web[\s\\]+--workspace=@nerkhbaan\/ui[\s\\]+--include-workspace-root=false[\s\\]+--offline/);
+  assert.match(installer, /Offline npm cache does not contain the locked dependency set/);
+});

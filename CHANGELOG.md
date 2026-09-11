@@ -2,6 +2,12 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.2] - 2026-09-11
+
+### Fixed
+
+- Frontend image builds now use the locked local npm cache when every configured registry is unavailable.
+
 ## [2.0.1] - 2026-09-11
 
 ### Fixed
