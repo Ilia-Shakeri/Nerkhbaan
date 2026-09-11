@@ -1,5 +1,6 @@
 {
   "name": "nerkhbaan-monorepo",
+  "version": "2.0.0",
   "private": true,
   "packageManager": "npm@10.9.8",
   "engines": {
@@ -21,11 +22,12 @@
     "build:admin": "npm run build --workspace=nerkhbaan-admin-web",
     "build": "npm run build:web && npm run build:admin && npm run build:desktop",
     "check:api": "cd apps/api && python -m compileall app && python -m pyflakes app tests scripts",
+    "check:release": "node scripts/check-release-version.mjs",
     "test:api": "cd apps/api && python -m unittest discover -s tests -v",
     "test:frontend": "node --test scripts/frontend-contracts.test.mjs",
     "test:e2e": "playwright test",
     "test": "npm run test:api",
-    "verify": "npm run check:api && npm run test:api && npm run test:frontend && npm run build && npm run test:e2e -- --list"
+    "verify": "npm run check:release && npm run check:api && npm run test:api && npm run test:frontend && npm run build && npm run test:e2e -- --list"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0"

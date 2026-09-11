@@ -11,6 +11,7 @@ from .db import engine
 from .migrations.state import migration_state
 from .observability import set_queue_depths
 from .pricing.cache import PricingRedisStore
+from .release import VERSION
 
 
 #: Backlog counts are cached: health is polled every few seconds by Docker and
@@ -138,6 +139,7 @@ def health_snapshot() -> dict[str, Any]:
     ready = database_ok and migration_ok
     return {
         "status": "ok" if fully_operational else "degraded",
+        "release_version": VERSION,
         "ready": ready,
         "database": database["status"],
         "redis": cache["status"],

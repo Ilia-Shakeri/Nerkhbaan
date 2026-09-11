@@ -27,6 +27,7 @@ from .pricing import db_models as pricing_models
 from .pricing.cache import pricing_redis
 from .pricing.compatibility import legacy_pricing_adapter
 from .pricing.service import instrument_pricing_service
+from .release import VERSION
 from .request_body_limit import RequestBodyLimitMiddleware
 from .routers import (
     admin,
@@ -126,7 +127,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Nerkhbaan API",
-    version="2.0.0",
+    version=VERSION,
     lifespan=lifespan,
     docs_url="/api/docs" if settings.debug else None,
     openapi_url="/api/openapi.json" if settings.debug else None,
@@ -228,7 +229,7 @@ app.include_router(admin.router)
 @app.get("/api/health/live", tags=["system"])
 @app.get("/health", tags=["system"])
 def liveness() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "release_version": VERSION}
 
 
 @app.get("/api/health/ready", tags=["system"])

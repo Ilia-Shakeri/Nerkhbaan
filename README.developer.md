@@ -248,3 +248,13 @@ Changes there need a test that fails without the fix.
 | Admin API returns 403 on every write | `ADMIN_FRONTEND_ORIGIN` does not match the browser's origin. |
 | Refresh stops after a few days | Redis at `maxmemory` with `noeviction`. Watch `used_memory`. |
 | Service worker serves stale bundles | It is disabled in dev on purpose. In production the update prompt is user-driven. |
+# Release versioning
+
+`VERSION` is the release source of truth. Use Semantic Versioning: patch for a
+bug fix, minor for a backward-compatible feature, and major for a breaking
+public contract. Each release must update `VERSION`, `CHANGELOG.md`, all package
+manifest versions and `apps/api/app/release.py` in one commit.
+
+Run `npm run check:release` before committing. It rejects mismatched versions.
+For a material release, update every affected Markdown document in the same
+commit and record the release in `CHANGELOG.md`.

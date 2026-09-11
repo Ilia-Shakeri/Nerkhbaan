@@ -43,6 +43,7 @@ it was observed or computed.
 - [Operating it](#operating-it)
 - [Reading a price correctly](#reading-a-price-correctly)
 - [Documentation](#documentation)
+- [Releases](#releases)
 
 ---
 
@@ -111,6 +112,18 @@ npm run dev:web    # http://127.0.0.1:5173
 ```
 
 Full setup, conventions and troubleshooting: [`README.developer.md`](README.developer.md).
+
+---
+
+## Releases
+
+Current release: **2.0.0**. The authoritative value is [`VERSION`](VERSION).
+Every release updates [`CHANGELOG.md`](CHANGELOG.md), package manifests and API
+health metadata together. Run this check before a release:
+
+```bash
+npm run check:release
+```
 
 ---
 
