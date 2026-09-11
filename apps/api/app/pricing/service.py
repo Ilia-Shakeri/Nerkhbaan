@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import secrets
 import time
 from decimal import Decimal
@@ -10,10 +11,13 @@ import httpx
 
 from ..observability import (
     canonical_age_seconds,
+    pricing_snapshot_read_failures_total,
     pricing_refresh_duration_seconds,
     pricing_refresh_total,
     set_canonical_status,
 )
+
+logger = logging.getLogger(__name__)
 
 from .anomaly import AnomalyAssessment, DynamicAnomalyDetector, anomaly_detector
 from .backfill import PricingBackfillQueue, backfill_queue
@@ -261,11 +265,20 @@ class InstrumentPricingService:
         cached: dict[str, CanonicalQuote] = {}
         try:
             cached = await self.store.get_all_canonical()
-        except Exception:
-            pass
+        except Exception as exc:
+            pricing_snapshot_read_failures_total.labels(storage="redis").inc()
+            logger.warning(
+                "Canonical Redis aggregate read failed",
+                extra={"error_type": type(exc).__name__},
+            )
         try:
             database = await self.history.latest_all()
-        except Exception:
+        except Exception as exc:
+            pricing_snapshot_read_failures_total.labels(storage="postgres").inc()
+            logger.error(
+                "Canonical database aggregate read failed",
+                extra={"error_type": type(exc).__name__},
+            )
             database = {}
         return {**database, **cached}
 

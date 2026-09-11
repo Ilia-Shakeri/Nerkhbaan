@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select
@@ -40,6 +41,20 @@ class BackgroundRunner:
         self._dlq_task: asyncio.Task | None = None
         self._chat_purge_task: asyncio.Task | None = None
         self._pricing_available = True
+        self._refresh_state: dict[str, object] = {
+            "state": "not_started",
+            "last_started_at": None,
+            "last_completed_at": None,
+            "last_error_type": None,
+            "result_counts": {},
+        }
+
+    def refresh_health(self) -> dict[str, object]:
+        """Small safe state snapshot for health routes and deployment checks."""
+        return {
+            "enabled": settings.background_tasks_enabled,
+            **self._refresh_state,
+        }
 
     async def start(self) -> None:
         if self._running:
@@ -63,6 +78,13 @@ class BackgroundRunner:
 
     async def _run_refresh_loop(self) -> None:
         while self._running:
+            self._refresh_state.update(
+                {
+                    "state": "running",
+                    "last_started_at": datetime.now(UTC).isoformat(),
+                    "last_error_type": None,
+                }
+            )
             try:
                 refresh = await instrument_pricing_service.refresh_cycle()
                 self._pricing_available = not (
@@ -72,8 +94,31 @@ class BackgroundRunner:
                         for result in refresh.values()
                     )
                 )
+                counts = Counter(
+                    "failed" if result.startswith("failed:") else result
+                    for result in refresh.values()
+                )
+                usable = sum(
+                    count
+                    for status, count in counts.items()
+                    if status in {"live", "confirmed", "fresh_cache", "derived_fallback"}
+                )
+                self._refresh_state.update(
+                    {
+                        "state": "healthy" if usable else "degraded",
+                        "last_completed_at": datetime.now(UTC).isoformat(),
+                        "result_counts": dict(sorted(counts.items())),
+                    }
+                )
             except Exception as exc:
                 background_failures_total.labels(loop="pricing_refresh").inc()
+                self._refresh_state.update(
+                    {
+                        "state": "failed",
+                        "last_completed_at": datetime.now(UTC).isoformat(),
+                        "last_error_type": type(exc).__name__,
+                    }
+                )
                 logger.error("Pricing refresh failed error_type=%s", type(exc).__name__)
             await asyncio.sleep(self._next_delay(self.interval))
 

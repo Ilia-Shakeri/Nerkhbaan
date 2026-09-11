@@ -117,7 +117,7 @@ Full setup, conventions and troubleshooting: [`README.developer.md`](README.deve
 
 ## Releases
 
-Current release: **2.0.0**. The authoritative value is [`VERSION`](VERSION).
+Current release: **2.0.1**. The authoritative value is [`VERSION`](VERSION).
 Every release updates [`CHANGELOG.md`](CHANGELOG.md), package manifests and API
 health metadata together. Run this check before a release:
 
@@ -212,12 +212,15 @@ also starts `admin-frontend`.
 ```bash
 docker compose ps
 curl -fsS http://127.0.0.1:8000/api/health/ready | jq
-curl -fsS http://127.0.0.1:8000/api/prices/health | jq .startup
+curl -fsS http://127.0.0.1:8000/api/prices/health | jq '{startup, refresh}'
 ```
 
 `ready` is `503` unless the database is reachable **and** migrations are
 current. Check `startup.instruments_without_direct_source` — anything listed
 there is publishing formula output rather than an observed market price.
+`refresh.state` must be `healthy` before a public price release. `degraded`
+means the last cycle had no usable canonical quote; `failed` means the cycle
+raised an error.
 
 ### 6. First administrator
 
@@ -303,8 +306,8 @@ NAVASAN_HTTPS_PROXY_BASE_URL=
 | --- | --- |
 | `/api/health/live` | Liveness. Process is up. |
 | `/api/health/ready` | Readiness. Gates traffic. |
-| `/api/health` | Database, Redis, migration version, backlogs |
-| `/api/prices/health` | Per-chain status and source coverage |
+| `/api/health` | Release, database, Redis, migration version, backlogs, refresh state |
+| `/api/prices/health` | Per-chain status, source coverage, refresh state |
 | `/metrics` | Prometheus, private networks only |
 
 ### Watch these

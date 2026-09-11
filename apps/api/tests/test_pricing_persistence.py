@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import sys
+import os
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+
+os.environ.setdefault("JWT_SECRET_KEY", "pricing-persistence-test-key-0123456789")
 
 config_module = sys.modules.get("app.config")
 if config_module is not None:
@@ -104,6 +107,23 @@ class _HistorySession:
 
 
 class InternalPriceHistoryQueryTests(unittest.TestCase):
+    def test_latest_all_skips_one_malformed_row(self) -> None:
+        valid = MagicMock(instrument_id="BTC_USD")
+        with (
+            patch.object(
+                InternalPriceHistory,
+                "_query_latest_rows",
+                return_value=[{"instrument_id": "BROKEN"}, {"instrument_id": "BTC_USD"}],
+            ),
+            patch(
+                "app.pricing.history._canonical_from_row",
+                side_effect=[ValueError("bad row"), valid],
+            ),
+        ):
+            quotes = InternalPriceHistory._query_latest_all()
+
+        self.assertEqual(quotes, {"BTC_USD": valid})
+
     def test_latest_all_uses_no_untyped_null_parameter(self) -> None:
         session = _HistorySession()
 

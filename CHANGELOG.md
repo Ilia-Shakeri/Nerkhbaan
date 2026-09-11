@@ -2,6 +2,17 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.1] - 2026-09-11
+
+### Fixed
+
+- A malformed canonical-history row no longer removes valid prices from the aggregate API response.
+- Price refresh health now reports `healthy`, `degraded`, or `failed` with safe result counts.
+
+### Added
+
+- Storage-read failure metric for canonical aggregate reads.
+
 ## [2.0.0] - 2026-09-11
 
 ### Added

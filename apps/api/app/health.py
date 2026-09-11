@@ -118,6 +118,8 @@ def _redis_health() -> dict[str, Any]:
 
 
 def health_snapshot() -> dict[str, Any]:
+    from .services.background import background_runner
+
     database = _database_health()
     cache = _redis_health()
     migration_ok = bool(database["migration"].get("current"))
@@ -140,6 +142,7 @@ def health_snapshot() -> dict[str, Any]:
     return {
         "status": "ok" if fully_operational else "degraded",
         "release_version": VERSION,
+        "pricing_refresh": background_runner.refresh_health(),
         "ready": ready,
         "database": database["status"],
         "redis": cache["status"],

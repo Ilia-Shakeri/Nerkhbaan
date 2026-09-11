@@ -181,11 +181,21 @@ class PricingStartupChecks(BaseModel):
     ok: bool
 
 
+class PricingRefreshHealth(BaseModel):
+    enabled: bool
+    state: str
+    last_started_at: str | None = None
+    last_completed_at: str | None = None
+    last_error_type: str | None = None
+    result_counts: dict[str, int] = Field(default_factory=dict)
+
+
 class PricesHealthResponse(BaseModel):
     checked_at: str
     last_refresh_at: str | None = None
     startup: PricingStartupChecks
     chains: dict[str, PriceAssetHealth]
+    refresh: PricingRefreshHealth
 
 
 class AlertCreate(BaseModel):

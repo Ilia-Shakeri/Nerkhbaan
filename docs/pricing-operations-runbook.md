@@ -72,6 +72,9 @@ state, not a surprise. Before declaring a chain live:
 
 - `/api/health/live` is process liveness.
 - `/api/health/ready` is readiness and may fail when dependencies fail.
+- `/api/prices/health` includes refresh-loop state. `degraded` means no usable
+  canonical result in the last completed cycle. `failed` means the cycle itself
+  raised an error. Check this before changing a provider.
 - Provider canary output is operational evidence, not licensing evidence.
 - A local unit-test pass is not a production deploy proof.
 

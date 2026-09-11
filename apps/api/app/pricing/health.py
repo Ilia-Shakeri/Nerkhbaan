@@ -81,6 +81,8 @@ class PricingHealthService:
         return payload
 
     async def detailed(self, *, authenticated: bool = False) -> dict[str, Any]:
+        from ..services.background import background_runner
+
         redis_ok, database, backfill = await asyncio.gather(
             self.store.ping(),
             asyncio.to_thread(self._database_probe),
@@ -95,6 +97,7 @@ class PricingHealthService:
             "pricing_refresh": "enabled" if redis_ok else "suspended",
             "persistence_backlog": persistence_backlog,
             "backfill_backlog": backfill,
+            "refresh": background_runner.refresh_health(),
         }
         if authenticated:
             payload["migration_version"] = database["migration_version"]

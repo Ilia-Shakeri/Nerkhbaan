@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -28,6 +29,8 @@ _ACCEPTED_STATUSES = (
     "derived_fallback",
     "unpersisted",
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -401,7 +404,23 @@ class InternalPriceHistory:
     @staticmethod
     def _query_latest_all() -> dict[str, CanonicalQuote]:
         rows = InternalPriceHistory._query_latest_rows(None)
-        return {row["instrument_id"]: _canonical_from_row(row) for row in rows}
+        quotes: dict[str, CanonicalQuote] = {}
+        for row in rows:
+            try:
+                quote = _canonical_from_row(row)
+            except Exception as exc:
+                # One corrupt historical row must not erase every other
+                # instrument from the public aggregate response.
+                logger.error(
+                    "Skipping malformed canonical quote in aggregate read",
+                    extra={
+                        "instrument_id": str(row.get("instrument_id", "unknown")),
+                        "error_type": type(exc).__name__,
+                    },
+                )
+                continue
+            quotes[quote.instrument_id] = quote
+        return quotes
 
     @staticmethod
     def _query_latest_rows(instrument_id: str | None) -> list[Any]:

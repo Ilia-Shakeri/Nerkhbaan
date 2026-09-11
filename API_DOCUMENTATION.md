@@ -248,7 +248,7 @@ the missing range.
 
 ### `GET /api/prices/health`
 
-Public. Chain status per asset plus a `startup` block:
+Public. Chain status per asset plus `startup` and `refresh` blocks:
 
 ```jsonc
 "startup": {
@@ -263,6 +263,11 @@ Public. Chain status per asset plus a `startup` block:
 
 `instruments_without_direct_source` is the one to watch: those chains publish
 computed values, not observed ones.
+
+`refresh.state` is `healthy`, `degraded`, `failed`, or `not_started`.
+`degraded` means no usable canonical quote was produced in the last completed
+cycle; `failed` means the cycle raised an error. `result_counts` groups the
+last cycle by safe status names and exposes no provider credentials or payloads.
 
 ---
 
@@ -540,9 +545,9 @@ platform depends on, which is why it is not public.
 
 | Route | Purpose |
 | --- | --- |
-| `GET /health`, `GET /api/health/live` | Liveness. Always `200` if the process is up. |
+| `GET /health`, `GET /api/health/live` | Liveness. Always `200` if the process is up; includes `release_version`. |
 | `GET /api/health/ready` | Readiness. `503` unless the database is reachable **and** migrations are current. |
-| `GET /api/health` | Full snapshot: database, Redis, migration version, backlogs. |
+| `GET /api/health` | Full snapshot: release, database, Redis, migration version, backlogs, refresh state. |
 | `GET /metrics` | Prometheus. Loopback/private networks plus `METRICS_ALLOWED_NETWORKS`; `404` otherwise. |
 
 Readiness deliberately requires the database. Authentication, alerts and admin

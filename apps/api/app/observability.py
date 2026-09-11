@@ -68,6 +68,11 @@ background_failures_total = Counter(
     "Background loop failures.",
     ["loop"],
 )
+pricing_snapshot_read_failures_total = Counter(
+    "nerkhbaan_pricing_snapshot_read_failures_total",
+    "Canonical snapshot storage read failures.",
+    ["storage"],
+)
 queue_depth = Gauge(
     "nerkhbaan_queue_depth",
     "Known durable queue and review backlogs.",
