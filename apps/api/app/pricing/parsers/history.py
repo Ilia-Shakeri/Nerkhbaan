@@ -69,10 +69,50 @@ class NobitexUdfHistoryParser:
         return points
 
 
-def build_history_parser(parser_id: str) -> NobitexUdfHistoryParser:
+@dataclass(frozen=True, slots=True)
+class CoinGeckoHistoryParser:
+    asset_id: str
+    parser_version: str = "coingecko-market-chart/1.0.0"
+
+    def parse(
+        self,
+        payload: object,
+        instrument: InstrumentDefinition,
+        range_start: datetime,
+        range_end: datetime,
+    ) -> list[HistoricalPricePoint]:
+        root = require_object(payload, "CoinGecko history response")
+        prices = require_list(root.get("prices"), "history.prices")
+        volumes = {row[0]: row[1] for row in require_list(root.get("total_volumes", []), "history.total_volumes") if isinstance(row, list) and len(row) == 2}
+        points: list[HistoricalPricePoint] = []
+        last_timestamp: datetime | None = None
+        for row in prices:
+            if not isinstance(row, list) or len(row) != 2:
+                raise ParserError("history_shape", "CoinGecko history point is invalid")
+            try:
+                observed_at = datetime.fromtimestamp(int(row[0]) / 1000, UTC)
+            except (OSError, OverflowError, TypeError, ValueError) as exc:
+                raise ParserError("invalid_timestamp", "History timestamp is invalid") from exc
+            if observed_at < range_start or observed_at > range_end:
+                continue
+            if last_timestamp is not None and observed_at <= last_timestamp:
+                raise ParserError("history_order", "History timestamps are not strictly ordered")
+            price = strict_decimal(row[1], "history price")
+            if not instrument.accepts(price):
+                raise ParserError("outside_sanity_bounds", "History price is outside instrument bounds")
+            raw_volume = volumes.get(row[0])
+            volume = strict_decimal(raw_volume, "history volume", allow_zero=True) if raw_volume not in (None, "") else None
+            points.append(HistoricalPricePoint(observed_at=observed_at, price=price, volume=volume))
+            last_timestamp = observed_at
+        return points
+
+
+def build_history_parser(parser_id: str) -> NobitexUdfHistoryParser | CoinGeckoHistoryParser:
     parsers = {
         "nobitex_udf_usdtirt_v1": NobitexUdfHistoryParser("USDTIRT"),
         "nobitex_udf_btcirt_v1": NobitexUdfHistoryParser("BTCIRT"),
+        "coingecko_bitcoin_usd_history_v1": CoinGeckoHistoryParser("bitcoin"),
+        "coingecko_tether_usd_history_v1": CoinGeckoHistoryParser("tether"),
     }
     try:
         return parsers[parser_id]

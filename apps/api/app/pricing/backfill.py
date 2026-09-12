@@ -200,12 +200,11 @@ class PricingBackfillQueue:
         if not provider.history_url or not provider.history_parser_id:
             return 0
         parser = build_history_parser(provider.history_parser_id)
-        params = {
-            "symbol": parser.symbol,
-            "resolution": "60",
-            "from": int(job["range_start"].timestamp()),
-            "to": int(job["range_end"].timestamp()),
-        }
+        if parser.parser_version.startswith("coingecko-market-chart/"):
+            days = max(1, min(365, int((job["range_end"] - job["range_start"]).total_seconds() / 86400) + 1))
+            params = {"vs_currency": "usd", "days": str(days)}
+        else:
+            params = {"symbol": parser.symbol, "resolution": "60", "from": int(job["range_start"].timestamp()), "to": int(job["range_end"].timestamp())}
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=3.0), follow_redirects=False
         ) as client:
@@ -259,7 +258,7 @@ class PricingBackfillQueue:
                 metadata={
                     "quote_role": "backfill",
                     "provider_role": provider.role.value,
-                    "history_symbol": parser.symbol,
+                    "history_symbol": getattr(parser, "symbol", getattr(parser, "asset_id", "unknown")),
                 },
                 persistence_status=PersistenceStatus.UNPERSISTED,
             )

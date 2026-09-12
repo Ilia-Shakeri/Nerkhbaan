@@ -2,6 +2,12 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.9] - 2026-09-12
+
+### Added
+
+- CoinGecko free historical market-chart routes for BTC/USD and USDT/USD backfill.
+
 ## [2.0.8] - 2026-09-12
 
 ### Fixed

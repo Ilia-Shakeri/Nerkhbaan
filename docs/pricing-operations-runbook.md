@@ -90,6 +90,7 @@ state, not a surprise. Before declaring a chain live:
   avoids a permanent deferred-job backlog when a chart asks for unavailable data.
 - A history job also defers when live refresh is unavailable. Restore live data
   first, then request history again; this avoids retrying work that cannot run.
+- CoinGecko backfill covers BTC/USD and USDT/USD. It is not a Toman source.
 - Provider canary output is operational evidence, not licensing evidence.
 - A local unit-test pass is not a production deploy proof.
 
