@@ -4,7 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -36,6 +36,7 @@ from .models import (
 from .operational import OperationalPricingSettings, operational_pricing_settings
 from .parsers.history import build_history_parser
 from .persistence import PricingPersistence, pricing_persistence
+from .providers import ProviderQuoteCollector
 from .registry import ProviderDefinition
 
 
@@ -45,6 +46,43 @@ class BackfillEnqueueResult:
     idempotency_key: str
     database_job_id: int | None
     stream_event_id: str | None
+
+
+def _history_request_options(
+    provider: ProviderDefinition,
+    parser: Any,
+    range_start: datetime,
+    range_end: datetime,
+) -> tuple[dict[str, str | int], dict[str, str]]:
+    if not provider.history_url:
+        raise RuntimeError("history_provider_url_missing")
+    if parser.parser_version.startswith("coingecko-market-chart/"):
+        days = max(
+            1,
+            min(365, int((range_end - range_start).total_seconds() / 86400) + 1),
+        )
+        params: dict[str, str | int] = {"vs_currency": "usd", "days": str(days)}
+    elif parser.parser_version.startswith("servix-history/"):
+        params = {
+            "from": range_start.date().isoformat(),
+            "to": range_end.date().isoformat(),
+        }
+    else:
+        params = {
+            "symbol": parser.symbol,
+            "resolution": "60",
+            "from": int(range_start.timestamp()),
+            "to": int(range_end.timestamp()),
+        }
+    history_provider = replace(provider, url=provider.history_url)
+    ProviderQuoteCollector._validate_destination(history_provider)
+    headers = dict(provider.static_headers)
+    if provider.api_key_setting:
+        key = getattr(settings, provider.api_key_setting, None)
+        if not key or not provider.api_key_header:
+            raise RuntimeError("history_provider_key_missing")
+        headers[provider.api_key_header] = str(key)
+    return params, headers
 
 
 class PricingBackfillQueue:
@@ -141,6 +179,13 @@ class PricingBackfillQueue:
             except Exception:
                 current = None
             if current is None or utc_now() > current.valid_until:
+                provider = await self._history_provider(
+                    job["instrument_id"], independent_of_live=True
+                )
+            if provider is None or (
+                provider.history_requires_live_quote
+                and (current is None or utc_now() > current.valid_until)
+            ):
                 await asyncio.to_thread(
                     self._finish_job,
                     job["id"],
@@ -200,18 +245,16 @@ class PricingBackfillQueue:
         if not provider.history_url or not provider.history_parser_id:
             return 0
         parser = build_history_parser(provider.history_parser_id)
-        if parser.parser_version.startswith("coingecko-market-chart/"):
-            days = max(1, min(365, int((job["range_end"] - job["range_start"]).total_seconds() / 86400) + 1))
-            params = {"vs_currency": "usd", "days": str(days)}
-        else:
-            params = {"symbol": parser.symbol, "resolution": "60", "from": int(job["range_start"].timestamp()), "to": int(job["range_end"].timestamp())}
+        params, headers = _history_request_options(
+            provider, parser, job["range_start"], job["range_end"]
+        )
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=3.0), follow_redirects=False
         ) as client:
             response = await client.get(
                 provider.history_url,
                 params=params,
-                headers=dict(provider.static_headers),
+                headers=headers,
             )
             if response.status_code == 429:
                 await self.budgets.record_rate_limit(provider)
@@ -311,12 +354,24 @@ class PricingBackfillQueue:
                 break
             await self.store.client().xdel(self.stream_key, stream_id)
 
-    async def _history_provider(self, instrument_id: str) -> ProviderDefinition | None:
+    async def _history_provider(
+        self,
+        instrument_id: str,
+        *,
+        independent_of_live: bool = False,
+    ) -> ProviderDefinition | None:
         return next(
             (
                 provider
                 for provider in await self.operational.providers_for(instrument_id)
-                if provider.enabled and provider.history_url and provider.history_parser_id
+                if provider.enabled
+                and provider.configured(settings)
+                and provider.history_url
+                and provider.history_parser_id
+                and (
+                    not independent_of_live
+                    or not provider.history_requires_live_quote
+                )
             ),
             None,
         )

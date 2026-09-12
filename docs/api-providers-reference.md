@@ -106,7 +106,8 @@ clearest gap in the current source set (see 4.3).
 | Provider | Role | Cost | Auth (env var) | Enabled by default | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Navasan (`navasan_usd_toman`) | PRIMARY | **Paid** | `NAVASAN_API_KEY` (query) + `NAVASAN_HTTPS_PROXY_BASE_URL` | **Disabled by default** | Navasan's direct API (`api.navasan.tech`) is plain HTTP; the app *requires* an HTTPS proxy in front of it (`NAVASAN_ALLOW_INSECURE_HTTP` is rejected at startup on purpose) — you need both a paid key and your own HTTPS relay. |
-| Servix (`servix_usd_toman`) | FALLBACK | **Paid** (terms not verified — `servix.cc` pricing page not confirmed) | `SERVIX_API_KEY` (header) | **Disabled by default** | Registered, unconfigured. |
+| Servix (`servix_usd_toman`) | FALLBACK | **Free tier: 50 successful requests/day** | `SERVIX_API_KEY` (header) | **Disabled by default** | Permanent free tier, no payment method; registration and a key are required. |
+| PersianToolbox (`persian_toolbox_usd_toman`) | FALLBACK | Free, no key; fair-use quota is not guaranteed | none | **Disabled by default** | Technical USD/IRR reference converted from rial to Toman. The provider explicitly does not promise a free-market or tradable rate. |
 
 **This is the biggest real gap in the platform.** Without one of the above,
 every Toman metal price is bridged through `USDT_TOMAN / USDT_USD` instead of
@@ -118,8 +119,8 @@ for free/near-free candidates to close this.
 | Provider | Role | Cost | Auth | Enabled | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Nobitex (`nobitex_stats_usdt`, `nobitex_orderbook_usdt`, `nobitex_stats_btc`, `nobitex_orderbook_btc`) | **PRIMARY** + VERIFIER | Free, no key | none | Yes | **OFAC SDN-listed 2026-06-02 — see §0.** |
-| Wallex (`wallex_usdt_toman`, `wallex_btc_toman`) | FALLBACK | Free, no key | none | Yes | **OFAC SDN-listed 2026-06-02 — see §0.** |
-| Tetherland (`tetherland_usdt`, `tetherland_btc`) | FALLBACK | Free, no key | none | Yes | Not sanctioned as of this writing. Becomes the only clean registered path if Nobitex/Wallex are disabled. |
+| Wallex (`wallex_usdt_toman`, `wallex_btc_toman`) | FALLBACK | Free, no key | none | **Disabled by default** | **OFAC SDN-listed 2026-06-02 — see §0.** |
+| Tetherland (`tetherland_usdt`, `tetherland_btc`) | FALLBACK | Free, no key | none | USDT yes; BTC disabled | Not sanctioned as of this writing. BTC was quarantined after its live payload lacked the registered symbol. |
 | TALA (`tala_usdt_toman`) | FALLBACK | Paid | `TALA_API_KEY` | **Disabled by default** | |
 | Navasan (`navasan_usdt`) | FALLBACK | Paid | `NAVASAN_API_KEY` + HTTPS proxy | **Disabled by default** | |
 
@@ -129,8 +130,9 @@ for free/near-free candidates to close this.
 | --- | --- | --- | --- | --- | --- |
 | Coinbase Exchange (`coinbase_usdt_usd`, `coinbase_btc_usd`) | PRIMARY | Free, no key | none | Yes | Public ticker endpoint, no auth. |
 | CoinGecko (`coingecko_usdt`, `coingecko_btc`) | FALLBACK | Free, no key (rate-limited) | none | Yes | Confirmed public-plan limit: **5–15 calls/minute**, no monthly cap published, throttled dynamically by CoinGecko's own load. A free Demo API key raises this to a stable 30/min — worth adding `x-cg-demo-api-key` support if this route gets hit often. |
+| PersianToolbox (`persian_toolbox_btc`) | FALLBACK | Free, no key; fair-use quota is not guaranteed | none | Yes | Iranian wrapper for BTC/USD reference data. Five-minute request floor; strict source timestamp, freshness, source list, symbol, and unit checks. No history endpoint. |
 | CoinCap (`coincap_usdt`, `coincap_btc`) | FALLBACK, lowest priority | **Likely broken** | none configured | **Disabled by default** | CoinCap has moved to a "3.0" prepaid-credit model (`pro.coincap.io`, pay with USDC) — the free, keyless `api.coincap.io/v2` endpoint this integration targets appears to be sunset or degraded. Treat as dead until re-verified; do not re-enable without checking `pro.coincap.io` first. |
-| Servix (`servix_btc_usd`) | FALLBACK | Paid, unconfigured | `SERVIX_API_KEY` | **Disabled by default** | |
+| Servix (`servix_btc_usd`, `servix_usdt_usd`) | FALLBACK + history | Free tier: 50 successful requests/day | `SERVIX_API_KEY` | **Disabled by default** | BTC/USD and USDT/USD history; registration, attribution, and a key are required. Three routes are capped to 48 calls/day combined. |
 
 ---
 
@@ -148,7 +150,7 @@ for Ticaro/Arzbin, a base-URL setting in `config.py` that doesn't exist yet):
 | `navasan_btc_v1`, `navasan_gold18_v1`, `navasan_xau_v1` | `BTC_TOMAN`, `GOLD_18K_TOMAN_GRAM`, `XAU_USD_OZ` | Registry only wires Navasan's `usd` and `usdt` items. Same `NAVASAN_API_KEY` would cover these — essentially free additional coverage once Navasan is configured for anything. |
 | `nerkh_io_usd_v1`, `nerkh_io_usdt_v1`, `nerkh_io_btc_v1`, `nerkh_io_xau_v1`, `nerkh_io_xag_v1` | `USD_TOMAN`, `USDT_TOMAN`, `BTC_TOMAN`, `XAU_USD_OZ`, `XAG_USD_OZ` | Registry only wires Nerkh.io's `gold24` symbol. Same token would unlock these. |
 | `tala_xau_usd_v1`, `tala_xag_usd_v1` | `XAU_USD_OZ`, `XAG_USD_OZ` | Registry only wires Tala's Toman metals. Same `TALA_API_KEY` would add international-ounce verifiers. |
-| `servix_gold18_rls_v1` | `GOLD_18K_TOMAN_GRAM` | Parser exists (`servix_gold18_rls_v1`), no registry entry alongside the two Servix providers that are registered. |
+| `servix_gold18_rls_v1` | `GOLD_18K_TOMAN_GRAM` | Parser exists (`servix_gold18_rls_v1`), no registry entry alongside the three Servix providers that are registered. |
 
 Net effect: **if you ever pay for one of TALA, Navasan, or Nerkh.io, you get
 several instruments' worth of coverage almost for free** — the marginal
@@ -186,13 +188,13 @@ treat all as unstable/best-effort, not production-primary without a fallback:
 | TGJU Sana rate service (`tgju.org/sanarate-service`) | **Free, no key** | none | This is Iran's official currency-oversight-system ("Sana") rate, not the free-market rate — a *different*, semi-official number. Useful as a distinct reference/comparison point, not a substitute for a true free-market feed. | Found via community API list; endpoint shape not independently confirmed — verify before wiring. |
 | [margani/pricedb](https://github.com/margani/pricedb) (`prices.readme.io`) | Free, no key | none | Auto-updated via GitHub Actions; maintainer states "meant for personal use only" and "subject to change at any time." | Low confidence for production use. |
 | [HosseinOdd/Navasan-API](https://github.com/HosseinOdd/Navasan-API) | Free, but **not a hosted API** | n/a | Self-hosted Selenium scraper of navasan.net producing static JSON on a 10-minute GitHub Actions cadence — you'd run this yourself, not call a live endpoint. Scraping ToS risk noted by the maintainer. | Not directly usable as a `ProviderDefinition` without standing up your own scraper infra. |
-| BRSAPI (`brsapi.ir/free-api-gold-currency-webservice/`) | Advertised as **free, no registration** | none per their marketing copy | Iranian community-known free service covering gold+currency, precious metals/energy, and 3,000+ cryptocurrencies as three separate free web services. | **Could not independently fetch/verify** their docs from this environment (site fetch timed out). Referenced by multiple Iranian-developer API lists ([Hameds/APIs-made-in-Iran](https://github.com/Hameds/APIs-made-in-Iran/issues/120)) as actively used. Check `brsapi.ir` directly for exact endpoints, response shape, and any undisclosed rate limit before integrating. |
+| BRSAPI (`brsapi.ir/free-api-gold-currency-webservice/`) | Advertised as **free, no registration** | none per their marketing copy | Public sample endpoint was reachable from production. | The tested response was dated 1404/02/28 and is fixture/sample data, not a live feed. Do not integrate it as a live route. |
 | `api.zipodo.ir/usdt/` | Free, no key | none | Single-purpose USDT/Toman JSON endpoint. Narrow scope, unknown maintainer/reliability. | Low confidence, small blast radius if it breaks (one instrument only). |
 
 **Recommendation for this instrument specifically:** none of the free options
 above is trustworthy enough to be a sole `PRIMARY`. The pragmatic path is
-either (a) pay for Navasan or Servix — both already fully wired, just
-disabled — or (b) register 2–3 of the free scrapers above as low-priority
+either (a) configure Navasan or a free-tier Servix key — both already fully
+wired, just disabled — or (b) register 2–3 of the free scrapers above as low-priority
 `VERIFIER`/`FALLBACK` roles so the anomaly/consensus machinery in
 `canonical.py` can cross-check them against each other rather than trusting
 any single one.
@@ -240,10 +242,11 @@ For completeness, since not everything needs to stay free forever:
 | TALA.ir | Gold/silver/USD/USDT Toman | Undisclosed, contact vendor | Integrated, disabled |
 | Navasan.tech | USD/USDT/BTC Toman, gold | Undisclosed, contact vendor | Integrated, disabled |
 | Nerkh.io | Gold/USD/USDT/BTC Toman | Undisclosed, contact vendor | Integrated, disabled (gold24 only) |
-| Servix.cc | USD/BTC Toman | Undisclosed, contact vendor | Integrated, disabled |
+| Servix.cc | USD/BTC and market history | Permanent free tier: 50 successful requests/day; paid tiers add quota | Integrated, disabled until keyed |
+| PersianToolbox | BTC/USD and technical USD/IRR reference | Free, no key; fair use and caching required | Integrated; BTC enabled, USD/IRR disabled |
 | Alanchand | Gold 18K Toman | Free (1 req/hr) → negotiated unlimited | Integrated, PRIMARY |
 
-None of the four "undisclosed" vendors published pricing in this pass —
+None of the three "undisclosed" vendors published pricing in this pass —
 their sign-up flows are Telegram-bot or contact-form gated, typical for
 Iranian B2B data vendors. Getting real figures requires reaching out
 directly.
@@ -267,10 +270,9 @@ directly.
 4. **Register 2–3 of the §4.2 free USD_TOMAN scrapers as low-priority
    FALLBACK/VERIFIER**, never PRIMARY, so `canonical.py`'s consensus logic
    can use them defensively rather than trusting any single scraper.
-5. **Verify BRSAPI directly** (`brsapi.ir`) — it's the one lead in this
-   document not independently confirmed, and if it's as broad as advertised
-   (gold, currency, and 3,000+ crypto in one free service) it could
-   consolidate several gaps at once.
+5. **Do not use the BRSAPI public sample as live data.** Reconsider BRSAPI only
+   if the vendor supplies a documented live endpoint, timestamp contract, and
+   fair-use limit.
 6. **Drop or re-verify CoinCap** — the currently-registered free integration
    likely targets a sunset endpoint; either confirm `api.coincap.io/v2`
    still works keyless or remove the dead entries.
@@ -349,7 +351,8 @@ Providerای که `enabled` است ولی `configured` نیست، در زمان 
 | Provider | نقش | هزینه | احراز هویت (متغیر env) | فعال به‌صورت پیش‌فرض | یادداشت |
 | --- | --- | --- | --- | --- | --- |
 | Navasan (`navasan_usd_toman`) | PRIMARY | **پولی** | `NAVASAN_API_KEY` (query) + `NAVASAN_HTTPS_PROXY_BASE_URL` | **به‌صورت پیش‌فرض غیرفعال** | API مستقیم Navasan (`api.navasan.tech`) به‌صورت HTTP ساده است؛ اپ *الزاماً* یک HTTPS proxy جلوی آن می‌خواهد (`NAVASAN_ALLOW_INSECURE_HTTP` عمداً در زمان راه‌اندازی رد می‌شود) — هم به کلید پولی و هم به relay/proxy HTTPS خودتان نیاز دارید. |
-| Servix (`servix_usd_toman`) | FALLBACK | **پولی** (شرایط تأیید نشده — صفحه قیمت‌گذاری `servix.cc` تأیید نشد) | `SERVIX_API_KEY` (هدر) | **به‌صورت پیش‌فرض غیرفعال** | ثبت‌شده، پیکربندی‌نشده. |
+| Servix (`servix_usd_toman`) | FALLBACK | **سطح رایگان: روزی 50 درخواست موفق** | `SERVIX_API_KEY` (هدر) | **به‌صورت پیش‌فرض غیرفعال** | سطح رایگان دائمی است؛ ثبت‌نام و کلید لازم است، اطلاعات پرداخت نه. |
+| PersianToolbox (`persian_toolbox_usd_toman`) | FALLBACK | رایگان، بدون کلید؛ سهمیه عمومی تضمین نشده | ندارد | **به‌صورت پیش‌فرض غیرفعال** | مرجع فنی USD/IRR با تبدیل ریال به تومان. Provider نرخ بازار آزاد یا قابل معامله را تضمین نمی‌کند. |
 
 **این بزرگ‌ترین شکاف واقعی پلتفرم است.** بدون یکی از موارد بالا، هر قیمت فلز به تومان از طریق `USDT_TOMAN / USDT_USD` به‌جای یک نرخ واقعی دلار پل زده می‌شود، و حدود 3.4% بالاتر از واقعیت درمی‌آید (به بخش 4 در `PRICING_SOURCES.md` نگاه کنید). برای گزینه‌های رایگان/نزدیک‌به‌رایگان جهت پرکردن این شکاف، به 4.2 نگاه کنید.
 
@@ -358,8 +361,8 @@ Providerای که `enabled` است ولی `configured` نیست، در زمان 
 | Provider | نقش | هزینه | احراز هویت | فعال | یادداشت |
 | --- | --- | --- | --- | --- | --- |
 | Nobitex (`nobitex_stats_usdt`، `nobitex_orderbook_usdt`، `nobitex_stats_btc`، `nobitex_orderbook_btc`) | **PRIMARY** + VERIFIER | رایگان، بدون کلید | ندارد | بله | **در فهرست SDN توسط OFAC از 2026-06-02 — به بخش 0 نگاه کنید.** |
-| Wallex (`wallex_usdt_toman`، `wallex_btc_toman`) | FALLBACK | رایگان، بدون کلید | ندارد | بله | **در فهرست SDN توسط OFAC از 2026-06-02 — به بخش 0 نگاه کنید.** |
-| Tetherland (`tetherland_usdt`، `tetherland_btc`) | FALLBACK | رایگان، بدون کلید | ندارد | بله | تا این تاریخ تحریم نشده. اگر Nobitex/Wallex غیرفعال شوند، تنها مسیر ثبت‌شده «تمیز» باقی‌مانده است. |
+| Wallex (`wallex_usdt_toman`، `wallex_btc_toman`) | FALLBACK | رایگان، بدون کلید | ندارد | **به‌صورت پیش‌فرض غیرفعال** | **در فهرست SDN توسط OFAC از 2026-06-02 — به بخش 0 نگاه کنید.** |
+| Tetherland (`tetherland_usdt`، `tetherland_btc`) | FALLBACK | رایگان، بدون کلید | ندارد | USDT فعال؛ BTC غیرفعال | تا این تاریخ تحریم نشده. BTC بعد از نبود نماد ثبت‌شده در پاسخ زنده قرنطینه شد. |
 | TALA (`tala_usdt_toman`) | FALLBACK | پولی | `TALA_API_KEY` | **به‌صورت پیش‌فرض غیرفعال** | |
 | Navasan (`navasan_usdt`) | FALLBACK | پولی | `NAVASAN_API_KEY` + HTTPS proxy | **به‌صورت پیش‌فرض غیرفعال** | |
 
@@ -369,8 +372,9 @@ Providerای که `enabled` است ولی `configured` نیست، در زمان 
 | --- | --- | --- | --- | --- | --- |
 | Coinbase Exchange (`coinbase_usdt_usd`، `coinbase_btc_usd`) | PRIMARY | رایگان، بدون کلید | ندارد | بله | endpoint عمومی ticker، بدون احراز هویت. |
 | CoinGecko (`coingecko_usdt`، `coingecko_btc`) | FALLBACK | رایگان، بدون کلید (rate-limited) | ندارد | بله | محدودیت پلن عمومی تأییدشده: **5 تا 15 فراخوانی در دقیقه**، بدون سقف ماهانه منتشرشده، و به‌صورت پویا بسته به بار خود CoinGecko محدود می‌شود. یک کلید API رایگان از نوع Demo این را به 30 در دقیقه پایدار می‌رساند — اگر این مسیر پراستفاده شد، افزودن پشتیبانی از هدر `x-cg-demo-api-key` ارزش دارد. |
+| PersianToolbox (`persian_toolbox_btc`) | FALLBACK | رایگان، بدون کلید؛ سهمیه عمومی تضمین نشده | ندارد | بله | پوشش ایرانی برای مرجع BTC/USD. کف درخواست پنج دقیقه؛ کنترل سخت زمان، تازگی، منبع، نماد و واحد. تاریخچه ندارد. |
 | CoinCap (`coincap_usdt`، `coincap_btc`) | FALLBACK، کم‌اولویت‌ترین | **احتمالاً از کار افتاده** | چیزی پیکربندی نشده | **به‌صورت پیش‌فرض غیرفعال** | CoinCap به مدل «3.0» با اعتبار پیش‌پرداختی (`pro.coincap.io`، پرداخت با USDC) منتقل شده — به‌نظر می‌رسد endpoint رایگان و بدون‌کلید `api.coincap.io/v2` که این یکپارچه‌سازی هدف قرار داده، متوقف یا افت‌کیفیت‌یافته باشد. تا راستی‌آزمایی دوباره، آن را مرده در نظر بگیرید؛ بدون بررسی اول `pro.coincap.io`، دوباره فعالش نکنید. |
-| Servix (`servix_btc_usd`) | FALLBACK | پولی، پیکربندی‌نشده | `SERVIX_API_KEY` | **به‌صورت پیش‌فرض غیرفعال** | |
+| Servix (`servix_btc_usd`، `servix_usdt_usd`) | FALLBACK + تاریخچه | سطح رایگان: روزی 50 درخواست موفق | `SERVIX_API_KEY` | **به‌صورت پیش‌فرض غیرفعال** | تاریخچه BTC/USD و USDT/USD؛ ثبت‌نام، درج منبع و کلید لازم است. سه مسیر روی‌هم به 48 تماس در روز محدودند. |
 
 ---
 
@@ -385,7 +389,7 @@ Providerای که `enabled` است ولی `configured` نیست، در زمان 
 | `navasan_btc_v1`، `navasan_gold18_v1`، `navasan_xau_v1` | `BTC_TOMAN`، `GOLD_18K_TOMAN_GRAM`، `XAU_USD_OZ` | Registry فقط آیتم‌های `usd` و `usdt` نوسان را متصل کرده. همان `NAVASAN_API_KEY` این‌ها را هم پوشش می‌دهد — عملاً پوشش اضافی رایگان به‌محض این‌که Navasan برای هرچیزی پیکربندی شود. |
 | `nerkh_io_usd_v1`، `nerkh_io_usdt_v1`، `nerkh_io_btc_v1`، `nerkh_io_xau_v1`، `nerkh_io_xag_v1` | `USD_TOMAN`، `USDT_TOMAN`، `BTC_TOMAN`، `XAU_USD_OZ`، `XAG_USD_OZ` | Registry فقط symbol مربوط به `gold24` نرخ.io را متصل کرده. همان توکن این‌ها را هم باز می‌کند. |
 | `tala_xau_usd_v1`، `tala_xag_usd_v1` | `XAU_USD_OZ`، `XAG_USD_OZ` | Registry فقط فلزات تومانی Tala را متصل کرده. همان `TALA_API_KEY` می‌تواند verifierهای اونس بین‌المللی هم اضافه کند. |
-| `servix_gold18_rls_v1` | `GOLD_18K_TOMAN_GRAM` | parser وجود دارد (`servix_gold18_rls_v1`)، ولی در کنار دو Provider ثبت‌شده Servix، مدخل registry ندارد. |
+| `servix_gold18_rls_v1` | `GOLD_18K_TOMAN_GRAM` | parser وجود دارد (`servix_gold18_rls_v1`)، ولی در کنار سه Provider ثبت‌شده Servix، مدخل registry ندارد. |
 
 نتیجه خالص: **اگر روزی برای TALA، Navasan یا Nerkh.io هزینه کنید، تقریباً رایگان به‌اندازه چند instrument دیگر پوشش می‌گیرید** — هزینه مهندسی نهایی فقط یک مدخل در `registry.py` است، نه یک parser جدید.
 
@@ -414,10 +418,10 @@ Providerای که `enabled` است ولی `configured` نیست، در زمان 
 | سرویس نرخ سنای TGJU (`tgju.org/sanarate-service`) | **رایگان، بدون کلید** | ندارد | این نرخ رسمی سامانه نظارت ارزی («سنا») است، نه نرخ بازار آزاد — یک عدد نیمه‌رسمی *متفاوت*. برای مرجع/مقایسه مفید است، نه جایگزینی برای یک فید واقعی بازار آزاد. | از طریق فهرست API جامعه پیدا شده؛ شکل endpoint مستقل تأیید نشده — پیش از اتصال راستی‌آزمایی کنید. |
 | [margani/pricedb](https://github.com/margani/pricedb) (`prices.readme.io`) | رایگان، بدون کلید | ندارد | به‌صورت خودکار از طریق GitHub Actions به‌روز می‌شود؛ نگهدارنده می‌گوید «فقط برای استفاده شخصی» و «هر لحظه ممکن است تغییر کند». | اطمینان پایین برای استفاده Production. |
 | [HosseinOdd/Navasan-API](https://github.com/HosseinOdd/Navasan-API) | رایگان، ولی **یک API میزبانی‌شده نیست** | ندارد | یک اسکرپر Selenium خودمیزبان از navasan.net که هر 10 دقیقه از طریق GitHub Actions یک JSON استاتیک تولید می‌کند — باید خودتان اجرایش کنید، نه این‌که یک endpoint زنده صدا بزنید. نگهدارنده به ریسک ToS مربوط به اسکرپینگ هم اشاره کرده. | بدون راه‌اندازی زیرساخت اسکرپر خودتان، مستقیماً به‌عنوان `ProviderDefinition` قابل‌استفاده نیست. |
-| BRSAPI (`brsapi.ir/free-api-gold-currency-webservice/`) | تبلیغ‌شده به‌عنوان **رایگان، بدون ثبت‌نام** | طبق تبلیغاتشان چیزی لازم نیست | یک سرویس رایگان شناخته‌شده در جامعه ایرانی که طلا+ارز، فلزات گران‌بها/انرژی، و بیش از 3,000 ارز دیجیتال را به‌صورت سه وب‌سرویس رایگان جدا پوشش می‌دهد. | **در این محیط نتوانستم مستندشان را مستقلاً fetch/تأیید کنم** (fetch سایت timeout شد). در چند فهرست API توسعه‌دهندگان ایرانی ([Hameds/APIs-made-in-Iran](https://github.com/Hameds/APIs-made-in-Iran/issues/120)) به‌عنوان سرویسی که فعالانه استفاده می‌شود آمده. پیش از یکپارچه‌سازی، مستقیماً endpointهای دقیق، شکل پاسخ، و هر rate limit اعلام‌نشده را در `brsapi.ir` بررسی کنید. |
+| BRSAPI (`brsapi.ir/free-api-gold-currency-webservice/`) | تبلیغ‌شده به‌عنوان **رایگان، بدون ثبت‌نام** | طبق تبلیغاتشان چیزی لازم نیست | endpoint نمونه عمومی از Production در دسترس بود. | پاسخ تست‌شده تاریخ 1404/02/28 داشت و داده نمونه/fixture است، نه خوراک زنده. به‌عنوان مسیر زنده یکپارچه نشود. |
 | `api.zipodo.ir/usdt/` | رایگان، بدون کلید | ندارد | یک endpoint تک‌منظوره JSON برای تتر/تومان. دامنه محدود، نگهدارنده/قابلیت‌اطمینان نامعلوم. | اطمینان پایین، ولی اگر خراب شود شعاع آسیبش کوچک است (فقط یک instrument). |
 
-**توصیه برای این instrument به‌طور خاص:** هیچ‌کدام از گزینه‌های رایگان بالا آن‌قدر قابل‌اعتماد نیستند که تنها PRIMARY باشند. مسیر عملی یا (الف) پرداخت برای Navasan یا Servix است — که هردو از قبل کاملاً متصل‌اند، فقط غیرفعال‌اند — یا (ب) ثبت 2 تا 3 مورد از اسکرپرهای رایگان بالا با نقش‌های کم‌اولویت `VERIFIER`/`FALLBACK`، تا موتور anomaly/consensus در `canonical.py` بتواند آن‌ها را در برابر هم صلیب‌چک (cross-check) کند، نه این‌که به هیچ‌کدام به‌تنهایی اعتماد کند.
+**توصیه برای این instrument به‌طور خاص:** هیچ‌کدام از گزینه‌های رایگان بالا آن‌قدر قابل‌اعتماد نیستند که تنها PRIMARY باشند. مسیر عملی یا (الف) تنظیم Navasan یا کلید سطح رایگان Servix است — که هردو از قبل کاملاً متصل‌اند، فقط غیرفعال‌اند — یا (ب) ثبت 2 تا 3 مورد از اسکرپرهای رایگان بالا با نقش‌های کم‌اولویت `VERIFIER`/`FALLBACK`، تا موتور anomaly/consensus در `canonical.py` بتواند آن‌ها را در برابر هم صلیب‌چک (cross-check) کند، نه این‌که به هیچ‌کدام به‌تنهایی اعتماد کند.
 
 ### 4.3 `SILVER_925_TOMAN_GRAM` — در حال حاضر صفر Provider
 
@@ -451,10 +455,11 @@ Providerای که `enabled` است ولی `configured` نیست، در زمان 
 | TALA.ir | طلا/نقره/دلار/تتر به تومان | اعلام‌نشده، با فروشنده تماس بگیرید | یکپارچه، غیرفعال |
 | Navasan.tech | دلار/تتر/BTC به تومان، طلا | اعلام‌نشده، با فروشنده تماس بگیرید | یکپارچه، غیرفعال |
 | Nerkh.io | طلا/دلار/تتر/BTC به تومان | اعلام‌نشده، با فروشنده تماس بگیرید | یکپارچه، غیرفعال (فقط gold24) |
-| Servix.cc | دلار/BTC به تومان | اعلام‌نشده، با فروشنده تماس بگیرید | یکپارچه، غیرفعال |
+| Servix.cc | دلار/BTC و تاریخچه بازار | سطح رایگان دائمی: روزی 50 درخواست موفق؛ پلن پولی سهمیه را بیشتر می‌کند | یکپارچه، تا زمان ورود کلید غیرفعال |
+| PersianToolbox | BTC/USD و مرجع فنی USD/IRR | رایگان، بدون کلید؛ مصرف منصفانه و cache لازم | یکپارچه؛ BTC فعال، USD/IRR غیرفعال |
 | Alanchand | طلای 18 عیار به تومان | رایگان (1 درخواست در ساعت) تا نامحدود مذاکره‌شده | یکپارچه، PRIMARY |
 
-هیچ‌کدام از چهار فروشنده «اعلام‌نشده» در این دور تحقیق قیمتی منتشر نکردند؛ جریان ثبت‌نامشان از طریق ربات تلگرام یا فرم تماس دروازه‌بانی می‌شود، که برای فروشندگان داده B2B ایرانی معمول است. برای اعداد واقعی باید مستقیماً تماس بگیرید.
+هیچ‌کدام از سه فروشنده «اعلام‌نشده» در این دور تحقیق قیمتی منتشر نکردند؛ جریان ثبت‌نامشان از طریق ربات تلگرام یا فرم تماس دروازه‌بانی می‌شود، که برای فروشندگان داده B2B ایرانی معمول است. برای اعداد واقعی باید مستقیماً تماس بگیرید.
 
 ---
 
@@ -464,7 +469,7 @@ Providerای که `enabled` است ولی `configured` نیست، در زمان 
 2. **اتصال parser Arzbin (بخش 3) را تمام کنید.** ارزان‌ترین مسیر برای یک منبع دوم `USD_TOMAN` است — parser وجود دارد، فقط تنظیم base-URL و مدخل registry کم است — و `USD_TOMAN` شکاف #1 مستندشده دقت قیمت‌گذاری پلتفرم است.
 3. **`xaus.com` را به‌عنوان دومین verifier رایگان `XAU_USD_OZ`/`XAG_USD_OZ` اضافه کنید** — واقعاً رایگان و بدون‌کلید بودنش تأیید شده، استقلال را تقویت می‌کند (در حال حاضر `gold_api_free_*` تنها verifier بدون‌هزینه این زنجیره است).
 4. **2 تا 3 مورد از اسکرپرهای رایگان `USD_TOMAN` در بخش 4.2 را با نقش کم‌اولویت FALLBACK/VERIFIER ثبت کنید**، هرگز PRIMARY، تا منطق consensus در `canonical.py` بتواند تدافعی از آن‌ها استفاده کند، نه با اعتماد به یک اسکرپر تنها.
-5. **BRSAPI را مستقیماً راستی‌آزمایی کنید** (`brsapi.ir`) — تنها سرنخ این سند است که مستقلاً تأیید نشده، و اگر واقعاً به‌همان‌اندازه که تبلیغ می‌شود گسترده باشد (طلا، ارز، و بیش از 3,000 کریپتو در یک سرویس رایگان)، می‌تواند چند شکاف را یک‌جا پر کند.
+5. **نمونه عمومی BRSAPI را داده زنده ندانید.** فقط وقتی دوباره بررسی شود که فروشنده endpoint زنده مستند، قرارداد timestamp و سقف مصرف منصفانه بدهد.
 6. **CoinCap را کنار بگذارید یا دوباره راستی‌آزمایی کنید** — یکپارچه‌سازی رایگان فعلاً ثبت‌شده احتمالاً یک endpoint متوقف‌شده را هدف گرفته؛ یا تأیید کنید `api.coincap.io/v2` هنوز بدون کلید کار می‌کند، یا مدخل‌های مرده را حذف کنید.
 
 </div>

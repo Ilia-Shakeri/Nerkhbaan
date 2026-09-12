@@ -68,13 +68,16 @@ XAU_USD_OZ             goldapi_xau (primary), gold_api_free_xau, metals_dev_gold
 SILVER_999_TOMAN_GRAM  tala_silver999_toman (primary, needs key + symbol)
 SILVER_925_TOMAN_GRAM  formula only
 XAG_USD_OZ             goldapi_xag (primary), gold_api_free_xag, metals_dev_silver
-USD_TOMAN              navasan_usd_toman (primary), servix_usd_toman (fallback)
+USD_TOMAN              navasan_usd_toman (primary), servix_usd_toman,
+                       persian_toolbox_usd_toman (reference, disabled)
 USDT_TOMAN             nobitex_stats_usdt (primary), nobitex_orderbook_usdt,
                        tetherland_usdt, wallex_usdt_toman, tala_usdt_toman, navasan_usdt
-USDT_USD               coinbase_usdt_usd (primary), coingecko_usdt, coincap_usdt
+USDT_USD               coinbase_usdt_usd (primary), coingecko_usdt,
+                       servix_usdt_usd, coincap_usdt
 BTC_TOMAN              nobitex_stats_btc (primary), nobitex_orderbook_btc,
                        tetherland_btc, wallex_btc_toman
-BTC_USD                coinbase_btc_usd (primary), coingecko_btc, coincap_btc, servix_btc_usd
+BTC_USD                coinbase_btc_usd (primary), coingecko_btc,
+                       persian_toolbox_btc, servix_btc_usd, coincap_btc
 ```
 
 Several Iranian routes are **key-gated and disabled by default**. With no
@@ -87,6 +90,16 @@ optional keys configured, the Toman metal chains fall back to formula output.
 
 Startup logs the same list. This is checked in CI — a test fails if any
 instrument has neither a configured source nor a formula.
+
+`persian_toolbox_btc` is a no-key Iranian fallback. It accepts only `live` or
+`cached` payloads and verifies the published timestamp, upstream source list,
+BTC symbol, and USD unit. The site's USD/IRR value is a technical reference,
+not a promised free-market quote, so `persian_toolbox_usd_toman` stays disabled.
+
+Servix has a permanent keyed free tier of 50 successful requests per day. Its
+three routes default to disabled and together are capped at 48 requests per day.
+Their history endpoints can backfill charts even when no live canonical quote
+exists. Free-tier display requires visible Servix attribution.
 
 ---
 

@@ -14,6 +14,12 @@ Before enabling a new provider route, the operator must have all of this evidenc
 
 Tier B routes remain disabled until this gate is complete. Pending vendors such as BRSAPI, TSETMC, SourceArena, api.ir, IranMarketData.ir, Oanor, legacy nerkh-api.ir, TGJU paid API, NovinAPI, and TabanGohar must not be added to active pricing until the gate is satisfied.
 
+PersianToolbox is a no-key public reference route with a five-minute upstream
+cache and no guaranteed public quota. Keep its five-minute local request floor.
+Its BTC/USD route may serve as a low-trust fallback. Its USD/IRR route remains
+disabled because the provider does not promise a free-market or tradable rate.
+BRSAPI's public sample is fixture data and must never be used as a live route.
+
 ## Canary Command
 
 Run from `apps/api`:
@@ -90,11 +96,38 @@ state, not a surprise. Before declaring a chain live:
   fixture prove the exact endpoint contract.
 - Backfill is not queued for an instrument with no enabled history route. This
   avoids a permanent deferred-job backlog when a chart asks for unavailable data.
-- A history job also defers when live refresh is unavailable. Restore live data
-  first, then request history again; this avoids retrying work that cannot run.
+- By default, a history job also defers when live refresh is unavailable.
+  Restore live data first, then request history again; this avoids retrying work
+  that cannot run. Servix is the documented exception because its history route
+  is independent from the live-price route.
 - CoinGecko backfill covers BTC/USD and USDT/USD. It is not a Toman source.
+- Servix history covers BTC/USD, USDT/USD, and USD/Toman and may run without a
+  live canonical quote. Its documented history endpoint is independent of the
+  live-price gate. The key is sent only in `X-API-Key`.
 - Provider canary output is operational evidence, not licensing evidence.
 - A local unit-test pass is not a production deploy proof.
+- Provider timestamps are meaningful only when the host clock is synchronized.
+  Use [`time-sync-runbook.md`](time-sync-runbook.md); never widen future-clock
+  tolerance to mask an operating-system clock fault.
+
+## Servix free-tier chart setup
+
+Create a Servix account and key. Do not paste the key into chat, Git, a URL, or
+shell history. Store it in the production secret file, add visible Servix
+attribution required by the free plan, then enable only needed routes:
+
+```dotenv
+SERVIX_API_KEY=<stored-outside-source-control>
+PRICING_PROVIDER_SERVIX_BTC_USD_ENABLED=true
+PRICING_PROVIDER_SERVIX_USDT_USD_ENABLED=true
+```
+
+Enable `PRICING_PROVIDER_SERVIX_USD_TOMAN_ENABLED=true` only if USD/Toman
+history is exposed by the product. The registry budgets each of the three
+routes to 16 requests/day, so enabling all three stays below 50. After restart,
+request each chart once, watch the backfill queue, and verify the provider id in
+stored history. Keep PersianToolbox USD/IRR disabled; it is not a free-market
+contract.
 
 ## Backup And Restore Gate
 

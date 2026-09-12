@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from ..models import InstrumentDefinition
-from .base import ParserError, require_list, require_object, strict_decimal
+from ..models import InstrumentDefinition, ensure_utc, parse_datetime
+from .base import ParserError, exact_path, require_list, require_object, strict_decimal
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,12 +107,67 @@ class CoinGeckoHistoryParser:
         return points
 
 
-def build_history_parser(parser_id: str) -> NobitexUdfHistoryParser | CoinGeckoHistoryParser:
+@dataclass(frozen=True, slots=True)
+class ServixHistoryParser:
+    symbol: str
+    quote_unit: str
+    conversion_factor: Decimal = Decimal("1")
+    parser_version: str = "servix-history/1.0.0"
+
+    def parse(
+        self,
+        payload: object,
+        instrument: InstrumentDefinition,
+        range_start: datetime,
+        range_end: datetime,
+    ) -> list[HistoricalPricePoint]:
+        rows = require_list(payload, "Servix history response")
+        if len(rows) > 20_000:
+            raise ParserError("history_too_large", "History response has too many points")
+        points: list[HistoricalPricePoint] = []
+        for raw_row in rows:
+            row = require_object(raw_row, "Servix history row")
+            if row.get("code") != self.symbol:
+                raise ParserError("unsupported_symbol", "Servix history symbol does not match")
+            if row.get("quoteUnit") != self.quote_unit:
+                raise ParserError("unknown_unit", "Servix history quote unit does not match")
+            try:
+                observed_at = ensure_utc(parse_datetime(exact_path(row, "businessTime")))
+            except (TypeError, ValueError) as exc:
+                raise ParserError("invalid_timestamp", "History timestamp is invalid") from exc
+            if observed_at < range_start or observed_at > range_end:
+                continue
+            price = strict_decimal(exact_path(row, "value"), "history value")
+            price *= self.conversion_factor
+            if not instrument.accepts(price):
+                raise ParserError(
+                    "outside_sanity_bounds", "History price is outside instrument bounds"
+                )
+            points.append(
+                HistoricalPricePoint(observed_at=observed_at, price=price, volume=None)
+            )
+        points.sort(key=lambda point: point.observed_at)
+        if any(
+            current.observed_at <= previous.observed_at
+            for previous, current in zip(points, points[1:])
+        ):
+            raise ParserError("history_order", "History timestamps are not unique")
+        return points
+
+
+def build_history_parser(
+    parser_id: str,
+) -> NobitexUdfHistoryParser | CoinGeckoHistoryParser | ServixHistoryParser:
     parsers = {
         "nobitex_udf_usdtirt_v1": NobitexUdfHistoryParser("USDTIRT"),
         "nobitex_udf_btcirt_v1": NobitexUdfHistoryParser("BTCIRT"),
         "coingecko_bitcoin_usd_history_v1": CoinGeckoHistoryParser("bitcoin"),
         "coingecko_tether_usd_history_v1": CoinGeckoHistoryParser("tether"),
+        "servix_btc_usd_history_v1": ServixHistoryParser("BTC_USD", "USD"),
+        "servix_usdt_usd_history_v1": ServixHistoryParser("USDT_USD", "USD"),
+        "servix_usd_rls_history_v1": ServixHistoryParser(
+            "USD_RLS", "RLS", Decimal("0.1")
+        ),
     }
     try:
         return parsers[parser_id]

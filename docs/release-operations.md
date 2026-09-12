@@ -37,6 +37,10 @@ sh scripts/deploy-nerkhbaan-prod.sh
 
 Before deploy, record the current commit and database backup. After deploy, check readiness, Prometheus targets, active alerts, queue depth, provider failure rate, and price age. If health fails, keep data volumes, return to the recorded commit with a new reviewed deploy, and rerun the same gates.
 
+Before provider or login verification, require a synchronized host clock. Follow
+[`time-sync-runbook.md`](time-sync-runbook.md); a large correction needs a short
+maintenance window because old sessions and timers can expire.
+
 ## Relay
 
 `infra/relay` is a separate stateless stack. It accepts TLS from only the core IP range and requires `X-Relay-Token`. The core adds that header only when `PRICING_RELAY_BASE_URL` matches a configured provider URL host. Point only affected provider base URLs at the matching relay path, add the relay host to the provider allowlist, and set a secret-store token of at least 32 characters.

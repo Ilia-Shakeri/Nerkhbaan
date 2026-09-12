@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     goldapi_api_key: str | None = None
     servix_api_base_url: str = "https://servix.cc"
     servix_api_key: str | None = None
+    persian_toolbox_api_base_url: str = "https://persiantoolbox.ir"
     tala_api_base_url: str = "https://api.tala.ir"
     tala_api_key: str | None = None
     tala_xau_usd_key: str = "ons"
@@ -139,7 +140,7 @@ class Settings(BaseSettings):
         "api.alanchand.com,api.gold-api.com,www.goldapi.io,api.metals.dev,"
         "api.exchange.coinbase.com,api.coingecko.com,api.coincap.io,"
         "api.nobitex.ir,api.wallex.ir,api.tetherland.com,"
-        "servix.cc,api.tala.ir,api.navasan.tech,api.nerkh.io"
+        "servix.cc,persiantoolbox.ir,api.tala.ir,api.navasan.tech,api.nerkh.io"
     )
     pricing_require_provider_keys: bool = False
     pricing_lock_ttl_seconds: int = 45
@@ -296,6 +297,7 @@ class Settings(BaseSettings):
             "tala_api_base_url",
             "nerkh_io_api_base_url",
             "servix_api_base_url",
+            "persian_toolbox_api_base_url",
         ):
             value = getattr(self, name, None)
             if not value:

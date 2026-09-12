@@ -120,7 +120,7 @@ allowlist and config changes needed (`iran-filtering-infrastructure-analysis.md`
    commercial launch just as hard as a missing backup drill can.
 8. **`USD_TOMAN` has no trustworthy free source.** Every free candidate found
    scrapes/mirrors `bonbast.com` with maintainers who explicitly disclaim
-   uptime. The real fix is paying for Navasan or Servix (already wired, just
+   uptime. The real fix is configuring Navasan or the keyed Servix free tier (already wired, just
    disabled) — a business decision, already flagged identically in
    `PROJECT_STATUS.md`'s "Known limitations."
 9. **`SILVER_925_TOMAN_GRAM` has zero providers anywhere, free or paid** —
@@ -409,7 +409,7 @@ fixed».
    راه‌اندازی تجاری را دقیقاً به‌همان‌اندازه یک تمرین بکاپ ناقص مسدود کند.
 8. **`USD_TOMAN` هیچ منبع رایگان قابل‌اعتمادی ندارد.** هر کاندید رایگان
    پیداشده، bonbast.com را اسکرپ یا آینه می‌کند و نگهدارنده‌هایش صراحتاً
-   uptime را ضمانت نمی‌کنند. راه‌حل واقعی پرداخت برای Navasan یا Servix است
+   uptime را ضمانت نمی‌کنند. راه‌حل واقعی تنظیم Navasan یا سطح رایگان کلیددار Servix است
    (از قبل متصل، فقط غیرفعال) — یک تصمیم تجاری که در «Known limitations»ی
    `PROJECT_STATUS.md` هم عیناً همین‌طور علامت‌گذاری شده.
 9. **`SILVER_925_TOMAN_GRAM` در هیچ‌کجا، رایگان یا پولی، هیچ Provider ندارد**

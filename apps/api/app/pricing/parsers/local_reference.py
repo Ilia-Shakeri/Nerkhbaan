@@ -116,6 +116,66 @@ class CoinGeckoSimplePriceParser:
 
 
 @dataclass(frozen=True, slots=True)
+class PersianToolboxMarketParser:
+    asset: str
+    parser_version: str = "persian-toolbox-market/1.0.0"
+
+    def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
+        root = require_object(payload, "PersianToolbox response")
+        if root.get("ok") is not True:
+            raise ParserError("provider_error", "PersianToolbox response is not successful")
+        data = require_object(exact_path(root, "data"), "PersianToolbox data")
+        freshness = str(data.get("freshness") or "").strip().lower()
+        if freshness not in {"live", "cached"}:
+            raise ParserError("stale_payload", "PersianToolbox data is not fresh")
+        units = require_object(exact_path(data, "units"), "PersianToolbox units")
+        sources = require_list(exact_path(data, "sources"), "PersianToolbox sources")
+        if not sources or any(not isinstance(source, str) or not source.strip() for source in sources):
+            raise ParserError("invalid_source", "PersianToolbox sources are invalid")
+
+        if self.asset == "BTC_USD":
+            if units.get("cryptoPrice") != "USD":
+                raise ParserError("unknown_unit", "PersianToolbox crypto unit must be USD")
+            crypto = require_object(exact_path(data, "crypto"), "PersianToolbox crypto")
+            node = require_object(exact_path(crypto, "BTC"), "PersianToolbox BTC")
+            if node.get("symbol") != "BTC":
+                raise ParserError("unsupported_symbol", "PersianToolbox BTC symbol does not match")
+            raw = strict_decimal(exact_path(node, "priceUSD"), "BTC priceUSD")
+            factor = Decimal("1")
+            source_currency = "USD"
+        elif self.asset == "USD_TOMAN":
+            if units.get("currencyBase") != "USD" or units.get("iranCurrency") != "IRR":
+                raise ParserError("unknown_unit", "PersianToolbox currency units must be USD and IRR")
+            currencies = require_object(exact_path(data, "currencies"), "PersianToolbox currencies")
+            usd = require_object(exact_path(currencies, "USD"), "PersianToolbox USD")
+            irr = require_object(exact_path(currencies, "IRR"), "PersianToolbox IRR")
+            if usd.get("code") != "USD" or irr.get("code") != "IRR":
+                raise ParserError("unsupported_symbol", "PersianToolbox currency symbols do not match")
+            if strict_decimal(exact_path(usd, "rate"), "USD rate") != Decimal("1"):
+                raise ParserError("invalid_base_rate", "PersianToolbox USD base rate must equal one")
+            raw = strict_decimal(exact_path(irr, "rate"), "IRR rate")
+            factor = Decimal("0.1")
+            source_currency = "RIAL"
+        else:
+            raise ParserError("unsupported_symbol", "PersianToolbox asset is not supported")
+
+        return _parsed(
+            raw * factor,
+            context,
+            exact_path(data, "timestamp"),
+            {
+                "asset": self.asset,
+                "freshness": freshness,
+                "upstream_sources": [source.strip() for source in sources],
+                "source_currency": source_currency,
+                "original_value": str(raw),
+                "conversion_factor": str(factor),
+                "normalization": "rial_to_toman" if factor == Decimal("0.1") else "none",
+            },
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class WallexMarketParser:
     symbol: str
     parser_version: str = "wallex-market/1.0.0"

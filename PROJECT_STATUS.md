@@ -1,9 +1,29 @@
-# Project Status
+# Project Status and Audit Baseline
 
-**Assessed:** 2026-08-20 · **Branch:** `main` · **Verdict:** feature-complete, hardened, **not yet proven in production**
+**Updated:** 2026-09-12 · **Release:** `2.1.0` · **Verdict:** core deployed;
+production clock synchronized; release deployment and live provider proof open
 
-An honest account of what exists, what works, what does not, and precisely what
-stands between this repository and a 10/10 production system.
+## Current release update
+
+- The production core was deployed and its readiness endpoint returned healthy
+  on release `2.0.10`; this is deployment proof, not load or UAT proof.
+- The local release gate now passes 178 backend tests with one PostgreSQL-only
+  concurrency test skipped when `TEST_DATABASE_URL` is absent.
+- Price refresh metrics and structured request-id logs are implemented and
+  covered by tests.
+- Honest empty-chart states, CoinGecko history routes, and keyed Servix free-tier
+  history routes are implemented.
+- Release `2.1.0` adds a reachable Iranian no-key BTC/USD fallback. The host
+  clock is synchronized; deployment and the live production canary remain.
+- The external foreign worker remains disabled because direct traffic between
+  the two current VPS networks is blocked. Core operation does not depend on it.
+
+The detailed assessment below is the 2026-08-20 audit baseline. Later fixes are
+tracked in [`CHANGELOG.md`](CHANGELOG.md), and open work in
+[`FUTURE_TASKS.md`](FUTURE_TASKS.md).
+
+An audit account of what existed, what worked, and what stood between the
+repository and a 10/10 production system at the baseline date.
 
 ---
 
@@ -19,7 +39,7 @@ stands between this repository and a 10/10 production system.
 
 ---
 
-## Summary
+## Baseline summary
 
 Nerkhbaan is a full-stack market price platform: FastAPI backend, TimescaleDB
 time-series storage, Redis for coordination, a React PWA, an admin console, an
@@ -48,7 +68,7 @@ is the whole thing.
 
 ---
 
-## Scorecard
+## Baseline scorecard
 
 | Area | Score | Blocking issue |
 | --- | --- | --- |

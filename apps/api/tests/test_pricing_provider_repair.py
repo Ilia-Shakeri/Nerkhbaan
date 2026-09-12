@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import unittest
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
@@ -10,6 +11,7 @@ from unittest.mock import AsyncMock, patch
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enough")
 
 from app.pricing.derived import derived_price_engine
+from app.pricing.backfill import PricingBackfillQueue, _history_request_options
 from app.pricing.instruments import INSTRUMENTS
 from app.pricing.models import (
     CanonicalQuote,
@@ -20,6 +22,7 @@ from app.pricing.models import (
 )
 from app.pricing.operational import OperationalPricingSettings
 from app.pricing.parsers import ParserContext, ParserError, build_parser
+from app.pricing.parsers.history import build_history_parser
 from app.pricing.registry import PROVIDERS, PROVIDERS_BY_INSTRUMENT
 
 
@@ -125,6 +128,10 @@ class PricingProviderRepairTests(unittest.TestCase):
         ]
         self.assertEqual(btc_primary_ids, ["coinbase_btc_usd"])
 
+    def test_persian_toolbox_btc_is_enabled_but_reference_usd_stays_disabled(self) -> None:
+        self.assertTrue(PROVIDERS["persian_toolbox_btc"].enabled)
+        self.assertFalse(PROVIDERS["persian_toolbox_usd_toman"].enabled)
+
     def test_gold_24k_derivation_uses_decimal_metadata(self) -> None:
         quote = derived_price_engine.derive(
             "GOLD_24K_TOMAN_GRAM",
@@ -166,6 +173,148 @@ class PricingProviderRepairTests(unittest.TestCase):
 
         self.assertEqual(wallex.price, Decimal("60000"))
         self.assertEqual(tala.price, Decimal("8000000"))
+
+    def test_persian_toolbox_parses_btc_and_reference_usd_with_explicit_units(self) -> None:
+        timestamp = int(self._provider_time().timestamp() * 1000)
+        payload = {
+            "ok": True,
+            "data": {
+                "timestamp": timestamp,
+                "currencies": {
+                    "USD": {"code": "USD", "rate": 1},
+                    "IRR": {"code": "IRR", "rate": 1420000},
+                },
+                "crypto": {"BTC": {"symbol": "BTC", "priceUSD": 77000}},
+                "units": {
+                    "currencyBase": "USD",
+                    "iranCurrency": "IRR",
+                    "cryptoPrice": "USD",
+                },
+                "sources": ["exchange-reference", "crypto-reference"],
+                "freshness": "cached",
+            },
+        }
+
+        btc = build_parser("persian_toolbox_btc_usd_v1").parse(
+            payload, _context("BTC_USD")
+        )
+        usd = build_parser("persian_toolbox_usd_toman_v1").parse(
+            payload, _context("USD_TOMAN")
+        )
+
+        self.assertEqual(btc.price, Decimal("77000"))
+        self.assertEqual(usd.price, Decimal("142000"))
+        self.assertEqual(usd.metadata["normalization"], "rial_to_toman")
+
+    def test_persian_toolbox_rejects_stale_payload_and_wrong_unit(self) -> None:
+        timestamp = int(self._provider_time().timestamp() * 1000)
+        base = {
+            "ok": True,
+            "data": {
+                "timestamp": timestamp,
+                "crypto": {"BTC": {"symbol": "BTC", "priceUSD": 77000}},
+                "units": {"cryptoPrice": "USD"},
+                "sources": ["crypto-reference"],
+                "freshness": "stale",
+            },
+        }
+        with self.assertRaisesRegex(ParserError, "not fresh"):
+            build_parser("persian_toolbox_btc_usd_v1").parse(
+                base, _context("BTC_USD")
+            )
+        base["data"]["freshness"] = "live"
+        base["data"]["units"]["cryptoPrice"] = "EUR"
+        with self.assertRaisesRegex(ParserError, "must be USD"):
+            build_parser("persian_toolbox_btc_usd_v1").parse(
+                base, _context("BTC_USD")
+            )
+
+    def test_servix_history_parses_usd_and_rial_units(self) -> None:
+        start = datetime(2026, 8, 1, tzinfo=UTC)
+        end = datetime(2026, 8, 3, tzinfo=UTC)
+        btc = build_history_parser("servix_btc_usd_history_v1").parse(
+            [
+                {
+                    "code": "BTC_USD",
+                    "quoteUnit": "USD",
+                    "value": "77000",
+                    "businessTime": "2026-08-02T00:00:00Z",
+                }
+            ],
+            INSTRUMENTS["BTC_USD"],
+            start,
+            end,
+        )
+        usd = build_history_parser("servix_usd_rls_history_v1").parse(
+            [
+                {
+                    "code": "USD_RLS",
+                    "quoteUnit": "RLS",
+                    "value": "1420000",
+                    "businessTime": "2026-08-02T00:00:00Z",
+                }
+            ],
+            INSTRUMENTS["USD_TOMAN"],
+            start,
+            end,
+        )
+
+        self.assertEqual(btc[0].price, Decimal("77000"))
+        self.assertEqual(usd[0].price, Decimal("142000"))
+
+    def test_servix_history_rejects_wrong_symbol_or_unit(self) -> None:
+        parser = build_history_parser("servix_btc_usd_history_v1")
+        start = datetime(2026, 8, 1, tzinfo=UTC)
+        end = datetime(2026, 8, 3, tzinfo=UTC)
+        with self.assertRaises(ParserError):
+            parser.parse(
+                [
+                    {
+                        "code": "ETH_USD",
+                        "quoteUnit": "EUR",
+                        "value": "3000",
+                        "businessTime": "2026-08-02T00:00:00Z",
+                    }
+                ],
+                INSTRUMENTS["BTC_USD"],
+                start,
+                end,
+            )
+
+    def test_servix_history_request_uses_bounded_dates_and_secret_header(self) -> None:
+        provider = PROVIDERS["servix_btc_usd"]
+        parser = build_history_parser("servix_btc_usd_history_v1")
+        with patch("app.pricing.backfill.settings.servix_api_key", "test-key"):
+            params, headers = _history_request_options(
+                provider,
+                parser,
+                datetime(2026, 8, 1, 12, tzinfo=UTC),
+                datetime(2026, 8, 3, 12, tzinfo=UTC),
+            )
+
+        self.assertEqual(params, {"from": "2026-08-01", "to": "2026-08-03"})
+        self.assertEqual(headers, {"X-API-Key": "test-key"})
+        self.assertFalse(provider.history_requires_live_quote)
+        self.assertTrue(PROVIDERS["coingecko_btc"].history_requires_live_quote)
+
+    def test_servix_history_can_run_when_live_quote_is_missing(self) -> None:
+        providers = (
+            PROVIDERS["coingecko_btc"],
+            replace(PROVIDERS["servix_btc_usd"], enabled=True),
+        )
+        operational = AsyncMock()
+        operational.providers_for.return_value = providers
+        queue = PricingBackfillQueue(operational=operational)
+        with patch("app.pricing.backfill.settings.servix_api_key", "test-key"):
+            selected = asyncio.run(
+                queue._history_provider("BTC_USD", independent_of_live=True)
+            )
+
+        self.assertEqual(selected.provider_id, "servix_btc_usd")
+
+    @staticmethod
+    def _provider_time() -> datetime:
+        return datetime(2026, 8, 8, 12, 0, tzinfo=UTC)
 
     def test_unknown_unit_rejected(self) -> None:
         with self.assertRaises(ParserError):

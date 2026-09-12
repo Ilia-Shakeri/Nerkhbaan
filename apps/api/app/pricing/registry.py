@@ -53,6 +53,7 @@ class ProviderDefinition:
     maximum_payload_bytes: int = 262_144
     history_url: str | None = None
     history_parser_id: str | None = None
+    history_requires_live_quote: bool = True
     source_semantic: SourceSemantic = SourceSemantic.REFERENCE_RATE
     source_family: str = "reference"
     venue: str = "reference"
@@ -183,6 +184,7 @@ def _provider(
     headers: tuple[tuple[str, str], ...] = (),
     history_url: str | None = None,
     history_parser_id: str | None = None,
+    history_requires_live_quote: bool = True,
     source_semantic: SourceSemantic = SourceSemantic.REFERENCE_RATE,
     source_family: str | None = None,
     venue: str | None = None,
@@ -217,6 +219,7 @@ def _provider(
         static_headers=headers,
         history_url=history_url,
         history_parser_id=history_parser_id,
+        history_requires_live_quote=history_requires_live_quote,
         source_semantic=source_semantic,
         source_family=source_family or provider_id,
         venue=venue or source_family or provider_id,
@@ -400,6 +403,17 @@ _PROVIDERS = (
         selected_price_semantic=PriceSemantic.REFERENCE,
     ),
     _provider(
+        "persian_toolbox_btc", "PersianToolbox Bitcoin", "BTC_USD",
+        ProviderRole.FALLBACK, 3, "0.68",
+        _setting_url("persian_toolbox_api_base_url", "/api/market"),
+        "persian_toolbox_btc_usd_v1", "persian-toolbox-market/1.0.0", 600,
+        rpm=2, rph=20, rpd=288, interval=300,
+        source_semantic=SourceSemantic.AGGREGATOR,
+        source_family="persian_toolbox", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        symbol_or_pair="BTC/USD",
+    ),
+    _provider(
         "coincap_btc", "CoinCap Bitcoin", "BTC_USD", ProviderRole.FALLBACK, 99,
         "0.50", _setting_url("coincap_api_base_url", "/assets/bitcoin"), "coincap_bitcoin_v1",
         "coincap/1.0.0", 30, rpm=12, rph=360, rpd=4000, interval=30,
@@ -500,14 +514,29 @@ _PROVIDERS = (
         "servix_usd_toman", "Servix Free-Market USD", "USD_TOMAN",
         ProviderRole.FALLBACK, 10, "0.70", _setting_url("servix_api_base_url", "/api/v1/assets"),
         "servix_usd_rls_v1", "servix-assets/1.0.0", 300,
-        rpm=4, rph=80, rpd=1000, interval=300,
+        rpm=2, rph=2, rpd=16, interval=5400,
         api_key_setting="servix_api_key", api_key_header="X-API-Key",
+        history_url=_setting_url("servix_api_base_url", "/api/v1/assets/USD_RLS/history"),
+        history_parser_id="servix_usd_rls_history_v1",
+        history_requires_live_quote=False,
         enabled_default=False,
         source_semantic=SourceSemantic.AGGREGATOR,
         source_family="servix", venue="opaque_aggregator",
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
         symbol_or_pair="USD_RLS",
+    ),
+    _provider(
+        "persian_toolbox_usd_toman", "PersianToolbox USD Reference", "USD_TOMAN",
+        ProviderRole.FALLBACK, 20, "0.50",
+        _setting_url("persian_toolbox_api_base_url", "/api/market"),
+        "persian_toolbox_usd_toman_v1", "persian-toolbox-market/1.0.0", 600,
+        rpm=2, rph=20, rpd=288, interval=300,
+        enabled_default=False,
+        source_semantic=SourceSemantic.REFERENCE_RATE,
+        source_family="persian_toolbox", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        symbol_or_pair="USD/IRR",
     ),
     _provider(
         "navasan_usdt", "Navasan USDT", "USDT_TOMAN", ProviderRole.FALLBACK, 20,
@@ -538,14 +567,33 @@ _PROVIDERS = (
     _provider(
         "servix_btc_usd", "Servix BTC-USD", "BTC_USD", ProviderRole.FALLBACK, 30,
         "0.74", _setting_url("servix_api_base_url", "/api/v1/assets"), "servix_btc_usd_v1",
-        "servix-assets/1.0.0", 120, rpm=4, rph=80, rpd=1000, interval=120,
+        "servix-assets/1.0.0", 120, rpm=2, rph=2, rpd=16, interval=5400,
         api_key_setting="servix_api_key", api_key_header="X-API-Key",
+        history_url=_setting_url("servix_api_base_url", "/api/v1/assets/BTC_USD/history"),
+        history_parser_id="servix_btc_usd_history_v1",
+        history_requires_live_quote=False,
         enabled_default=False,
         source_semantic=SourceSemantic.AGGREGATOR,
         source_family="servix", venue="opaque_aggregator",
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
         symbol_or_pair="BTC_USD",
+    ),
+    _provider(
+        "servix_usdt_usd", "Servix USDT-USD", "USDT_USD", ProviderRole.FALLBACK, 30,
+        "0.74", _setting_url("servix_api_base_url", "/api/v1/assets"),
+        "servix_usdt_usd_v1", "servix-assets/1.0.0", 120,
+        rpm=2, rph=2, rpd=16, interval=5400,
+        api_key_setting="servix_api_key", api_key_header="X-API-Key",
+        history_url=_setting_url("servix_api_base_url", "/api/v1/assets/USDT_USD/history"),
+        history_parser_id="servix_usdt_usd_history_v1",
+        history_requires_live_quote=False,
+        enabled_default=False,
+        source_semantic=SourceSemantic.AGGREGATOR,
+        source_family="servix", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        credential_placement="header",
+        symbol_or_pair="USDT_USD",
     ),
 )
 

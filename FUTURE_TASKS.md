@@ -12,16 +12,15 @@ is partial, and what production readiness still requires — see
 - [ ] Route-level API tests. Every endpoint is exercised through units today;
       none through an HTTP client against a real database.
 - [ ] Browser end-to-end coverage for sign-in, alert creation and delivery.
-- [ ] Structured JSON logging with the request id, so the id in an error
-      response is greppable in aggregation.
-- [ ] Prometheus counters for refresh outcome, provider latency and canonical
-      status. The endpoint exists; the metrics it declares are never
-      incremented.
 - [ ] A real free-market USD/Toman source. Without one, every Toman metal price
       without a direct provider is bridged through USDT and runs percent-level
       high.
 - [ ] Direct Iranian silver source. `SILVER_999_TOMAN_GRAM` has one key-gated
       provider; `SILVER_925_TOMAN_GRAM` is formula-only.
+- [ ] Confirm PersianToolbox redistribution terms and whether its USD/IRR
+      reference can legally and semantically be shown to customers.
+- [ ] Create the free Servix account, add visible source attribution, store its
+      key outside Git, and enable only the needed chart routes.
 
 ## Operator Proof
 
@@ -51,3 +50,7 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -Evid
 - [x] Deployment health gate and web response guards.
 - [x] Local API, web, admin, desktop, dependency and static checks.
 - [x] Full production audit and remediation — see `PROJECT_STATUS.md`.
+- [x] Reachable no-key Iranian BTC/USD fallback with strict payload validation.
+- [x] Reachable Iranian NTP sources tested without changing production time.
+- [x] Structured JSON request logging and live pricing metrics.
+- [x] Servix free-tier history parser and bounded backfill for BTC, USDT, and USD.

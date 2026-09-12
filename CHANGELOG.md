@@ -2,6 +2,29 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.1.0] - 2026-09-12
+
+### Added
+
+- A no-key PersianToolbox BTC/USD fallback with strict timestamp, freshness,
+  source, symbol, and unit validation.
+- Authenticated Servix history backfill for BTC/USD, USDT/USD, and USD/Toman,
+  including strict symbol/unit parsing and header-only key transport.
+- A Servix USDT/USD fallback route, disabled until an operator supplies a key,
+  enables attribution, and turns on the route.
+- A disabled PersianToolbox USD/IRR reference route for later operator review;
+  it is not treated as a free-market USD/Toman quote.
+- A production clock-synchronization runbook using reachable Iranian NTP
+  sources and a no-change query gate before any clock correction.
+
+### Changed
+
+- Servix documentation now records its permanent 50-request daily free tier.
+- Servix route budgets share at most 48 daily calls across the three registered
+  instruments, leaving quota room for operator checks.
+- Release metadata is consistent across every package after the 2.0.10 API-only
+  version drift.
+
 ## [2.0.10] - 2026-09-12
 
 ### Added

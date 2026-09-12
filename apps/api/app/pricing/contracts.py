@@ -48,6 +48,10 @@ _DOCS = {
     "nobitex": ("https://apidocs.nobitex.ir/",),
     "wallex": ("https://api-docs.wallex.ir/",),
     "servix": ("https://servix.cc/docs", "https://servix.cc/terms"),
+    "persian_toolbox": (
+        "https://persiantoolbox.ir/developers/api/market",
+        "https://persiantoolbox.ir/terms",
+    ),
     "tala": ("https://api.tala.ir/document", "https://api.tala.ir/terms"),
     "ticaro": ("https://ticaro.ir/docs", "https://ticaro.ir/terms"),
     "arzbin": ("https://www.arzbin.com/developers/api",),
@@ -57,7 +61,7 @@ _DOCS = {
 
 _TIER_B = ("servix", "tala", "ticaro", "arzbin", "navasan", "nerkh_io")
 _DIRECT = ("coinbase", "nobitex", "wallex")
-_REFERENCE = ("goldapi", "gold_api_free", "metals_dev")
+_REFERENCE = ("goldapi", "gold_api_free", "metals_dev", "persian_toolbox")
 
 PENDING_PROVIDER_CANDIDATES = (
     "BRSAPI gold/currency",
@@ -93,6 +97,8 @@ def provider_contract(provider: ProviderDefinition) -> ProviderContract:
         unit_contract = "documented_rial_to_toman_0.1"
     if family == "nerkh_io":
         unit_contract = "operator_configured_category_unit"
+    if family == "persian_toolbox":
+        unit_contract = "documented_usd_or_rial_with_explicit_0.1_conversion"
     if family in {"coinbase", "coingecko", "goldapi", "gold_api_free", "metals_dev"}:
         unit_contract = "documented_usd"
     endpoint = urlparse(provider.url)
