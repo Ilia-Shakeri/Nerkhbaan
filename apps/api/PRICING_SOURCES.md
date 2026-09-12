@@ -93,8 +93,10 @@ instrument has neither a configured source nor a formula.
 
 `persian_toolbox_btc` is a no-key Iranian fallback. It accepts only `live` or
 `cached` payloads and verifies the published timestamp, upstream source list,
-BTC symbol, and USD unit. The site's USD/IRR value is a technical reference,
-not a promised free-market quote, so `persian_toolbox_usd_toman` stays disabled.
+BTC symbol, and USD unit. Its documented cache may be at most five minutes old;
+the source timestamp stays unchanged, while receipt starts only the usual short
+BTC live window. The site's USD/IRR value is a technical reference, not a
+promised free-market quote, so `persian_toolbox_usd_toman` stays disabled.
 
 Servix has a permanent keyed free tier of 50 successful requests per day. Its
 three routes default to disabled and together are capped at 48 requests per day.

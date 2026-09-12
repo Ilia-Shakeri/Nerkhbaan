@@ -1,7 +1,7 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-12 · **Release:** `2.1.0` · **Verdict:** core deployed;
-production clock synchronized; release deployment and live provider proof open
+**Updated:** 2026-09-12 · **Release:** `2.1.1` · **Verdict:** core deployed;
+production clock synchronized; cached-provider correction pending deployment
 
 ## Current release update
 
@@ -13,8 +13,9 @@ production clock synchronized; release deployment and live provider proof open
   covered by tests.
 - Honest empty-chart states, CoinGecko history routes, and keyed Servix free-tier
   history routes are implemented.
-- Release `2.1.0` adds a reachable Iranian no-key BTC/USD fallback. The host
-  clock is synchronized; deployment and the live production canary remain.
+- Release `2.1.1` keeps the Iranian BTC/USD provider timestamp intact while
+  accepting its documented five-minute cache. Each accepted response gets only
+  the normal short BTC live window from receipt; older payloads remain rejected.
 - The external foreign worker remains disabled because direct traffic between
   the two current VPS networks is blocked. Core operation does not depend on it.
 

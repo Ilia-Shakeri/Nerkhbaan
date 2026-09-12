@@ -54,6 +54,8 @@ class ProviderDefinition:
     history_url: str | None = None
     history_parser_id: str | None = None
     history_requires_live_quote: bool = True
+    maximum_source_age_seconds: int | None = None
+    anchor_live_window_at_receive_time: bool = False
     source_semantic: SourceSemantic = SourceSemantic.REFERENCE_RATE
     source_family: str = "reference"
     venue: str = "reference"
@@ -185,6 +187,8 @@ def _provider(
     history_url: str | None = None,
     history_parser_id: str | None = None,
     history_requires_live_quote: bool = True,
+    maximum_source_age_seconds: int | None = None,
+    anchor_live_window_at_receive_time: bool = False,
     source_semantic: SourceSemantic = SourceSemantic.REFERENCE_RATE,
     source_family: str | None = None,
     venue: str | None = None,
@@ -220,6 +224,8 @@ def _provider(
         history_url=history_url,
         history_parser_id=history_parser_id,
         history_requires_live_quote=history_requires_live_quote,
+        maximum_source_age_seconds=maximum_source_age_seconds,
+        anchor_live_window_at_receive_time=anchor_live_window_at_receive_time,
         source_semantic=source_semantic,
         source_family=source_family or provider_id,
         venue=venue or source_family or provider_id,
@@ -408,6 +414,8 @@ _PROVIDERS = (
         _setting_url("persian_toolbox_api_base_url", "/api/market"),
         "persian_toolbox_btc_usd_v1", "persian-toolbox-market/1.0.0", 600,
         rpm=2, rph=20, rpd=288, interval=300,
+        maximum_source_age_seconds=300,
+        anchor_live_window_at_receive_time=True,
         source_semantic=SourceSemantic.AGGREGATOR,
         source_family="persian_toolbox", venue="opaque_aggregator",
         selected_price_semantic=PriceSemantic.REFERENCE,

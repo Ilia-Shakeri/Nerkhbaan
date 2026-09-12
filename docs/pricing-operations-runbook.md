@@ -109,6 +109,10 @@ state, not a surprise. Before declaring a chain live:
 - Provider timestamps are meaningful only when the host clock is synchronized.
   Use [`time-sync-runbook.md`](time-sync-runbook.md); never widen future-clock
   tolerance to mask an operating-system clock fault.
+- PersianToolbox documents a cache of up to five minutes. Its original source
+  timestamp is always stored. A payload inside that explicit limit may start a
+  normal short BTC live window when received; it does not become a new source
+  observation, and a payload beyond five minutes is rejected.
 
 ## Servix free-tier chart setup
 

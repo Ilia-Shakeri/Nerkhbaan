@@ -260,8 +260,8 @@ class ProviderQuoteCollector:
                     instrument=instrument,
                     received_at=received_at,
                     maximum_timestamp_age_seconds=min(
-                        provider.operational_ttl_seconds,
-                        instrument.operational_ttl_seconds,
+                        provider.maximum_source_age_seconds
+                        or provider.operational_ttl_seconds,
                         instrument.expire_after_seconds,
                     ),
                 ),
@@ -310,6 +310,17 @@ class ProviderQuoteCollector:
                     "quote_role": purpose.value,
                     "provider_role": provider.role.value,
                     "provider_live_ttl_seconds": provider.operational_ttl_seconds,
+                    "maximum_source_age_seconds": (
+                        provider.maximum_source_age_seconds
+                        or min(
+                            provider.operational_ttl_seconds,
+                            instrument.operational_ttl_seconds,
+                            instrument.expire_after_seconds,
+                        )
+                    ),
+                    "anchor_live_window_at_receive_time": (
+                        provider.anchor_live_window_at_receive_time
+                    ),
                 },
                 persistence_status=PersistenceStatus.UNPERSISTED,
             )
@@ -784,14 +795,17 @@ class ProviderQuoteCollector:
     ):
         policy = FreshnessPolicy(
             maximum_source_age_seconds=min(
-                provider.operational_ttl_seconds,
-                instrument.operational_ttl_seconds,
+                provider.maximum_source_age_seconds
+                or provider.operational_ttl_seconds,
                 instrument.expire_after_seconds,
             ),
             provider_live_ttl_seconds=provider.operational_ttl_seconds,
             instrument_operational_ttl_seconds=instrument.operational_ttl_seconds,
             instrument_stale_after_seconds=instrument.stale_after_seconds,
             instrument_expire_after_seconds=instrument.expire_after_seconds,
+            anchor_live_window_at_receive_time=(
+                provider.anchor_live_window_at_receive_time
+            ),
         )
         return freshness_boundaries(
             quote.observed_at,

@@ -2,6 +2,18 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.1.1] - 2026-09-12
+
+### Fixed
+
+- PersianToolbox payloads inside the provider's documented five-minute cache
+  window are accepted without replacing their original source timestamp.
+- A documented cached response receives only the instrument's normal short live
+  window from receipt. Payloads older than the explicit provider limit remain
+  rejected, and the original observation time remains visible and persisted.
+- The freshness test module now supplies its own isolated test secret instead
+  of depending on suite execution order.
+
 ## [2.1.0] - 2026-09-12
 
 ### Added

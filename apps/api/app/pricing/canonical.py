@@ -576,16 +576,30 @@ class CanonicalPricePolicy:
             provider_ttl = instrument.operational_ttl_seconds
         if provider_ttl <= 0:
             raise ValueError("Provider live TTL must be positive")
+        raw_source_age = quote.metadata.get(
+            "maximum_source_age_seconds",
+            min(provider_ttl, instrument.operational_ttl_seconds),
+        )
+        try:
+            maximum_source_age = int(raw_source_age)
+        except (TypeError, ValueError):
+            maximum_source_age = min(
+                provider_ttl, instrument.operational_ttl_seconds
+            )
+        if maximum_source_age <= 0:
+            raise ValueError("Maximum source age must be positive")
         policy = FreshnessPolicy(
             maximum_source_age_seconds=min(
-                provider_ttl,
-                instrument.operational_ttl_seconds,
+                maximum_source_age,
                 instrument.expire_after_seconds,
             ),
             provider_live_ttl_seconds=provider_ttl,
             instrument_operational_ttl_seconds=instrument.operational_ttl_seconds,
             instrument_stale_after_seconds=instrument.stale_after_seconds,
             instrument_expire_after_seconds=instrument.expire_after_seconds,
+            anchor_live_window_at_receive_time=bool(
+                quote.metadata.get("anchor_live_window_at_receive_time", False)
+            ),
         )
         return freshness_boundaries(
             quote.observed_at,

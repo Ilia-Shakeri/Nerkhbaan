@@ -129,7 +129,10 @@ class PricingProviderRepairTests(unittest.TestCase):
         self.assertEqual(btc_primary_ids, ["coinbase_btc_usd"])
 
     def test_persian_toolbox_btc_is_enabled_but_reference_usd_stays_disabled(self) -> None:
-        self.assertTrue(PROVIDERS["persian_toolbox_btc"].enabled)
+        btc = PROVIDERS["persian_toolbox_btc"]
+        self.assertTrue(btc.enabled)
+        self.assertEqual(btc.maximum_source_age_seconds, 300)
+        self.assertTrue(btc.anchor_live_window_at_receive_time)
         self.assertFalse(PROVIDERS["persian_toolbox_usd_toman"].enabled)
 
     def test_gold_24k_derivation_uses_decimal_metadata(self) -> None:

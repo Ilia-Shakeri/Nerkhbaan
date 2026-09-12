@@ -22,6 +22,7 @@ class FreshnessPolicy:
     instrument_stale_after_seconds: int
     instrument_expire_after_seconds: int
     future_clock_skew_seconds: int = DEFAULT_FUTURE_CLOCK_SKEW_SECONDS
+    anchor_live_window_at_receive_time: bool = False
 
     def __post_init__(self) -> None:
         if min(
@@ -139,6 +140,11 @@ def _freshness_anchor(
     received = _ensure_utc(receive_timestamp)
     if source > received + timedelta(seconds=policy.future_clock_skew_seconds):
         raise ValueError("Source timestamp exceeds future clock skew allowance")
+    if policy.anchor_live_window_at_receive_time:
+        age_seconds = (received - source).total_seconds()
+        if age_seconds > policy.maximum_source_age_seconds:
+            raise ValueError("Source timestamp exceeds maximum accepted age")
+        return received, received
     return min(source, received), received
 
 

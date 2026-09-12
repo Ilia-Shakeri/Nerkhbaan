@@ -70,8 +70,8 @@ async def probe_provider(provider_id: str) -> dict[str, object]:
                     instrument=instrument,
                     received_at=utc_now(),
                     maximum_timestamp_age_seconds=min(
-                        provider.operational_ttl_seconds,
-                        instrument.operational_ttl_seconds,
+                        provider.maximum_source_age_seconds
+                        or provider.operational_ttl_seconds,
                         instrument.expire_after_seconds,
                     ),
                 ),

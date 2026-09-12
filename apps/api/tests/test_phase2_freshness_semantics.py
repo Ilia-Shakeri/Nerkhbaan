@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 os.environ["DEBUG"] = "false"
+os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enough")
 
 from app.pricing.freshness import (
     FreshnessPolicy,
@@ -92,6 +93,30 @@ class FreshnessBoundaryTests(unittest.TestCase):
             cache_retention_until(source_time, FROZEN_NOW, policy),
             FROZEN_NOW + timedelta(seconds=600),
         )
+
+    def test_documented_cache_can_start_short_live_window_at_receive_time(self) -> None:
+        source_time = FROZEN_NOW - timedelta(seconds=240)
+        policy = FreshnessPolicy(
+            maximum_source_age_seconds=300,
+            provider_live_ttl_seconds=600,
+            instrument_operational_ttl_seconds=20,
+            instrument_stale_after_seconds=60,
+            instrument_expire_after_seconds=300,
+            anchor_live_window_at_receive_time=True,
+        )
+
+        boundaries = freshness_boundaries(source_time, FROZEN_NOW, policy)
+
+        self.assertEqual(
+            boundaries.live_eligible_until,
+            FROZEN_NOW + timedelta(seconds=20),
+        )
+        with self.assertRaises(ValueError):
+            freshness_boundaries(
+                FROZEN_NOW - timedelta(seconds=301),
+                FROZEN_NOW,
+                policy,
+            )
 
     def test_live_and_expired_edges_are_inclusive_then_flip(self) -> None:
         boundaries = freshness_boundaries(
