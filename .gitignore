@@ -58,7 +58,10 @@ full_Nerkhbaan_project_code.txt
 code_dumper.py
 apps/api/price_cache.json
 _export*.tar.gz
-_claude_tmp/
+_agent_tmp/
+
+# Local SSH keys for operational hosts. Never commit these files.
+.local-keys/
 
 # Private operational notes and credentials
 ALERT_SETUP.md

@@ -32,11 +32,13 @@ from .locks import DistributedPricingLocks, pricing_locks
 from .models import (
     CanonicalQuote,
     CanonicalStatus,
+    Currency,
     PersistenceStatus,
     ProviderQuote,
     ProviderRole,
     RequestPurpose,
     ValidationStatus,
+    WeightUnit,
     utc_now,
 )
 from .persistence import PricingPersistence, pricing_persistence
@@ -393,6 +395,63 @@ class InstrumentPricingService:
 
     async def flush_persistence_backlog(self, batch_size: int = 100) -> dict[str, int]:
         return await self.persistence.flush_stream(batch_size=batch_size)
+
+    async def ingest_worker_quote(
+        self,
+        *,
+        instrument_id: str,
+        provider_id: str,
+        price: Decimal,
+        observed_at: Any,
+        historical: bool,
+    ) -> None:
+        provider = PROVIDERS_BY_INSTRUMENT.get(instrument_id, ())
+        definition = next((item for item in provider if item.provider_id == provider_id), None)
+        if definition is None or provider_id not in {"coingecko_btc", "coingecko_usdt"}:
+            raise ValueError("Worker provider is not allowed for this instrument")
+        instrument = await self.operational.instrument(instrument_id)
+        if not instrument.enabled or not instrument.accepts(price):
+            raise ValueError("Worker quote is outside the instrument policy")
+        quote = ProviderQuote.create(
+            instrument_id=instrument_id,
+            provider_id=provider_id,
+            source_type="http",
+            price=price,
+            currency=Currency(instrument.quote_currency),
+            weight_unit=WeightUnit(instrument.weight_unit),
+            purity=instrument.purity,
+            observed_at=observed_at,
+            parser_version=f"{definition.parser_version}+worker/1.0.0",
+            validation_status=ValidationStatus.ACCEPTED,
+            confidence_score=definition.trust_score,
+            source_semantic=definition.source_semantic,
+            source_family=definition.source_family,
+            venue=definition.venue,
+            selected_price_semantic=definition.selected_price_semantic,
+            route_id="foreign_worker_ingest",
+            metadata={"quote_role": "backfill" if historical else "normal"},
+        )
+        persisted = await self.persistence.persist_provider_quote(quote)
+        if not persisted.persisted:
+            raise PricingRefreshSuspended("Worker quote persistence is unavailable")
+        previous = None if historical else await self.get_canonical(instrument_id)
+        decision = self.policy.select(
+            instrument=instrument,
+            primary=quote,
+            previous=previous,
+            assessment=None,
+            verifier_quotes=[],
+            now=quote.observed_at,
+        )
+        canonical = decision.canonical
+        if historical:
+            stored = await self.persistence.persist_canonical(canonical)
+            if not stored.persisted:
+                raise PricingRefreshSuspended("Worker history persistence is unavailable")
+            return
+        await self.store.set_provider_quote(quote, definition.operational_ttl_seconds)
+        await self._attach_changes(canonical)
+        await self._commit(canonical, previous)
 
     async def process_backfill_jobs(self, maximum_jobs: int = 2) -> dict[str, int]:
         return await self.backfill.process_jobs(maximum_jobs=maximum_jobs)

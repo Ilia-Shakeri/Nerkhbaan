@@ -134,6 +134,7 @@ class Settings(BaseSettings):
     pricing_provider_max_response_bytes: int = 262_144
     pricing_relay_base_url: str | None = None
     pricing_relay_shared_token: str | None = None
+    pricing_worker_shared_secret: str | None = None
     pricing_provider_allowed_hosts: str = (
         "api.alanchand.com,api.gold-api.com,www.goldapi.io,api.metals.dev,"
         "api.exchange.coinbase.com,api.coingecko.com,api.coincap.io,"

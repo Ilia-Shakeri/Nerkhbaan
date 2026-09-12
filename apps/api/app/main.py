@@ -38,6 +38,7 @@ from .routers import (
     notifications,
     price_ws,
     prices,
+    pricing_worker,
     providers,
     push,
     support,
@@ -215,6 +216,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(prices.router)
+app.include_router(pricing_worker.router)
 app.include_router(instruments.router)
 app.include_router(price_ws.router)
 app.include_router(providers.router)

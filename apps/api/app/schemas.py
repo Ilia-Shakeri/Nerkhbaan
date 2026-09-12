@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -98,6 +99,18 @@ class PricePoint(BaseModel):
     high: float | None = None
     low: float | None = None
     volume: float | None = None
+
+
+class PricingWorkerQuote(BaseModel):
+    instrument_id: str = Field(pattern=r"^(BTC_USD|USDT_USD)$")
+    provider_id: str = Field(pattern=r"^coingecko_(btc|usdt)$")
+    price: Decimal = Field(gt=0)
+    observed_at: datetime
+    historical: bool = False
+
+
+class PricingWorkerIngestRequest(BaseModel):
+    quotes: list[PricingWorkerQuote] = Field(min_length=1, max_length=800)
 
 
 class PriceHistoryResponse(BaseModel):

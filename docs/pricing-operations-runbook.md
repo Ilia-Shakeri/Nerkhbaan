@@ -36,6 +36,8 @@ The command uses the live request guard, credentials, response-size cap, retry r
 
 Keep production proof outside source control. Use `docs/operator-gates.evidence.example.json` as the shape for internal evidence, then validate a local copy:
 
+For the external BTC/USD and USDT/USD worker, follow `docs/external-price-worker.md`. The worker is a narrow signed ingress path, not database access or a general proxy.
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -EvidencePath path\to\operator-gates.evidence.json
 ```

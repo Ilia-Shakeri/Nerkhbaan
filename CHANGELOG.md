@@ -2,6 +2,14 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.10] - 2026-09-12
+
+### Added
+
+- Authenticated external price-worker ingress for BTC/USD and USDT/USD, including HMAC request verification and Redis replay protection.
+- A systemd worker package that imports one year of free CoinGecko history once and posts live crypto updates every minute.
+- An operator runbook for installation, secret rotation, migration to a replacement VPS, verification, and rollback.
+
 ## [2.0.9] - 2026-09-12
 
 ### Added
