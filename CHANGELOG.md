@@ -2,6 +2,12 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.8] - 2026-09-12
+
+### Fixed
+
+- Backfill jobs now defer once when a live quote is unavailable instead of retrying the same history work until the queue fills.
+
 ## [2.0.7] - 2026-09-12
 
 ### Fixed

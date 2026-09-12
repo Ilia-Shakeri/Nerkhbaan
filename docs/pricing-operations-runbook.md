@@ -88,6 +88,8 @@ state, not a surprise. Before declaring a chain live:
   fixture prove the exact endpoint contract.
 - Backfill is not queued for an instrument with no enabled history route. This
   avoids a permanent deferred-job backlog when a chart asks for unavailable data.
+- A history job also defers when live refresh is unavailable. Restore live data
+  first, then request history again; this avoids retrying work that cannot run.
 - Provider canary output is operational evidence, not licensing evidence.
 - A local unit-test pass is not a production deploy proof.
 

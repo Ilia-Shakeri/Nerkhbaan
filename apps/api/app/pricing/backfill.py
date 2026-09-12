@@ -142,12 +142,12 @@ class PricingBackfillQueue:
                 current = None
             if current is None or utc_now() > current.valid_until:
                 await asyncio.to_thread(
-                    self._retry_job,
+                    self._finish_job,
                     job["id"],
+                    "deferred",
                     "live_refresh_has_priority",
-                    job["attempt_count"],
                 )
-                counts["failed"] += 1
+                counts["deferred"] += 1
                 continue
             async with self.locks.backfill_lock(job["instrument_id"]) as lease:
                 if lease is None:
