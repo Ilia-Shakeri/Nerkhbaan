@@ -15,6 +15,7 @@ from .models import (
     CanonicalQuote,
     CanonicalStatus,
     VerificationStatus,
+    _change_or_none,
     decimal_or_none,
     decimal_value,
     ensure_utc,
@@ -558,10 +559,11 @@ def _canonical_from_row(row: Any) -> CanonicalQuote:
         is_persisted=bool(row["is_persisted"]),
         decision_reason=row["decision_reason"],
         verification_status=VerificationStatus(row["verification_status"]),
-        change_1h=decimal_or_none(row["change_1h"]),
-        change_24h=decimal_or_none(row["change_24h"]),
-        change_7d=decimal_or_none(row["change_7d"]),
-        change_30d=decimal_or_none(row["change_30d"]),
+        # Price fields must be positive; percentage changes may be negative.
+        change_1h=_change_or_none(row["change_1h"]),
+        change_24h=_change_or_none(row["change_24h"]),
+        change_7d=_change_or_none(row["change_7d"]),
+        change_30d=_change_or_none(row["change_30d"]),
         idempotency_key=row["idempotency_key"],
         sequence_number=(int(row["sequence_number"]) if row["sequence_number"] is not None else None),
     )

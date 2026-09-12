@@ -36,7 +36,7 @@ from .models import (
 from .operational import OperationalPricingSettings, operational_pricing_settings
 from .parsers.history import build_history_parser
 from .persistence import PricingPersistence, pricing_persistence
-from .registry import PROVIDERS_BY_INSTRUMENT, ProviderDefinition
+from .registry import ProviderDefinition
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +84,8 @@ class PricingBackfillQueue:
         idempotency_key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         if not await self.operational.feature_enabled("backfill_enabled"):
             return BackfillEnqueueResult("disabled", idempotency_key, None, None)
+        if await self._history_provider(instrument.instrument_id) is None:
+            return BackfillEnqueueResult("unsupported", idempotency_key, None, None)
         try:
             job_id = await asyncio.to_thread(
                 self._insert_job,
@@ -124,7 +126,7 @@ class PricingBackfillQueue:
             job = await asyncio.to_thread(self._claim_job)
             if job is None:
                 break
-            provider = self._history_provider(job["instrument_id"])
+            provider = await self._history_provider(job["instrument_id"])
             if provider is None:
                 await asyncio.to_thread(
                     self._finish_job,
@@ -310,12 +312,11 @@ class PricingBackfillQueue:
                 break
             await self.store.client().xdel(self.stream_key, stream_id)
 
-    @staticmethod
-    def _history_provider(instrument_id: str) -> ProviderDefinition | None:
+    async def _history_provider(self, instrument_id: str) -> ProviderDefinition | None:
         return next(
             (
                 provider
-                for provider in PROVIDERS_BY_INSTRUMENT.get(instrument_id, ())
+                for provider in await self.operational.providers_for(instrument_id)
                 if provider.enabled and provider.history_url and provider.history_parser_id
             ),
             None,

@@ -86,6 +86,8 @@ state, not a surprise. Before declaring a chain live:
   response. A database enable flag cannot override this safety default. Re-enable
   only with the route-specific environment flag after a new canary and parser
   fixture prove the exact endpoint contract.
+- Backfill is not queued for an instrument with no enabled history route. This
+  avoids a permanent deferred-job backlog when a chart asks for unavailable data.
 - Provider canary output is operational evidence, not licensing evidence.
 - A local unit-test pass is not a production deploy proof.
 

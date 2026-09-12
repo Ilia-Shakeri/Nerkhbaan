@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.0.7] - 2026-09-12
+
+### Fixed
+
+- Canonical reads now accept negative percentage changes, so valid falling-market rows no longer disappear from aggregate prices or flood error logs.
+- History requests for instruments with no enabled history route no longer create deferred backfill jobs.
+
 ## [2.0.6] - 2026-09-11
 
 ### Fixed

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 import os
 import unittest
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "pricing-persistence-test-key-0123456789")
@@ -21,7 +24,8 @@ from app.pricing.db_models import (
 )
 from app.pricing.instruments import INSTRUMENTS
 from app.pricing.persistence import PricingPersistence
-from app.pricing.history import InternalPriceHistory
+from app.pricing.backfill import PricingBackfillQueue
+from app.pricing.history import InternalPriceHistory, _canonical_from_row
 from app.pricing.registry import PROVIDERS
 
 
@@ -107,6 +111,39 @@ class _HistorySession:
 
 
 class InternalPriceHistoryQueryTests(unittest.TestCase):
+    def test_latest_row_accepts_negative_percentage_change(self) -> None:
+        now = datetime(2026, 9, 12, 12, 0, tzinfo=UTC)
+        quote = _canonical_from_row(
+            {
+                "id": 1,
+                "instrument_id": "BTC_USD",
+                "price": Decimal("100000"),
+                "status": "live",
+                "primary_quote_id": None,
+                "verification_quote_ids": [],
+                "source_summary": {},
+                "candidate_price": None,
+                "candidate_provider_id": None,
+                "observed_at": now,
+                "canonical_at": now,
+                "valid_until": now + timedelta(minutes=1),
+                "stale_at": now + timedelta(minutes=2),
+                "expires_at": now + timedelta(minutes=3),
+                "is_persisted": True,
+                "decision_reason": "test",
+                "verification_status": "not_required",
+                "change_1h": Decimal("-1.25"),
+                "change_24h": Decimal("0.50"),
+                "change_7d": None,
+                "change_30d": None,
+                "idempotency_key": "test",
+                "sequence_number": 1,
+            }
+        )
+
+        self.assertEqual(quote.change_1h, Decimal("-1.25"))
+        self.assertEqual(quote.change_24h, Decimal("0.50"))
+
     def test_latest_all_skips_one_malformed_row(self) -> None:
         valid = MagicMock(instrument_id="BTC_USD")
         with (
@@ -143,6 +180,32 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
         self.assertEqual(rows, [])
         self.assertEqual(session.calls[0][1], {"instrument_id": "BTC_USD"})
         self.assertIn("instrument_id = :instrument_id", session.calls[0][0])
+
+
+class _BackfillOperational:
+    async def feature_enabled(self, _key: str) -> bool:
+        return True
+
+    async def providers_for(self, _instrument_id: str):
+        return ()
+
+
+class PricingBackfillQueueTests(unittest.TestCase):
+    def test_enqueue_skips_instruments_without_a_history_route(self) -> None:
+        now = datetime(2026, 9, 12, 12, 0, tzinfo=UTC)
+        queue = PricingBackfillQueue(operational=_BackfillOperational())
+
+        with patch.object(PricingBackfillQueue, "_insert_job") as insert_job:
+            result = asyncio.run(
+                queue.enqueue(
+                    instrument_id="XAU_USD_OZ",
+                    range_start=now - timedelta(hours=1),
+                    range_end=now,
+                )
+            )
+
+        self.assertEqual(result.status, "unsupported")
+        insert_job.assert_not_called()
 
 
 if __name__ == "__main__":
