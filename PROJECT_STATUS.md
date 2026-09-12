@@ -1,13 +1,13 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-12 · **Release:** `2.1.1` · **Verdict:** core deployed;
-production clock synchronized; cached-provider correction pending deployment
+**Updated:** 2026-09-12 · **Release:** `2.1.1` · **Verdict:** deployed healthy;
+Iranian BTC fallback live proof passed; chart history remains partial
 
 ## Current release update
 
 - The production core was deployed and its readiness endpoint returned healthy
-  on release `2.0.10`; this is deployment proof, not load or UAT proof.
-- The local release gate now passes 178 backend tests with one PostgreSQL-only
+  on release `2.1.1`; this is deployment proof, not load or UAT proof.
+- The local release gate now passes 179 backend tests with one PostgreSQL-only
   concurrency test skipped when `TEST_DATABASE_URL` is absent.
 - Price refresh metrics and structured request-id logs are implemented and
   covered by tests.
@@ -16,6 +16,9 @@ production clock synchronized; cached-provider correction pending deployment
 - Release `2.1.1` keeps the Iranian BTC/USD provider timestamp intact while
   accepting its documented five-minute cache. Each accepted response gets only
   the normal short BTC live window from receipt; older payloads remain rejected.
+- The production provider canary returned HTTP 200 for `persian_toolbox_btc`.
+  The refresh loop reported one live result, and the public 30-day BTC chart
+  returned eight real persisted points with `partial` status.
 - The external foreign worker remains disabled because direct traffic between
   the two current VPS networks is blocked. Core operation does not depend on it.
 
