@@ -162,6 +162,9 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    dns:
+      - 178.22.122.100
+      - 185.51.200.2
     environment:
       NERKHBAAN_WORKER_SECRET: ${PRICING_WORKER_SHARED_SECRET:?Set PRICING_WORKER_SHARED_SECRET}
       PRICE_FEED_REPOSITORY: https://github.com/Ilia-Shakeri/Nerkhbaan.git

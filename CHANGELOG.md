@@ -2,6 +2,15 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.4] - 2026-09-13
+
+### Fixed
+
+- Git feed pulls now have a hard 30-second deadline and an explicit startup
+  log, preventing a blocked Git route from hanging the sidecar forever.
+- The pull sidecar now uses the verified Shecan resolvers, avoiding a blocked
+  GitHub address returned by the default Docker resolver on the Iran host.
+
 ## [2.4.3] - 2026-09-13
 
 ### Fixed

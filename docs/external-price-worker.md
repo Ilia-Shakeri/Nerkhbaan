@@ -15,7 +15,8 @@ host cannot reach `nerkhbaan.ir`. It needs no permanent foreign VPS.
 4. `price-feed-pull` uses Git smart HTTP over `github.com`, the GitHub route
    verified reachable from the Iran host. It repeats route, timestamp, and price
    checks, signs the exact ingest body with HMAC-SHA256, presents the trusted
-   public Host, and posts inside the Compose network.
+   public Host, and posts inside the Compose network. Every Git pull has a hard
+   30-second deadline; a failed pull is retried on the next interval.
 5. The core accepts only `gold_api_free_xag -> XAG_USD_OZ`,
    `coingecko_btc -> BTC_USD`, and `coingecko_usdt -> USDT_USD`.
    Relay records use a bounded parser version; upstream parser identity is kept
@@ -24,7 +25,10 @@ host cannot reach `nerkhbaan.ir`. It needs no permanent foreign VPS.
 The sidecar receives only `PRICING_WORKER_SHARED_SECRET`. It receives no
 database URL, Redis URL, user data, or admin credential. Its filesystem is
 read-only except for a 32 MB temporary directory, all Linux capabilities are
-dropped, and it runs as uid/gid 1000.
+dropped, and it runs as uid/gid 1000. The production service uses the verified
+Shecan resolvers `178.22.122.100` and `185.51.200.2`; replace both addresses in
+`docker-compose.prod.yaml` and retest HTTPS from the container if that DNS
+service changes.
 
 ### Enable and verify
 

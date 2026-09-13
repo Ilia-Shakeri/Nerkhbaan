@@ -45,6 +45,8 @@ type config struct {
 	interval   time.Duration
 }
 
+const gitCommandTimeout = 30 * time.Second
+
 func main() {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -52,6 +54,7 @@ func main() {
 	}
 	client := &http.Client{Timeout: 20 * time.Second}
 	lastUpdate := ""
+	log.Printf("price feed pull started")
 	for {
 		update, err := runOnce(client, cfg, lastUpdate)
 		if err != nil {
@@ -120,16 +123,19 @@ func fetchFeed(cfg config) ([]byte, error) {
 		return nil, fmt.Errorf("make temp repository: %w", err)
 	}
 	defer os.RemoveAll(directory)
-	if err := runGit("init", "--quiet", directory); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), gitCommandTimeout)
+	defer cancel()
+	if err := runGit(ctx, "init", "--quiet", directory); err != nil {
 		return nil, err
 	}
 	if err := runGit(
+		ctx,
 		"-C", directory, "-c", "http.version=HTTP/1.1", "fetch", "--quiet",
 		"--depth=1", cfg.repository, cfg.ref,
 	); err != nil {
 		return nil, err
 	}
-	command := exec.Command("git", "-C", directory, "show", "FETCH_HEAD:prices.json")
+	command := exec.CommandContext(ctx, "git", "-C", directory, "show", "FETCH_HEAD:prices.json")
 	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	output, err := command.Output()
 	if err != nil {
@@ -138,8 +144,8 @@ func fetchFeed(cfg config) ([]byte, error) {
 	return output, nil
 }
 
-func runGit(args ...string) error {
-	command := exec.Command("git", args...)
+func runGit(ctx context.Context, args ...string) error {
+	command := exec.CommandContext(ctx, "git", args...)
 	command.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	if err := command.Run(); err != nil {
 		return fmt.Errorf("git %s failed: %w", args[0], err)

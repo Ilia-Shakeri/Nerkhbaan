@@ -1,9 +1,15 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.4.3` · **Verdict:** release candidate;
-production `2.4.2` core is healthy; the relay parser fix awaits deployment
+**Updated:** 2026-09-13 · **Release:** `2.4.4` · **Verdict:** release candidate;
+production `2.4.3` core is healthy; the bounded Git pull and container DNS fix
+await deployment
 
 ## Current release update
+
+- Release candidate `2.4.4` puts a hard deadline around each Git feed pull and
+  logs sidecar startup, so a blocked route cannot hang one process forever. The
+  sidecar uses the two verified Shecan resolvers because Docker's default DNS
+  returned a blocked GitHub address on the Iran host.
 
 - Release candidate `2.4.3` bounds the relay parser version to the production
   database column while retaining upstream parser identity in metadata.
