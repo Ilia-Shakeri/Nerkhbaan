@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.3] - 2026-09-13
+
+### Fixed
+
+- Relay records now use a bounded parser version that fits the production
+  schema. The longer upstream parser version remains available in metadata.
+
 ## [2.4.2] - 2026-09-13
 
 ### Fixed

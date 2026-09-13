@@ -18,6 +18,8 @@ host cannot reach `nerkhbaan.ir`. It needs no permanent foreign VPS.
    public Host, and posts inside the Compose network.
 5. The core accepts only `gold_api_free_xag -> XAG_USD_OZ`,
    `coingecko_btc -> BTC_USD`, and `coingecko_usdt -> USDT_USD`.
+   Relay records use a bounded parser version; upstream parser identity is kept
+   in record metadata.
 
 The sidecar receives only `PRICING_WORKER_SHARED_SECRET`. It receives no
 database URL, Redis URL, user data, or admin credential. Its filesystem is

@@ -8,10 +8,13 @@ from unittest.mock import patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enough")
 
-from app.pricing.service import InstrumentPricingService
+from app.pricing.service import InstrumentPricingService, _WORKER_PARSER_VERSION
 
 
 class PricingWorkerServiceTests(unittest.IsolatedAsyncioTestCase):
+    def test_worker_parser_version_fits_production_column(self) -> None:
+        self.assertLessEqual(len(_WORKER_PARSER_VERSION), 32)
+
     async def test_rejects_stale_live_quote_before_storage(self) -> None:
         service = InstrumentPricingService()
         now = datetime(2026, 9, 13, 8, 0, tzinfo=UTC)

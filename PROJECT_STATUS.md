@@ -1,9 +1,12 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.4.2` · **Verdict:** release candidate;
-production `2.4.1` core is healthy; the sidecar Host fix awaits deployment
+**Updated:** 2026-09-13 · **Release:** `2.4.3` · **Verdict:** release candidate;
+production `2.4.2` core is healthy; the relay parser fix awaits deployment
 
 ## Current release update
+
+- Release candidate `2.4.3` bounds the relay parser version to the production
+  database column while retaining upstream parser identity in metadata.
 
 - Release candidate `2.4.2` keeps the API Host allowlist strict while making
   the private-network sidecar present the trusted public host during ingest.

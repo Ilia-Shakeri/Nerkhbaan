@@ -19,6 +19,7 @@ from ..observability import (
 )
 
 logger = logging.getLogger(__name__)
+_WORKER_PARSER_VERSION = "worker-relay/1.0.0"
 
 from .anomaly import AnomalyAssessment, DynamicAnomalyDetector, anomaly_detector
 from .backfill import PricingBackfillQueue, backfill_queue
@@ -435,7 +436,7 @@ class InstrumentPricingService:
             weight_unit=WeightUnit(instrument.weight_unit),
             purity=instrument.purity,
             observed_at=observed_at,
-            parser_version=f"{definition.parser_version}+worker/1.0.0",
+            parser_version=_WORKER_PARSER_VERSION,
             validation_status=ValidationStatus.ACCEPTED,
             confidence_score=definition.trust_score,
             source_semantic=definition.source_semantic,
@@ -443,7 +444,10 @@ class InstrumentPricingService:
             venue=definition.venue,
             selected_price_semantic=definition.selected_price_semantic,
             route_id="foreign_worker_ingest",
-            metadata={"quote_role": "backfill" if historical else "normal"},
+            metadata={
+                "quote_role": "backfill" if historical else "normal",
+                "upstream_parser_version": definition.parser_version,
+            },
         )
         persisted = await self.persistence.persist_provider_quote(quote)
         if not persisted.persisted:
