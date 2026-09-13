@@ -2,6 +2,22 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.2.0] - 2026-09-13
+
+### Added
+
+- A 14-stage HTTP integration smoke against real PostgreSQL and Redis in CI.
+- Route proof for anonymous authentication boundaries, duplicate signup,
+  session listing, invalid alert delivery, legacy and instrument history,
+  authenticated source history, unknown resources, and refresh-token reuse.
+
+### Changed
+
+- Project status and roadmap now separate the 2026-08-20 audit baseline from
+  completed integration, browser, observability, replica, and production work.
+- The release-version gate now verifies every workspace entry in the lockfile,
+  preventing a package manifest and lockfile version drift.
+
 ## [2.1.1] - 2026-09-12
 
 ### Fixed

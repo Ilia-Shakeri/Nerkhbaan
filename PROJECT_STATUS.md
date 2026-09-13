@@ -1,7 +1,7 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-12 · **Release:** `2.1.1` · **Verdict:** deployed healthy;
-Iranian BTC fallback live proof passed; chart history remains partial
+**Updated:** 2026-09-13 · **Release:** `2.2.0` · **Verdict:** release candidate;
+real-service API proof expanded; production remains on healthy `2.1.1`
 
 ## Current release update
 
@@ -9,6 +9,11 @@ Iranian BTC fallback live proof passed; chart history remains partial
   on release `2.1.1`; this is deployment proof, not load or UAT proof.
 - The local release gate now passes 179 backend tests with one PostgreSQL-only
   concurrency test skipped when `TEST_DATABASE_URL` is absent.
+- CI runs a 14-stage HTTP smoke against real PostgreSQL and Redis. It covers
+  auth boundaries, token-family reuse, alerts, pricing, charts, instruments,
+  provider redaction, and representative 401/404/409/422 responses.
+- A real-browser CI flow covers sign-up and alert create/edit/delete. Trigger
+  and delivery proof remain open.
 - Price refresh metrics and structured request-id logs are implemented and
   covered by tests.
 - Honest empty-chart states, CoinGecko history routes, and keyed Servix free-tier
@@ -25,6 +30,9 @@ Iranian BTC fallback live proof passed; chart history remains partial
 The detailed assessment below is the 2026-08-20 audit baseline. Later fixes are
 tracked in [`CHANGELOG.md`](CHANGELOG.md), and open work in
 [`FUTURE_TASKS.md`](FUTURE_TASKS.md).
+
+Claims under "What is not done" and the tier plan are historical baseline text.
+Use this current-release section and `FUTURE_TASKS.md` for present status.
 
 An audit account of what existed, what worked, and what stood between the
 repository and a 10/10 production system at the baseline date.

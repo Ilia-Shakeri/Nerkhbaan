@@ -1,3 +1,3 @@
 """Release identity shared by API metadata and health responses."""
 
-VERSION = "2.1.1"
+VERSION = "2.2.0"

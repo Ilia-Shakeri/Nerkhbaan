@@ -1,5 +1,12 @@
 # Nerkhbaan — Production Readiness Roadmap
 
+> Current correction, 2026-09-13: this file preserves the 2026-08-24 plan as a
+> historical baseline. Structured metrics/logging, a two-replica production
+> backend, real PostgreSQL/Redis integration gates, browser sign-up and alert
+> CRUD, production deployment, and Iranian BTC fallback proof are complete.
+> Current open work lives in `FUTURE_TASKS.md`; release facts live in
+> `PROJECT_STATUS.md`.
+
 Synthesizes three sources already in this repository/session: `PROJECT_STATUS.md`
 (engineering audit, assessed 2026-08-20), `FUTURE_TASKS.md`, and the two prior
 deliverables from this conversation — `docs/api-providers-reference.md` (data

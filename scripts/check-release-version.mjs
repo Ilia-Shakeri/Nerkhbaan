@@ -22,6 +22,18 @@ for (const manifest of [
 const lockfile = JSON.parse(read("package-lock.json"));
 assert.equal(lockfile.version, version, "package-lock.json version must match VERSION");
 assert.equal(lockfile.packages[""].version, version, "root lockfile version must match VERSION");
+for (const workspace of [
+  "apps/web",
+  "apps/admin-web",
+  "apps/desktop",
+  "packages/ui",
+]) {
+  assert.equal(
+    lockfile.packages[workspace]?.version,
+    version,
+    `${workspace} lockfile version must match VERSION`,
+  );
+}
 
 assert.match(
   read("apps/api/app/release.py"),

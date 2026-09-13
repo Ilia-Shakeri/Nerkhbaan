@@ -4,6 +4,11 @@
 
 Run `npm run verify`. CI then proves PostgreSQL migrations and restore, Redis round trips and replica lease exclusion, live HTTP routes, browser auth/alert flow, Compose/nginx/relay/monitoring syntax, desktop packaging, image builds, and security scans.
 
+The live HTTP gate has 14 stages. It creates a unique user and alert, exercises
+auth, session, pricing, chart, instrument, provider, and error contracts, then
+removes the alert. Run it only against a disposable test database; the user and
+security audit rows intentionally remain as transaction evidence.
+
 ## Staging
 
 Use the production Compose file under a separate project name and separate ports. Keep its database, Redis, certificates, webhook file, and provider keys separate from production.

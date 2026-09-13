@@ -9,9 +9,10 @@ is partial, and what production readiness still requires — see
 - [ ] Extract the shared web/desktop React layer. `apps/desktop` currently
       duplicates `apps/web`'s API client and views (~2,500 lines) and the two
       have already drifted.
-- [ ] Route-level API tests. Every endpoint is exercised through units today;
-      none through an HTTP client against a real database.
-- [ ] Browser end-to-end coverage for sign-in, alert creation and delivery.
+- [ ] Extend route-level API coverage beyond the current 14-stage real-service
+      smoke to notification delivery, support, and admin mutation paths.
+- [ ] Extend browser coverage beyond sign-up and alert CRUD to a seeded alert
+      trigger and verified delivery result.
 - [ ] A real free-market USD/Toman source. Without one, every Toman metal price
       without a direct provider is bridged through USDT and runs percent-level
       high.
@@ -47,6 +48,9 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -Evid
 - [x] Assistant user quota, shared rate limits, provider fallback, chat transaction order.
 - [x] Production evidence schema and strict verifier.
 - [x] CI parity for Redis and refresh-token concurrency.
+- [x] Route-level HTTP smoke against real PostgreSQL and Redis, including auth,
+      session, alert, pricing, chart, instrument, provider, and error contracts.
+- [x] Browser end-to-end coverage for sign-up and alert create/edit/delete.
 - [x] Deployment health gate and web response guards.
 - [x] Local API, web, admin, desktop, dependency and static checks.
 - [x] Full production audit and remediation — see `PROJECT_STATUS.md`.

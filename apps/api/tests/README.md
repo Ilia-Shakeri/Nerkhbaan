@@ -35,8 +35,11 @@ npm run verify
 | `test_request_body_limit.py` | Body-size middleware |
 | `test_provider_contracts.py`, `test_provider_canary.py` | Parser contracts, sanitised canary output |
 
-`ci_migration_check.py` and `ci_service_smoke.py` are not unit tests. They run
-in CI against real PostgreSQL and Redis services after migrations are applied.
+`ci_migration_check.py`, `ci_service_smoke.py`, and
+`scripts/integration_smoke_test.py` are not unit tests. They run in CI against
+real PostgreSQL and Redis services after migrations are applied. The HTTP smoke
+covers 14 stages across auth, sessions, alerts, pricing, charts, instruments,
+provider redaction, error contracts, and refresh-token family reuse.
 
 ## Writing tests here
 
