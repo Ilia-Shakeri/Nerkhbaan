@@ -1,9 +1,20 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.3.3` · **Verdict:** release candidate;
-production core is healthy on `2.3.2`; derived gold boundary fix awaits deployment
+**Updated:** 2026-09-13 · **Release:** `2.3.3` · **Verdict:** deployed core healthy;
+gold pricing and chart collection are live; silver pricing remains unavailable
 
 ## Current release update
+
+- Production `2.3.3` runs on two healthy backend replicas and one healthy web
+  replica. Readiness reports PostgreSQL and Redis connected, current migrations,
+  operational WebSocket fanout, and zero persistence, backfill, and dead-letter
+  backlog.
+- The public gold 24K canonical quote is live from the no-key Iranian reference.
+  Gold 18K is a persisted derived fallback with the same five-minute safe input
+  boundary. The public 30-day gold chart now has real stored points and will
+  continue to fill on each source cycle.
+- Silver remains the only empty public asset chart. Its enabled routes still
+  lack a reachable, configured source.
 
 - Release candidate `2.3.3` makes derived prices inherit the weakest vetted
   input boundary directly, preventing a second age penalty on derived gold 18K.
