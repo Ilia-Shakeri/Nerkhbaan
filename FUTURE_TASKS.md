@@ -44,6 +44,11 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -Evid
 
 ## Completed
 
+- [x] Production 2.4.6 deployment with two healthy API replicas, healthy web,
+      current migrations, connected data stores, and zero durable backlogs.
+- [x] Free public XAG/USD, BTC/USD, and USDT/USD relay with strict route, unit,
+      range, timestamp, signature, replay, and pull-timeout controls.
+- [x] Live silver USD/Toman card and non-empty persisted silver chart path.
 - [x] Provider request bounds, retry policy, parser contracts, secret-safe canary.
 - [x] Assistant user quota, shared rate limits, provider fallback, chat transaction order.
 - [x] Production evidence schema and strict verifier.

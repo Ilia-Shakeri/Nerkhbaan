@@ -42,6 +42,13 @@ The scheduled workflow must exist on the repository default branch. Run it once
 manually after first merge, then verify the `price-feed` branch contains only
 `prices.json`.
 
+Production proof on 2026-09-13: release 2.4.6 accepted a fresh three-route feed,
+reported healthy pricing refresh, published live silver USD/Toman values, and
+returned persisted silver chart data. The first hosted scheduled run failed
+before job startup during an upstream partial outage, so recurrence proof remains
+an operator gate. Manual publication proves transport and application behavior;
+it does not prove the hosted schedule.
+
 Build and start through the production stack:
 
 ```bash

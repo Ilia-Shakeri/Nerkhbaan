@@ -1,10 +1,33 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.4.4` · **Verdict:** release candidate;
-production `2.4.3` core is healthy; the bounded Git pull and container DNS fix
-await deployment
+**Updated:** 2026-09-13 · **Release:** `2.4.6` · **Verdict:** production core
+and public pricing relay are healthy; scheduled publisher proof is temporarily
+blocked by an upstream service outage
 
 ## Current release update
+
+- Production `2.4.6` runs two healthy API replicas and one healthy web replica.
+  Readiness reports `ready=true`, release `2.4.6`, connected PostgreSQL and
+  Redis, current migrations, operational WebSocket fanout, zero persistence,
+  backfill, and dead-letter backlog, and a healthy pricing refresh.
+- The Iran pull sidecar accepted a fresh one-commit feed containing XAG/USD,
+  BTC/USD, and USDT/USD. Relayed inputs preserve vendor timestamps, reject data
+  older than ten minutes, and receive only a bounded five- or six-minute live
+  window. Git pulls terminate after 60 seconds instead of hanging indefinitely.
+- The public silver card now has live XAG/USD and derived Toman values. Its
+  dashboard chart returned eight real points; the 30-day endpoint returned its
+  first persisted Toman point and will fill naturally on later source cycles.
+- The complete local release gate passed 189 API tests with one PostgreSQL-only
+  concurrency test skipped locally, 20 frontend contract tests, all web/admin/
+  desktop builds, and browser-test discovery. The pull service also passed its
+  tests inside the production Linux environment.
+- The scheduled repository publisher has not produced a successful recurrence
+  yet. Its first run failed before job startup during a platform-wide partial
+  outage. Manual publication proved the same builder, branch contract, Iran
+  pull, signed ingest, canonical selection, derived silver, and chart path.
+
+The bullets below record earlier release progression and are retained as
+historical deployment context.
 
 - Release candidate `2.4.4` puts a hard deadline around each Git feed pull and
   logs sidecar startup, so a blocked route cannot hang one process forever. The
