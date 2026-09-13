@@ -117,7 +117,7 @@ Full setup, conventions and troubleshooting: [`README.developer.md`](README.deve
 
 ## Releases
 
-Current release: **2.4.4**. The authoritative value is [`VERSION`](VERSION).
+Current release: **2.4.5**. The authoritative value is [`VERSION`](VERSION).
 Every release updates [`CHANGELOG.md`](CHANGELOG.md), package manifests and API
 health metadata together. Run this check before a release:
 

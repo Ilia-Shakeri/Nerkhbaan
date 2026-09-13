@@ -22,6 +22,12 @@ host cannot reach `nerkhbaan.ir`. It needs no permanent foreign VPS.
    Relay records use a bounded parser version; upstream parser identity is kept
    in record metadata.
 
+The live contract is deliberately narrow. Feed and quote timestamps must be at
+most ten minutes old when the Iran pull service and API receive them. Accepted
+current quotes preserve the vendor observation timestamp, but start a bounded
+receive-time window: up to five minutes for XAG/USD and six minutes for BTC/USD
+and USDT/USD. Direct providers keep their own shorter provider windows.
+
 The sidecar receives only `PRICING_WORKER_SHARED_SECRET`. It receives no
 database URL, Redis URL, user data, or admin credential. Its filesystem is
 read-only except for a 32 MB temporary directory, all Linux capabilities are

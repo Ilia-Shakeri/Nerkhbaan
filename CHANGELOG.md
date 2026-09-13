@@ -2,6 +2,19 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.5] - 2026-09-13
+
+### Fixed
+
+- Relayed market quotes now start a bounded live window when the Iran API
+  receives them, while preserving the upstream observation timestamp.
+- BTC/USD and USDT/USD freshness windows now cover the five-minute public-feed
+  cadence; faster direct providers retain their own shorter provider windows.
+- Both the pull service and API reject live relay quotes older than ten minutes.
+  This prevents delayed feeds from appearing current.
+- Silver derivation can remain live between scheduled feed updates instead of
+  losing its USDT/USD input after 30 seconds.
+
 ## [2.4.4] - 2026-09-13
 
 ### Fixed

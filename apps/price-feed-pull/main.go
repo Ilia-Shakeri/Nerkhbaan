@@ -46,6 +46,7 @@ type config struct {
 }
 
 const gitCommandTimeout = 30 * time.Second
+const maximumFeedAge = 10 * time.Minute
 
 func main() {
 	cfg, err := loadConfig()
@@ -158,7 +159,7 @@ func validateFeed(value feed, now time.Time) error {
 		return errors.New("unsupported price feed contract")
 	}
 	updated, err := time.Parse(time.RFC3339Nano, value.UpdatedAt)
-	if err != nil || updated.After(now.Add(5*time.Minute)) || now.Sub(updated) > 2*time.Hour {
+	if err != nil || updated.After(now.Add(5*time.Minute)) || now.Sub(updated) > maximumFeedAge {
 		return errors.New("price feed timestamp is outside the safe window")
 	}
 	expected := map[string]string{
@@ -179,7 +180,7 @@ func validateFeed(value feed, now time.Time) error {
 		}
 		seen[item.ProviderID] = true
 		observed, err := time.Parse(time.RFC3339Nano, item.ObservedAt)
-		if err != nil || observed.After(now.Add(5*time.Minute)) || now.Sub(observed) > 2*time.Hour {
+		if err != nil || observed.After(now.Add(5*time.Minute)) || now.Sub(observed) > maximumFeedAge {
 			return errors.New("quote timestamp is outside the safe window")
 		}
 		price, err := strconv.ParseFloat(item.Price, 64)

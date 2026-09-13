@@ -20,6 +20,8 @@ from ..observability import (
 
 logger = logging.getLogger(__name__)
 _WORKER_PARSER_VERSION = "worker-relay/1.0.0"
+_WORKER_MAXIMUM_SOURCE_AGE_SECONDS = 600
+_WORKER_LIVE_TTL_SECONDS = 360
 
 from .anomaly import AnomalyAssessment, DynamicAnomalyDetector, anomaly_detector
 from .backfill import PricingBackfillQueue, backfill_queue
@@ -420,7 +422,9 @@ class InstrumentPricingService:
         now = utc_now()
         if observed_at > now + timedelta(minutes=5):
             raise ValueError("Worker quote timestamp is in the future")
-        if not historical and now - observed_at > timedelta(hours=2):
+        if not historical and now - observed_at > timedelta(
+            seconds=_WORKER_MAXIMUM_SOURCE_AGE_SECONDS
+        ):
             raise ValueError("Worker quote timestamp is too old")
         if historical and provider_id == "gold_api_free_xag":
             raise ValueError("Worker provider does not support historical quotes")
@@ -436,6 +440,7 @@ class InstrumentPricingService:
             weight_unit=WeightUnit(instrument.weight_unit),
             purity=instrument.purity,
             observed_at=observed_at,
+            received_at=now,
             parser_version=_WORKER_PARSER_VERSION,
             validation_status=ValidationStatus.ACCEPTED,
             confidence_score=definition.trust_score,
@@ -447,6 +452,9 @@ class InstrumentPricingService:
             metadata={
                 "quote_role": "backfill" if historical else "normal",
                 "upstream_parser_version": definition.parser_version,
+                "provider_live_ttl_seconds": _WORKER_LIVE_TTL_SECONDS,
+                "maximum_source_age_seconds": _WORKER_MAXIMUM_SOURCE_AGE_SECONDS,
+                "anchor_live_window_at_receive_time": not historical,
             },
         )
         persisted = await self.persistence.persist_provider_quote(quote)
@@ -459,7 +467,7 @@ class InstrumentPricingService:
             previous=previous,
             assessment=None,
             verifier_quotes=[],
-            now=quote.observed_at,
+            now=quote.observed_at if historical else now,
         )
         canonical = decision.canonical
         if historical:

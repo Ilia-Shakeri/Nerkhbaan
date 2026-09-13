@@ -108,7 +108,7 @@ _DEFAULT_INSTRUMENTS = {
     "USDT_USD": _instrument(
         "USDT_USD", "USDT", Currency.USD, Market.GLOBAL_EXCHANGE,
         Region.GLOBAL, WeightUnit.UNIT, None, 4,
-        30, 90, 300, "0.5", "2", "0.8", "1.2", 8, 2,
+        360, 900, 1800, "0.5", "2", "0.8", "1.2", 8, 2,
     ),
     "BTC_TOMAN": _instrument(
         "BTC_TOMAN", "BTC", Currency.TOMAN, Market.IRAN_EXCHANGE,
@@ -119,7 +119,7 @@ _DEFAULT_INSTRUMENTS = {
     "BTC_USD": _instrument(
         "BTC_USD", "BTC", Currency.USD, Market.GLOBAL_EXCHANGE,
         Region.GLOBAL, WeightUnit.UNIT, None, 2,
-        20, 60, 300, "2", "8", "1000", "1000000", 10, 3,
+        360, 900, 1800, "2", "8", "1000", "1000000", 10, 3,
     ),
 }
 
