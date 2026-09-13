@@ -1,6 +1,12 @@
 name: Public price feed
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/price-feed.yml
+      - scripts/build-price-feed.py
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:

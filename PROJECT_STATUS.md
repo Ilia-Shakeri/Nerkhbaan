@@ -1,9 +1,13 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.4.0` · **Verdict:** release candidate;
-production `2.3.3` is healthy; the validated silver relay awaits deployment
+**Updated:** 2026-09-13 · **Release:** `2.4.1` · **Verdict:** release candidate;
+production `2.4.0` core is healthy; the silver feed awaits its first run
 
 ## Current release update
+
+- Release candidate `2.4.1` publishes the first feed immediately when its
+  workflow or builder reaches `main`; the five-minute schedule remains the
+  steady-state refresh path.
 
 - Release candidate `2.4.0` adds a Git-backed pull relay for XAG/USD, BTC/USD,
   and USDT/USD. A scheduled runner validates the two free public sources and

@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.1] - 2026-09-13
+
+### Fixed
+
+- Changes to the feed workflow or builder on `main` now publish an immediate
+  initial feed instead of waiting for the first scheduled run.
+
 ## [2.4.0] - 2026-09-13
 
 ### Added

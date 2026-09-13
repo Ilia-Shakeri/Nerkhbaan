@@ -5,9 +5,9 @@
 Use this route when the Iran host cannot open public market APIs and a foreign
 host cannot reach `nerkhbaan.ir`. It needs no permanent foreign VPS.
 
-1. `.github/workflows/price-feed.yml` runs every five minutes on the default
-   branch. It reads XAG/USD from Gold API Free and BTC/USD plus USDT/USD from
-   CoinGecko.
+1. `.github/workflows/price-feed.yml` runs immediately when its workflow or
+   builder changes on the default branch, then every five minutes. It reads
+   XAG/USD from Gold API Free and BTC/USD plus USDT/USD from CoinGecko.
 2. `scripts/build-price-feed.py` rejects changed units, missing routes, stale
    timestamps, non-numeric values, and values outside instrument safety ranges.
 3. The workflow force-replaces the orphan `price-feed` branch. The branch always
