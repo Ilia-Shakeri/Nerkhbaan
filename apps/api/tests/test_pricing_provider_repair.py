@@ -139,6 +139,14 @@ class PricingProviderRepairTests(unittest.TestCase):
         self.assertEqual(gold.budget.minimum_interval_seconds, 300)
         self.assertEqual(gold.maximum_source_age_seconds, 300)
         self.assertTrue(gold.anchor_live_window_at_receive_time)
+        self.assertEqual(
+            INSTRUMENTS["GOLD_24K_TOMAN_GRAM"].operational_ttl_seconds,
+            gold.budget.minimum_interval_seconds,
+        )
+        self.assertEqual(
+            INSTRUMENTS["GOLD_18K_TOMAN_GRAM"].operational_ttl_seconds,
+            gold.budget.minimum_interval_seconds,
+        )
         self.assertFalse(PROVIDERS["persian_toolbox_usd_toman"].enabled)
 
     def test_gold_24k_derivation_uses_decimal_metadata(self) -> None:

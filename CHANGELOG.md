@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.3.2] - 2026-09-13
+
+### Fixed
+
+- Gold 24K and derived 18K freshness now match the Iranian source's five-minute
+  cache interval. Cards no longer spend most of each provider cycle stale.
+
 ## [2.3.1] - 2026-09-13
 
 ### Fixed

@@ -1,9 +1,13 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.3.1` · **Verdict:** release candidate;
-production core is healthy on `2.3.0`; receive-anchored gold fix awaits deployment
+**Updated:** 2026-09-13 · **Release:** `2.3.2` · **Verdict:** release candidate;
+production core is healthy on `2.3.1`; gold interval fix awaits deployment
 
 ## Current release update
+
+- Release candidate `2.3.2` aligns gold 24K and derived 18K freshness with the
+  source's five-minute cache. Production `2.3.1` already writes gold chart
+  points, but its one-minute instrument window leaves the card stale too often.
 
 - Release candidate `2.3.1` fixes canonical freshness for accepted cached
   sources. The provider and canonical quote now share the same receive-anchored

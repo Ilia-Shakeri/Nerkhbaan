@@ -59,13 +59,13 @@ _DEFAULT_INSTRUMENTS = {
     "GOLD_18K_TOMAN_GRAM": _instrument(
         "GOLD_18K_TOMAN_GRAM", "XAU_18K", Currency.TOMAN,
         Market.IRAN_PHYSICAL, Region.IRAN, WeightUnit.GRAM, "0.750", 0,
-        60, 180, 900, "1.5", "5", "100000", "100000000", 10, 3,
+        300, 600, 1800, "1.5", "5", "100000", "100000000", 10, 3,
         derived_fallback=True,
     ),
     "GOLD_24K_TOMAN_GRAM": _instrument(
         "GOLD_24K_TOMAN_GRAM", "XAU_24K", Currency.TOMAN,
         Market.IRAN_PHYSICAL, Region.IRAN, WeightUnit.GRAM, "0.9999", 0,
-        60, 180, 900, "1.5", "5", "100000", "150000000", 9, 3,
+        300, 600, 1800, "1.5", "5", "100000", "150000000", 9, 3,
         derived_fallback=True,
     ),
     "XAU_USD_OZ": _instrument(
