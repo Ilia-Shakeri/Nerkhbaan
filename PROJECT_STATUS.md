@@ -1,9 +1,18 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.3.3` · **Verdict:** deployed core healthy;
-gold pricing and chart collection are live; silver pricing remains unavailable
+**Updated:** 2026-09-13 · **Release:** `2.4.0` · **Verdict:** release candidate;
+production `2.3.3` is healthy; the validated silver relay awaits deployment
 
 ## Current release update
+
+- Release candidate `2.4.0` adds a Git-backed pull relay for XAG/USD, BTC/USD,
+  and USDT/USD. A scheduled runner validates the two free public sources and
+  force-replaces a one-commit `price-feed` branch. A restricted production
+  sidecar fetches only that branch, repeats route/time/range checks, signs the
+  payload, and sends it only to the internal worker endpoint.
+- The relay builder passed a live foreign-host test with three current records:
+  XAG/USD, BTC/USD, and USDT/USD. Production and scheduled-run proof remain
+  pending.
 
 - Production `2.3.3` runs on two healthy backend replicas and one healthy web
   replica. Readiness reports PostgreSQL and Redis connected, current migrations,

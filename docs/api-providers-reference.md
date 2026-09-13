@@ -84,7 +84,7 @@ marked **freemium**.
 | Provider | Role | Cost | Auth (env var) | Enabled by default | Notes |
 | --- | --- | --- | --- | --- | --- |
 | GoldAPI.io (`goldapi_xau`/`goldapi_xag`) | PRIMARY | **Freemium** | `GOLDAPI_API_KEY` (header) | Yes, but skipped if no key | Free tier historically ~100 req/month; paid plans scale up. Verify current terms at goldapi.io before relying on it. |
-| Gold-API.com (`gold_api_free_xau`/`gold_api_free_xag`) | VERIFIER | **Free, no key** | none | Yes | `gold-api.com` — genuinely free, unauthenticated JSON. Also covers crypto. Good independent verifier already in use. |
+| Gold-API.com (`gold_api_free_xau`/`gold_api_free_xag`) | VERIFIER | **Free, no key** | none | Yes | Direct calls are blocked from the Iran host. XAG is validated outside Iran, published through the single-commit Git feed, validated again by the pull sidecar, and ingested under the same provider identity. |
 | Metals.dev (`metals_dev_gold`/`metals_dev_silver`) | FALLBACK | **Freemium** | `METALS_DEV_API_KEY` (query) | Yes, but skipped if no key | Confirmed free tier: **100 requests/month**, 60s update cadence. Paid from $1.79/mo (2,000 req) up to $99.99/mo (500,000 req). |
 
 ### 2.2 `GOLD_18K_TOMAN_GRAM` / `GOLD_24K_TOMAN_GRAM` — Iran physical gold, Toman
@@ -333,7 +333,7 @@ Providerای که `enabled` است ولی `configured` نیست، در زمان 
 | Provider | نقش | هزینه | احراز هویت (متغیر env) | فعال به‌صورت پیش‌فرض | یادداشت |
 | --- | --- | --- | --- | --- | --- |
 | GoldAPI.io (`goldapi_xau`/`goldapi_xag`) | PRIMARY | **Freemium** | `GOLDAPI_API_KEY` (هدر) | بله، ولی بدون کلید نادیده گرفته می‌شود | سطح رایگان تاریخاً حدود 100 درخواست در ماه؛ پلن‌های پولی مقیاس‌پذیرترند. پیش از تکیه‌کردن، شرایط فعلی را در goldapi.io بررسی کنید. |
-| Gold-API.com (`gold_api_free_xau`/`gold_api_free_xag`) | VERIFIER | **رایگان، بدون کلید** | ندارد | بله | `gold-api.com` — واقعاً رایگان، JSON بدون احراز هویت. کریپتو را هم پوشش می‌دهد. یک verifier مستقل خوب که الان هم استفاده می‌شود. |
+| Gold-API.com (`gold_api_free_xau`/`gold_api_free_xag`) | VERIFIER | **رایگان، بدون کلید** | ندارد | بله | تماس مستقیم از سرور ایران بسته است. XAG بیرون ایران سنجیده می‌شود، از شاخه تک‌کامیتی Git می‌آید، در sidecar دوباره سنجیده می‌شود و با همان شناسه منبع وارد می‌شود. |
 | Metals.dev (`metals_dev_gold`/`metals_dev_silver`) | FALLBACK | **Freemium** | `METALS_DEV_API_KEY` (query) | بله، ولی بدون کلید نادیده گرفته می‌شود | سطح رایگان تأییدشده: **100 درخواست در ماه**، به‌روزرسانی هر 60 ثانیه. پلن‌های پولی از 1.79$ در ماه (2,000 درخواست) تا 99.99$ در ماه (500,000 درخواست). |
 
 ### 2.2 `GOLD_18K_TOMAN_GRAM` / `GOLD_24K_TOMAN_GRAM` — طلای فیزیکی ایران، تومان

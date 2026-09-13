@@ -13,6 +13,11 @@ from ..schemas import PricingWorkerIngestRequest
 
 router = APIRouter(prefix="/api/internal/pricing-worker", tags=["pricing-worker"])
 _MAX_CLOCK_SKEW_SECONDS = 300
+_WORKER_ROUTES = {
+    "coingecko_btc": "BTC_USD",
+    "coingecko_usdt": "USDT_USD",
+    "gold_api_free_xag": "XAG_USD_OZ",
+}
 
 
 async def _authenticate(request: Request, body: bytes) -> None:
@@ -45,7 +50,7 @@ async def ingest(request: Request) -> dict[str, int]:
     try:
         payload = PricingWorkerIngestRequest.model_validate_json(body)
         for quote in payload.quotes:
-            expected = "BTC_USD" if quote.provider_id == "coingecko_btc" else "USDT_USD"
+            expected = _WORKER_ROUTES.get(quote.provider_id)
             if quote.instrument_id != expected:
                 raise ValueError("Worker provider does not match instrument")
             await instrument_pricing_service.ingest_worker_quote(**quote.model_dump())

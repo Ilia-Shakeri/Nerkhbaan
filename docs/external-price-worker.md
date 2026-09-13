@@ -1,10 +1,69 @@
-# External price worker
+# External price feeds
+
+## Preferred Git pull route
+
+Use this route when the Iran host cannot open public market APIs and a foreign
+host cannot reach `nerkhbaan.ir`. It needs no permanent foreign VPS.
+
+1. `.github/workflows/price-feed.yml` runs every five minutes on the default
+   branch. It reads XAG/USD from Gold API Free and BTC/USD plus USDT/USD from
+   CoinGecko.
+2. `scripts/build-price-feed.py` rejects changed units, missing routes, stale
+   timestamps, non-numeric values, and values outside instrument safety ranges.
+3. The workflow force-replaces the orphan `price-feed` branch. The branch always
+   has one small commit, so feed history cannot grow without bound.
+4. `price-feed-pull` uses Git smart HTTP over `github.com`, the GitHub route
+   verified reachable from the Iran host. It repeats route, timestamp, and price
+   checks, signs the exact ingest body with HMAC-SHA256, and posts inside the
+   Compose network.
+5. The core accepts only `gold_api_free_xag -> XAG_USD_OZ`,
+   `coingecko_btc -> BTC_USD`, and `coingecko_usdt -> USDT_USD`.
+
+The sidecar receives only `PRICING_WORKER_SHARED_SECRET`. It receives no
+database URL, Redis URL, user data, or admin credential. Its filesystem is
+read-only except for a 32 MB temporary directory, all Linux capabilities are
+dropped, and it runs as uid/gid 1000.
+
+### Enable and verify
+
+The scheduled workflow must exist on the repository default branch. Run it once
+manually after first merge, then verify the `price-feed` branch contains only
+`prices.json`.
+
+Build and start through the production stack:
+
+```bash
+APP_IMAGE_TAG=release-tag docker compose -f docker-compose.prod.yaml build price-feed-pull
+APP_IMAGE_TAG=release-tag docker compose -f docker-compose.prod.yaml up -d --no-deps price-feed-pull
+docker compose -f docker-compose.prod.yaml logs --tail 40 price-feed-pull
+```
+
+Expected log: `price feed accepted at ...`. Then verify:
+
+```bash
+curl -fsS https://nerkhbaan.ir/api/instruments/XAG_USD_OZ
+curl -fsS https://nerkhbaan.ir/api/instruments/SILVER_999_TOMAN_GRAM
+curl -fsS 'https://nerkhbaan.ir/api/prices/silver/history?timeframe=30d'
+```
+
+Disable only the relay if it fails. Stored prices remain and age normally:
+
+```bash
+docker compose -f docker-compose.prod.yaml stop price-feed-pull
+```
+
+If the API vendor changes, edit only `scripts/build-price-feed.py`, retain the
+same normalized feed contract, add a parser test, and run the workflow manually.
+If GitHub connectivity changes, replace the repository URL or the pull transport
+in `apps/price-feed-pull`; do not weaken the core HMAC or route allowlist.
 
 ## Purpose
 
 The Iran application stays the public site and source of truth. A small worker outside Iran reads the permitted free CoinGecko BTC/USD and USDT/USD routes, then sends signed price records to the application. The worker never gets database, Redis, user, or admin access.
 
-This push design is used because the Iran host resolved CoinGecko but its TCP connection to port 443 was refused. It also avoids relying on the Iran host reaching a foreign relay.
+This older push design remains a fallback for a managed foreign VPS. It was
+blocked in the current hosting path because neither VPS could open the needed
+direction. Prefer the Git pull route above while that network policy remains.
 
 ## Trust boundary
 

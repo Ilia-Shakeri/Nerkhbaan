@@ -2,6 +2,26 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.0] - 2026-09-13
+
+### Added
+
+- A scheduled public price feed for XAG/USD, BTC/USD, and USDT/USD using free,
+  validated upstream routes outside Iran.
+- A locked-down pull service that reads only the single-commit `price-feed`
+  branch through reachable Git smart HTTP, validates the feed again, signs it,
+  and sends it only to the internal pricing endpoint.
+- Exact worker allowlists and safe ranges for the silver route.
+- Server-side rejection of stale, future-dated, and unsupported historical
+  relay quotes, plus bounded upstream response reads.
+
+### Changed
+
+- The production stack can run the pull service without exposing database,
+  Redis, user, or admin access.
+- External price-worker documentation now covers both the preferred Git pull
+  route and foreign-VPS replacement steps.
+
 ## [2.3.3] - 2026-09-13
 
 ### Fixed

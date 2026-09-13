@@ -4,6 +4,7 @@ import asyncio
 import logging
 import secrets
 import time
+from datetime import timedelta
 from decimal import Decimal
 from typing import Any, Iterable
 
@@ -39,6 +40,7 @@ from .models import (
     RequestPurpose,
     ValidationStatus,
     WeightUnit,
+    ensure_utc,
     utc_now,
 )
 from .persistence import PricingPersistence, pricing_persistence
@@ -407,8 +409,20 @@ class InstrumentPricingService:
     ) -> None:
         provider = PROVIDERS_BY_INSTRUMENT.get(instrument_id, ())
         definition = next((item for item in provider if item.provider_id == provider_id), None)
-        if definition is None or provider_id not in {"coingecko_btc", "coingecko_usdt"}:
+        if definition is None or provider_id not in {
+            "coingecko_btc",
+            "coingecko_usdt",
+            "gold_api_free_xag",
+        }:
             raise ValueError("Worker provider is not allowed for this instrument")
+        observed_at = ensure_utc(observed_at)
+        now = utc_now()
+        if observed_at > now + timedelta(minutes=5):
+            raise ValueError("Worker quote timestamp is in the future")
+        if not historical and now - observed_at > timedelta(hours=2):
+            raise ValueError("Worker quote timestamp is too old")
+        if historical and provider_id == "gold_api_free_xag":
+            raise ValueError("Worker provider does not support historical quotes")
         instrument = await self.operational.instrument(instrument_id)
         if not instrument.enabled or not instrument.accepts(price):
             raise ValueError("Worker quote is outside the instrument policy")

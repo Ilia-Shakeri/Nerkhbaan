@@ -34,6 +34,8 @@ npm run verify
 | `test_insights.py`, `test_insight_router_contracts.py` | Assistant provider fallback and quotas |
 | `test_request_body_limit.py` | Body-size middleware |
 | `test_provider_contracts.py`, `test_provider_canary.py` | Parser contracts, sanitised canary output |
+| `test_price_feed_builder.py` | Public feed routes, units, ranges, and freshness |
+| `test_pricing_worker_auth.py`, `test_pricing_worker_service.py` | HMAC replay guard, exact relay allowlist, and quote-time limits |
 
 `ci_migration_check.py`, `ci_service_smoke.py`, and
 `scripts/integration_smoke_test.py` are not unit tests. They run in CI against

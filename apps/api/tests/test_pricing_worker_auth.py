@@ -11,10 +11,27 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enoug
 
 from fastapi import HTTPException
 
-from app.routers.pricing_worker import _authenticate
+from app.routers.pricing_worker import _WORKER_ROUTES, _authenticate
+from app.schemas import PricingWorkerIngestRequest
 
 
 class PricingWorkerAuthenticationTests(unittest.IsolatedAsyncioTestCase):
+    def test_worker_contract_allows_only_exact_metal_route(self) -> None:
+        payload = PricingWorkerIngestRequest.model_validate(
+            {
+                "quotes": [
+                    {
+                        "instrument_id": "XAG_USD_OZ",
+                        "provider_id": "gold_api_free_xag",
+                        "price": "64.6",
+                        "observed_at": "2026-09-13T08:00:00Z",
+                    }
+                ]
+            }
+        )
+        quote = payload.quotes[0]
+        self.assertEqual(_WORKER_ROUTES[quote.provider_id], quote.instrument_id)
+
     async def test_valid_signature_claims_one_replay_slot(self) -> None:
         secret = "x" * 48
         body = b'{"quotes":[]}'

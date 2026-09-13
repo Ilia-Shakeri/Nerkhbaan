@@ -117,7 +117,7 @@ Full setup, conventions and troubleshooting: [`README.developer.md`](README.deve
 
 ## Releases
 
-Current release: **2.3.3**. The authoritative value is [`VERSION`](VERSION).
+Current release: **2.4.0**. The authoritative value is [`VERSION`](VERSION).
 Every release updates [`CHANGELOG.md`](CHANGELOG.md), package manifests and API
 health metadata together. Run this check before a release:
 
@@ -376,6 +376,7 @@ Full detail: [`apps/api/PRICING_SOURCES.md`](apps/api/PRICING_SOURCES.md).
 | [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) | Every endpoint, auth, errors, rate limits |
 | [`apps/api/PRICING_SOURCES.md`](apps/api/PRICING_SOURCES.md) | Instruments, providers, verification, derived pricing |
 | [`docs/pricing-operations-runbook.md`](docs/pricing-operations-runbook.md) | Provider onboarding gate, canary, operator evidence |
+| [`docs/external-price-worker.md`](docs/external-price-worker.md) | Git-based public price relay, deployment, replacement and rollback |
 | [`docs/redis-recovery.md`](docs/redis-recovery.md) | Redis data safety and recovery |
 | [`docs/production-hardening-report.md`](docs/production-hardening-report.md) | Historical hardening record |
 | [`.github/security-exceptions/POLICY.md`](.github/security-exceptions/POLICY.md) | CI scan exception policy |

@@ -148,6 +148,37 @@ services:
           cpus: "0.75"
           memory: 768M
 
+  price-feed-pull:
+    image: nerkhbaan-price-feed-pull:${APP_IMAGE_TAG:-local}
+    build:
+      context: ./apps/price-feed-pull
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "1000:1000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      NERKHBAAN_WORKER_SECRET: ${PRICING_WORKER_SHARED_SECRET:?Set PRICING_WORKER_SHARED_SECRET}
+      PRICE_FEED_REPOSITORY: https://github.com/Ilia-Shakeri/Nerkhbaan.git
+      PRICE_FEED_REF: price-feed
+      PRICE_FEED_INGEST_ENDPOINT: http://backend:8000/api/internal/pricing-worker/ingest
+      PRICE_FEED_POLL_SECONDS: "60"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - nerkhbaan-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.10"
+          memory: 64M
+
   frontend:
     image: nerkhbaan-web:${APP_IMAGE_TAG:-local}
     build:
