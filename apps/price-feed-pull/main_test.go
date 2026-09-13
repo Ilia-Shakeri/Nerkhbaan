@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -36,5 +39,25 @@ func TestValidateFeedRejectsStaleFeed(t *testing.T) {
 	}
 	if err := validateFeed(value, now); err == nil {
 		t.Fatal("stale feed accepted")
+	}
+}
+
+func TestSendUsesTrustedPublicHost(t *testing.T) {
+	seenHost := ""
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		seenHost = request.Host
+		response.WriteHeader(http.StatusAccepted)
+	}))
+	defer server.Close()
+
+	err := send(server.Client(), config{
+		endpoint: server.URL,
+		secret:   strings.Repeat("x", 32),
+	}, []byte(`{"quotes":[]}`))
+	if err != nil {
+		t.Fatalf("signed request failed: %v", err)
+	}
+	if seenHost != "nerkhbaan.ir" {
+		t.Fatalf("unexpected trusted host: %q", seenHost)
 	}
 }

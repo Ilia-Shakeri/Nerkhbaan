@@ -211,6 +211,7 @@ func send(client *http.Client, cfg config, body []byte) error {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Pricing-Worker-Timestamp", timestamp)
 	request.Header.Set("X-Pricing-Worker-Signature", signature)
+	request.Host = "nerkhbaan.ir"
 	response, err := client.Do(request)
 	if err != nil {
 		return fmt.Errorf("send ingest request: %w", err)

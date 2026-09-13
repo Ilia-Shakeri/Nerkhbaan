@@ -14,8 +14,8 @@ host cannot reach `nerkhbaan.ir`. It needs no permanent foreign VPS.
    has one small commit, so feed history cannot grow without bound.
 4. `price-feed-pull` uses Git smart HTTP over `github.com`, the GitHub route
    verified reachable from the Iran host. It repeats route, timestamp, and price
-   checks, signs the exact ingest body with HMAC-SHA256, and posts inside the
-   Compose network.
+   checks, signs the exact ingest body with HMAC-SHA256, presents the trusted
+   public Host, and posts inside the Compose network.
 5. The core accepts only `gold_api_free_xag -> XAG_USD_OZ`,
    `coingecko_btc -> BTC_USD`, and `coingecko_usdt -> USDT_USD`.
 

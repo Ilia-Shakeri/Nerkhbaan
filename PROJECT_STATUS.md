@@ -1,9 +1,12 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.4.1` · **Verdict:** release candidate;
-production `2.4.0` core is healthy; the silver feed awaits its first run
+**Updated:** 2026-09-13 · **Release:** `2.4.2` · **Verdict:** release candidate;
+production `2.4.1` core is healthy; the sidecar Host fix awaits deployment
 
 ## Current release update
+
+- Release candidate `2.4.2` keeps the API Host allowlist strict while making
+  the private-network sidecar present the trusted public host during ingest.
 
 - Release candidate `2.4.1` publishes the first feed immediately when its
   workflow or builder reaches `main`; the five-minute schedule remains the

@@ -2,6 +2,14 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.2] - 2026-09-13
+
+### Fixed
+
+- The internal pull service now sends the trusted public Host while connecting
+  over the private Compose network, so the API host guard accepts signed feed
+  ingestion without adding an internal hostname to the public allowlist.
+
 ## [2.4.1] - 2026-09-13
 
 ### Fixed
