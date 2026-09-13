@@ -1,29 +1,39 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.2.1` · **Verdict:** release candidate;
-real-service API proof expanded; production remains on healthy `2.1.1`
+**Updated:** 2026-09-13 · **Release:** `2.2.1` · **Verdict:** deployed core healthy;
+real-service API proof passed; metal pricing and chart history remain incomplete
 
 ## Current release update
 
-- The production core was deployed and its readiness endpoint returned healthy
-  on release `2.1.1`; this is deployment proof, not load or UAT proof.
+- The production core runs release `2.2.1` on two healthy backend replicas and
+  one healthy web replica. Readiness reports PostgreSQL and Redis connected,
+  current migrations, operational WebSocket fanout, and `ready=true`.
+- A fresh 37,186,217-byte PostgreSQL backup passed gzip validation immediately
+  before deployment. Existing PostgreSQL and Redis volumes were retained.
 - The local release gate now passes 179 backend tests with one PostgreSQL-only
   concurrency test skipped when `TEST_DATABASE_URL` is absent.
-- CI runs a 14-stage HTTP smoke against real PostgreSQL and Redis. It covers
+- A disposable production-host test stack passed the 14-stage HTTP smoke
+  against real PostgreSQL and Redis. It covers
   auth boundaries, token-family reuse, alerts, pricing, charts, instruments,
   provider redaction, and representative 401/404/409/422 responses.
+- That smoke exposed an untyped optional PostgreSQL filter in source history.
+  Release `2.2.1` fixes it and the full smoke then passed.
 - A real-browser CI flow covers sign-up and alert create/edit/delete. Trigger
   and delivery proof remain open.
 - Price refresh metrics and structured request-id logs are implemented and
   covered by tests.
 - Honest empty-chart states, CoinGecko history routes, and keyed Servix free-tier
   history routes are implemented.
-- Release `2.1.1` keeps the Iranian BTC/USD provider timestamp intact while
+- Release `2.2.1` keeps the Iranian BTC/USD provider timestamp intact while
   accepting its documented five-minute cache. Each accepted response gets only
   the normal short BTC live window from receipt; older payloads remain rejected.
 - The production provider canary returned HTTP 200 for `persian_toolbox_btc`.
-  The refresh loop reported one live result, and the public 30-day BTC chart
-  returned eight real persisted points with `partial` status.
+  The public site returned HTTP 200 and its anonymous auth guard returned 401.
+- Production currently exposes four assets. BTC and USDT have live values and
+  partial 30-day charts with 12 and 22 persisted points. Gold and silver still
+  have no current value and no chart points. Pricing readiness is degraded with
+  one fresh, four expired, and six unavailable instruments; this blocks final
+  data-completeness sign-off.
 - The external foreign worker remains disabled because direct traffic between
   the two current VPS networks is blocked. Core operation does not depend on it.
 
