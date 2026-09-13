@@ -1,6 +1,6 @@
 {
   "name": "nerkhbaan-monorepo",
-  "version": "2.4.5",
+  "version": "2.4.6",
   "private": true,
   "packageManager": "npm@10.9.8",
   "engines": {

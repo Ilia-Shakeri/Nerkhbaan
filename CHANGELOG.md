@@ -2,6 +2,14 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.6] - 2026-09-13
+
+### Fixed
+
+- Git feed pulls now allow up to 60 seconds before forced termination. The
+  deadline still bounds blocked routes while tolerating observed Iran-to-GitHub
+  latency above 30 seconds.
+
 ## [2.4.5] - 2026-09-13
 
 ### Fixed

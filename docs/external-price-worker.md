@@ -16,7 +16,7 @@ host cannot reach `nerkhbaan.ir`. It needs no permanent foreign VPS.
    verified reachable from the Iran host. It repeats route, timestamp, and price
    checks, signs the exact ingest body with HMAC-SHA256, presents the trusted
    public Host, and posts inside the Compose network. Every Git pull has a hard
-   30-second deadline; a failed pull is retried on the next interval.
+   60-second deadline; a failed pull is retried on the next interval.
 5. The core accepts only `gold_api_free_xag -> XAG_USD_OZ`,
    `coingecko_btc -> BTC_USD`, and `coingecko_usdt -> USDT_USD`.
    Relay records use a bounded parser version; upstream parser identity is kept

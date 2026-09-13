@@ -45,7 +45,7 @@ type config struct {
 	interval   time.Duration
 }
 
-const gitCommandTimeout = 30 * time.Second
+const gitCommandTimeout = 60 * time.Second
 const maximumFeedAge = 10 * time.Minute
 
 func main() {
