@@ -1,9 +1,12 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.3.2` · **Verdict:** release candidate;
-production core is healthy on `2.3.1`; gold interval fix awaits deployment
+**Updated:** 2026-09-13 · **Release:** `2.3.3` · **Verdict:** release candidate;
+production core is healthy on `2.3.2`; derived gold boundary fix awaits deployment
 
 ## Current release update
+
+- Release candidate `2.3.3` makes derived prices inherit the weakest vetted
+  input boundary directly, preventing a second age penalty on derived gold 18K.
 
 - Release candidate `2.3.2` aligns gold 24K and derived 18K freshness with the
   source's five-minute cache. Production `2.3.1` already writes gold chart

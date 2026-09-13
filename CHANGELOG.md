@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.3.3] - 2026-09-13
+
+### Fixed
+
+- Derived prices now inherit the weakest vetted input's live boundary directly.
+  Old raw source timestamps no longer shorten a safe derived gold window twice.
+
 ## [2.3.2] - 2026-09-13
 
 ### Fixed

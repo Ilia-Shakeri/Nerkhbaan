@@ -621,12 +621,16 @@ class CanonicalPricePolicy:
         quote: ProviderQuote,
         instrument: InstrumentDefinition,
     ) -> datetime:
+        input_live_eligible_until = quote.metadata.get("input_live_eligible_until")
+        if quote.is_derived and input_live_eligible_until is not None:
+            # A formula has no independent market timestamp. Its safe live
+            # boundary is exactly the weakest already-vetted input boundary.
+            return parse_datetime(input_live_eligible_until)
         live_until = CanonicalPricePolicy._quote_freshness_boundaries(
             quote, instrument
         ).live_eligible_until
         for field_name in (
             "effective_live_eligible_until",
-            "input_live_eligible_until",
         ):
             raw_value = quote.metadata.get(field_name)
             if raw_value is not None:

@@ -578,6 +578,7 @@ class DerivedPriceTests(unittest.TestCase):
             "XAU_USD_OZ": _canonical(
                 "XAU_USD_OZ",
                 "2400",
+                observed_seconds_ago=400,
                 valid_for_seconds=5,
             ),
             "USDT_TOMAN": _canonical("USDT_TOMAN", "60000"),
