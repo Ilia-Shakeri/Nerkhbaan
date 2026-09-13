@@ -446,6 +446,15 @@ class CanonicalPricePolicy:
         source_live_eligible_until: datetime | None = None,
     ) -> CanonicalQuote:
         freshness_anchor = ensure_utc(observed_at)
+        if source_live_eligible_until is not None:
+            # A vetted cached source may start its short live window when we
+            # receive it. Rebuild that effective anchor here so the canonical
+            # quote keeps the same live, stale, and expiry boundaries as the
+            # accepted provider quote.
+            effective_anchor = ensure_utc(source_live_eligible_until) - timedelta(
+                seconds=instrument.operational_ttl_seconds
+            )
+            freshness_anchor = max(freshness_anchor, effective_anchor)
         valid_until = freshness_anchor + timedelta(
             seconds=instrument.operational_ttl_seconds
         )

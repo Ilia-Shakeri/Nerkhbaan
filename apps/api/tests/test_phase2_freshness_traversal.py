@@ -381,6 +381,52 @@ class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(decision.canonical.valid_until, expected_live_until)
 
+    def test_receive_anchored_source_keeps_canonical_live_window(self) -> None:
+        instrument = replace(
+            get_instrument("GOLD_24K_TOMAN_GRAM"),
+            operational_ttl_seconds=60,
+            stale_after_seconds=180,
+            expire_after_seconds=900,
+        )
+        quote = _provider_quote(
+            observed_at=FROZEN_NOW - timedelta(seconds=240),
+            instrument_id=instrument.instrument_id,
+            provider_id="persian_toolbox_gold24",
+        )
+        quote.received_at = FROZEN_NOW
+        quote.metadata.update(
+            {
+                "provider_live_ttl_seconds": 600,
+                "maximum_source_age_seconds": 300,
+                "anchor_live_window_at_receive_time": True,
+                "effective_live_eligible_until": (
+                    FROZEN_NOW + timedelta(seconds=60)
+                ).isoformat(),
+            }
+        )
+
+        decision = CanonicalPricePolicy().select(
+            instrument=instrument,
+            primary=quote,
+            previous=None,
+            assessment=None,
+            verifier_quotes=[],
+            now=FROZEN_NOW,
+        )
+
+        self.assertEqual(
+            decision.canonical.valid_until,
+            FROZEN_NOW + timedelta(seconds=60),
+        )
+        self.assertEqual(
+            decision.canonical.stale_at,
+            FROZEN_NOW + timedelta(seconds=180),
+        )
+        self.assertEqual(
+            decision.canonical.expires_at,
+            FROZEN_NOW + timedelta(seconds=900),
+        )
+
     async def test_queued_live_cache_has_true_skip_reason(self) -> None:
         provider = PROVIDERS["coinbase_btc_usd"]
         cached = _provider_quote(

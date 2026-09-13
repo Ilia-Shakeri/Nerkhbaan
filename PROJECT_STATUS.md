@@ -1,9 +1,13 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.3.0` · **Verdict:** release candidate;
-production core remains healthy on `2.2.1`; gold recovery awaits deployment
+**Updated:** 2026-09-13 · **Release:** `2.3.1` · **Verdict:** release candidate;
+production core is healthy on `2.3.0`; receive-anchored gold fix awaits deployment
 
 ## Current release update
+
+- Release candidate `2.3.1` fixes canonical freshness for accepted cached
+  sources. The provider and canonical quote now share the same receive-anchored
+  live, stale, and expiry windows.
 
 - Release candidate `2.3.0` adds a no-key PersianToolbox 24K gold reference.
   It checks source time, freshness, source list, and the documented IRR-per-gram

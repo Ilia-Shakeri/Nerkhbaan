@@ -2,6 +2,14 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.3.1] - 2026-09-13
+
+### Fixed
+
+- Receive-anchored cached sources now keep the same live, stale, and expiry
+  windows after canonical selection. Gold no longer becomes stale as soon as a
+  valid five-minute provider payload is accepted.
+
 ## [2.3.0] - 2026-09-13
 
 ### Added
