@@ -1,6 +1,6 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.2.0` · **Verdict:** release candidate;
+**Updated:** 2026-09-13 · **Release:** `2.2.1` · **Verdict:** release candidate;
 real-service API proof expanded; production remains on healthy `2.1.1`
 
 ## Current release update

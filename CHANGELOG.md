@@ -2,6 +2,14 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.2.1] - 2026-09-13
+
+### Fixed
+
+- Provider source history now binds an optional provider filter with an explicit
+  PostgreSQL type, so unfiltered source-history requests work on an empty real
+  database instead of returning HTTP 503.
+
 ## [2.2.0] - 2026-09-13
 
 ### Added

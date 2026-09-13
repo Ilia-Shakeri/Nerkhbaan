@@ -308,7 +308,7 @@ class InternalPriceHistory:
             WHERE instrument_id = :instrument_id
               AND observed_at >= :start
               AND observed_at <= :end
-              AND (:provider_id IS NULL OR provider_id = :provider_id)
+              AND (CAST(:provider_id AS TEXT) IS NULL OR provider_id = :provider_id)
             ORDER BY observed_at ASC
             LIMIT 10000
             """
