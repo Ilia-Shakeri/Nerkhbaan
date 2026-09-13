@@ -143,6 +143,16 @@ class PersianToolboxMarketParser:
             raw = strict_decimal(exact_path(node, "priceUSD"), "BTC priceUSD")
             factor = Decimal("1")
             source_currency = "USD"
+        elif self.asset == "GOLD_24K_TOMAN_GRAM":
+            if units.get("goldPricePerGram") != "IRR":
+                raise ParserError(
+                    "unknown_unit",
+                    "PersianToolbox gold unit must be IRR per gram",
+                )
+            gold = require_object(exact_path(data, "gold"), "PersianToolbox gold")
+            raw = strict_decimal(exact_path(gold, "pricePerGram"), "gold pricePerGram")
+            factor = Decimal("0.1")
+            source_currency = "RIAL"
         elif self.asset == "USD_TOMAN":
             if units.get("currencyBase") != "USD" or units.get("iranCurrency") != "IRR":
                 raise ParserError("unknown_unit", "PersianToolbox currency units must be USD and IRR")

@@ -45,6 +45,9 @@ def build_parser(parser_id: str) -> ExplicitParser:
         "coingecko_bitcoin_usd_v1": lambda: CoinGeckoSimplePriceParser(asset_id="bitcoin"),
         "coingecko_tether_usd_v1": lambda: CoinGeckoSimplePriceParser(asset_id="tether"),
         "persian_toolbox_btc_usd_v1": lambda: PersianToolboxMarketParser(asset="BTC_USD"),
+        "persian_toolbox_gold24_toman_v1": lambda: PersianToolboxMarketParser(
+            asset="GOLD_24K_TOMAN_GRAM"
+        ),
         "persian_toolbox_usd_toman_v1": lambda: PersianToolboxMarketParser(asset="USD_TOMAN"),
         "wallex_usdt_toman_v1": lambda: WallexMarketParser(symbol="USDTTMN"),
         "wallex_btc_toman_v1": lambda: WallexMarketParser(symbol="BTCTMN"),

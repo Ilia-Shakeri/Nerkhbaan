@@ -128,11 +128,17 @@ class PricingProviderRepairTests(unittest.TestCase):
         ]
         self.assertEqual(btc_primary_ids, ["coinbase_btc_usd"])
 
-    def test_persian_toolbox_btc_is_enabled_but_reference_usd_stays_disabled(self) -> None:
+    def test_persian_toolbox_btc_and_gold_are_enabled_but_reference_usd_stays_disabled(self) -> None:
         btc = PROVIDERS["persian_toolbox_btc"]
         self.assertTrue(btc.enabled)
         self.assertEqual(btc.maximum_source_age_seconds, 300)
         self.assertTrue(btc.anchor_live_window_at_receive_time)
+        gold = PROVIDERS["persian_toolbox_gold24"]
+        self.assertTrue(gold.enabled)
+        self.assertEqual(gold.instrument_id, "GOLD_24K_TOMAN_GRAM")
+        self.assertEqual(gold.budget.minimum_interval_seconds, 300)
+        self.assertEqual(gold.maximum_source_age_seconds, 300)
+        self.assertTrue(gold.anchor_live_window_at_receive_time)
         self.assertFalse(PROVIDERS["persian_toolbox_usd_toman"].enabled)
 
     def test_gold_24k_derivation_uses_decimal_metadata(self) -> None:
@@ -177,7 +183,7 @@ class PricingProviderRepairTests(unittest.TestCase):
         self.assertEqual(wallex.price, Decimal("60000"))
         self.assertEqual(tala.price, Decimal("8000000"))
 
-    def test_persian_toolbox_parses_btc_and_reference_usd_with_explicit_units(self) -> None:
+    def test_persian_toolbox_parses_btc_gold_and_reference_usd_with_explicit_units(self) -> None:
         timestamp = int(self._provider_time().timestamp() * 1000)
         payload = {
             "ok": True,
@@ -188,9 +194,11 @@ class PricingProviderRepairTests(unittest.TestCase):
                     "IRR": {"code": "IRR", "rate": 1420000},
                 },
                 "crypto": {"BTC": {"symbol": "BTC", "priceUSD": 77000}},
+                "gold": {"pricePerGram": 212000000, "change24h": -0.4},
                 "units": {
                     "currencyBase": "USD",
                     "iranCurrency": "IRR",
+                    "goldPricePerGram": "IRR",
                     "cryptoPrice": "USD",
                 },
                 "sources": ["exchange-reference", "crypto-reference"],
@@ -204,10 +212,32 @@ class PricingProviderRepairTests(unittest.TestCase):
         usd = build_parser("persian_toolbox_usd_toman_v1").parse(
             payload, _context("USD_TOMAN")
         )
+        gold = build_parser("persian_toolbox_gold24_toman_v1").parse(
+            payload, _context("GOLD_24K_TOMAN_GRAM")
+        )
 
         self.assertEqual(btc.price, Decimal("77000"))
         self.assertEqual(usd.price, Decimal("142000"))
         self.assertEqual(usd.metadata["normalization"], "rial_to_toman")
+        self.assertEqual(gold.price, Decimal("21200000.0"))
+        self.assertEqual(gold.metadata["normalization"], "rial_to_toman")
+
+    def test_persian_toolbox_gold_rejects_wrong_unit(self) -> None:
+        timestamp = int(self._provider_time().timestamp() * 1000)
+        payload = {
+            "ok": True,
+            "data": {
+                "timestamp": timestamp,
+                "gold": {"pricePerGram": 212000000},
+                "units": {"goldPricePerGram": "TOMAN"},
+                "sources": ["gold-reference"],
+                "freshness": "live",
+            },
+        }
+        with self.assertRaisesRegex(ParserError, "must be IRR per gram"):
+            build_parser("persian_toolbox_gold24_toman_v1").parse(
+                payload, _context("GOLD_24K_TOMAN_GRAM")
+            )
 
     def test_persian_toolbox_rejects_stale_payload_and_wrong_unit(self) -> None:
         timestamp = int(self._provider_time().timestamp() * 1000)

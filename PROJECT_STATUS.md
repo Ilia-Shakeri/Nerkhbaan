@@ -1,9 +1,13 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.2.1` · **Verdict:** deployed core healthy;
-real-service API proof passed; metal pricing and chart history remain incomplete
+**Updated:** 2026-09-13 · **Release:** `2.3.0` · **Verdict:** release candidate;
+production core remains healthy on `2.2.1`; gold recovery awaits deployment
 
 ## Current release update
+
+- Release candidate `2.3.0` adds a no-key PersianToolbox 24K gold reference.
+  It checks source time, freshness, source list, and the documented IRR-per-gram
+  unit before conversion to Toman. Production proof remains pending.
 
 - The production core runs release `2.2.1` on two healthy backend replicas and
   one healthy web replica. Readiness reports PostgreSQL and Redis connected,

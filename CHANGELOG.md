@@ -2,6 +2,14 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.3.0] - 2026-09-13
+
+### Added
+
+- A no-key PersianToolbox 24K gold reference route in IRR per gram.
+- Strict checks for unit, freshness, time, source list, and positive value.
+- A five-minute call interval matching the documented provider cache.
+
 ## [2.2.1] - 2026-09-13
 
 ### Fixed
