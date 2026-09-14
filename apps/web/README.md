@@ -53,6 +53,19 @@ are published only when a value *changes*, so a stalled pricing pipeline
 produces heartbeats and no updates — which looks exactly like a quiet market.
 The poll is the liveness check that distinguishes them.
 
+## Interface and accessibility contracts
+
+- The startup screen contains no market quote or chart. Only API-backed history
+  may be presented as market data.
+- Authentication uses a scrollable dynamic viewport with safe-area padding.
+  Its normal card rotation remains, while the platform reduced-motion setting
+  replaces movement with a minimal transition and skips the startup screen.
+- Password fields expose one keyboard-reachable, localized reveal control.
+- Interactive charts expose a spoken summary and the latest 20 real points as
+  a screen-reader table. Chart cards also have keyboard move controls.
+- Icon-only actions need localized accessible names. Popovers and toggles must
+  expose their expanded or pressed state.
+
 ## Service worker
 
 Built with `injectManifest`, not `generateSW`, because the app needs its own

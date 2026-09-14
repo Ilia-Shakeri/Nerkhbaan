@@ -35,5 +35,28 @@ export function RequiredPasswordView() {
     }
   };
 
-  return <main className="flex min-h-screen items-center justify-center bg-[#060606] p-6"><Card className="w-full max-w-md space-y-5 border-[#D4AF37]/30 p-6"><div className="flex items-center gap-3"><Lock className="text-[#D4AF37]" /><div><h1 className="text-xl font-bold text-white">{language === 'fa' ? 'تغییر رمز الزامی' : 'Password change required'}</h1><p className="mt-1 text-sm text-slate-400">{language === 'fa' ? 'پیش از ادامه، رمز موقت را عوض کنید.' : 'Change the temporary password before continuing.'}</p></div></div><form onSubmit={submit} className="space-y-3"><Input type="password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} placeholder={language === 'fa' ? 'رمز فعلی' : 'Current password'} required /><Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={language === 'fa' ? 'رمز جدید' : 'New password'} minLength={8} required /><Input type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder={language === 'fa' ? 'تکرار رمز جدید' : 'Confirm new password'} minLength={8} required /><Button type="submit" disabled={saving} className="w-full bg-[#D4AF37] text-black">{saving ? '...' : language === 'fa' ? 'تغییر رمز' : 'Change password'}</Button></form></Card></main>;
+  const passwordToggleLabels = {
+    show: language === 'fa' ? 'نمایش رمز عبور' : 'Show password',
+    hide: language === 'fa' ? 'پنهان کردن رمز عبور' : 'Hide password',
+  };
+
+  return (
+    <main className="flex min-h-dvh items-center justify-center overflow-y-auto bg-[#060606] p-6">
+      <Card className="w-full max-w-md space-y-5 border-[#D4AF37]/30 p-6">
+        <div className="flex items-center gap-3">
+          <Lock className="text-[#D4AF37]" />
+          <div>
+            <h1 className="text-xl font-bold text-white">{language === 'fa' ? 'تغییر رمز الزامی' : 'Password change required'}</h1>
+            <p className="mt-1 text-sm text-slate-400">{language === 'fa' ? 'پیش از ادامه، رمز موقت را عوض کنید.' : 'Change the temporary password before continuing.'}</p>
+          </div>
+        </div>
+        <form onSubmit={submit} className="space-y-3">
+          <Input name="current-password" autoComplete="current-password" type="password" passwordToggleLabels={passwordToggleLabels} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} placeholder={language === 'fa' ? 'رمز فعلی' : 'Current password'} required />
+          <Input name="new-password" autoComplete="new-password" type="password" passwordToggleLabels={passwordToggleLabels} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={language === 'fa' ? 'رمز جدید' : 'New password'} minLength={8} required />
+          <Input name="confirm-password" autoComplete="new-password" type="password" passwordToggleLabels={passwordToggleLabels} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder={language === 'fa' ? 'تکرار رمز جدید' : 'Confirm new password'} minLength={8} required />
+          <Button type="submit" disabled={saving} className="w-full bg-[#D4AF37] text-black">{saving ? '...' : language === 'fa' ? 'تغییر رمز' : 'Change password'}</Button>
+        </form>
+      </Card>
+    </main>
+  );
 }

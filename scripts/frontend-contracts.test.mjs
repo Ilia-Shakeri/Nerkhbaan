@@ -192,3 +192,45 @@ test("dashboard never makes a chart point from a live quote", () => {
   assert.match(dashboard, /function ChartUnavailableState/);
   assert.match(dashboard, /historyQuery\?\.refetch/);
 });
+
+test("public splash never presents fixed market values as live data", () => {
+  const splash = read("apps/web/src/app/components/SplashScreen.tsx");
+  assert.doesNotMatch(splash, /const\s+TICKERS|Live Prices|قیمت‌های زنده/);
+  assert.match(splash, /role="status"/);
+});
+
+test("authentication stays scrollable and exposes one keyboard password toggle", () => {
+  const auth = read("apps/web/src/app/views/AuthView.tsx");
+  const input = read("packages/ui/src/app/components/ui/input.tsx");
+  assert.match(auth, /min-h-dvh/);
+  assert.match(auth, /overflow-y-auto/);
+  assert.match(auth, /dir="auto"/);
+  assert.doesNotMatch(auth, /tabIndex=\{-1\}[\s\S]{0,300}Eye/);
+  assert.match(auth, /rotateY:/, "the requested authentication card rotation must remain");
+  assert.match(input, /aria-pressed=\{showPassword\}/);
+});
+
+test("motion and charts have accessible alternatives", () => {
+  const app = read("apps/web/src/app/App.tsx");
+  const dashboard = read("apps/web/src/app/views/DashboardView.tsx");
+  const styles = read("apps/web/src/styles/index.css");
+  assert.match(app, /MotionConfig reducedMotion="user"/);
+  assert.match(styles, /prefers-reduced-motion:\s*reduce/);
+  assert.match(styles, /prefers-reduced-transparency:\s*reduce/);
+  assert.match(dashboard, /ref=\{containerRef\}[\s\S]{0,160}role="img"/);
+  assert.match(dashboard, /<table id=\{tableId\} className="sr-only">/);
+  assert.match(dashboard, /Move .* card up|بردن کارت/);
+});
+
+test("admin navigation survives history and dangerous dialogs contain focus", () => {
+  const app = read("apps/admin-web/src/App.tsx");
+  const ui = read("apps/admin-web/src/ui.tsx");
+  assert.match(app, /sectionFromHash/);
+  assert.match(app, /hashchange/);
+  assert.match(app, /aria-current=/);
+  assert.match(app, /allowedNavigation\.some\(\(item\) => item\.id === section\)/);
+  assert.match(ui, /event\.key === 'Escape'/);
+  assert.match(ui, /busyRef\.current/);
+  assert.match(ui, /event\.key !== 'Tab'/);
+  assert.match(ui, /previousFocus\?\.focus\(\)/);
+});

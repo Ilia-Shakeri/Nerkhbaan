@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Mail, Lock, CheckCircle2, XCircle, Sun, Moon, Languages, Eye, EyeOff } from 'lucide-react';
+import { User, Mail, Lock, CheckCircle2, XCircle, Sun, Moon, Languages } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -24,7 +24,8 @@ export function AuthView() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fullName, setFullName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [formError, setFormError] = useState('');
+  const errorRef = useRef<HTMLDivElement>(null);
 
   // Password live validation checks
   const hasLength = password.length >= 8;
@@ -64,7 +65,7 @@ export function AuthView() {
     pwdLower: { fa: 'یک حرف کوچک', en: 'Lowercase letter' },
     pwdNumSym: { fa: 'عدد یا نماد', en: 'Number or Symbol' },
     invalidPwdMsg: { fa: 'رمز عبور ضعیف است', en: 'Password is too weak' },
-    networkError:  { fa: 'خطا در ارتباط با سرور. اتصال اینترنت خود را بررسی کنید.', en: 'Cannot reach server. Check your connection.' },
+    networkError:  { fa: 'ارتباط با سرویس برقرار نشد. چند لحظه دیگر دوباره تلاش کنید.', en: 'The service could not be reached. Try again shortly.' },
     badCredentials:{ fa: 'نام کاربری یا رمز عبور اشتباه است', en: 'Invalid username or password' },
     duplicate:     { fa: 'این ایمیل یا نام کاربری قبلاً ثبت شده است', en: 'Email or username already registered' },
   };
@@ -73,11 +74,17 @@ export function AuthView() {
     if (!msg || msg === 'Network Error' || msg.toLowerCase().startsWith('network')) return t.networkError[language];
     if (msg.toLowerCase().includes('invalid credentials')) return t.badCredentials[language];
     if (msg.toLowerCase().includes('already registered')) return t.duplicate[language];
-    return msg;
+    if (language === 'fa' && !/[\u0600-\u06ff]/.test(msg)) return t.failed.fa;
+    return msg || t.failed[language];
   };
+
+  useEffect(() => {
+    if (formError) errorRef.current?.focus();
+  }, [formError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     if (!isLogin && !isPasswordValid) {
         toast.error(t.invalidPwdMsg[language]);
         return;
@@ -105,7 +112,9 @@ export function AuthView() {
       navigate('/');
     } catch (error: any) {
       const raw = error instanceof Error ? error.message : '';
-      toast.error(localizeError(raw) || t.failed[language]);
+      const message = localizeError(raw);
+      setFormError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -119,20 +128,26 @@ export function AuthView() {
   };
 
   return (
-    <div className={`flex h-screen overflow-hidden flex-col items-center justify-center p-4 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`}>
+    <div
+      className={`flex min-h-dvh overflow-x-hidden overflow-y-auto flex-col items-center px-4 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`}
+      style={{
+        paddingTop: 'max(5rem, calc(env(safe-area-inset-top) + 4rem))',
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+      }}
+    >
       
       {/* Header Controls */}
-      <div className="absolute top-6 left-6 flex items-center gap-3">
-        <button onClick={toggleLanguage} className={`flex h-10 items-center justify-center rounded-2xl px-4 text-xs font-bold shadow-sm transition-all hover:scale-105 ${isDark ? 'bg-white/5 text-[#E8D9AE] hover:bg-white/10' : 'bg-black/5 text-[#6B4E16] hover:bg-black/10'}`}>
+      <div className="fixed left-4 top-4 z-20 flex items-center gap-3" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+        <button type="button" onClick={toggleLanguage} aria-label={language === 'fa' ? 'تغییر زبان به انگلیسی' : 'Switch language to Persian'} className={`flex h-11 items-center justify-center rounded-2xl px-4 text-xs font-bold shadow-sm transition-transform active:scale-95 ${isDark ? 'bg-white/5 text-[#E8D9AE] hover:bg-white/10' : 'bg-black/5 text-[#6B4E16] hover:bg-black/10'}`}>
           <Languages size={16} className="me-2" />
           {language === 'fa' ? 'English' : 'فارسی'}
         </button>
-        <button onClick={toggleTheme} className={`flex h-10 w-10 items-center justify-center rounded-2xl shadow-sm transition-all hover:scale-105 ${isDark ? 'bg-white/5 text-[#E8D9AE] hover:bg-white/10' : 'bg-black/5 text-[#6B4E16] hover:bg-black/10'}`}>
+        <button type="button" onClick={toggleTheme} aria-label={language === 'fa' ? (isDark ? 'فعال کردن پوسته روشن' : 'فعال کردن پوسته تیره') : (isDark ? 'Use light theme' : 'Use dark theme')} aria-pressed={isDark} className={`flex h-11 w-11 items-center justify-center rounded-2xl shadow-sm transition-transform active:scale-95 ${isDark ? 'bg-white/5 text-[#E8D9AE] hover:bg-white/10' : 'bg-black/5 text-[#6B4E16] hover:bg-black/10'}`}>
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </div>
 
-      <div className="w-full max-w-md perspective-1000">
+      <div className="my-auto w-full max-w-md perspective-1000">
         <AnimatePresence mode="wait">
           <motion.div
             key={isLogin ? 'login' : 'signup'}
@@ -170,11 +185,11 @@ export function AuthView() {
                   <label className="block space-y-1">
                     <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.fullName[language]}</span>
                     <div className="relative">
-                      <User size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
+                      <User size={18} className="pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                       <Input
-                        type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                        placeholder={t.fullNamePlaceholder[language]} required dir="ltr"
-                        className={`h-11 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                        name="name" autoComplete="name" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
+                        placeholder={t.fullNamePlaceholder[language]} required dir="auto"
+                        className={`h-11 rounded-2xl ps-11 pe-4 text-start text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-500' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>
                   </label>
@@ -183,7 +198,7 @@ export function AuthView() {
                     <div className="relative">
                       <User size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                       <Input
-                        type="text" value={username} onChange={(e) => setUsername(e.target.value)}
+                        name="username" autoComplete="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)}
                         placeholder={t.usernamePlaceholder[language]} required dir="ltr"
                         className={`h-11 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
@@ -194,7 +209,7 @@ export function AuthView() {
                     <div className="relative">
                       <Mail size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                       <Input
-                        type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                        name="email" autoComplete="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                         placeholder={t.emailPlaceholder[language]} required dir="ltr"
                         className={`h-11 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
@@ -209,7 +224,7 @@ export function AuthView() {
                   <div className="relative">
                     <User size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                     <Input
-                      type="text" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
+                      name="username" autoComplete="username" type="text" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
                       placeholder={t.identifierPlaceholder[language]} required dir="ltr"
                       className={`h-12 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                     />
@@ -222,22 +237,16 @@ export function AuthView() {
                 <div className="relative">
                   <Lock size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                   <Input
-                    type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                    name="password"
+                    autoComplete={isLogin ? 'current-password' : 'new-password'}
+                    type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                     required dir="ltr" placeholder={t.passwordPlaceholder[language]}
-                    className={`${isLogin ? 'h-12' : 'h-11'} rounded-2xl pl-11 pr-14 text-left text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                    passwordToggleLabels={{
+                      show: language === 'fa' ? 'نمایش رمز عبور' : 'Show password',
+                      hide: language === 'fa' ? 'پنهان کردن رمز عبور' : 'Hide password',
+                    }}
+                    className={`${isLogin ? 'h-12' : 'h-11'} rounded-2xl pl-11 pr-14 text-left text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-500' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => !prev)}
-                    tabIndex={-1}
-                    className={`absolute right-2.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 ${
-                      isDark
-                        ? 'bg-[#D4AF37]/12 text-[#D4AF37] hover:bg-[#D4AF37]/22 hover:shadow-[0_0_14px_rgba(212,175,55,0.32)]'
-                        : 'bg-[#D4AF37]/18 text-[#8A6A23] hover:bg-[#D4AF37]/30 hover:shadow-[0_0_14px_rgba(212,175,55,0.22)]'
-                    }`}
-                  >
-                    {showPassword ? <EyeOff size={15} strokeWidth={2.2} /> : <Eye size={15} strokeWidth={2.2} />}
-                  </button>
                 </div>
               </label>
 
@@ -252,7 +261,7 @@ export function AuthView() {
               {/* Password Validation Matrix - Renders only during registration flow */}
               {!isLogin && password.length > 0 && (
                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="rounded-xl bg-black/5 p-3 dark:bg-white/5">
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className={`flex items-center gap-1.5 transition-colors ${hasLength ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
                       {hasLength ? <CheckCircle2 size={14} /> : <XCircle size={14} />} <span>{t.pwdLength[language]}</span>
                     </div>
@@ -267,6 +276,12 @@ export function AuthView() {
                     </div>
                   </div>
                 </motion.div>
+              )}
+
+              {formError && (
+                <div ref={errorRef} tabIndex={-1} role="alert" className={`rounded-xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-400 ${isDark ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-red-300 bg-red-50 text-red-700'}`}>
+                  {formError}
+                </div>
               )}
 
               <Button
@@ -297,6 +312,7 @@ export function AuthView() {
                     onClick={() => {
                       setIsLogin(!isLogin);
                       setPassword('');
+                      setFormError('');
                     }}
                     className={`font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}
                   >

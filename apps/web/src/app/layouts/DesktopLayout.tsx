@@ -114,6 +114,18 @@ export function DesktopLayout() {
     };
   }, [isAuthenticated, isNotificationsOpen]);
 
+  useEffect(() => {
+    if (!isSidebarOpen && !isNotificationsOpen && !isUserMenuOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      setIsSidebarOpen(false);
+      setIsNotificationsOpen(false);
+      setIsUserMenuOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [isNotificationsOpen, isSidebarOpen, isUserMenuOpen]);
+
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
@@ -201,10 +213,11 @@ export function DesktopLayout() {
           <button
             type="button"
             onClick={toggleTheme}
-            className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+            className={`flex h-11 w-11 items-center justify-center rounded-xl transition-colors active:scale-95 ${
               isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
             }`}
-            aria-label="Toggle theme"
+            aria-label={language === 'fa' ? (isDark ? 'فعال کردن پوسته روشن' : 'فعال کردن پوسته تیره') : (isDark ? 'Use light theme' : 'Use dark theme')}
+            aria-pressed={isDark}
           >
             {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
@@ -212,10 +225,10 @@ export function DesktopLayout() {
           <button
             type="button"
             onClick={toggleLanguage}
-            className={`flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+            className={`flex h-11 w-11 items-center justify-center rounded-xl transition-colors active:scale-95 ${
               isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
             }`}
-            aria-label="Toggle language"
+            aria-label={language === 'fa' ? 'تغییر زبان به انگلیسی' : 'Switch language to Persian'}
           >
             <Languages size={18} />
           </button>
@@ -276,6 +289,7 @@ export function DesktopLayout() {
             exit={{ opacity: 0 }}
             onClick={() => setIsSidebarOpen(false)}
             className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+            aria-hidden="true"
           />
         )}
       </AnimatePresence>
@@ -293,10 +307,14 @@ export function DesktopLayout() {
             } lg:hidden ${
               language === 'fa' ? 'right-0 border-l border-[#D4AF37]/15' : 'left-0 border-r border-[#D4AF37]/15'
             }`}
+            id="mobile-navigation"
+            aria-label={language === 'fa' ? 'منوی اصلی' : 'Main navigation'}
           >
             <button 
+              type="button"
               onClick={() => setIsSidebarOpen(false)}
-              className={`absolute end-4 top-4 p-2 ${isDark ? 'text-[#CFBE91] hover:text-[#F6E8C2]' : 'text-[#8A6B20] hover:text-[#5D4614]'}`}
+              className={`absolute end-4 top-4 flex h-11 w-11 items-center justify-center rounded-xl ${isDark ? 'text-[#CFBE91] hover:text-[#F6E8C2]' : 'text-[#8A6B20] hover:text-[#5D4614]'}`}
+              aria-label={language === 'fa' ? 'بستن منو' : 'Close menu'}
             >
               <X size={20} />
             </button>
@@ -317,8 +335,12 @@ export function DesktopLayout() {
 
           <div className="flex items-center gap-4 lg:hidden">
              <button 
+                type="button"
                 onClick={() => setIsSidebarOpen(true)}
-                className={`-mx-2 rounded-lg p-2 ${isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'}`}
+                className={`-mx-2 flex h-11 w-11 items-center justify-center rounded-xl ${isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'}`}
+                aria-label={language === 'fa' ? 'باز کردن منو' : 'Open menu'}
+                aria-expanded={isSidebarOpen}
+                aria-controls="mobile-navigation"
              >
                 <Menu size={20} />
              </button>
@@ -341,6 +363,7 @@ export function DesktopLayout() {
                       ? 'text-[#0A0A0A]'
                       : isDark ? 'text-[#9C8A5D] hover:text-[#CFBE91]' : 'text-[#A07830] hover:text-[#6E5317]'
                   }`}
+                  aria-pressed={currencyMode === mode}
                 >
                   {currencyMode === mode && (
                     <motion.div
@@ -364,6 +387,8 @@ export function DesktopLayout() {
                   isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
                 }`}
                 aria-label={language === 'fa' ? 'اعلان‌ها' : 'Notifications'}
+                aria-expanded={isNotificationsOpen}
+                aria-controls="notifications-panel"
               >
                 <Bell size={20} />
                 {(hasDegradedSources || notifications.some((item) => !item.read_at)) && (
@@ -375,7 +400,7 @@ export function DesktopLayout() {
               <AnimatePresence>
                 {isNotificationsOpen && (
                   <>
-                    <motion.div 
+                    <motion.div
                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                        onClick={() => setIsNotificationsOpen(false)}
@@ -389,6 +414,9 @@ export function DesktopLayout() {
                       className={`absolute end-0 top-12 z-20 w-80 rounded-2xl border border-[#D4AF37]/20 p-2 shadow-xl ${
                         isDark ? 'bg-[#0E0E0E]' : 'bg-[#FFF9EA]'
                       }`}
+                      id="notifications-panel"
+                      role="region"
+                      aria-label={language === 'fa' ? 'فهرست اعلان‌ها' : 'Notification list'}
                     >
                       <div className={`mb-2 px-3 pt-2 text-sm font-semibold ${isDark ? 'text-[#F5EBCD]' : 'text-[#5D4614]'}`}>
                         {language === 'fa' ? 'اعلان‌ها' : 'Notifications'}
@@ -457,8 +485,12 @@ export function DesktopLayout() {
             {/* User Dropdown Menu */}
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                 className="flex items-center gap-2 pe-1 cursor-pointer transition-opacity hover:opacity-80"
+                aria-label={language === 'fa' ? 'منوی کاربر' : 'User menu'}
+                aria-expanded={isUserMenuOpen}
+                aria-controls="user-menu"
               >
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#D4AF37] text-[#0A0A0A]">
                   <UserCircle2 size={16} />
@@ -486,9 +518,13 @@ export function DesktopLayout() {
                           ? 'border-white/10 bg-[#1A1A1A]'
                           : 'border-black/10 bg-white'
                       }`}
+                      id="user-menu"
+                      role="menu"
                     >
                       <div className="p-1">
                         <button
+                          type="button"
+                          role="menuitem"
                           onClick={() => {
                             setIsUserMenuOpen(false);
                             setIsUserInfoOpen(true);
@@ -504,6 +540,8 @@ export function DesktopLayout() {
                         </button>
 
                         <button
+                          type="button"
+                          role="menuitem"
                           onClick={() => {
                             setIsUserMenuOpen(false);
                             setIsChangePasswordOpen(true);
@@ -519,6 +557,8 @@ export function DesktopLayout() {
                         </button>
 
                         <button
+                          type="button"
+                          role="menuitem"
                           onClick={() => {
                             setIsUserMenuOpen(false);
                             navigate('/support');
@@ -536,6 +576,8 @@ export function DesktopLayout() {
                         <div className="my-1 h-px bg-[#D4AF37]/15" />
 
                         <button
+                          type="button"
+                          role="menuitem"
                           onClick={() => {
                             setIsUserMenuOpen(false);
                             logout();

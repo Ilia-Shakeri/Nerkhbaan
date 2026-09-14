@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { adminApi, ApiError } from "./api";
 import type { DangerousAction, JsonRecord } from "./types";
@@ -55,7 +55,7 @@ export function EmptyState({ text = "No records found" }: { text?: string }) {
 
 export function PageState({ loading, error }: { loading: boolean; error: string }) {
   if (loading) return <div className="page-state"><span className="spinner" /> Loading current data…</div>;
-  if (error) return <div className="error-banner">{error}</div>;
+  if (error) return <div className="error-banner" role="alert">{error}</div>;
   return null;
 }
 
@@ -127,6 +127,45 @@ export function DangerousDialog({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const matches = confirmation === action.expected;
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const onCloseRef = useRef(onClose);
+  const busyRef = useRef(busy);
+  onCloseRef.current = onClose;
+  busyRef.current = busy;
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = dialogRef.current;
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    focusable()[0]?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!busyRef.current) onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, []);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -147,10 +186,10 @@ export function DangerousDialog({
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <form className="modal danger-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="danger-title">
+      <form ref={dialogRef} className="modal danger-modal" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="danger-title" aria-describedby="danger-impact">
         <div className="danger-mark">!</div>
         <h2 id="danger-title">{action.title}</h2>
-        <p className="impact-copy">{action.impact}</p>
+        <p className="impact-copy" id="danger-impact">{action.impact}</p>
         <label>
           Current administrator password
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
@@ -159,7 +198,7 @@ export function DangerousDialog({
           Type <code>{action.expected}</code>
           <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" spellCheck={false} />
         </label>
-        {error && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner" role="alert">{error}</div>}
         <div className="modal-actions">
           <button type="button" className="button ghost" onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" className="button danger" disabled={!matches || !password || busy}>

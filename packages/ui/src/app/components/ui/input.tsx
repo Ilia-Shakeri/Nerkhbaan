@@ -4,10 +4,15 @@ import { cn } from '../../../lib/utils';
 import { Eye, EyeOff } from 'lucide-react';
 
 export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {}
+  extends React.InputHTMLAttributes<HTMLInputElement> {
+  passwordToggleLabels?: {
+    show: string;
+    hide: string;
+  };
+}
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, ...props }, ref) => {
+  ({ className, type, passwordToggleLabels, ...props }, ref) => {
     const [showPassword, setShowPassword] = useState(false);
     const isPasswordField = type === 'password';
     const inputType = isPasswordField && showPassword ? 'text' : type;
@@ -28,8 +33,11 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            className="absolute right-1.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-gray-400 transition-colors hover:text-gray-600 active:scale-95 dark:hover:text-gray-300"
+            aria-label={showPassword
+              ? passwordToggleLabels?.hide ?? 'Hide password'
+              : passwordToggleLabels?.show ?? 'Show password'}
+            aria-pressed={showPassword}
           >
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>

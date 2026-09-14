@@ -29,6 +29,11 @@ const navigation: Array<{ id: Section; label: string; symbol: string; permission
   { id: "audit", label: "Audit", symbol: "▤", permission: "admin.audit.read" },
 ];
 
+const sectionFromHash = (): Section => {
+  const candidate = window.location.hash.replace(/^#\/?/, '') as Section;
+  return navigation.some((item) => item.id === candidate) ? candidate : 'dashboard';
+};
+
 function Login({ onSignin }: { onSignin: (profile: AdminProfile) => void }) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
@@ -71,7 +76,7 @@ function Login({ onSignin }: { onSignin: (profile: AdminProfile) => void }) {
           Password
           <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
         </label>
-        {error && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner" role="alert">{error}</div>}
         <button className="button primary full" disabled={busy}>{busy ? "Checking…" : "Enter control plane"}</button>
         <small>Short session · HttpOnly cookie · Network policy aware</small>
       </form>
@@ -115,7 +120,7 @@ function PasswordGate({ profile, onChanged }: { profile: AdminProfile; onChanged
         <label>New password<input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} autoComplete="new-password" /></label>
         <label>Confirm new password<input type="password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="new-password" /></label>
         <p className="policy-copy">14+ characters with uppercase, lowercase, number, and symbol.</p>
-        {error && <div className="error-banner">{error}</div>}
+        {error && <div className="error-banner" role="alert">{error}</div>}
         <button className="button primary full" disabled={busy}>Set secure password</button>
       </form>
     </main>
@@ -125,7 +130,7 @@ function PasswordGate({ profile, onChanged }: { profile: AdminProfile; onChanged
 export default function App() {
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [checking, setChecking] = useState(true);
-  const [section, setSection] = useState<Section>("dashboard");
+  const [section, setSection] = useState<Section>(sectionFromHash);
   const [danger, setDanger] = useState<DangerousAction | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -133,10 +138,28 @@ export default function App() {
     adminApi.me().then(setProfile).catch(() => setProfile(null)).finally(() => setChecking(false));
   }, []);
 
+  useEffect(() => {
+    const syncSection = () => setSection(sectionFromHash());
+    window.addEventListener('hashchange', syncSection);
+    return () => window.removeEventListener('hashchange', syncSection);
+  }, []);
+
+  const selectSection = (nextSection: Section) => {
+    if (window.location.hash !== `#/${nextSection}`) window.location.hash = `/${nextSection}`;
+    setSection(nextSection);
+  };
+
   const allowedNavigation = useMemo(
     () => navigation.filter((item) => profile?.permissions.includes(item.permission)),
     [profile],
   );
+
+  useEffect(() => {
+    if (!profile || allowedNavigation.some((item) => item.id === section)) return;
+    const fallback = allowedNavigation[0]?.id ?? 'dashboard';
+    if (window.location.hash !== `#/${fallback}`) window.location.hash = `/${fallback}`;
+    setSection(fallback);
+  }, [allowedNavigation, profile, section]);
 
   async function signout() {
     await adminApi.signout();
@@ -173,7 +196,7 @@ export default function App() {
         <div className="sidebar-brand"><div className="brand-seal small"><span>N</span></div><div><strong>Nerkhbaan</strong><small>Operations</small></div></div>
         <nav>
           {allowedNavigation.map((item) => (
-            <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => setSection(item.id)}>
+            <button key={item.id} className={section === item.id ? "active" : ""} onClick={() => selectSection(item.id)} aria-current={section === item.id ? 'page' : undefined} title={item.label}>
               <span>{item.symbol}</span>{item.label}
             </button>
           ))}
@@ -181,7 +204,7 @@ export default function App() {
         <div className="sidebar-profile">
           <div className="avatar">{profile.full_name.slice(0, 1).toUpperCase()}</div>
           <div><strong>{profile.full_name}</strong><small>{profile.roles.join(" · ")}</small></div>
-          <button className="icon-button" onClick={() => void signout()} title="Sign out">↪</button>
+          <button className="icon-button" onClick={() => void signout()} title="Sign out" aria-label="Sign out">↪</button>
         </div>
       </aside>
       <main className="workspace">

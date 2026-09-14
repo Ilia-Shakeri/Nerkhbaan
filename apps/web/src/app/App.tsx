@@ -5,7 +5,7 @@ import { Toaster } from "sonner";
 import { useEffect, useState, useRef } from "react";
 import { SplashScreen } from "@/app/components/SplashScreen";
 import { applyPendingUpdate } from "@/pwa/registerServiceWorker";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, MotionConfig } from "motion/react";
 
 function AuthEventsBridge() {
   const { logout } = useAppContext();
@@ -24,25 +24,12 @@ function AuthEventsBridge() {
   return null;
 }
 
-// The splash is branding, not a loading gate. A live price dashboard that
-// blocks for seconds on every session start is worse than one that shows data
-// immediately, so it is capped short and only shown once per session.
-const SPLASH_DURATION_MS = 1200;
-
 function AppContent() {
   const [showSplash, setShowSplash] = useState(() => {
-    return !sessionStorage.getItem('splash-shown');
+    const prefersLessMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return !prefersLessMotion && !sessionStorage.getItem('splash-shown');
   });
   const { language, theme } = useAppContext();
-
-  useEffect(() => {
-    if (!showSplash) return;
-    const readyTimer = setTimeout(() => {
-      sessionStorage.setItem('splash-shown', 'true');
-      setShowSplash(false);
-    }, SPLASH_DURATION_MS);
-    return () => clearTimeout(readyTimer);
-  }, [showSplash]);
 
   const [showOfflineBanner, setShowOfflineBanner] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
@@ -88,7 +75,8 @@ function AppContent() {
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
-            className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full bg-red-500 text-white text-sm font-semibold shadow-lg"
+            className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-red-500 px-6 py-3 text-sm font-semibold text-white shadow-lg"
+            style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
           >
             {language === 'fa' ? 'شما آفلاین هستید' : 'You are offline'}
           </motion.div>
@@ -100,7 +88,8 @@ function AppContent() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
             onClick={() => { void applyPendingUpdate(); }}
-            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-full bg-emerald-600 text-white text-sm font-semibold shadow-lg"
+            className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-lg"
+            style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
           >
             {language === 'fa' ? 'نسخه جدید آماده است — بازخوانی' : 'New version ready — reload'}
           </motion.button>
@@ -115,11 +104,13 @@ export function App() {
   const Router = window.electronAPI ? HashRouter : BrowserRouter;
   return (
     <AppProvider>
-      <Router>
-        <AuthEventsBridge />
-        <AppContent />
-        <Toaster position="top-center" richColors />
-      </Router>
+      <MotionConfig reducedMotion="user">
+        <Router>
+          <AuthEventsBridge />
+          <AppContent />
+          <Toaster position="top-center" richColors />
+        </Router>
+      </MotionConfig>
     </AppProvider>
   );
 }

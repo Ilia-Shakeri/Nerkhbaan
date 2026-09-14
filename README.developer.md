@@ -262,3 +262,9 @@ commit and record the release in `CHANGELOG.md`.
 Price charts use only recorded history. Do not turn a current quote into a
 chart point: show an explicit unavailable state and retry action until the
 history API returns real points.
+
+Frontend changes must keep the interface contracts in
+`scripts/frontend-contracts.test.mjs`: no fixed quote may look live, short
+mobile authentication must scroll, password fields get one named reveal
+control, motion preferences are honored, charts retain a non-visual data
+alternative, and admin dialogs contain then restore keyboard focus.

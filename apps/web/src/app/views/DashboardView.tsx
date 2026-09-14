@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellPlus, ArrowUpRight, ArrowDownRight, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
+import { BellPlus, ArrowUp, ArrowDown, ArrowUpRight, ArrowDownRight, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -308,7 +308,7 @@ function ChartUnavailableState({
   isRetrying,
   error,
   onRetry,
-  className = 'h-[400px] min-h-[400px]',
+  className = 'h-[320px] min-h-[320px] sm:h-[400px] sm:min-h-[400px]',
 }: {
   isDark: boolean;
   language: 'fa' | 'en';
@@ -344,7 +344,7 @@ function FinancialChart({
   isDark,
   currencyMode,
   language,
-  className = 'h-[400px] min-h-[400px]',
+  className = 'h-[320px] min-h-[320px] sm:h-[400px] sm:min-h-[400px]',
 }: {
   data: LineData<UTCTimestamp>[];
   color: string;
@@ -357,6 +357,17 @@ function FinancialChart({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const [crosshairPoint, setCrosshairPoint] = useState<{ value: number; time: Time } | null>(null);
+  const descriptionId = useId();
+  const tableId = useId();
+  const values = data.map((point) => point.value).filter(Number.isFinite);
+  const latestPoint = data.at(-1);
+  const minimum = values.length ? Math.min(...values) : null;
+  const maximum = values.length ? Math.max(...values) : null;
+  const chartDescription = data.length
+    ? language === 'fa'
+      ? `نمودار دارای ${data.length} نقطه است. آخرین مقدار ${formatPrice(latestPoint?.value ?? null, currencyMode, language)}، کمینه ${formatPrice(minimum, currencyMode, language)} و بیشینه ${formatPrice(maximum, currencyMode, language)} است.`
+      : `Chart with ${data.length} points. Latest ${formatPrice(latestPoint?.value ?? null, currencyMode, language)}, minimum ${formatPrice(minimum, currencyMode, language)}, and maximum ${formatPrice(maximum, currencyMode, language)}.`
+    : language === 'fa' ? 'نمودار داده‌ای ندارد.' : 'The chart has no data.';
 
   useEffect(() => {
     const container = containerRef.current;
@@ -439,17 +450,27 @@ function FinancialChart({
 
   return (
     <div className={`relative w-full ${className}`} dir="ltr" data-chart-interactive="true">
-      <div ref={containerRef} className="h-full w-full" />
+      <p id={descriptionId} className="sr-only">{chartDescription}</p>
+      <div ref={containerRef} className="h-full w-full" role="img" tabIndex={0} aria-describedby={descriptionId} />
       {crosshairPoint && (
         <div className={`pointer-events-none absolute start-3 top-3 z-10 rounded-lg border px-2 py-1 text-xs font-bold backdrop-blur ${
           isDark ? 'border-white/10 bg-black/75 text-white' : 'border-black/10 bg-white/85 text-[#3B2E13]'
         }`}>
           <div>{formatPrice(crosshairPoint.value, currencyMode, language)}</div>
-          <div className={`mt-0.5 text-[10px] font-medium ${isDark ? 'text-[#CDBB8C]' : 'text-[#7A5E24]'}`}>
+          <div className={`mt-0.5 text-xs font-medium ${isDark ? 'text-[#CDBB8C]' : 'text-[#7A5E24]'}`}>
             {formatChartDateTime(crosshairPoint.time, language)}
           </div>
         </div>
       )}
+      <table id={tableId} className="sr-only">
+        <caption>{language === 'fa' ? 'آخرین داده‌های نمودار قیمت' : 'Latest chart price data'}</caption>
+        <thead><tr><th>{language === 'fa' ? 'زمان' : 'Time'}</th><th>{language === 'fa' ? 'قیمت' : 'Price'}</th></tr></thead>
+        <tbody>
+          {data.slice(-20).map((point) => (
+            <tr key={String(point.time)}><td>{formatChartDateTime(point.time, language)}</td><td>{formatPrice(point.value, currencyMode, language)}</td></tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -929,12 +950,12 @@ export function DashboardView() {
                   <div>
                     <CardTitle className={`flex items-center gap-2 text-lg font-semibold ${isDark ? 'text-[#E8D9AE]' : 'text-[#6A4D16]'}`}>
                       <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#111111]" style={{ backgroundColor: chartColor }}>
-                        <AssetIcon id={asset.id} className="h-7 w-7 text-[11px]" />
+                        <AssetIcon id={asset.id} className="h-7 w-7 text-xs" />
                       </div>
                       {asset.label[language]}
                     </CardTitle>
 
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       <span
                         className={`rounded-full px-2 py-0.5 font-semibold ${
                           isDark ? STATUS_COLORS[asset.usdStatus].dark : STATUS_COLORS[asset.usdStatus].light
@@ -982,9 +1003,30 @@ export function DashboardView() {
                         ? 'border-white/10 text-[#D4AF37] hover:bg-white/5 hover:text-[#F3E2AB]' 
                         : 'border-black/10 text-[#8A6A23] hover:bg-black/5 hover:text-[#5E4714]'
                     }`}
+                    aria-label={language === 'fa' ? `ساخت هشدار برای ${asset.label.fa}` : `Create an alert for ${asset.label.en}`}
                   >
                     <BellPlus size={18} />
                   </Button>
+                  <div className="flex items-center gap-1" aria-label={language === 'fa' ? 'تغییر جای کارت' : 'Move card'}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={idx === 0}
+                      onClick={() => idx > 0 && reorderAssets(asset.id, orderedAssets[idx - 1].id)}
+                      className="h-10 w-10 rounded-xl"
+                      aria-label={language === 'fa' ? `بردن کارت ${asset.label.fa} به بالا` : `Move ${asset.label.en} card up`}
+                    ><ArrowUp size={16} /></Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      disabled={idx === orderedAssets.length - 1}
+                      onClick={() => idx < orderedAssets.length - 1 && reorderAssets(asset.id, orderedAssets[idx + 1].id)}
+                      className="h-10 w-10 rounded-xl"
+                      aria-label={language === 'fa' ? `بردن کارت ${asset.label.fa} به پایین` : `Move ${asset.label.en} card down`}
+                    ><ArrowDown size={16} /></Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -1020,6 +1062,8 @@ export function DashboardView() {
                         ? 'border-orange-400/50 bg-orange-500/10 text-orange-400'
                         : isDark ? 'border-white/10 text-[#D4AF37] hover:bg-white/5' : 'border-black/10 text-[#8A6A23] hover:bg-black/5'
                     }`}
+                    aria-expanded={Boolean(expandedSources[asset.id])}
+                    aria-controls={`sources-${asset.id}`}
                   >
                     {language === 'fa' ? 'مقایسه منابع' : 'Compare sources'}
                     <ChevronDown size={13} className={`transition-transform ${expandedSources[asset.id] ? 'rotate-180' : ''}`} />
@@ -1047,6 +1091,7 @@ export function DashboardView() {
                 <AnimatePresence initial={false}>
                   {expandedSources[asset.id] && (
                     <motion.div
+                      id={`sources-${asset.id}`}
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
@@ -1084,7 +1129,7 @@ export function DashboardView() {
                                 <div className="text-end font-bold" dir="ltr">
                                   <div className={isDark ? 'text-white' : 'text-[#3B2E13]'}>{formatPrice(source.price, currencyMode, language)}</div>
                                   {source.difference_percent !== null && source.difference_percent !== undefined && (
-                                    <div className="text-[10px] text-[#D4AF37]">{source.difference_percent.toFixed(2)}%</div>
+                                    <div className="text-xs text-[#D4AF37]">{source.difference_percent.toFixed(2)}%</div>
                                   )}
                                 </div>
                               </div>
@@ -1106,11 +1151,12 @@ export function DashboardView() {
                           ...current,
                           [asset.id]: value,
                         }))}
-                        className={`min-w-10 rounded-lg px-2 py-1.5 text-[11px] font-bold transition sm:min-w-12 sm:text-xs ${
+                        className={`min-w-10 rounded-lg px-2 py-1.5 text-xs font-bold transition sm:min-w-12 ${
                           assetTimeframe === value
                             ? 'bg-[#D4AF37] text-black shadow-sm'
                             : isDark ? 'text-[#A89668] hover:text-white' : 'text-[#7A5E24] hover:text-[#3B2E13]'
                         }`}
+                        aria-pressed={assetTimeframe === value}
                       >
                         {value}
                       </button>
@@ -1132,14 +1178,16 @@ export function DashboardView() {
                       className="relative"
                     >
                       <button
+                        type="button"
                         onClick={() => setFullscreenAsset(asset.id)}
                         className={`absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${isDark ? 'bg-[#1A1A1A]/80 text-[#D4AF37] hover:bg-[#222222]' : 'bg-white/80 text-[#8A6B20] hover:bg-white'} backdrop-blur-sm`}
                         title={language === 'fa' ? 'تمام صفحه' : 'Full Screen'}
+                        aria-label={language === 'fa' ? `نمایش نمودار ${asset.label.fa} در تمام صفحه` : `Show ${asset.label.en} chart in full screen`}
                       >
                         <Maximize2 size={16} />
                       </button>
                       {isLoading ? (
-                        <div className={`h-[400px] min-h-[400px] w-full animate-pulse rounded-[1.5rem] ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
+                        <div className={`h-[320px] min-h-[320px] w-full animate-pulse rounded-[1.5rem] sm:h-[400px] sm:min-h-[400px] ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
                       ) : (
                         <FinancialChart
                           data={chartData}
@@ -1147,7 +1195,7 @@ export function DashboardView() {
                           isDark={isDark}
                           currencyMode={currencyMode}
                           language={language}
-                          className={`h-[400px] min-h-[400px] rounded-[1.5rem] border p-2 backdrop-blur-md transition-colors ${
+                          className={`h-[320px] min-h-[320px] rounded-[1.5rem] border p-2 backdrop-blur-md transition-colors sm:h-[400px] sm:min-h-[400px] ${
                         isDark 
                           ? 'border-white/5 bg-[#111111]/40' 
                           : 'border-black/5 bg-white/40'
@@ -1171,7 +1219,7 @@ export function DashboardView() {
             </label>
             <div className={`flex items-center gap-3 rounded-[1.5rem] border p-3 ${isDark ? 'border-[#D4AF37]/20 bg-[#111111]' : 'border-[#D4AF37]/35 bg-[#FFF0CC]'}`}>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37] text-[#0A0A0A]">
-                <AssetIcon id={selectedAssetForAlert} className="h-7 w-7 text-[11px]" />
+                <AssetIcon id={selectedAssetForAlert} className="h-7 w-7 text-xs" />
               </div>
               <span className={`font-bold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
                 {ASSET_LABELS[selectedAssetForAlert][language]}

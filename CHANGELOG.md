@@ -2,6 +2,36 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.7] - 2026-09-14
+
+### Fixed
+
+- Removed fixed market values that were presented as live on the startup screen.
+- Made authentication scroll safely on short mobile screens and respect device
+  safe areas without changing the normal sign-in/sign-up card rotation.
+- Removed duplicate password reveal controls and localized their accessible
+  labels across authentication and password-reset flows.
+- Added inline, focusable authentication errors with safer localized network
+  messages and corrected the recovery-flow description.
+- Added reduced-motion, reduced-transparency, and increased-contrast behavior.
+- Added accessible chart summaries and recent-point tables, keyboard chart-card
+  reordering, named icon controls, and explicit toggle/menu state.
+- Made admin navigation history-aware and prevented unauthorized hash sections.
+- Trapped focus inside dangerous admin confirmations, added Escape handling,
+  and restored focus when a dialog closes.
+
+### Changed
+
+- Reduced non-essential startup motion and removed fake chart decoration.
+- Increased small operational text and reduced floating button movement.
+- Reduced chart height on small screens while retaining the desktop data view.
+
+### Tests
+
+- Added frontend contracts for honest startup data, mobile authentication,
+  password controls, motion preferences, chart alternatives, admin history,
+  and dangerous-dialog focus behavior.
+
 ## [2.4.6] - 2026-09-13
 
 ### Fixed

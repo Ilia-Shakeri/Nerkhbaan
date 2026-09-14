@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Mail, ArrowRight, ArrowLeft, KeyRound, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Mail, ArrowRight, ArrowLeft, KeyRound, CheckCircle2 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -19,7 +19,8 @@ export function ForgotPasswordView() {
   const [newPassword, setNewPassword] = useState('');
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [formError, setFormError] = useState('');
+  const errorRef = useRef<HTMLDivElement>(null);
 
   const t = {
     // Replaced the simple tagline with a descriptive footer message
@@ -29,7 +30,7 @@ export function ForgotPasswordView() {
     },
     backToLogin: { fa: 'بازگشت به ورود', en: 'Back to login' },
     title1: { fa: 'بازیابی رمز عبور', en: 'Forgot Password' },
-    desc1: { fa: 'ایمیل خود را وارد کنید تا لینک و کد بازیابی برای شما ارسال شود.', en: 'Enter your email address to receive a recovery code.' },
+    desc1: { fa: 'ایمیل خود را وارد کنید تا کد بازیابی برای شما ارسال شود.', en: 'Enter your email address to receive a recovery code.' },
     emailLabel: { fa: 'ایمیل شما', en: 'Your Email' },
     emailPlaceholder: { fa: 'name@example.com', en: 'name@example.com' },
     sendCode: { fa: 'ارسال کد تایید', en: 'Send Recovery Code' },
@@ -45,8 +46,19 @@ export function ForgotPasswordView() {
     goToLogin: { fa: 'ورود به حساب', en: 'Go to Login' }
   };
 
+  const readableError = (error: unknown, fallbackFa: string, fallbackEn: string) => {
+    const message = error instanceof Error ? error.message : '';
+    if (language === 'fa') return /[\u0600-\u06ff]/.test(message) ? message : fallbackFa;
+    return message || fallbackEn;
+  };
+
+  useEffect(() => {
+    if (formError) errorRef.current?.focus();
+  }, [formError]);
+
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     setIsSubmitting(true);
     try {
       // Connects to existing endpoint logic
@@ -54,7 +66,9 @@ export function ForgotPasswordView() {
       toast.success(language === 'fa' ? 'کد بازیابی ارسال شد' : 'Recovery code sent');
       setStep(2);
     } catch (error: any) {
-      toast.error(error.message || 'Error sending code');
+      const message = readableError(error, 'ارسال کد انجام نشد. دوباره تلاش کنید.', 'The recovery code could not be sent. Try again.');
+      setFormError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -62,15 +76,15 @@ export function ForgotPasswordView() {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     setIsSubmitting(true);
     try {
       await api.auth.resetPassword({ email, code: code.trim(), new_password: newPassword });
       setStep(3);
     } catch (error: any) {
-      toast.error(
-        error?.message ||
-          (language === 'fa' ? 'کد نامعتبر یا منقضی شده است' : 'Invalid or expired code')
-      );
+      const message = readableError(error, 'کد نامعتبر یا منقضی شده است', 'Invalid or expired code');
+      setFormError(message);
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -83,7 +97,7 @@ export function ForgotPasswordView() {
   };
 
   return (
-    <div className={`flex min-h-screen flex-col items-center justify-center p-6 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`}>
+    <div className={`flex min-h-dvh flex-col items-center justify-center overflow-x-hidden overflow-y-auto p-6 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`} style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="w-full max-w-md perspective-1000">
         <div className="mb-6 flex justify-start">
             <Link to="/auth" className={`flex items-center gap-2 text-sm font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
@@ -152,12 +166,17 @@ export function ForgotPasswordView() {
                         <div className="relative">
                             <Mail size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-[#D4AF37]`} />
                             <Input
-                                type="email" value={email} onChange={(e) => setEmail(e.target.value)}
+                                name="email" autoComplete="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                                 placeholder={t.emailPlaceholder[language]} required dir="ltr"
                                 className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                             />
                         </div>
                     </label>
+                    {formError && (
+                      <div ref={errorRef} tabIndex={-1} role="alert" className={`rounded-xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-400 ${isDark ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-red-300 bg-red-50 text-red-700'}`}>
+                        {formError}
+                      </div>
+                    )}
                     <Button
                         type="submit" disabled={isSubmitting}
                         className={`mt-6 h-12 w-full rounded-2xl text-sm font-bold transition-all duration-300 ${
@@ -176,9 +195,9 @@ export function ForgotPasswordView() {
                     <label className="block space-y-2">
                         <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.codeLabel[language]}</span>
                         <div className="relative">
-                            <KeyRound size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-[#D4AF37]`} />
+                            <KeyRound size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                             <Input
-                                type="text" value={code} onChange={(e) => setCode(e.target.value)}
+                                name="recovery-code" autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" type="text" value={code} onChange={(e) => setCode(e.target.value)}
                                 placeholder={t.codePlaceholder[language]} required dir="ltr"
                                 className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-4 text-right' : 'pl-11 pr-4 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 tracking-widest font-mono font-bold ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                             />
@@ -189,24 +208,21 @@ export function ForgotPasswordView() {
                         <div className="relative">
                             <KeyRound size={18} className={`pointer-events-none absolute ${isRtl ? 'right-4' : 'left-4'} top-1/2 -translate-y-1/2 text-[#D4AF37]`} />
                             <Input
-                                type={showNewPassword ? 'text' : 'password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
+                                name="new-password" autoComplete="new-password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                                 placeholder={t.newPassPlaceholder[language]} required dir="ltr"
-                                className={`h-12 rounded-2xl ${isRtl ? 'pr-11 pl-14 text-right' : 'pl-11 pr-14 text-left'} text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 tracking-widest [&::-ms-reveal]:hidden [&::-ms-clear]:hidden ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
+                                passwordToggleLabels={{
+                                  show: language === 'fa' ? 'نمایش رمز عبور جدید' : 'Show new password',
+                                  hide: language === 'fa' ? 'پنهان کردن رمز عبور جدید' : 'Hide new password',
+                                }}
+                                className={`h-12 rounded-2xl pl-11 pr-14 text-left text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-500' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                             />
-                            <button
-                                type="button"
-                                onClick={() => setShowNewPassword(p => !p)}
-                                tabIndex={-1}
-                                className={`absolute ${isRtl ? 'left-2.5' : 'right-2.5'} top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-200 hover:scale-105 active:scale-95 ${
-                                  isDark
-                                    ? 'bg-[#D4AF37]/12 text-[#D4AF37] hover:bg-[#D4AF37]/22 hover:shadow-[0_0_14px_rgba(212,175,55,0.32)]'
-                                    : 'bg-[#D4AF37]/18 text-[#8A6A23] hover:bg-[#D4AF37]/30 hover:shadow-[0_0_14px_rgba(212,175,55,0.22)]'
-                                }`}
-                            >
-                                {showNewPassword ? <EyeOff size={15} strokeWidth={2.2} /> : <Eye size={15} strokeWidth={2.2} />}
-                            </button>
                         </div>
                     </label>
+                    {formError && (
+                      <div ref={errorRef} tabIndex={-1} role="alert" className={`rounded-xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-400 ${isDark ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-red-300 bg-red-50 text-red-700'}`}>
+                        {formError}
+                      </div>
+                    )}
                     <Button
                         type="submit" disabled={isSubmitting || newPassword.length < 8}
                         className={`mt-6 h-12 w-full rounded-2xl text-sm font-bold transition-all duration-300 ${

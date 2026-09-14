@@ -221,14 +221,14 @@ export function AlertsView() {
 
                       <div className="flex flex-1 flex-wrap items-center gap-x-6 gap-y-2">
                         <div>
-                          <div className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.asset[language]}</div>
+                          <div className={`text-xs font-medium uppercase tracking-wider ${isDark ? 'text-[#8A7A54]' : 'text-[#765C1F]'}`}>{t.asset[language]}</div>
                           <div className={`text-base font-bold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{assetLabel}</div>
                         </div>
 
                         <div className={`hidden sm:block h-8 w-px ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
 
                         <div>
-                          <div className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.condition[language]}</div>
+                          <div className={`text-xs font-medium uppercase tracking-wider ${isDark ? 'text-[#8A7A54]' : 'text-[#765C1F]'}`}>{t.condition[language]}</div>
                           <div className={`mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${condColor}`} dir="ltr">
                             {alert.condition === 'above' ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
                             {t[alert.condition][language]}
@@ -238,7 +238,7 @@ export function AlertsView() {
                         <div className={`hidden sm:block h-8 w-px ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
 
                         <div dir="ltr">
-                          <div className={`text-[10px] font-medium uppercase tracking-wider ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`} dir={language === 'fa' ? 'rtl' : 'ltr'}>{t.target[language]}</div>
+                          <div className={`text-xs font-medium uppercase tracking-wider ${isDark ? 'text-[#8A7A54]' : 'text-[#765C1F]'}`} dir={language === 'fa' ? 'rtl' : 'ltr'}>{t.target[language]}</div>
                           <div className={`font-bold tracking-wider ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
                             {alert.alert_type === 'formula'
                               ? alert.formula

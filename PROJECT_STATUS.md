@@ -1,10 +1,24 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-13 · **Release:** `2.4.6` · **Verdict:** production core
-and public pricing relay are healthy; scheduled publisher proof is temporarily
-blocked by an upstream service outage
+**Updated:** 2026-09-14 · **Release:** `2.4.7` · **Verdict:** frontend
+reliability and accessibility release is locally verified; production
+deployment proof is pending
 
 ## Current release update
+
+- Release candidate `2.4.7` removes fixed values presented as live during
+  startup, fixes short-screen authentication overflow, and keeps the existing
+  sign-in/sign-up card rotation for users who have not requested reduced motion.
+- Authentication now has one localized password toggle, inline focusable
+  errors, password-manager metadata, safe-area spacing, and corrected recovery
+  copy. Charts expose summaries and recent data to assistive technology, and
+  cards can be reordered without dragging.
+- Motion, transparency, and contrast preferences now have explicit behavior.
+  Icon controls expose names and state. Admin navigation follows browser
+  history, permission-checks hash routes, and dangerous dialogs contain and
+  restore keyboard focus.
+- Local release checks cover the new interface contracts. Production remains
+  on the last verified `2.4.6` deployment until this release is deployed.
 
 - Production `2.4.6` runs two healthy API replicas and one healthy web replica.
   Readiness reports `ready=true`, release `2.4.6`, connected PostgreSQL and

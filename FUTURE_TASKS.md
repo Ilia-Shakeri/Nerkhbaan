@@ -44,6 +44,11 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -Evid
 
 ## Completed
 
+- [x] First full interface remediation: honest startup state, short-screen
+      authentication, reduced-motion/transparency/contrast behavior, named
+      controls, chart alternatives, keyboard reordering, and contained admin
+      confirmation dialogs in release 2.4.7.
+
 - [x] Production 2.4.6 deployment with two healthy API replicas, healthy web,
       current migrations, connected data stores, and zero durable backlogs.
 - [x] Free public XAG/USD, BTC/USD, and USDT/USD relay with strict route, unit,
