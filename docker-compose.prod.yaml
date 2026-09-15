@@ -354,6 +354,12 @@ services:
       HEALTHCHECK_PORT: "8080"
     volumes:
       - db_backups:/backups
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:$${HEALTHCHECK_PORT}/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy

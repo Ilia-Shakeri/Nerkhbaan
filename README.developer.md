@@ -278,3 +278,7 @@ working outcome; do not ship placeholder contact or attachment actions.
 Shared source packages must declare every runtime import in their own manifest.
 A dependency available through a sibling workspace is not valid clean-image
 proof.
+
+Production health intervals must complete inside `DEPLOY_WAIT_SECONDS`. The
+database-backup service overrides its image default with a 30-second probe so
+the standard four-minute deployment wait can produce a truthful result.

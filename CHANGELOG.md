@@ -2,6 +2,19 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.10] - 2026-09-15
+
+### Fixed
+
+- Overrode the database-backup image's five-minute health interval with a
+  30-second production check. The backup service can now become healthy inside
+  the deployment command's four-minute wait window.
+
+### Tests
+
+- Added a contract that keeps backup health cadence below the deployment wait
+  deadline.
+
 ## [2.4.9] - 2026-09-15
 
 ### Fixed

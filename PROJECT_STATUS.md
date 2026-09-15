@@ -1,10 +1,14 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-15 · **Release:** `2.4.9` · **Verdict:** frontend
+**Updated:** 2026-09-15 · **Release:** `2.4.10` · **Verdict:** frontend
 speed, usability, and accessibility release is locally verified; production
 deployment proof is pending
 
 ## Current release update
+
+- Release candidate `2.4.10` aligns the database-backup health cadence with the
+  deployment deadline. A healthy backup process no longer makes deployment
+  report a false timeout before its first image-provided health probe.
 
 - Release candidate `2.4.9` declares the motion runtime at the shared package
   boundary. This fixes the clean production image build that exposed a hidden

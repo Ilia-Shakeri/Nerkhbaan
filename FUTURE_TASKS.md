@@ -44,6 +44,9 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -Evid
 
 ## Completed
 
+- [x] Database-backup health cadence aligned with the deployment deadline in
+      release 2.4.10.
+
 - [x] Clean production web-image dependency repair in release 2.4.9.
 
 - [x] Interface speed and usability remediation: route-level screen splitting,

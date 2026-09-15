@@ -272,3 +272,11 @@ test("support and contact surfaces expose only working actions", () => {
   assert.doesNotMatch(contact, /1234 5678|support@nerkhbaan\.com/);
   assert.match(contact, /navigate\('\/support'\)/);
 });
+
+test("production backup health fits inside the deployment wait window", () => {
+  const compose = read("docker-compose.prod.yaml");
+  const deploy = read("scripts/deploy-nerkhbaan-prod.sh");
+  assert.match(compose, /db-backup:[\s\S]*healthcheck:[\s\S]*interval: 30s/);
+  assert.match(compose, /HEALTHCHECK_PORT/);
+  assert.match(deploy, /DEPLOY_WAIT_SECONDS="\$\{DEPLOY_WAIT_SECONDS:-240\}"/);
+});
