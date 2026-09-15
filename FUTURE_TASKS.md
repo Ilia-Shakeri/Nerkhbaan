@@ -44,6 +44,12 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -Evid
 
 ## Completed
 
+- [x] Interface speed and usability remediation: route-level screen splitting,
+      reliable modal and mobile-drawer focus, larger controls, honest request
+      states, settings rollback, lighter repeated cards, and smoother bounded
+      motion without changing the authentication card rotation in release
+      2.4.8.
+
 - [x] First full interface remediation: honest startup state, short-screen
       authentication, reduced-motion/transparency/contrast behavior, named
       controls, chart alternatives, keyboard reordering, and contained admin

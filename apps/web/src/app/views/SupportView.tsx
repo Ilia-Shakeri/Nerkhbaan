@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { MessageCircle, Send, Paperclip, Loader2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { MessageCircle, Send, Loader2 } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 export function SupportView() {
   const { language, theme } = useAppContext();
   const isDark = theme === 'dark';
+  const shouldReduceMotion = useReducedMotion();
+  const subjectRef = useRef<HTMLInputElement>(null);
 
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [isLoadingTickets, setIsLoadingTickets] = useState(true);
@@ -41,15 +43,20 @@ export function SupportView() {
     resolved: { fa: 'حل شده', en: 'Resolved' },
     closed: { fa: 'بسته شده', en: 'Closed' },
     typeMessage: { fa: 'پیام خود را بنویسید...', en: 'Type your message...' },
-    attach: { fa: 'پیوست فایل', en: 'Attach file' },
     createTicket: { fa: 'ایجاد تیکت', en: 'Create Ticket' },
     ticketCreated: { fa: 'تیکت با موفقیت ایجاد شد', en: 'Ticket created successfully' },
     messageSent: { fa: 'پیام ارسال شد', en: 'Message sent' },
     loadFail: { fa: 'خطا در بارگذاری تیکت‌ها', en: 'Failed to load tickets' },
     sendFail: { fa: 'خطا در ارسال پیام', en: 'Failed to send message' },
     createFail: { fa: 'خطا در ایجاد تیکت', en: 'Failed to create ticket' },
-    noTickets: { fa: 'هنوز تیکتی ثبت نشده است', en: 'No tickets yet' }
+    noTickets: { fa: 'هنوز تیکتی ثبت نشده است', en: 'No tickets yet' },
+    noMessages: { fa: 'هنوز پیامی ثبت نشده است', en: 'No messages yet' },
+    messageLoadFail: { fa: 'پیام‌های تیکت بارگذاری نشد', en: 'Ticket messages could not be loaded' },
   };
+
+  useEffect(() => {
+    if (showNewTicketForm) subjectRef.current?.focus();
+  }, [showNewTicketForm]);
 
   const loadTickets = async () => {
     try {
@@ -79,7 +86,10 @@ export function SupportView() {
         if (!cancelled) setMessages(data);
       })
       .catch(() => {
-        if (!cancelled) setMessages([]);
+        if (!cancelled) {
+          setMessages([]);
+          toast.error(t.messageLoadFail[language]);
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoadingMessages(false);
@@ -140,10 +150,12 @@ export function SupportView() {
 
   return (
     <div className="h-full flex flex-col space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>{t.title[language]}</h1>
         <Button
           onClick={() => setShowNewTicketForm(!showNewTicketForm)}
+          aria-expanded={showNewTicketForm}
+          aria-controls="new-ticket-form"
           className={`gap-2 ${isDark ? 'bg-[#D4AF37] text-black' : 'bg-[#D4AF37] text-black'}`}
         >
           <MessageCircle size={18} />
@@ -151,19 +163,25 @@ export function SupportView() {
         </Button>
       </div>
 
-      {showNewTicketForm && (
+      <AnimatePresence initial={false}>
+        {showNewTicketForm && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
+          id="new-ticket-form"
+          initial={{ opacity: 0, y: shouldReduceMotion ? 0 : -8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
+          exit={{ opacity: 0, y: shouldReduceMotion ? 0 : -8 }}
+          transition={{ type: 'spring', bounce: 0, duration: 0.28 }}
         >
           <Card className={`p-6 ${isDark ? 'bg-[#0E0E0E]/60 border-white/5' : 'bg-white/60 border-black/5'}`}>
             <div className="space-y-4">
               <div>
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
+                <label htmlFor="new-ticket-subject" className={`block text-sm font-semibold mb-2 ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
                   {t.subject[language]}
                 </label>
                 <Input
+                  ref={subjectRef}
+                  id="new-ticket-subject"
+                  name="subject"
                   value={newTicketSubject}
                   onChange={(e) => setNewTicketSubject(e.target.value)}
                   placeholder={language === 'fa' ? 'موضوع تیکت' : 'Ticket subject'}
@@ -171,15 +189,17 @@ export function SupportView() {
                 />
               </div>
               <div>
-                <label className={`block text-sm font-semibold mb-2 ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
+                <label htmlFor="new-ticket-message" className={`block text-sm font-semibold mb-2 ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
                   {t.message[language]}
                 </label>
                 <textarea
+                  id="new-ticket-message"
+                  name="message"
                   value={newTicketMessage}
                   onChange={(e) => setNewTicketMessage(e.target.value)}
                   placeholder={language === 'fa' ? 'توضیحات' : 'Description'}
                   rows={4}
-                  className={`w-full rounded-lg border px-3 py-2 text-sm ${
+                  className={`w-full rounded-xl border px-3 py-2 text-base outline-none transition-[border-color,box-shadow] focus:ring-2 focus:ring-[#D4AF37]/40 sm:text-sm ${
                     isDark 
                       ? 'bg-[#141414] border-[#D4AF37]/20 text-white' 
                       : 'bg-white border-[#D4AF37]/30 text-[#3B2E13]'
@@ -201,7 +221,8 @@ export function SupportView() {
             </div>
           </Card>
         </motion.div>
-      )}
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
         <Card className={`lg:col-span-1 p-4 overflow-y-auto ${isDark ? 'bg-[#0E0E0E]/60 border-white/5' : 'bg-white/60 border-black/5'}`}>
@@ -219,13 +240,14 @@ export function SupportView() {
               tickets.map((ticket) => (
               <motion.button
                 key={ticket.id}
+                type="button"
                 onClick={() => setSelectedTicket(ticket.id)}
-                className={`w-full text-left p-3 rounded-xl transition-all ${
+                aria-pressed={selectedTicket === ticket.id}
+                className={`w-full rounded-xl p-3 text-start transition-[background-color,border-color,box-shadow] active:scale-[0.99] ${
                   selectedTicket === ticket.id
                     ? isDark ? 'bg-[#D4AF37]/20 border border-[#D4AF37]' : 'bg-[#D4AF37]/20 border border-[#D4AF37]'
                     : isDark ? 'bg-[#141414] hover:bg-[#1A1A1A]' : 'bg-white hover:bg-gray-50'
                 }`}
-                whileHover={{ scale: 1.02 }}
               >
                 <div className={`font-semibold text-sm mb-1 ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
                   {ticket.subject}
@@ -259,16 +281,21 @@ export function SupportView() {
                   <div className="flex h-full items-center justify-center">
                     <Loader2 size={24} className={`animate-spin ${isDark ? 'text-[#D4AF37]' : 'text-[#9D7A20]'}`} />
                   </div>
+                ) : messages.length === 0 ? (
+                  <div className={`flex h-full items-center justify-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                    {t.noMessages[language]}
+                  </div>
                 ) : (
                   messages.map((msg) => (
                   <motion.div
                     key={msg.id}
-                    initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 8 }}
                     animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', bounce: 0, duration: 0.28 }}
                     className={`flex ${msg.from_user === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`max-w-[70%] rounded-2xl px-4 py-3 ${
+                      className={`max-w-[88%] rounded-2xl px-4 py-3 sm:max-w-[70%] ${
                         msg.from_user === 'user'
                           ? isDark ? 'bg-[#D4AF37] text-black' : 'bg-[#D4AF37] text-black'
                           : isDark ? 'bg-[#1A1A1A] text-white' : 'bg-gray-100 text-[#3B2E13]'
@@ -285,14 +312,9 @@ export function SupportView() {
               </div>
 
               <div className={`p-4 border-t ${isDark ? 'border-white/10' : 'border-black/10'}`}>
-                <div className="flex gap-2">
-                  <button
-                    className={`p-2 rounded-lg transition-colors ${isDark ? 'hover:bg-[#1A1A1A]' : 'hover:bg-gray-100'}`}
-                    title={t.attach[language]}
-                  >
-                    <Paperclip size={20} className={isDark ? 'text-gray-400' : 'text-gray-600'} />
-                  </button>
+                <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void handleSendMessage(); }}>
                   <Input
+                    name="reply"
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={(e) => {
@@ -304,10 +326,10 @@ export function SupportView() {
                     placeholder={t.typeMessage[language]}
                     className={`flex-1 ${isDark ? 'bg-[#141414] border-[#D4AF37]/20' : 'bg-white border-[#D4AF37]/30'}`}
                   />
-                  <Button onClick={handleSendMessage} disabled={isSending || !newMessage.trim()} className="bg-[#D4AF37] text-black disabled:opacity-50">
+                  <Button type="submit" disabled={isSending || !newMessage.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={t.send[language]}>
                     {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                   </Button>
-                </div>
+                </form>
               </div>
             </>
           ) : (

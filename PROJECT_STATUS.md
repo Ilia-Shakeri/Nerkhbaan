@@ -1,10 +1,26 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-14 · **Release:** `2.4.7` · **Verdict:** frontend
-reliability and accessibility release is locally verified; production
+**Updated:** 2026-09-15 · **Release:** `2.4.8` · **Verdict:** frontend
+speed, usability, and accessibility release is locally verified; production
 deployment proof is pending
 
 ## Current release update
+
+- Release candidate `2.4.8` splits protected screens into independent route
+  chunks. The main web entry bundle fell from 692.63 kB to 180.57 kB before
+  compression, while public authentication remains immediately available.
+- Shared dialogs and mobile navigation now contain and restore keyboard focus.
+  Controls use larger touch targets and explicit names; forms have usable
+  labels, input metadata, save-state guards, and failed-save rollback.
+- Chart analysis no longer issues unused history requests. Charts, alerts,
+  reports, and support distinguish loading, empty, unavailable, and failure
+  states and provide retry where useful. Unsupported contact and attachment
+  actions were removed.
+- Interface springs are shorter and non-bouncy, repeated cards avoid expensive
+  blur and floating effects, and reduced-motion behavior remains supported.
+  The existing sign-in/sign-up card rotation is intentionally unchanged.
+- Local release checks cover these new interface contracts. Production remains
+  on the last verified `2.4.6` deployment until this release is deployed.
 
 - Release candidate `2.4.7` removes fixed values presented as live during
   startup, fixes short-screen authentication overflow, and keeps the existing
@@ -17,8 +33,8 @@ deployment proof is pending
   Icon controls expose names and state. Admin navigation follows browser
   history, permission-checks hash routes, and dangerous dialogs contain and
   restore keyboard focus.
-- Local release checks cover the new interface contracts. Production remains
-  on the last verified `2.4.6` deployment until this release is deployed.
+- The `2.4.7` candidate was locally verified but was not the last production
+  deployment recorded by this status file.
 
 - Production `2.4.6` runs two healthy API replicas and one healthy web replica.
   Readiness reports `ready=true`, release `2.4.6`, connected PostgreSQL and

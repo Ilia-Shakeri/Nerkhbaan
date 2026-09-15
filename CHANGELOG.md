@@ -2,6 +2,46 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.8] - 2026-09-15
+
+### Fixed
+
+- Added keyboard focus containment, Escape handling, outside-click dismissal,
+  focus restoration, and scroll-safe sizing to shared dialogs.
+- Replaced misleading empty states with explicit loading, unavailable, error,
+  and retry states across chart analysis, alerts, reports, and support.
+- Removed unsupported contact details and the non-working support attachment
+  control so every visible action now has a real outcome.
+- Prevented overlapping password controls, duplicate toast systems, settings
+  save races, and optimistic-setting drift after a failed request.
+- Made the mobile navigation drawer contain focus and restore it to the menu
+  button when closed.
+
+### Changed
+
+- Increased small interaction targets, added clear control names and state, and
+  improved forms for keyboard, screen-reader, password-manager, and mobile use.
+- Shortened and damped interface springs, limited transitions to the properties
+  that change, and retained the existing authentication card rotation.
+- Improved dynamic viewport and safe-area behavior in application shells,
+  dialogs, authentication-adjacent errors, and admin screens.
+
+### Performance
+
+- Split protected screens into route-level chunks, reducing the main web entry
+  bundle from 692.63 kB to 180.57 kB before compression.
+- Removed an unused per-instrument price-history request and expensive blur,
+  floating, and persistent animation hints from repeated interface elements.
+- Removed duplicate animation and toast dependencies from workspace manifests.
+- Limited frontend compiler globals to browser build types so optional desktop
+  packaging stubs cannot break web or admin type checks.
+
+### Tests
+
+- Added contracts for shared-dialog focus behavior, mobile navigation focus,
+  lazy protected routes, chart request discipline, honest contact actions, and
+  working support controls.
+
 ## [2.4.7] - 2026-09-14
 
 ### Fixed

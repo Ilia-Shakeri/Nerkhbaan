@@ -360,7 +360,7 @@ function FinancialChart({
   const descriptionId = useId();
   const tableId = useId();
   const values = data.map((point) => point.value).filter(Number.isFinite);
-  const latestPoint = data.at(-1);
+  const latestPoint = data.length ? data[data.length - 1] : undefined;
   const minimum = values.length ? Math.min(...values) : null;
   const maximum = values.length ? Math.max(...values) : null;
   const chartDescription = data.length
@@ -933,17 +933,17 @@ export function DashboardView() {
             }}
           >
             <Card
-              className={`relative overflow-hidden rounded-[2.5rem] backdrop-blur-2xl transition-all duration-500 ${
-                isDark 
-                  ? 'border-white/5 bg-[#0E0E0E]/60 shadow-xl' 
-                  : 'border-black/5 bg-white/60 shadow-xl'
+              className={`relative overflow-hidden rounded-[2.5rem] transition-[border-color,box-shadow,transform] duration-200 ${
+                isDark
+                  ? 'border-white/5 bg-[#0E0E0E]/92 shadow-xl'
+                  : 'border-black/5 bg-white/92 shadow-xl'
               } ${
-                dragOverAssetId === asset.id 
-                  ? 'ring-2 ring-[#D4AF37]/50 shadow-[0_0_30px_rgba(212,175,55,0.3)] scale-[1.02]' 
+                dragOverAssetId === asset.id
+                  ? 'ring-2 ring-[#D4AF37]/50 shadow-[0_0_30px_rgba(212,175,55,0.3)] scale-[1.02]'
                   : dragReadyAssetId === asset.id
                     ? 'ring-1 ring-[#D4AF37]/40 cursor-grabbing'
                     : 'cursor-grab'
-              } hover:shadow-[0_8px_32px_rgba(212,175,55,0.15)] hover:-translate-y-1`}
+              } hover:shadow-[0_8px_32px_rgba(212,175,55,0.15)]`}
             >
               <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-2">
@@ -998,7 +998,7 @@ export function DashboardView() {
                     }}
                     variant="outline"
                     size="icon"
-                    className={`h-10 w-10 rounded-xl transition-all ${
+                    className={`h-11 w-11 rounded-xl transition-colors ${
                       isDark 
                         ? 'border-white/10 text-[#D4AF37] hover:bg-white/5 hover:text-[#F3E2AB]' 
                         : 'border-black/10 text-[#8A6A23] hover:bg-black/5 hover:text-[#5E4714]'
@@ -1014,7 +1014,7 @@ export function DashboardView() {
                       size="icon"
                       disabled={idx === 0}
                       onClick={() => idx > 0 && reorderAssets(asset.id, orderedAssets[idx - 1].id)}
-                      className="h-10 w-10 rounded-xl"
+                      className="h-11 w-11 rounded-xl"
                       aria-label={language === 'fa' ? `بردن کارت ${asset.label.fa} به بالا` : `Move ${asset.label.en} card up`}
                     ><ArrowUp size={16} /></Button>
                     <Button
@@ -1023,7 +1023,7 @@ export function DashboardView() {
                       size="icon"
                       disabled={idx === orderedAssets.length - 1}
                       onClick={() => idx < orderedAssets.length - 1 && reorderAssets(asset.id, orderedAssets[idx + 1].id)}
-                      className="h-10 w-10 rounded-xl"
+                      className="h-11 w-11 rounded-xl"
                       aria-label={language === 'fa' ? `بردن کارت ${asset.label.fa} به پایین` : `Move ${asset.label.en} card down`}
                     ><ArrowDown size={16} /></Button>
                   </div>
@@ -1180,7 +1180,7 @@ export function DashboardView() {
                       <button
                         type="button"
                         onClick={() => setFullscreenAsset(asset.id)}
-                        className={`absolute top-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${isDark ? 'bg-[#1A1A1A]/80 text-[#D4AF37] hover:bg-[#222222]' : 'bg-white/80 text-[#8A6B20] hover:bg-white'} backdrop-blur-sm`}
+                        className={`absolute right-2 top-2 z-10 flex h-11 w-11 items-center justify-center rounded-xl transition-colors active:scale-95 ${isDark ? 'bg-[#1A1A1A]/90 text-[#D4AF37] hover:bg-[#222222]' : 'bg-white/90 text-[#8A6B20] hover:bg-white'} backdrop-blur-sm`}
                         title={language === 'fa' ? 'تمام صفحه' : 'Full Screen'}
                         aria-label={language === 'fa' ? `نمایش نمودار ${asset.label.fa} در تمام صفحه` : `Show ${asset.label.en} chart in full screen`}
                       >
@@ -1211,7 +1211,7 @@ export function DashboardView() {
         );
       })}</div>
 
-      <Modal isOpen={isAlertModalOpen} onClose={() => setIsAlertModalOpen(false)} title={t.createAlert[language]} size="large">
+      <Modal isOpen={isAlertModalOpen} onClose={() => setIsAlertModalOpen(false)} title={t.createAlert[language]} size="large" closeLabel={language === 'fa' ? 'بستن پنجره هشدار' : 'Close alert dialog'}>
         <div className="space-y-6 pt-4 max-h-[70vh] overflow-y-auto px-1">
           <div className="space-y-2">
             <label className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
@@ -1259,7 +1259,7 @@ export function DashboardView() {
                     {language === 'fa' ? 'اعلان فوری در اپلیکیشن' : 'Instant in-app notification'}
                   </p>
                 </div>
-                <Switch checked={alertNotifyApp} onCheckedChange={setAlertNotifyApp} />
+                <Switch checked={alertNotifyApp} onCheckedChange={setAlertNotifyApp} aria-label={language === 'fa' ? 'اعلان فوری در برنامه' : 'Instant in-app notification'} />
               </div>
 
               <div className={`flex items-start gap-3 rounded-xl border p-4 transition-colors ${isDark ? 'border-[#D4AF37]/20 bg-[#0F0F0F] hover:bg-[#141414]' : 'border-[#D4AF37]/30 bg-[#FFFBF0] hover:bg-white'}`}>
@@ -1274,7 +1274,7 @@ export function DashboardView() {
                         {language === 'fa' ? 'ارسال به ایمیل ثبت‌شده' : 'Send to registered email'}
                       </p>
                     </div>
-                    <Switch checked={alertNotifyEmail} onCheckedChange={setAlertNotifyEmail} />
+                    <Switch checked={alertNotifyEmail} onCheckedChange={setAlertNotifyEmail} aria-label={language === 'fa' ? 'اعلان ایمیلی' : 'Email notification'} />
                   </div>
                 </div>
               </div>
@@ -1293,7 +1293,7 @@ export function DashboardView() {
                         {language === 'fa' ? 'ارسال به آدرس API سفارشی' : 'Send to custom API endpoint'}
                       </p>
                     </div>
-                    <Switch checked={alertNotifyWebhook} onCheckedChange={setAlertNotifyWebhook} />
+                    <Switch checked={alertNotifyWebhook} onCheckedChange={setAlertNotifyWebhook} aria-label={language === 'fa' ? 'اعلان وب‌هوک' : 'Webhook notification'} />
                   </div>
                   {alertNotifyWebhook && (
                     <Input
@@ -1327,7 +1327,7 @@ export function DashboardView() {
                       : 'Alerts that fail to deliver will be queued and retried automatically.'}
                   </p>
                 </div>
-                <Switch checked={alertEnableDlq} onCheckedChange={setAlertEnableDlq} />
+                <Switch checked={alertEnableDlq} onCheckedChange={setAlertEnableDlq} aria-label={language === 'fa' ? 'صف تلاش دوباره' : 'Retry queue'} />
               </div>
             </div>
           </div>
@@ -1342,7 +1342,7 @@ export function DashboardView() {
             </Button>
             <Button
               disabled={isSavingAlert || !alertTargetPrice}
-              className={`h-12 flex-1 rounded-2xl border-0 text-black shadow-lg hover:shadow-xl transition-all disabled:opacity-50 ${
+              className={`h-12 flex-1 rounded-2xl border-0 text-black shadow-lg transition-shadow hover:shadow-xl disabled:opacity-50 ${
                 isDark ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB]' : 'bg-[#D4AF37] hover:bg-[#E8C45A]'
               }`}
               onClick={async () => {
@@ -1378,10 +1378,11 @@ export function DashboardView() {
       </Modal>
 
       <Modal 
-        isOpen={fullscreenAsset !== null} 
-        onClose={() => setFullscreenAsset(null)} 
+        isOpen={fullscreenAsset !== null}
+        onClose={() => setFullscreenAsset(null)}
         title={fullscreenAsset ? ASSET_LABELS[fullscreenAsset][language] : ''} 
         size="large"
+        closeLabel={language === 'fa' ? 'بستن نمودار تمام صفحه' : 'Close full-screen chart'}
       >
         {fullscreenAsset && (() => {
           const asset = orderedAssets.find(a => a.id === fullscreenAsset);

@@ -2,7 +2,7 @@ import { BrowserRouter, HashRouter, useNavigate } from "react-router-dom";
 import { AppRouter } from "@/app/router/AppRouter";
 import { AppProvider, useAppContext } from "@/app/context/AppContext";
 import { Toaster } from "sonner";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { SplashScreen } from "@/app/components/SplashScreen";
 import { applyPendingUpdate } from "@/pwa/registerServiceWorker";
 import { motion, AnimatePresence, MotionConfig } from "motion/react";
@@ -31,14 +31,14 @@ function AppContent() {
   });
   const { language, theme } = useAppContext();
 
-  const [showOfflineBanner, setShowOfflineBanner] = useState(false);
+  const [showOfflineBanner, setShowOfflineBanner] = useState(() => !navigator.onLine);
   const [updateReady, setUpdateReady] = useState(false);
   const stabilityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSplashComplete = () => {
+  const handleSplashComplete = useCallback(() => {
     sessionStorage.setItem('splash-shown', 'true');
     setShowSplash(false);
-  };
+  }, []);
 
   useEffect(() => {
     const onUpdate = () => setUpdateReady(true);
@@ -75,8 +75,11 @@ function AppContent() {
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -100, opacity: 0 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
             className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-red-500 px-6 py-3 text-sm font-semibold text-white shadow-lg"
             style={{ top: 'max(1rem, env(safe-area-inset-top))' }}
+            role="status"
+            aria-live="polite"
           >
             {language === 'fa' ? 'شما آفلاین هستید' : 'You are offline'}
           </motion.div>
@@ -87,8 +90,9 @@ function AppContent() {
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.3 }}
             onClick={() => { void applyPendingUpdate(); }}
-            className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-lg"
+            className="fixed left-1/2 z-50 min-h-11 -translate-x-1/2 rounded-full bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-lg active:scale-[0.98]"
             style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
           >
             {language === 'fa' ? 'نسخه جدید آماده است — بازخوانی' : 'New version ready — reload'}

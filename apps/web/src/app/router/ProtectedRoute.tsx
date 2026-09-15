@@ -7,7 +7,7 @@ export const ProtectedRoute = ({ children, allowPasswordChange = false }: { chil
   const location = useLocation();
 
   if (!authReady) {
-    return <div className="min-h-screen bg-[#060606]" aria-busy="true" />;
+    return <div className="min-h-dvh bg-[#060606]" aria-busy="true" />;
   }
 
   if (!isAuthenticated) {

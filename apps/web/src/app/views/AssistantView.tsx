@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { Bot, Check, Loader2, MessageSquarePlus, Pencil, Send, Trash2, X } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 export function AssistantView() {
   const { language, theme } = useAppContext();
   const isDark = theme === 'dark';
+  const shouldReduceMotion = useReducedMotion();
 
   const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
@@ -34,7 +35,12 @@ export function AssistantView() {
     sendFail: { fa: 'پاسخ در دسترس نیست', en: 'Reply is unavailable' },
     saved: { fa: 'ذخیره شد', en: 'Saved' },
     deleted: { fa: 'حذف شد', en: 'Deleted' },
-    ttl: { fa: 'تاریخچه پس از یک ماه حذف می‌شود', en: 'History is deleted after one month' }
+    ttl: { fa: 'تاریخچه پس از یک ماه حذف می‌شود', en: 'History is deleted after one month' },
+    rename: { fa: 'تغییر نام گفتگو', en: 'Rename chat' },
+    cancelRename: { fa: 'لغو تغییر نام', en: 'Cancel rename' },
+    delete: { fa: 'حذف گفتگو', en: 'Delete chat' },
+    deleteConfirm: { fa: 'این گفتگو حذف شود؟', en: 'Delete this chat?' },
+    send: { fa: 'ارسال پیام', en: 'Send message' },
   };
 
   const refreshSessions = async () => {
@@ -64,8 +70,11 @@ export function AssistantView() {
   }, [activeSessionId]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages, isSending]);
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: shouldReduceMotion ? 'auto' : 'smooth',
+    });
+  }, [messages, isSending, shouldReduceMotion]);
 
   const startNewChat = () => {
     setActiveSessionId(null);
@@ -109,6 +118,7 @@ export function AssistantView() {
   };
 
   const deleteSession = async (sessionId: number) => {
+    if (!window.confirm(t.deleteConfirm[language])) return;
     try {
       await api.insights.deleteSession(sessionId);
       const next = sessions.filter((session) => session.id !== sessionId);
@@ -148,30 +158,30 @@ export function AssistantView() {
             ) : (
               <div className="space-y-2">
                 {sessions.map((session) => (
-                  <button
+                  <div
                     key={session.id}
-                    type="button"
-                    onClick={() => setActiveSessionId(session.id)}
-                    className={`w-full rounded-xl border p-3 text-start transition ${
+                    className={`flex min-h-12 items-center gap-1 rounded-xl border p-1.5 transition-[background-color,border-color] ${
                       activeSessionId === session.id
                         ? 'border-[#D4AF37]/60 bg-[#D4AF37]/10'
                         : isDark ? 'border-white/5 hover:bg-white/5' : 'border-black/5 hover:bg-[#D4AF37]/5'
                     }`}
                   >
                     {renamingId === session.id ? (
-                      <div className="flex gap-1">
-                        <Input value={renameDraft} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setRenameDraft(event.target.value)} className="h-8 text-xs" autoFocus />
-                        <Button size="icon" className="h-8 w-8 bg-[#D4AF37] text-black" onClick={() => renameSession(session.id)}><Check size={14} /></Button>
-                        <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setRenamingId(null)}><X size={14} /></Button>
-                      </div>
+                      <form className="flex min-w-0 flex-1 gap-1" onSubmit={(event) => { event.preventDefault(); void renameSession(session.id); }}>
+                        <Input value={renameDraft} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setRenameDraft(event.target.value)} className="h-11 min-w-0 text-xs" aria-label={t.rename[language]} autoFocus />
+                        <Button type="submit" size="icon" className="h-11 w-11 bg-[#D4AF37] text-black" aria-label={t.rename[language]}><Check size={16} /></Button>
+                        <Button type="button" size="icon" variant="ghost" className="h-11 w-11" onClick={() => setRenamingId(null)} aria-label={t.cancelRename[language]}><X size={16} /></Button>
+                      </form>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <span className={`flex-1 truncate text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{session.title}</span>
-                        <Pencil size={14} className="text-[#D4AF37]" onClick={(event) => { event.stopPropagation(); setRenamingId(session.id); setRenameDraft(session.title); }} />
-                        <Trash2 size={14} className="text-red-400" onClick={(event) => { event.stopPropagation(); deleteSession(session.id); }} />
-                      </div>
+                      <>
+                        <button type="button" onClick={() => setActiveSessionId(session.id)} aria-current={activeSessionId === session.id ? 'true' : undefined} className="min-h-11 min-w-0 flex-1 rounded-lg px-2 text-start">
+                          <span className={`block truncate text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{session.title}</span>
+                        </button>
+                        <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[#D4AF37] transition-colors hover:bg-[#D4AF37]/10 active:scale-95" onClick={() => { setRenamingId(session.id); setRenameDraft(session.title); }} aria-label={`${t.rename[language]}: ${session.title}`}><Pencil size={16} /></button>
+                        <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-500/10 active:scale-95" onClick={() => void deleteSession(session.id)} aria-label={`${t.delete[language]}: ${session.title}`}><Trash2 size={16} /></button>
+                      </>
                     )}
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -179,7 +189,7 @@ export function AssistantView() {
         </Card>
 
         <Card className={`flex min-h-0 flex-col rounded-2xl ${isDark ? 'border-white/5 bg-[#0E0E0E]/60' : 'border-black/5 bg-white/70'}`}>
-          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto p-4" role="log" aria-live="polite" aria-relevant="additions">
             {messages.length === 0 ? (
               <div className="flex h-full items-center justify-center">
                 <div className="text-center">
@@ -190,7 +200,7 @@ export function AssistantView() {
             ) : (
               <div className="space-y-4">
                 {messages.map((msg, index) => (
-                  <motion.div key={`${msg.role}-${index}`} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <motion.div key={`${msg.role}-${index}`} initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-7 whitespace-pre-wrap ${msg.role === 'user' ? 'bg-[#D4AF37] text-black' : isDark ? 'bg-[#1A1A1A] text-white' : 'bg-gray-100 text-[#3B2E13]'}`}>
                       {msg.content}
                     </div>
@@ -208,7 +218,7 @@ export function AssistantView() {
           </div>
 
           <div className={`border-t p-4 ${isDark ? 'border-white/10' : 'border-black/10'}`}>
-            <div className="flex gap-2">
+            <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void handleSend(); }}>
               <Input
                 value={draft}
                 onChange={(event: React.ChangeEvent<HTMLInputElement>) => setDraft(event.target.value)}
@@ -221,10 +231,10 @@ export function AssistantView() {
                 placeholder={t.placeholder[language]}
                 className={`flex-1 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414]' : 'border-[#D4AF37]/30 bg-white'}`}
               />
-              <Button onClick={handleSend} disabled={isSending || !draft.trim()} className="bg-[#D4AF37] text-black disabled:opacity-50">
+              <Button type="submit" disabled={isSending || !draft.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={t.send[language]}>
                 {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
               </Button>
-            </div>
+            </form>
           </div>
         </Card>
       </div>

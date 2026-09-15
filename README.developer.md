@@ -268,3 +268,10 @@ Frontend changes must keep the interface contracts in
 mobile authentication must scroll, password fields get one named reveal
 control, motion preferences are honored, charts retain a non-visual data
 alternative, and admin dialogs contain then restore keyboard focus.
+
+Protected web screens are loaded at route level. Keep public authentication
+eager, keep secondary authenticated screens lazy, and check the Vite build
+report when adding a large dependency. Shared dialogs must contain keyboard
+focus, restore focus and body scrolling on close, support Escape and outside
+click, and fit inside the dynamic viewport. Visible controls must have a real
+working outcome; do not ship placeholder contact or attachment actions.

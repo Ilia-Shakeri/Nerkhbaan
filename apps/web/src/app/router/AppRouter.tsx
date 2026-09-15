@@ -1,19 +1,28 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { DesktopLayout } from '../layouts/DesktopLayout';
-import { DashboardView } from '../views/DashboardView';
-import { AlertsView } from '../views/AlertsView';
-import { SettingsView } from '../views/SettingsView';
-import { ContactView } from '../views/ContactView';
-import { PrivacyView } from '../views/PrivacyView';
 import { AuthView } from '../views/AuthView';
 import { ForgotPasswordView } from '../views/ForgotPasswordView';
-import { AdvancedReportView } from '../views/AdvancedReportView';
-import { SupportView } from '../views/SupportView';
-import { ChartAnalysisView } from '../views/ChartAnalysisView';
-import { AssistantView } from '../views/AssistantView';
 import { ProtectedRoute } from './ProtectedRoute';
 import { RequiredPasswordView } from '../views/RequiredPasswordView';
+
+const AlertsView = lazy(() => import('../views/AlertsView').then((module) => ({ default: module.AlertsView })));
+const DesktopLayout = lazy(() => import('../layouts/DesktopLayout').then((module) => ({ default: module.DesktopLayout })));
+const DashboardView = lazy(() => import('../views/DashboardView').then((module) => ({ default: module.DashboardView })));
+const SettingsView = lazy(() => import('../views/SettingsView').then((module) => ({ default: module.SettingsView })));
+const ContactView = lazy(() => import('../views/ContactView').then((module) => ({ default: module.ContactView })));
+const PrivacyView = lazy(() => import('../views/PrivacyView').then((module) => ({ default: module.PrivacyView })));
+const AdvancedReportView = lazy(() => import('../views/AdvancedReportView').then((module) => ({ default: module.AdvancedReportView })));
+const SupportView = lazy(() => import('../views/SupportView').then((module) => ({ default: module.SupportView })));
+const ChartAnalysisView = lazy(() => import('../views/ChartAnalysisView').then((module) => ({ default: module.ChartAnalysisView })));
+const AssistantView = lazy(() => import('../views/AssistantView').then((module) => ({ default: module.AssistantView })));
+
+function DeferredPage({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<div className="flex min-h-64 items-center justify-center" role="status" aria-label="Loading page"><span className="h-7 w-7 animate-spin rounded-full border-2 border-[#D4AF37] border-t-transparent" /></div>}>
+      {children}
+    </Suspense>
+  );
+}
 
 export const AppRouter = () => {
   return (
@@ -26,19 +35,19 @@ export const AppRouter = () => {
         path="/"
         element={
           <ProtectedRoute>
-            <DesktopLayout />
+            <DeferredPage><DesktopLayout /></DeferredPage>
           </ProtectedRoute>
         }
       >
-        <Route index element={<DashboardView />} />
-        <Route path="alerts" element={<AlertsView />} />
-        <Route path="advanced-report" element={<AdvancedReportView />} />
-        <Route path="analysis" element={<ChartAnalysisView />} />
-        <Route path="assistant" element={<AssistantView />} />
-        <Route path="settings" element={<SettingsView />} />
-        <Route path="contact" element={<ContactView />} />
-        <Route path="privacy" element={<PrivacyView />} />
-        <Route path="support" element={<SupportView />} />
+        <Route index element={<DeferredPage><DashboardView /></DeferredPage>} />
+        <Route path="alerts" element={<DeferredPage><AlertsView /></DeferredPage>} />
+        <Route path="advanced-report" element={<DeferredPage><AdvancedReportView /></DeferredPage>} />
+        <Route path="analysis" element={<DeferredPage><ChartAnalysisView /></DeferredPage>} />
+        <Route path="assistant" element={<DeferredPage><AssistantView /></DeferredPage>} />
+        <Route path="settings" element={<DeferredPage><SettingsView /></DeferredPage>} />
+        <Route path="contact" element={<DeferredPage><ContactView /></DeferredPage>} />
+        <Route path="privacy" element={<DeferredPage><PrivacyView /></DeferredPage>} />
+        <Route path="support" element={<DeferredPage><SupportView /></DeferredPage>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

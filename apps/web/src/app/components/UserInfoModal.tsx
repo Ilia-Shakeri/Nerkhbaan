@@ -65,14 +65,14 @@ export function UserInfoModal({ isOpen, onClose, language }: UserInfoModalProps)
     : [];
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t.title[language]}>
+    <Modal isOpen={isOpen} onClose={onClose} title={t.title[language]} closeLabel={language === 'fa' ? 'بستن اطلاعات کاربری' : 'Close user information'}>
       <div className="space-y-4">
         {isLoading ? (
           <div className="flex justify-center py-8">
             <Loader2 size={24} className="animate-spin text-[#D4AF37]" />
           </div>
         ) : hasError ? (
-          <p className="py-6 text-center text-sm text-red-500">{t.loadFail[language]}</p>
+          <p className="py-6 text-center text-sm text-red-500" role="alert">{t.loadFail[language]}</p>
         ) : (
           rows.map(({ icon: Icon, label, value }) => (
             <div

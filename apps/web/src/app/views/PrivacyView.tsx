@@ -31,7 +31,7 @@ export function PrivacyView() {
       </div>
 
       <div className="space-y-6">
-        <div className={`rounded-2xl border p-6 transition-all ${
+        <div className={`rounded-2xl border p-6 ${
           isDark 
             ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40' 
             : 'border-[#D4AF37]/30 bg-white/50'
@@ -51,7 +51,7 @@ export function PrivacyView() {
           </p>
         </div>
 
-        <div className={`rounded-2xl border p-6 transition-all ${
+        <div className={`rounded-2xl border p-6 ${
           isDark 
             ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40' 
             : 'border-[#D4AF37]/30 bg-white/50'
@@ -71,7 +71,7 @@ export function PrivacyView() {
           </p>
         </div>
 
-        <div className={`rounded-2xl border p-6 transition-all ${
+        <div className={`rounded-2xl border p-6 ${
           isDark 
             ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40' 
             : 'border-[#D4AF37]/30 bg-white/50'
@@ -91,7 +91,7 @@ export function PrivacyView() {
           </p>
         </div>
 
-        <div className={`rounded-2xl border p-6 transition-all ${
+        <div className={`rounded-2xl border p-6 ${
           isDark 
             ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40' 
             : 'border-[#D4AF37]/30 bg-white/50'

@@ -1,33 +1,37 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
-import { TrendingUp, AlertCircle } from 'lucide-react';
+import { TrendingUp, AlertCircle, Loader2, RefreshCw } from 'lucide-react';
+import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 
 export function AdvancedReportView() {
   const { language, theme } = useAppContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const isDark = theme === 'dark';
   
-  // State to manage the chart loading overlay visibility
-  const [isChartLoaded, setIsChartLoaded] = useState(false);
+  const [chartState, setChartState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [retryKey, setRetryKey] = useState(0);
 
   const t = {
     title: { fa: 'گزارش پیشرفته', en: 'Advanced Report' },
     subtitle: { fa: 'تحلیل تکنیکال و اسکن بازار', en: 'Technical Analysis & Market Scanning' },
     loading: { fa: 'در حال بارگذاری نمودار...', en: 'Loading chart...' },
+    loadError: { fa: 'نمودار بیرونی بارگذاری نشد.', en: 'The external chart could not be loaded.' },
+    retry: { fa: 'تلاش دوباره', en: 'Try again' },
   };
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    // Reset state when dependencies change to ensure overlay logic remains accurate
-    setIsChartLoaded(false);
+    let active = true;
+    let script = document.getElementById('market-chart-script') as HTMLScriptElement | null;
+    let timeout = 0;
+    setChartState('loading');
 
-    const script = document.createElement('script');
-    script.src = 'https://s3.tradingview.com/tv.js';
-    script.async = true;
-    script.onload = () => {
+    const initializeChart = () => {
+      if (!active) return;
       if (typeof (window as any).TradingView !== 'undefined') {
+        containerRef.current?.replaceChildren();
         new (window as any).TradingView.widget({
           autosize: true,
           symbol: 'BINANCE:BTCUSDT',
@@ -47,22 +51,44 @@ export function AdvancedReportView() {
           ],
           supported_resolutions: ['1', '5', '15', '60', 'D', 'W', 'M'],
         });
-        // Chart has successfully initialized, hide the overlay
-        setIsChartLoaded(true);
+        setChartState('ready');
+      } else {
+        setChartState('error');
       }
     };
-    document.head.appendChild(script);
+    const failChart = () => {
+      if (!active) return;
+      if (script) script.dataset.failed = 'true';
+      setChartState('error');
+    };
 
-    // Cleanup function to prevent multiple widget instances from stacking
-    return () => {
-      const container = document.getElementById('tradingview_widget');
-      if (container) container.innerHTML = '';
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
+    if (typeof (window as any).TradingView !== 'undefined') {
+      initializeChart();
+    } else {
+      if (script?.dataset.failed === 'true') {
+        script.remove();
+        script = null;
       }
-      setIsChartLoaded(false);
+      if (!script) {
+        script = document.createElement('script');
+        script.id = 'market-chart-script';
+        script.src = 'https://s3.tradingview.com/tv.js';
+        script.async = true;
+        document.head.appendChild(script);
+      }
+      script.addEventListener('load', initializeChart, { once: true });
+      script.addEventListener('error', failChart, { once: true });
+      timeout = window.setTimeout(failChart, 12_000);
+    }
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeout);
+      script?.removeEventListener('load', initializeChart);
+      script?.removeEventListener('error', failChart);
+      containerRef.current?.replaceChildren();
     };
-  }, [isDark, language]);
+  }, [isDark, retryKey]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -81,17 +107,27 @@ export function AdvancedReportView() {
       </div>
 
       <Card className="p-0 overflow-hidden">
-        <div ref={containerRef} className="relative" style={{ height: '80vh', minHeight: '600px' }}>
-          <div id="tradingview_widget" className="h-full w-full"></div>
+        <div className="relative h-[65dvh] min-h-[420px] sm:min-h-[600px]">
+          <div ref={containerRef} id="tradingview_widget" className="h-full w-full" />
           
           {/* Conditionally render the loading overlay */}
-          {!isChartLoaded && (
-            <div className={`absolute inset-0 flex items-center justify-center pointer-events-none ${isDark ? 'bg-[#0E0E0E]/80' : 'bg-white/80'}`}>
-              <div className="flex items-center gap-2">
-                <AlertCircle className={isDark ? 'text-gray-400' : 'text-gray-600'} size={18} />
-                <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                  {t.loading[language]}
+          {chartState !== 'ready' && (
+            <div className={`absolute inset-0 flex items-center justify-center ${isDark ? 'bg-[#0E0E0E]/95' : 'bg-white/95'}`} role="status">
+              <div className="flex max-w-sm flex-col items-center gap-3 px-6 text-center">
+                {chartState === 'loading' ? (
+                  <Loader2 className="animate-spin text-[#D4AF37]" size={24} />
+                ) : (
+                  <AlertCircle className="text-amber-500" size={24} />
+                )}
+                <span className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {chartState === 'loading' ? t.loading[language] : t.loadError[language]}
                 </span>
+                {chartState === 'error' && (
+                  <Button type="button" onClick={() => setRetryKey((value) => value + 1)} className="gap-2 bg-[#D4AF37] text-black">
+                    <RefreshCw size={16} />
+                    {t.retry[language]}
+                  </Button>
+                )}
               </div>
             </div>
           )}

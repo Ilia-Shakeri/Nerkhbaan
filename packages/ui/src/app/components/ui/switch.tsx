@@ -28,18 +28,24 @@ export const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         aria-checked={isChecked}
         onClick={toggle}
         className={cn(
-          "peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-gray-950 disabled:cursor-not-allowed disabled:opacity-50",
-          isChecked ? "bg-[#10B981]" : "bg-gray-200 dark:bg-white/10",
+          "peer relative inline-flex h-11 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full transition-transform active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
           className
         )}
         {...props}
       >
         <span
           className={cn(
-            "pointer-events-none block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform",
-            isChecked ? "translate-x-5 rtl:-translate-x-5" : "translate-x-0 rtl:translate-x-0"
+            "pointer-events-none flex h-6 w-11 items-center rounded-full p-0.5 transition-colors",
+            isChecked ? "bg-[#10B981]" : "bg-gray-300 dark:bg-white/15",
           )}
-        />
+        >
+          <span
+            className={cn(
+              "block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200",
+              isChecked ? "translate-x-5 rtl:-translate-x-5" : "translate-x-0",
+            )}
+          />
+        </span>
       </button>
     );
   }

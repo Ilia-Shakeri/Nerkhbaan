@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import logo from '../../logo/logo.png';
 
 interface SplashScreenProps {
@@ -16,13 +16,13 @@ const PARTICLES = Array.from({ length: 12 }, (_, index) => ({
   delay: (index * 0.17) % 1.2,
 }));
 
-const APP_VERSION = 'v2.4.7';
+const APP_VERSION = 'v2.4.8';
 
 export function SplashScreen({ onComplete, language, theme }: SplashScreenProps) {
   const isDark = theme === 'dark';
 
   useEffect(() => {
-    const timer = window.setTimeout(onComplete, 700);
+    const timer = window.setTimeout(onComplete, 420);
     return () => window.clearTimeout(timer);
   }, [onComplete]);
 

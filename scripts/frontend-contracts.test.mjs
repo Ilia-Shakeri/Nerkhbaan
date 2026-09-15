@@ -234,3 +234,39 @@ test("admin navigation survives history and dangerous dialogs contain focus", ()
   assert.match(ui, /event\.key !== 'Tab'/);
   assert.match(ui, /previousFocus\?\.focus\(\)/);
 });
+
+test("shared dialogs contain focus and restore page state", () => {
+  const modal = read("packages/ui/src/app/components/ui/Modal.tsx");
+  assert.match(modal, /from 'motion\/react'/);
+  assert.match(modal, /role="dialog"/);
+  assert.match(modal, /event\.key === 'Escape'/);
+  assert.match(modal, /event\.key !== 'Tab'/);
+  assert.match(modal, /previousFocus\?\.focus\(\)/);
+  assert.match(modal, /document\.body\.style\.overflow = previousOverflow/);
+});
+
+test("mobile navigation contains focus and restores its trigger", () => {
+  const layout = read("apps/web/src/app/layouts/DesktopLayout.tsx");
+  assert.match(layout, /mobileNavigationRef/);
+  assert.match(layout, /role="dialog"/);
+  assert.match(layout, /aria-modal="true"/);
+  assert.match(layout, /event\.key !== 'Tab'/);
+  assert.match(layout, /mobileMenuButtonRef\.current\?\.focus\(\)/);
+});
+
+test("secondary routes load on demand and analysis avoids unused history calls", () => {
+  const router = read("apps/web/src/app/router/AppRouter.tsx");
+  const analysis = read("apps/web/src/app/views/ChartAnalysisView.tsx");
+  assert.match(router, /lazy\(\(\) => import\('\.\.\/views\/DashboardView'\)/);
+  assert.match(router, /<Suspense/);
+  assert.doesNotMatch(analysis, /getPriceHistory/);
+  assert.match(analysis, /assetsLoadFailed/);
+});
+
+test("support and contact surfaces expose only working actions", () => {
+  const support = read("apps/web/src/app/views/SupportView.tsx");
+  const contact = read("apps/web/src/app/views/ContactView.tsx");
+  assert.doesNotMatch(support, /Paperclip|Attach file|پیوست فایل/);
+  assert.doesNotMatch(contact, /1234 5678|support@nerkhbaan\.com/);
+  assert.match(contact, /navigate\('\/support'\)/);
+});

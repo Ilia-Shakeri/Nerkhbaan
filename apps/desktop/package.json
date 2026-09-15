@@ -1,6 +1,6 @@
 {
   "name": "nerkhbaan-desktop",
-  "version": "2.4.7",
+  "version": "2.4.8",
   "description": "Secure desktop client for Nerkhbaan price tracking.",
   "author": "Nerkhbaan",
   "private": true,
@@ -63,7 +63,6 @@
     "react-dnd-html5-backend": "16.0.1",
     "react-dom": "18.3.1",
     "react-hook-form": "7.55.0",
-    "react-hot-toast": "^2.6.0",
     "react-popper": "2.3.0",
     "react-resizable-panels": "2.1.7",
     "react-responsive-masonry": "2.7.1",

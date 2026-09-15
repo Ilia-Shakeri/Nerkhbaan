@@ -23,6 +23,7 @@ export function AlertsView() {
 
   const [alerts, setAlerts] = useState<AlertResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -51,7 +52,11 @@ export function AlertsView() {
     noAlerts:   { fa: 'هیچ هشداری ثبت نشده',    en: 'No alerts yet'      },
     createFirst:{ fa: 'اولین هشدار خود را ایجاد کنید', en: 'Create your first price alert' },
     deleteOk:   { fa: 'هشدار حذف شد',           en: 'Alert removed'      },
+    deleteAlert:{ fa: 'حذف هشدار',              en: 'Delete alert'       },
+    deleteConfirm:{ fa: 'این هشدار حذف شود؟',   en: 'Delete this alert?' },
     deleteFail: { fa: 'خطا در حذف هشدار',        en: 'Failed to remove'   },
+    loadFail:   { fa: 'هشدارها بارگذاری نشدند', en: 'Alerts could not be loaded' },
+    retry:      { fa: 'تلاش دوباره',             en: 'Try again'          },
     createOk:   { fa: 'هشدار ایجاد شد',         en: 'Alert created'      },
     createFail: { fa: 'خطا در ایجاد هشدار',      en: 'Failed to create'   },
     updateOk:   { fa: 'هشدار به‌روزرسانی شد',    en: 'Alert updated'      },
@@ -65,11 +70,13 @@ export function AlertsView() {
   };
 
   const loadAlerts = async () => {
+    setIsLoading(true);
+    setLoadError(false);
     try {
       const data = await api.alerts.list();
       setAlerts(data);
     } catch {
-      // Silently fail — the list stays empty and user can retry via new alert creation
+      setLoadError(true);
     } finally {
       setIsLoading(false);
     }
@@ -78,6 +85,7 @@ export function AlertsView() {
   useEffect(() => { loadAlerts(); }, []);
 
   const handleDelete = async (id: number) => {
+    if (!window.confirm(t.deleteConfirm[language])) return;
     try {
       await api.alerts.remove(id);
       setAlerts((prev) => prev.filter((a) => a.id !== id));
@@ -167,6 +175,9 @@ export function AlertsView() {
         <div className="relative w-full sm:max-w-xs">
           <Search className={`absolute start-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#9C8A5D]' : 'text-[#A8883A]'}`} size={16} />
           <Input
+            name="alert-search"
+            type="search"
+            aria-label={t.search[language]}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t.search[language]}
@@ -185,6 +196,11 @@ export function AlertsView() {
       {isLoading ? (
         <div className="flex h-48 items-center justify-center">
           <Loader2 size={28} className={`animate-spin ${isDark ? 'text-[#D4AF37]' : 'text-[#9D7A20]'}`} />
+        </div>
+      ) : loadError ? (
+        <div className={`flex min-h-48 flex-col items-center justify-center gap-3 rounded-2xl border p-6 text-center ${isDark ? 'border-amber-500/20 bg-amber-500/5' : 'border-amber-500/30 bg-amber-50'}`} role="alert">
+          <p className={isDark ? 'text-amber-200' : 'text-amber-800'}>{t.loadFail[language]}</p>
+          <Button type="button" variant="outline" onClick={() => void loadAlerts()}>{t.retry[language]}</Button>
         </div>
       ) : filtered.length === 0 ? (
         <motion.div
@@ -211,9 +227,10 @@ export function AlertsView() {
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.97 }}
+                  transition={{ type: 'spring', bounce: 0, duration: 0.28 }}
                   layout
                 >
-                  <Card className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border p-4 backdrop-blur-md transition-all ${cardBase} ${!alert.is_active ? 'opacity-50' : ''}`}>
+                  <Card className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border p-4 backdrop-blur-md transition-[opacity,background-color,border-color] ${cardBase} ${!alert.is_active ? 'opacity-50' : ''}`}>
                     <div className="flex flex-1 items-center gap-4">
                       <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${alert.is_active ? isDark ? 'bg-[#D4AF37]/10 text-[#D4AF37]' : 'bg-[#D4AF37]/15 text-[#8A6A20]' : isDark ? 'bg-white/5 text-[#4A3913]' : 'bg-black/5 text-[#C0A050]'}`}>
                         {alert.is_active ? <BellRing size={20} /> : <BellOff size={20} />}
@@ -262,16 +279,16 @@ export function AlertsView() {
                           size="icon"
                           aria-label={t.editAlert[language]}
                           onClick={() => openEdit(alert)}
-                          className={`h-9 w-9 rounded-lg ${isDark ? 'text-[#5A4E35] hover:bg-[#D4AF37]/10 hover:text-[#D4AF37]' : 'text-[#C0A050] hover:bg-[#D4AF37]/15 hover:text-[#8A6A20]'}`}
+                          className={`h-11 w-11 rounded-xl ${isDark ? 'text-[#8A7A54] hover:bg-[#D4AF37]/10 hover:text-[#D4AF37]' : 'text-[#8A6A25] hover:bg-[#D4AF37]/15 hover:text-[#6E5317]'}`}
                         >
                           <Pencil size={16} />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label={t.deleteOk[language]}
+                          aria-label={t.deleteAlert[language]}
                           onClick={() => handleDelete(alert.id)}
-                          className={`h-9 w-9 rounded-lg ${isDark ? 'text-[#5A4E35] hover:bg-red-500/10 hover:text-red-400' : 'text-[#C0A050] hover:bg-red-50 hover:text-red-600'}`}
+                          className={`h-11 w-11 rounded-xl ${isDark ? 'text-[#8A7A54] hover:bg-red-500/10 hover:text-red-400' : 'text-[#8A6A25] hover:bg-red-50 hover:text-red-600'}`}
                         >
                           <Trash2 size={16} />
                         </Button>
@@ -289,6 +306,7 @@ export function AlertsView() {
         isOpen={isModalOpen}
         onClose={() => { setIsModalOpen(false); setEditingId(null); }}
         title={editingId !== null ? t.editAlert[language] : t.newAlert[language]}
+        closeLabel={language === 'fa' ? 'بستن پنجره هشدار' : 'Close alert dialog'}
       >
         <div className="space-y-5 pt-2">
           <div className="grid grid-cols-2 gap-4">
@@ -345,11 +363,11 @@ export function AlertsView() {
           <div className={`space-y-3 rounded-xl border p-4 ${isDark ? 'border-white/5 bg-[#0A0A0A]' : 'border-black/5 bg-slate-50'}`}>
             <div className="flex items-center justify-between">
               <span className={`text-sm font-medium ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>{t.notifyApp[language]}</span>
-              <Switch checked={formNotifyApp} onCheckedChange={setFormNotifyApp} />
+              <Switch checked={formNotifyApp} onCheckedChange={setFormNotifyApp} aria-label={t.notifyApp[language]} />
             </div>
             <div className="flex items-center justify-between">
               <span className={`text-sm font-medium ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>{t.notifyEmail[language]}</span>
-              <Switch checked={formNotifyEmail} onCheckedChange={setFormNotifyEmail} />
+              <Switch checked={formNotifyEmail} onCheckedChange={setFormNotifyEmail} aria-label={t.notifyEmail[language]} />
             </div>
           </div>
 

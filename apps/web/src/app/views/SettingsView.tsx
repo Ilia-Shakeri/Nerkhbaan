@@ -49,6 +49,7 @@ export function SettingsView() {
   const [isSaving, setIsSaving] = useState(false);
 
   const t = {
+    title: { fa: 'تنظیمات', en: 'Settings' },
     general: { fa: 'عمومی', en: 'General' },
     notifications: { fa: 'اطلاع‌رسانی', en: 'Notifications' },
     behavior: { fa: 'رفتار برنامه', en: 'Behavior' },
@@ -80,6 +81,7 @@ export function SettingsView() {
     pending: { fa: 'در انتظار تایید', en: 'Pending verification' },
     saved: { fa: 'ذخیره شد', en: 'Saved' },
     unavailable: { fa: 'در دسترس نیست', en: 'Unavailable' },
+    saveFail: { fa: 'ذخیره تنظیمات انجام نشد', en: 'Settings could not be saved' },
   };
 
   useEffect(() => {
@@ -118,21 +120,34 @@ export function SettingsView() {
 
   const headingCls = `mb-4 flex items-center gap-2 text-xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-[#3B2E13]'}`;
   const cardCls = `divide-y ${isDark ? 'divide-white/5 border-white/5 bg-[#0E0E0E]/70' : 'divide-black/5 border-black/5 bg-white/80'} backdrop-blur-md rounded-2xl`;
-  const rowCls = 'flex items-center justify-between gap-4 p-5';
+  const rowCls = 'flex items-center justify-between gap-4 p-5 max-sm:items-start';
   const iconWrap = (tone: string) => `flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`;
 
   const saveBasic = async (key: 'push_app' | 'silent_mode' | 'aggressive_alerts', enabled: boolean) => {
+    const previous = prefs;
     setPrefs((prev) => ({ ...prev, [key]: enabled }));
+    setIsSaving(true);
     try {
       setPrefs(await api.notifications.setBasic(key, enabled));
     } catch (error) {
+      setPrefs(previous);
       toast.error(error instanceof Error ? error.message : 'Failed to save');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const toggleOtpChannel = async (channel: 'sms' | 'email', checked: boolean) => {
     if (!checked) {
-      setPrefs(await api.notifications.disable(channel));
+      setIsSaving(true);
+      try {
+        setPrefs(await api.notifications.disable(channel));
+        setOtpPanel(null);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t.saveFail[language]);
+      } finally {
+        setIsSaving(false);
+      }
       return;
     }
     setOtpPanel(channel);
@@ -170,10 +185,17 @@ export function SettingsView() {
 
   const enableTelegram = async (checked: boolean) => {
     if (!checked) {
-      setPrefs(await api.notifications.disable('telegram'));
-      setTelegramCodeSent(false);
-      setTelegramCode('');
-      setTelegramLink(null);
+      setIsSaving(true);
+      try {
+        setPrefs(await api.notifications.disable('telegram'));
+        setTelegramCodeSent(false);
+        setTelegramCode('');
+        setTelegramLink(null);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : t.saveFail[language]);
+      } finally {
+        setIsSaving(false);
+      }
       return;
     }
     if (prefs.telegram_deeplink_available) {
@@ -226,14 +248,14 @@ export function SettingsView() {
   const otpFields = (channel: 'sms' | 'email') => (
     <AnimatePresence>
       {otpPanel === channel && (
-        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }} className="overflow-hidden">
           <div className="grid gap-3 px-5 pb-5 sm:grid-cols-[1fr_140px]">
-            <Input dir="ltr" value={otpDestination} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setOtpDestination(event.target.value)} placeholder={channel === 'sms' ? t.phonePlaceholder[language] : t.emailPlaceholder[language]} />
-            <Button disabled={isSaving || !otpDestination.trim()} onClick={() => sendOtp(channel)} className="bg-[#D4AF37] text-black">{t.sendCode[language]}</Button>
+            <Input name={`${channel}-destination`} type={channel === 'sms' ? 'tel' : 'email'} inputMode={channel === 'sms' ? 'tel' : 'email'} autoComplete={channel === 'sms' ? 'tel' : 'email'} aria-label={channel === 'sms' ? t.sms[language] : t.email[language]} dir="ltr" value={otpDestination} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setOtpDestination(event.target.value)} placeholder={channel === 'sms' ? t.phonePlaceholder[language] : t.emailPlaceholder[language]} />
+            <Button type="button" disabled={isSaving || !otpDestination.trim()} onClick={() => sendOtp(channel)} className="bg-[#D4AF37] text-black">{t.sendCode[language]}</Button>
             {otpSent && (
               <>
-                <Input dir="ltr" value={otpCode} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setOtpCode(event.target.value)} placeholder={t.otpPlaceholder[language]} className="tracking-[0.3em]" />
-                <Button disabled={isSaving || !otpCode.trim()} onClick={() => confirmOtp(channel)} className="bg-emerald-500 text-white">{t.confirm[language]}</Button>
+                <Input name={`${channel}-code`} inputMode="numeric" autoComplete="one-time-code" aria-label={t.otpPlaceholder[language]} dir="ltr" value={otpCode} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setOtpCode(event.target.value)} placeholder={t.otpPlaceholder[language]} className="tracking-[0.3em]" />
+                <Button type="button" disabled={isSaving || !otpCode.trim()} onClick={() => confirmOtp(channel)} className="bg-emerald-500 text-white">{t.confirm[language]}</Button>
               </>
             )}
           </div>
@@ -244,7 +266,8 @@ export function SettingsView() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-8 pb-10">
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <h1 className={`text-3xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>{t.title[language]}</h1>
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }}>
         <h2 className={headingCls}><Activity className="text-[#D4AF37]" size={22} />{t.general[language]}</h2>
         <Card className={cardCls}>
           <div className={rowCls}>
@@ -252,47 +275,47 @@ export function SettingsView() {
               <div className={iconWrap(isDark ? 'bg-[#D4AF37]/10 text-[#D4AF37]' : 'bg-[#D4AF37]/15 text-[#8A6A20]')}>{isDark ? <Moon size={20} /> : <Sun size={20} />}</div>
               <div><div className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.darkTheme[language]}</div><div className={`text-sm ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.darkThemeSub[language]}</div></div>
             </div>
-            <Switch checked={isDark} onCheckedChange={toggleTheme} />
+            <Switch checked={isDark} onCheckedChange={toggleTheme} aria-label={t.darkTheme[language]} />
           </div>
           <div className={rowCls}>
             <div className="flex items-center gap-4">
               <div className={iconWrap(isDark ? 'bg-[#D4AF37]/10 text-[#D4AF37]' : 'bg-[#D4AF37]/15 text-[#8A6A20]')}><Languages size={20} /></div>
               <span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.languageSet[language]}</span>
             </div>
-            <button onClick={toggleLanguage} className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${isDark ? 'bg-[#D4AF37]/10 text-[#D4AF37]' : 'bg-[#D4AF37]/15 text-[#8A6A20]'}`}>{language === 'fa' ? 'English' : 'فارسی'}</button>
+            <button type="button" onClick={toggleLanguage} className={`min-h-11 rounded-xl px-4 py-2 text-sm font-bold transition-colors active:scale-[0.98] ${isDark ? 'bg-[#D4AF37]/10 text-[#D4AF37]' : 'bg-[#D4AF37]/15 text-[#8A6A20]'}`} aria-label={t.languageSet[language]}>{language === 'fa' ? 'English' : 'فارسی'}</button>
           </div>
         </Card>
       </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }}>
         <h2 className={headingCls}><Bell className="text-[#D4AF37]" size={22} />{t.notifications[language]}</h2>
         <Card className={cardCls}>
           <div className={rowCls}>
             <div className="flex items-center gap-4"><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><Bell size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.pushApp[language]}</span></div>
-            <Switch disabled={!prefs.push_available} checked={prefs.push_available && prefs.push_app} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} />
+            <Switch disabled={!prefs.push_available || isSaving} checked={prefs.push_available && prefs.push_app} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} aria-label={t.pushApp[language]} />
           </div>
           <div>
             <div className={rowCls}>
               <div className="flex items-center gap-4"><div className={iconWrap('bg-emerald-500/10 text-emerald-400')}><Smartphone size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.sms[language]}</span>{prefs.sms_verified && <span className="ms-2 inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle2 size={13} />{t.verified[language]}</span>}{!prefs.sms_available && <span className="ms-2 text-xs text-slate-500">{t.unavailable[language]}</span>}</div></div>
-              <Switch disabled={!prefs.sms_available} checked={prefs.sms_enabled && prefs.sms_verified} onCheckedChange={(value: boolean) => toggleOtpChannel('sms', value)} />
+              <Switch disabled={!prefs.sms_available || isSaving} checked={prefs.sms_enabled && prefs.sms_verified} onCheckedChange={(value: boolean) => toggleOtpChannel('sms', value)} aria-label={t.sms[language]} />
             </div>
             {otpFields('sms')}
           </div>
           <div>
             <div className={rowCls}>
               <div className="flex items-center gap-4"><div className={iconWrap('bg-purple-500/10 text-purple-400')}><Mail size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.email[language]}</span>{prefs.email_verified && <span className="ms-2 inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle2 size={13} />{t.verified[language]}</span>}{!prefs.email_available && <span className="ms-2 text-xs text-slate-500">{t.unavailable[language]}</span>}</div></div>
-              <Switch disabled={!prefs.email_available} checked={prefs.email_enabled && prefs.email_verified} onCheckedChange={(value: boolean) => toggleOtpChannel('email', value)} />
+              <Switch disabled={!prefs.email_available || isSaving} checked={prefs.email_enabled && prefs.email_verified} onCheckedChange={(value: boolean) => toggleOtpChannel('email', value)} aria-label={t.email[language]} />
             </div>
             {otpFields('email')}
           </div>
           <div>
             <div className={rowCls}>
               <div className="flex min-w-0 flex-1 items-center gap-4"><div className={iconWrap('bg-sky-500/10 text-sky-400')}><Send size={20} /></div><div className="min-w-0 flex-1"><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.telegram[language]}</span><p className={`mt-1 text-xs ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{prefs.telegram_verified ? t.verified[language] : telegramLink || telegramCodeSent ? t.pending[language] : prefs.telegram_deeplink_available ? t.telegramLinkHelp[language] : t.telegramHelp[language]}</p></div></div>
-              <Switch disabled={!prefs.telegram_available || isSaving} checked={(prefs.telegram_enabled && prefs.telegram_verified) || Boolean(telegramLink)} onCheckedChange={enableTelegram} />
+              <Switch disabled={!prefs.telegram_available || isSaving} checked={(prefs.telegram_enabled && prefs.telegram_verified) || Boolean(telegramLink)} onCheckedChange={enableTelegram} aria-label={t.telegram[language]} />
             </div>
             <AnimatePresence>
               {telegramLink && !prefs.telegram_verified && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }} className="overflow-hidden">
                   <div className="flex flex-col gap-3 px-5 pb-5 sm:flex-row sm:items-center sm:justify-between" aria-live="polite">
                     <p className={`text-sm ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{t.telegramLinkHelp[language]}</p>
                     <Button onClick={openTelegramLink} className="shrink-0 bg-[#D4AF37] text-black">{t.openTelegram[language]}</Button>
@@ -300,13 +323,13 @@ export function SettingsView() {
                 </motion.div>
               )}
               {!prefs.telegram_deeplink_available && (!prefs.telegram_enabled && (telegramId || telegramCodeSent)) && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }} className="overflow-hidden">
                   <div className="grid gap-3 px-5 pb-5 sm:grid-cols-[1fr_140px]">
-                    <Input disabled={!prefs.telegram_available || telegramCodeSent} dir="ltr" value={telegramId} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setTelegramId(event.target.value)} placeholder={t.telegramPlaceholder[language]} />
+                    <Input name="telegram-id" autoComplete="off" aria-label={t.telegram[language]} disabled={!prefs.telegram_available || telegramCodeSent} dir="ltr" value={telegramId} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setTelegramId(event.target.value)} placeholder={t.telegramPlaceholder[language]} />
                     <Button disabled={isSaving || !prefs.telegram_available || telegramCodeSent || !telegramId.trim()} onClick={() => enableTelegram(true)} className="bg-[#D4AF37] text-black">{t.sendCode[language]}</Button>
                     {telegramCodeSent && (
                       <>
-                        <Input dir="ltr" value={telegramCode} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setTelegramCode(event.target.value)} placeholder={t.otpPlaceholder[language]} className="tracking-[0.3em]" />
+                        <Input name="telegram-code" inputMode="numeric" autoComplete="one-time-code" aria-label={t.otpPlaceholder[language]} dir="ltr" value={telegramCode} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setTelegramCode(event.target.value)} placeholder={t.otpPlaceholder[language]} className="tracking-[0.3em]" />
                         <Button disabled={isSaving || !/^\d{6}$/.test(telegramCode)} onClick={confirmTelegram} className="bg-emerald-500 text-white">{t.confirm[language]}</Button>
                       </>
                     )}
@@ -318,25 +341,25 @@ export function SettingsView() {
         </Card>
       </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.16 }}>
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }}>
         <h2 className={headingCls}><Activity className="text-[#D4AF37]" size={22} />{t.behavior[language]}</h2>
         <Card className={cardCls}>
           <div className={rowCls}>
             <div className="flex items-center gap-4"><div className={iconWrap('bg-slate-500/10 text-slate-400')}><VolumeX size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.silent[language]}</span><div className={`text-sm ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.silentSub[language]}</div></div></div>
-            <Switch checked={prefs.silent_mode} onCheckedChange={(value: boolean) => saveBasic('silent_mode', value)} />
+            <Switch disabled={isSaving} checked={prefs.silent_mode} onCheckedChange={(value: boolean) => saveBasic('silent_mode', value)} aria-label={t.silent[language]} />
           </div>
           <div className={rowCls}>
             <div className="flex items-center gap-4"><div className={iconWrap('bg-orange-500/10 text-orange-400')}><Repeat size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.aggressiveTl[language]}</span><div className={`text-sm ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.aggressiveSub[language]}</div></div></div>
-            <Switch checked={prefs.aggressive_alerts} onCheckedChange={(value: boolean) => saveBasic('aggressive_alerts', value)} />
+            <Switch disabled={isSaving} checked={prefs.aggressive_alerts} onCheckedChange={(value: boolean) => saveBasic('aggressive_alerts', value)} aria-label={t.aggressiveTl[language]} />
           </div>
         </Card>
       </motion.div>
 
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}>
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }}>
         <h2 className={headingCls}><LifeBuoy className="text-[#D4AF37]" size={22} />{t.support[language]}</h2>
         <Card className={cardCls}>
-          <button onClick={() => navigate('/support')} className={`flex w-full items-center gap-4 p-5 text-start transition-colors ${isDark ? 'hover:bg-white/3' : 'hover:bg-[#D4AF37]/5'}`}><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><LifeBuoy size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.contact[language]}</span></button>
-          <button onClick={() => navigate('/privacy')} className={`flex w-full items-center gap-4 p-5 text-start transition-colors ${isDark ? 'hover:bg-white/3' : 'hover:bg-[#D4AF37]/5'}`}><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><ShieldCheck size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.privacy[language]}</span></button>
+          <button type="button" onClick={() => navigate('/support')} className={`flex min-h-14 w-full items-center gap-4 p-5 text-start transition-colors active:scale-[0.995] ${isDark ? 'hover:bg-white/3' : 'hover:bg-[#D4AF37]/5'}`}><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><LifeBuoy size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.contact[language]}</span></button>
+          <button type="button" onClick={() => navigate('/privacy')} className={`flex min-h-14 w-full items-center gap-4 p-5 text-start transition-colors active:scale-[0.995] ${isDark ? 'hover:bg-white/3' : 'hover:bg-[#D4AF37]/5'}`}><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><ShieldCheck size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.privacy[language]}</span></button>
         </Card>
       </motion.div>
     </div>

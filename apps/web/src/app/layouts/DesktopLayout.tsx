@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -55,6 +55,8 @@ export function DesktopLayout() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsUnavailable, setNotificationsUnavailable] = useState(false);
+  const mobileNavigationRef = useRef<HTMLElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const showApiError = (event: Event) => {
@@ -126,6 +128,34 @@ export function DesktopLayout() {
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [isNotificationsOpen, isSidebarOpen, isUserMenuOpen]);
 
+  useEffect(() => {
+    if (!isSidebarOpen) return;
+    const panel = mobileNavigationRef.current;
+    const focusable = () => Array.from(panel?.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    ) ?? []);
+    focusable()[0]?.focus();
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (!items.length) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', trapFocus);
+    return () => {
+      window.removeEventListener('keydown', trapFocus);
+      mobileMenuButtonRef.current?.focus();
+    };
+  }, [isSidebarOpen]);
+
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
@@ -147,14 +177,14 @@ export function DesktopLayout() {
           <img
           src={logo}
           alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
-          className={`object-contain transition-all duration-300 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
+          className={`object-contain transition-[width,height] duration-200 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
         />
         </NavLink>
         {canCollapse && (
           <button
             type="button"
             onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-            className={`absolute bottom-1 end-1 rounded-lg border p-1.5 opacity-0 shadow-lg backdrop-blur transition-all group-hover:opacity-100 group-focus-within:opacity-100 ${
+            className={`absolute bottom-1 end-1 flex h-11 w-11 items-center justify-center rounded-xl border opacity-0 shadow-lg backdrop-blur transition-[opacity,background-color,color] group-hover:opacity-100 group-focus-within:opacity-100 ${
               isDark
                 ? 'border-white/10 bg-[#171717]/95 text-[#D4AF37] hover:bg-[#222222]'
                 : 'border-black/10 bg-[#FFF3D8]/95 text-[#8A6B20] hover:bg-[#F2E4BC]'
@@ -182,7 +212,7 @@ export function DesktopLayout() {
             to={item.path}
             onClick={() => setIsSidebarOpen(false)}
             className={({ isActive }) =>
-              `flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-all ${
+              `min-h-11 flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-[background-color,color,box-shadow] ${
                 isActive
                   ? 'bg-[#D4AF37] text-[#0A0A0A] shadow-[0_4px_20px_rgba(212,175,55,0.25)]'
                   : isDark
@@ -192,18 +222,19 @@ export function DesktopLayout() {
             }
           >
             <item.icon size={18} />
-            <motion.span
-              initial={false}
-              animate={
-                collapsed
-                  ? { opacity: 0, width: 0, x: -6 }
-                  : { opacity: 1, width: 'auto', x: 0 }
-              }
-              transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-              className="overflow-hidden whitespace-nowrap"
-            >
-              {item.label[language]}
-            </motion.span>
+            <AnimatePresence initial={false}>
+              {!collapsed && (
+                <motion.span
+                  initial={{ opacity: 0, x: -4 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -4 }}
+                  transition={{ duration: 0.16, ease: 'easeOut' }}
+                  className="whitespace-nowrap"
+                >
+                  {item.label[language]}
+                </motion.span>
+              )}
+            </AnimatePresence>
           </NavLink>
         ))}
       </nav>
@@ -239,7 +270,7 @@ export function DesktopLayout() {
 
   return (
     <div
-      className={`flex h-screen w-full overflow-hidden transition-colors duration-500 ${
+      className={`flex h-dvh w-full overflow-hidden transition-colors duration-200 ${
         isDark ? 'bg-[#050505] text-[#F2E8CC]' : 'bg-[#FFF8E8] text-[#4A3913]'
       }`}
     >
@@ -272,10 +303,10 @@ export function DesktopLayout() {
       <motion.aside
         initial={false}
         animate={{ width: isSidebarCollapsed ? 80 : 256 }}
-        transition={{ type: 'spring', stiffness: 170, damping: 26, mass: 1.05 }}
-        className={`hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
+        transition={{ type: 'spring', bounce: 0, duration: 0.34 }}
+        className={`hidden overflow-hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
           isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
-        } will-change-[width]`}
+        }`}
       >
         <SidebarContent collapsed={isSidebarCollapsed} canCollapse />
       </motion.aside>
@@ -298,17 +329,21 @@ export function DesktopLayout() {
       <AnimatePresence>
         {isSidebarOpen && (
           <motion.aside
+            ref={mobileNavigationRef}
             initial={{ x: language === 'fa' ? '100%' : '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: language === 'fa' ? '100%' : '-100%' }}
-            transition={{ type: 'spring', bounce: 0.08, duration: 0.56 }}
+            transition={{ type: 'spring', bounce: 0, duration: 0.34 }}
             className={`fixed bottom-0 top-0 z-50 flex w-72 flex-col ${
               isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
             } lg:hidden ${
               language === 'fa' ? 'right-0 border-l border-[#D4AF37]/15' : 'left-0 border-r border-[#D4AF37]/15'
             }`}
             id="mobile-navigation"
+            role="dialog"
+            aria-modal="true"
             aria-label={language === 'fa' ? 'منوی اصلی' : 'Main navigation'}
+            style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
           >
             <button 
               type="button"
@@ -327,14 +362,16 @@ export function DesktopLayout() {
       <div className="relative flex flex-1 flex-col overflow-hidden">
         {/* Topbar */}
         <header
-          className={`relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-[#D4AF37]/12 px-6 backdrop-blur-md transition-colors duration-500 ${
+          className={`relative z-10 flex min-h-16 shrink-0 items-center justify-between border-b border-[#D4AF37]/12 px-4 backdrop-blur-md transition-colors duration-200 sm:px-6 ${
             isDark ? 'bg-[#0B0B0B]/95' : 'bg-[#FFF3D8]/95'
           }`}
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
         >
           <div className="hidden lg:block" aria-hidden="true" />
 
           <div className="flex items-center gap-4 lg:hidden">
              <button 
+                ref={mobileMenuButtonRef}
                 type="button"
                 onClick={() => setIsSidebarOpen(true)}
                 className={`-mx-2 flex h-11 w-11 items-center justify-center rounded-xl ${isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'}`}
@@ -383,7 +420,7 @@ export function DesktopLayout() {
             <div className="relative">
               <button
                 onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                className={`relative flex h-10 w-10 items-center justify-center rounded-xl transition-colors ${
+                className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors active:scale-95 ${
                   isDark ? 'text-[#CFBE91] hover:bg-[#171717]' : 'text-[#8A6B20] hover:bg-[#F2E4BC]'
                 }`}
                 aria-label={language === 'fa' ? 'اعلان‌ها' : 'Notifications'}
@@ -410,7 +447,7 @@ export function DesktopLayout() {
                       initial={{ opacity: 0, y: 10, scale: 0.95 }}
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+                      transition={{ type: 'spring', bounce: 0, duration: 0.28 }}
                       className={`absolute end-0 top-12 z-20 w-80 rounded-2xl border border-[#D4AF37]/20 p-2 shadow-xl ${
                         isDark ? 'bg-[#0E0E0E]' : 'bg-[#FFF9EA]'
                       }`}
@@ -487,7 +524,7 @@ export function DesktopLayout() {
               <button
                 type="button"
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
-                className="flex items-center gap-2 pe-1 cursor-pointer transition-opacity hover:opacity-80"
+                className="flex min-h-11 min-w-11 cursor-pointer items-center gap-2 rounded-xl pe-1 transition-colors hover:bg-black/5 active:scale-[0.98] dark:hover:bg-white/5"
                 aria-label={language === 'fa' ? 'منوی کاربر' : 'User menu'}
                 aria-expanded={isUserMenuOpen}
                 aria-controls="user-menu"
@@ -512,7 +549,7 @@ export function DesktopLayout() {
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.15 }}
+                      transition={{ type: 'spring', bounce: 0, duration: 0.24 }}
                       className={`absolute ${language === 'fa' ? 'left-0' : 'right-0'} top-full mt-2 z-40 w-48 overflow-hidden rounded-xl border shadow-xl ${
                         isDark
                           ? 'border-white/10 bg-[#1A1A1A]'
@@ -529,7 +566,7 @@ export function DesktopLayout() {
                             setIsUserMenuOpen(false);
                             setIsUserInfoOpen(true);
                           }}
-                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                          className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                             isDark
                               ? 'text-[#E2D3AA] hover:bg-[#252525]'
                               : 'text-[#6E5317] hover:bg-[#F6EBD0]'
@@ -546,7 +583,7 @@ export function DesktopLayout() {
                             setIsUserMenuOpen(false);
                             setIsChangePasswordOpen(true);
                           }}
-                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                          className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                             isDark
                               ? 'text-[#E2D3AA] hover:bg-[#252525]'
                               : 'text-[#6E5317] hover:bg-[#F6EBD0]'
@@ -563,7 +600,7 @@ export function DesktopLayout() {
                             setIsUserMenuOpen(false);
                             navigate('/support');
                           }}
-                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                          className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                             isDark
                               ? 'text-[#E2D3AA] hover:bg-[#252525]'
                               : 'text-[#6E5317] hover:bg-[#F6EBD0]'
@@ -582,7 +619,7 @@ export function DesktopLayout() {
                             setIsUserMenuOpen(false);
                             logout();
                           }}
-                          className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+                          className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
                             isDark
                               ? 'text-red-400 hover:bg-red-500/10'
                               : 'text-red-600 hover:bg-red-50'

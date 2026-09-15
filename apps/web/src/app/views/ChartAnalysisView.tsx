@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Sparkles, Loader2, RefreshCw } from 'lucide-react';
+import { Sparkles, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { useAppContext } from '../context/AppContext';
-import { api, getPriceHistory, getPrices, type PriceAsset } from '../services/api';
+import { api, getPrices, type PriceAsset } from '../services/api';
 import { toast } from 'sonner';
 
 export function ChartAnalysisView() {
@@ -13,6 +13,8 @@ export function ChartAnalysisView() {
 
   const [assets, setAssets] = useState<PriceAsset[]>([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
+  const [assetsLoadFailed, setAssetsLoadFailed] = useState(false);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -28,28 +30,24 @@ export function ChartAnalysisView() {
     pickAsset: { fa: 'ابتدا یک دارایی انتخاب کنید', en: 'Select an asset first' },
     thinking: { fa: 'در حال بررسی بازار...', en: 'Reading the market...' },
     loadFail: { fa: 'خطا در بارگذاری دارایی‌ها', en: 'Failed to load assets' },
+    noAssets: { fa: 'دارایی فعالی پیدا نشد', en: 'No active assets were found' },
+    retry: { fa: 'تلاش دوباره', en: 'Try again' },
     analyzeFail: { fa: 'تحلیل در دسترس نیست', en: 'Analysis is unavailable' }
   };
 
   useEffect(() => {
     let cancelled = false;
+    setIsLoadingAssets(true);
+    setAssetsLoadFailed(false);
     getPrices()
-      .then(async (data) => {
-        const liveAssets: PriceAsset[] = data?.assets ?? [];
-        const assetsWithHistory = await Promise.all(
-          liveAssets.map(async (asset) => {
-            try {
-              const history = await getPriceHistory(asset.asset);
-              return { ...asset, history: history.points };
-            } catch {
-              return { ...asset, history: [] };
-            }
-          })
-        );
-        if (!cancelled) setAssets(assetsWithHistory);
+      .then((data) => {
+        if (!cancelled) setAssets(data?.assets ?? []);
       })
       .catch(() => {
-        if (!cancelled) toast.error(t.loadFail[language]);
+        if (!cancelled) {
+          setAssetsLoadFailed(true);
+          toast.error(t.loadFail[language]);
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoadingAssets(false);
@@ -58,7 +56,7 @@ export function ChartAnalysisView() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadAttempt]);
 
   const handleAnalyze = async (asset: string) => {
     setSelectedAsset(asset);
@@ -97,6 +95,16 @@ export function ChartAnalysisView() {
             <div className="flex justify-center py-8">
               <Loader2 size={24} className={`animate-spin ${isDark ? 'text-[#D4AF37]' : 'text-[#9D7A20]'}`} />
             </div>
+          ) : assetsLoadFailed ? (
+            <div className="flex min-h-48 flex-col items-center justify-center gap-3 text-center" role="alert">
+              <AlertCircle size={24} className="text-amber-500" />
+              <p className={`text-sm ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{t.loadFail[language]}</p>
+              <Button type="button" variant="outline" onClick={() => setLoadAttempt((value) => value + 1)}>{t.retry[language]}</Button>
+            </div>
+          ) : assets.length === 0 ? (
+            <div className={`flex min-h-48 items-center justify-center text-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+              {t.noAssets[language]}
+            </div>
           ) : (
             <div className="space-y-3">
               {assets.map((asset) => (
@@ -104,8 +112,9 @@ export function ChartAnalysisView() {
                   key={asset.asset}
                   onClick={() => handleAnalyze(asset.asset)}
                   disabled={isAnalyzing}
-                  whileHover={{ scale: 1.02 }}
-                  className={`w-full text-start p-3 rounded-xl transition-all disabled:opacity-50 ${
+                  whileTap={{ scale: 0.98 }}
+                  aria-pressed={selectedAsset === asset.asset}
+                  className={`w-full rounded-xl p-3 text-start transition-[background-color,border-color,box-shadow] disabled:opacity-50 ${
                     selectedAsset === asset.asset
                       ? 'bg-[#D4AF37]/20 border border-[#D4AF37]'
                       : isDark ? 'bg-[#141414] hover:bg-[#1A1A1A]' : 'bg-white hover:bg-gray-50'

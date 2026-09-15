@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MessageSquare } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { Mail, Phone, MapPin, MessageSquare } from 'lucide-react';
 
 export function ContactView() {
   const navigate = useNavigate();
@@ -10,20 +10,17 @@ export function ContactView() {
 
   const t = {
     title: { fa: 'تماس با ما', en: 'Contact Us' },
-    subtitle: { fa: 'ما همیشه آماده شنیدن نظرات شما هستیم', en: 'We are always ready to hear from you' },
-    email: { fa: 'ایمیل', en: 'Email' },
-    phone: { fa: 'تلفن', en: 'Phone' },
-    address: { fa: 'آدرس', en: 'Address' },
+    subtitle: {
+      fa: 'درخواست خود را امن و مستقیم برای تیم پشتیبانی بفرستید',
+      en: 'Send your request securely to the support team',
+    },
     support: { fa: 'پشتیبانی', en: 'Support' },
-    emailValue: { fa: 'support@nerkhbaan.com', en: 'support@nerkhbaan.com' },
-    phoneValue: { fa: '+98 21 1234 5678', en: '+98 21 1234 5678' },
-    addressValue: { fa: 'تهران، ایران', en: 'Tehran, Iran' },
-    supportValue: { fa: 'ورود به مرکز پشتیبانی', en: 'Open Support Center' }
+    supportValue: { fa: 'ورود به مرکز پشتیبانی', en: 'Open Support Center' },
   };
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
-      <div className="text-center space-y-2">
+      <div className="space-y-2 text-center">
         <h1 className={`text-3xl font-bold ${isDark ? 'text-[#E7D49A]' : 'text-[#5F4A16]'}`}>
           {t.title[language]}
         </h1>
@@ -32,81 +29,23 @@ export function ContactView() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className={`rounded-2xl border p-6 transition-all ${
-          isDark 
-            ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40 hover:bg-[#0E0E0E]/60' 
-            : 'border-[#D4AF37]/30 bg-white/50 hover:bg-white/80'
-        }`}>
-          <div className="flex items-center gap-4 mb-3">
-            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${
-              isDark ? 'bg-[#D4AF37]/10' : 'bg-[#D4AF37]/20'
-            }`}>
-              <Mail size={24} className="text-[#D4AF37]" />
-            </div>
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-[#E7D49A]' : 'text-[#5F4A16]'}`}>
-              {t.email[language]}
-            </h3>
-          </div>
-          <p className={`text-sm ${isDark ? 'text-[#A89668]' : 'text-[#8A6B20]'}`}>
-            {t.emailValue[language]}
-          </p>
-        </div>
-
-        <div className={`rounded-2xl border p-6 transition-all ${
-          isDark 
-            ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40 hover:bg-[#0E0E0E]/60' 
-            : 'border-[#D4AF37]/30 bg-white/50 hover:bg-white/80'
-        }`}>
-          <div className="flex items-center gap-4 mb-3">
-            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${
-              isDark ? 'bg-[#D4AF37]/10' : 'bg-[#D4AF37]/20'
-            }`}>
-              <Phone size={24} className="text-[#D4AF37]" />
-            </div>
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-[#E7D49A]' : 'text-[#5F4A16]'}`}>
-              {t.phone[language]}
-            </h3>
-          </div>
-          <p className={`text-sm ${isDark ? 'text-[#A89668]' : 'text-[#8A6B20]'}`}>
-            {t.phoneValue[language]}
-          </p>
-        </div>
-
-        <div className={`rounded-2xl border p-6 transition-all ${
-          isDark 
-            ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40 hover:bg-[#0E0E0E]/60' 
-            : 'border-[#D4AF37]/30 bg-white/50 hover:bg-white/80'
-        }`}>
-          <div className="flex items-center gap-4 mb-3">
-            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${
-              isDark ? 'bg-[#D4AF37]/10' : 'bg-[#D4AF37]/20'
-            }`}>
-              <MapPin size={24} className="text-[#D4AF37]" />
-            </div>
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-[#E7D49A]' : 'text-[#5F4A16]'}`}>
-              {t.address[language]}
-            </h3>
-          </div>
-          <p className={`text-sm ${isDark ? 'text-[#A89668]' : 'text-[#8A6B20]'}`}>
-            {t.addressValue[language]}
-          </p>
-        </div>
-
-        <button type="button" onClick={() => navigate('/support')} className={`rounded-2xl border p-6 text-start transition-all ${
-          isDark 
-            ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40 hover:bg-[#0E0E0E]/60' 
-            : 'border-[#D4AF37]/30 bg-white/50 hover:bg-white/80'
-        }`}>
-          <div className="flex items-center gap-4 mb-3">
-            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${
-              isDark ? 'bg-[#D4AF37]/10' : 'bg-[#D4AF37]/20'
-            }`}>
+      <div className="mx-auto max-w-xl">
+        <button
+          type="button"
+          onClick={() => navigate('/support')}
+          className={`w-full rounded-2xl border p-6 text-start transition-[background-color,border-color,box-shadow,transform] active:scale-[0.99] ${
+            isDark
+              ? 'border-[#D4AF37]/20 bg-[#0E0E0E]/40 hover:bg-[#0E0E0E]/70'
+              : 'border-[#D4AF37]/30 bg-white/50 hover:bg-white/90'
+          }`}
+        >
+          <div className="mb-3 flex items-center gap-4">
+            <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${isDark ? 'bg-[#D4AF37]/10' : 'bg-[#D4AF37]/20'}`}>
               <MessageSquare size={24} className="text-[#D4AF37]" />
             </div>
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-[#E7D49A]' : 'text-[#5F4A16]'}`}>
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-[#E7D49A]' : 'text-[#5F4A16]'}`}>
               {t.support[language]}
-            </h3>
+            </h2>
           </div>
           <p className={`text-sm ${isDark ? 'text-[#A89668]' : 'text-[#8A6B20]'}`}>
             {t.supportValue[language]}

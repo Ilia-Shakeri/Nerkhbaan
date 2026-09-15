@@ -33,17 +33,19 @@ export class AppErrorBoundary extends Component<Props, State> {
       return this.props.children;
     }
 
+    const isPersian = document.documentElement.lang === 'fa' || localStorage.getItem('language') === 'fa';
+
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#050505] p-6 text-[#F2E8CC]">
+      <main className="flex min-h-dvh items-center justify-center bg-[#050505] p-6 text-[#F2E8CC]" role="alert">
         <section className="w-full max-w-md rounded-3xl border border-[#D4AF37]/25 bg-[#0E0E0E] p-8 text-center shadow-2xl">
-          <h1 className="text-xl font-bold text-[#D4AF37]">Page failed to load</h1>
-          <p className="mt-3 text-sm text-[#CDBB8C]">Try loading the page again. If it still fails, sign in once more.</p>
-          <div className="mt-6 flex justify-center gap-3">
-            <button type="button" onClick={this.reload} className="rounded-xl bg-[#D4AF37] px-4 py-2 text-sm font-bold text-black">
-              Reload
+          <h1 className="text-xl font-bold text-[#D4AF37]">{isPersian ? 'صفحه بارگذاری نشد' : 'Page failed to load'}</h1>
+          <p className="mt-3 text-sm text-[#CDBB8C]">{isPersian ? 'صفحه را دوباره بارگذاری کنید. اگر مشکل ماند، دوباره وارد شوید.' : 'Try loading the page again. If it still fails, sign in once more.'}</p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <button type="button" onClick={this.reload} className="min-h-11 rounded-xl bg-[#D4AF37] px-4 py-2 text-sm font-bold text-black active:scale-[0.98]">
+              {isPersian ? 'بارگذاری دوباره' : 'Reload'}
             </button>
-            <button type="button" onClick={this.signOut} className="rounded-xl border border-[#D4AF37]/40 px-4 py-2 text-sm font-bold text-[#E8D9AE]">
-              Sign in again
+            <button type="button" onClick={this.signOut} className="min-h-11 rounded-xl border border-[#D4AF37]/40 px-4 py-2 text-sm font-bold text-[#E8D9AE] active:scale-[0.98]">
+              {isPersian ? 'ورود دوباره' : 'Sign in again'}
             </button>
           </div>
         </section>

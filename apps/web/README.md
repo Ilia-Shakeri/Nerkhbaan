@@ -65,6 +65,15 @@ The poll is the liveness check that distinguishes them.
   a screen-reader table. Chart cards also have keyboard move controls.
 - Icon-only actions need localized accessible names. Popovers and toggles must
   expose their expanded or pressed state.
+- Protected screens are route-level chunks. Keep public authentication eager so
+  the first session does not download the full dashboard before sign-in.
+- Shared dialogs contain focus, close with Escape or an outside click, restore
+  the prior focus and body scroll state, and remain scrollable on short screens.
+- Use one motion package, short non-bouncy springs, targeted properties, and
+  reduced-motion fallbacks. Do not add blur or persistent `will-change` to
+  repeated cards.
+- Every visible control needs a working result. Failed requests must not look
+  like empty data, and unavailable integrations need an honest state or retry.
 
 ## Service worker
 
