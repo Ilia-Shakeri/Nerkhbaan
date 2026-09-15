@@ -1,14 +1,26 @@
 # Project Status and Audit Baseline
 
 **Updated:** 2026-09-15 · **Release:** `2.4.10` · **Verdict:** frontend
-speed, usability, and accessibility release is locally verified; production
-deployment proof is pending
+speed, usability, accessibility, clean images, and production deployment are
+verified; formal operator evidence remains pending
 
 ## Current release update
 
 - Release candidate `2.4.10` aligns the database-backup health cadence with the
   deployment deadline. A healthy backup process no longer makes deployment
   report a false timeout before its first image-provided health probe.
+- Production now runs commit `5e9a74aca8a4` and release `2.4.10`. The clean web
+  image built on the production host, all seven core services became healthy,
+  the public web returned HTTP 200, and `/api/health` returned `ready=true` with
+  connected PostgreSQL and Redis, current migrations, operational WebSocket
+  fanout, and zero persistence, backfill, and dead-letter backlogs.
+- A live browser accepted the waiting service-worker update and verified the
+  localized sign-in and sign-up forms. The requested authentication card
+  rotation remains operational.
+- The operator evidence file was absent. The deployment therefore followed an
+  explicitly requested direct Compose path after clean-tree, exact-commit,
+  configuration, build, service-health, public-web, and API-readiness checks.
+  The formal operator-evidence task remains open and must not be marked passed.
 
 - Release candidate `2.4.9` declares the motion runtime at the shared package
   boundary. This fixes the clean production image build that exposed a hidden
@@ -27,8 +39,7 @@ deployment proof is pending
 - Interface springs are shorter and non-bouncy, repeated cards avoid expensive
   blur and floating effects, and reduced-motion behavior remains supported.
   The existing sign-in/sign-up card rotation is intentionally unchanged.
-- Local release checks cover these new interface contracts. Production remains
-  on the last verified `2.4.6` deployment until this release is deployed.
+- Local and production checks now cover these interface contracts.
 
 - Release candidate `2.4.7` removes fixed values presented as live during
   startup, fixes short-screen authentication overflow, and keeps the existing
