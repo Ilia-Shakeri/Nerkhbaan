@@ -2,6 +2,17 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.4.9] - 2026-09-15
+
+### Fixed
+
+- Declared the motion runtime in the shared interface package. Clean web image
+  builds no longer depend on a package installed only by another workspace.
+
+### Tests
+
+- Added clean production-image build verification after the local release gate.
+
 ## [2.4.8] - 2026-09-15
 
 ### Fixed

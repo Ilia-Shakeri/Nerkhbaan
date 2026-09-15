@@ -1,10 +1,14 @@
 # Project Status and Audit Baseline
 
-**Updated:** 2026-09-15 · **Release:** `2.4.8` · **Verdict:** frontend
+**Updated:** 2026-09-15 · **Release:** `2.4.9` · **Verdict:** frontend
 speed, usability, and accessibility release is locally verified; production
 deployment proof is pending
 
 ## Current release update
+
+- Release candidate `2.4.9` declares the motion runtime at the shared package
+  boundary. This fixes the clean production image build that exposed a hidden
+  dependency on another workspace's installed modules.
 
 - Release candidate `2.4.8` splits protected screens into independent route
   chunks. The main web entry bundle fell from 692.63 kB to 180.57 kB before

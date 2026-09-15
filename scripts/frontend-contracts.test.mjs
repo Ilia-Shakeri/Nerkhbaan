@@ -237,7 +237,9 @@ test("admin navigation survives history and dangerous dialogs contain focus", ()
 
 test("shared dialogs contain focus and restore page state", () => {
   const modal = read("packages/ui/src/app/components/ui/Modal.tsx");
+  const uiPackage = JSON.parse(read("packages/ui/package.json"));
   assert.match(modal, /from 'motion\/react'/);
+  assert.match(uiPackage.dependencies?.motion ?? "", /^\^11\./);
   assert.match(modal, /role="dialog"/);
   assert.match(modal, /event\.key === 'Escape'/);
   assert.match(modal, /event\.key !== 'Tab'/);

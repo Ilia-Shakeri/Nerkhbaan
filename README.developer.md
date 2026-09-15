@@ -275,3 +275,6 @@ report when adding a large dependency. Shared dialogs must contain keyboard
 focus, restore focus and body scrolling on close, support Escape and outside
 click, and fit inside the dynamic viewport. Visible controls must have a real
 working outcome; do not ship placeholder contact or attachment actions.
+Shared source packages must declare every runtime import in their own manifest.
+A dependency available through a sibling workspace is not valid clean-image
+proof.

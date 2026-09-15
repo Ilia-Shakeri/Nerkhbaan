@@ -74,6 +74,8 @@ The poll is the liveness check that distinguishes them.
   repeated cards.
 - Every visible control needs a working result. Failed requests must not look
   like empty data, and unavailable integrations need an honest state or retry.
+- Shared packages declare their own runtime imports. A successful hoisted local
+  build does not replace a clean production-image build.
 
 ## Service worker
 
