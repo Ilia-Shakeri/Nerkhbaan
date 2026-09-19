@@ -2,6 +2,12 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.7.2] - 2026-09-19
+
+### Fixed
+- Updated the Iran-side feed validator to accept exactly one validated silver
+  route from either Gold API Free or XAUS. Duplicate silver routes remain blocked.
+
 ## [2.7.1] - 2026-09-19
 
 ### Fixed

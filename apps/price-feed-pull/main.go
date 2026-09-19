@@ -162,23 +162,26 @@ func validateFeed(value feed, now time.Time) error {
 	if err != nil || updated.After(now.Add(5*time.Minute)) || now.Sub(updated) > maximumFeedAge {
 		return errors.New("price feed timestamp is outside the safe window")
 	}
-	expected := map[string]string{
+	allowed := map[string]string{
 		"gold_api_free_xag": "XAG_USD_OZ",
+		"xaus_xag":          "XAG_USD_OZ",
 		"coingecko_btc":     "BTC_USD",
 		"coingecko_usdt":    "USDT_USD",
 	}
-	if len(value.Quotes) != len(expected) {
+	if len(value.Quotes) != 3 {
 		return errors.New("price feed must contain exactly three quotes")
 	}
-	seen := map[string]bool{}
+	seenProviders := map[string]bool{}
+	seenInstruments := map[string]bool{}
 	for _, item := range value.Quotes {
-		if expected[item.ProviderID] != item.InstrumentID || item.Historical {
+		if allowed[item.ProviderID] != item.InstrumentID || item.Historical {
 			return errors.New("price feed contains an unauthorized route")
 		}
-		if seen[item.ProviderID] {
-			return errors.New("price feed contains a duplicate provider")
+		if seenProviders[item.ProviderID] || seenInstruments[item.InstrumentID] {
+			return errors.New("price feed contains a duplicate route")
 		}
-		seen[item.ProviderID] = true
+		seenProviders[item.ProviderID] = true
+		seenInstruments[item.InstrumentID] = true
 		observed, err := time.Parse(time.RFC3339Nano, item.ObservedAt)
 		if err != nil || observed.After(now.Add(5*time.Minute)) || now.Sub(observed) > maximumFeedAge {
 			return errors.New("quote timestamp is outside the safe window")
@@ -186,6 +189,11 @@ func validateFeed(value feed, now time.Time) error {
 		price, err := strconv.ParseFloat(item.Price, 64)
 		if err != nil || !safePrice(item.InstrumentID, price) {
 			return errors.New("quote price is outside the safe range")
+		}
+	}
+	for _, instrument := range []string{"XAG_USD_OZ", "BTC_USD", "USDT_USD"} {
+		if !seenInstruments[instrument] {
+			return errors.New("price feed omitted a required instrument")
 		}
 	}
 	return nil

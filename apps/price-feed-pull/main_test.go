@@ -29,6 +29,27 @@ func TestValidateFeedAcceptsOnlyExactFreshRoutes(t *testing.T) {
 	}
 }
 
+func TestValidateFeedAcceptsXausSilverFallback(t *testing.T) {
+	now := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+	value := feed{
+		Version:   1,
+		Source:    "public-market-relay",
+		UpdatedAt: now.Format(time.RFC3339),
+		Quotes: []quote{
+			{InstrumentID: "XAG_USD_OZ", ProviderID: "xaus_xag", Price: "66.37", ObservedAt: now.Format(time.RFC3339)},
+			{InstrumentID: "BTC_USD", ProviderID: "coingecko_btc", Price: "77000", ObservedAt: now.Format(time.RFC3339)},
+			{InstrumentID: "USDT_USD", ProviderID: "coingecko_usdt", Price: "0.999", ObservedAt: now.Format(time.RFC3339)},
+		},
+	}
+	if err := validateFeed(value, now); err != nil {
+		t.Fatalf("fresh XAUS fallback rejected: %v", err)
+	}
+	value.Quotes[1] = quote{InstrumentID: "XAG_USD_OZ", ProviderID: "gold_api_free_xag", Price: "66.4", ObservedAt: now.Format(time.RFC3339)}
+	if err := validateFeed(value, now); err == nil {
+		t.Fatal("duplicate silver route accepted")
+	}
+}
+
 func TestValidateFeedRejectsStaleFeed(t *testing.T) {
 	now := time.Date(2026, 9, 13, 8, 0, 0, 0, time.UTC)
 	value := feed{
