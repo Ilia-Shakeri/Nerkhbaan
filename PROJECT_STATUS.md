@@ -1,6 +1,6 @@
 # Project Status and Audit Baseline
 
-## 2026-09-19 — 2.7.0 chart and interface release candidate
+## 2026-09-19 — 2.7.1 chart and interface release candidate
 
 The dashboard uses clean first-party chart surfaces with footer attribution.
 The Advanced Report route can load TradingView only after a clear visitor action.

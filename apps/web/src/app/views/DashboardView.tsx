@@ -3,8 +3,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BellPlus, ArrowUpRight, ArrowDownRight, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
-import bitcoinIcon from 'cryptocurrency-icons/svg/color/btc.svg';
-import tetherIcon from 'cryptocurrency-icons/svg/color/usdt.svg';
+import bitcoinIcon from '../../assets/crypto/btc.svg';
+import tetherIcon from '../../assets/crypto/usdt.svg';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';

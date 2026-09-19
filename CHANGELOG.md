@@ -2,6 +2,12 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.7.1] - 2026-09-19
+
+### Fixed
+- Vendored the two small CC0 cryptocurrency marks so production image builds do
+  not depend on downloading a newly added package from the Iran host.
+
 ## [2.7.0] - 2026-09-19
 
 ### Added

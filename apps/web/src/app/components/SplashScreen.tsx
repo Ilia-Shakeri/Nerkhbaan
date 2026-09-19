@@ -16,7 +16,7 @@ const PARTICLES = Array.from({ length: 12 }, (_, index) => ({
   delay: (index * 0.17) % 1.2,
 }));
 
-const APP_VERSION = 'v2.7.0';
+const APP_VERSION = 'v2.7.1';
 
 export function SplashScreen({ onComplete, language, theme }: SplashScreenProps) {
   const isDark = theme === 'dark';
