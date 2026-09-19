@@ -30,13 +30,17 @@ jobs:
       - name: Build validated feed
         run: python3 scripts/build-price-feed.py /tmp/prices.json
 
-      - name: Publish single-commit feed branch
+      - name: Publish validated feed branch
         run: |
           git config user.name "Nerkhbaan Price Feed"
           git config user.email "price-feed@users.noreply.github.com"
-          git switch --orphan price-feed-next
-          git rm -rf .
+          git fetch origin price-feed
+          git switch --detach origin/price-feed
           cp /tmp/prices.json prices.json
           git add prices.json
+          if git diff --cached --quiet; then
+            echo "Feed has no changes"
+            exit 0
+          fi
           git commit -m "data: refresh public price feed"
-          git push --force origin HEAD:price-feed
+          git push origin HEAD:price-feed

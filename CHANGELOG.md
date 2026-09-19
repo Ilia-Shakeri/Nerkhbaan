@@ -2,6 +2,14 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.7.3] - 2026-09-19
+
+### Fixed
+- Replaced the protected-branch-incompatible forced price-feed publication with
+  a normal fast-forward update from the existing validated feed branch.
+- Silver charts now open on the 30-day range so sparse but valid persisted
+  observations render as a useful trend instead of an empty single-point line.
+
 ## [2.7.2] - 2026-09-19
 
 ### Fixed

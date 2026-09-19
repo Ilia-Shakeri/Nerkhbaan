@@ -1,6 +1,6 @@
 # Nerkhbaan
 
-2.7.2 adds a consent-gated TradingView chart, a second validated silver source,
+2.7.3 adds a consent-gated TradingView chart, a second validated silver source,
 cleaner dashboard controls, a themed footer and refreshed legal pages.
 Limited deployment completed with owner approval; this is not legal compliance clearance.
 See [legal readiness and release blockers](docs/legal-readiness-2026-09-19.md).

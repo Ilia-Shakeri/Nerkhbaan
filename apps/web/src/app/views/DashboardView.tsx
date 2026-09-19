@@ -70,7 +70,7 @@ const DEFAULT_ASSET_ORDER: AssetId[] = ['gold', 'silver', 'usdt', 'btc'];
 const TIMEFRAMES: PriceTimeframe[] = ['1h', '24h', '7d', '30d', '1y'];
 const DEFAULT_TIMEFRAMES: Record<AssetId, PriceTimeframe> = {
   gold: '24h',
-  silver: '24h',
+  silver: '30d',
   usdt: '24h',
   btc: '24h',
 };

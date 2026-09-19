@@ -41,6 +41,7 @@ test("external chart waits for explicit action and attribution remains", () => {
   assert.match(report, /embed-widget-advanced-chart\.js/);
   assert.match(report, /rel="noopener noreferrer"/);
   assert.match(dashboard, /attributionLogo: false/);
+  assert.match(dashboard, /silver: '30d'/);
   assert.match(read("apps/web/src/app/components/LegalLinks.tsx"), /TradingView Lightweight Charts/);
   assert.match(read("apps/web/security-headers.conf"), /https:\/\/s3\.tradingview\.com/);
   assert.match(read("NOTICE"), /Copyright/);
