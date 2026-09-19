@@ -2,10 +2,11 @@
 
 Base path: `/api`. All responses are JSON. All timestamps are RFC 3339 in UTC.
 
-## 2.6.0 candidate — explicit permissions
+## 2.6.1 — explicit permissions
 
-Not yet deployed. Signup requires JSON booleans `accepted_terms: true` and
-`account_data_consent: true`, plus `policy_version: "2026-09-19"`.
+Signup requires JSON booleans `accepted_terms: true` and
+`account_data_consent: true`, plus `policy_version: "2026-09-19.1"`.
+Web and API must deploy together; previous policy receipts are not rewritten.
 `full_name` is optional; omitted/blank falls back to the username.
 Support ticket/message POST requests require `support_data_consent: true` and
 the same version. Chat POST requires `processing_consent: true` and that version.

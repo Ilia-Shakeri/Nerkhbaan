@@ -1,6 +1,29 @@
 # Legal, privacy and accessibility readiness — 2026-09-19
 
-Release candidate: 2.6.0. **Not deployed. Not legal clearance.**
+Current release: 2.6.1. **Limited deployment authorized. Not legal clearance.**
+
+## Owner confirmation and publication decision — 2.6.1
+
+The owner supplied and authorized publication of Ilia Shakeri / ایلیا شاکری,
+Tehran, Iran, and iliashkr@gmail.com. There is no public postal address. The
+current service is free and targets Iran; subscriptions and worldwide expansion
+are future plans. No corporate registration, licence or address was invented.
+All five pages expose an account-free email link. Policy receipts now use
+`2026-09-19.1`; prior text remains in version control and prior receipts remain intact.
+Persian refresh-cookie duration corrected to 30 days, matching English/server defaults.
+
+The owner expressly authorized this limited release with backup and health checks,
+acknowledging missing address, data-rights, retention and restore evidence. This
+does not satisfy normal operator gates or authorize payment/global expansion.
+The original 2.6.0 review below is historical; owner questions 1–2 are answered
+except postal address and applicable registration/licensing evidence. Processor
+register, retention/rights operations, asset/data rights, credential rotation,
+restore drill and full accessibility proof remain open. No claims of full compliance.
+
+Correction loop: initial scoped quality 8/10. Found stale missing-owner copy,
+missing public email link and Persian cookie-duration mismatch; fixed these and
+added regression checks. Final scoped implementation score depends on tests and
+deployment evidence; overall legal readiness remains below 9 pending external proof.
 
 ## Scope and decision
 

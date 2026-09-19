@@ -1,5 +1,14 @@
 # Project Status and Audit Baseline
 
+## 2026-09-19 — 2.6.1 owner details and limited release
+
+Owner confirmed Ilia Shakeri / ایلیا شاکری, Tehran, Iran, public email
+iliashkr@gmail.com, current Iran target and free use. No public postal address.
+Subscriptions/worldwide use are future plans. Policy version `2026-09-19.1`.
+Limited deployment authorized with backup and health checks; remaining processor,
+retention, rights, restore and accessibility evidence is not marked passed.
+See the latest release record in [operations](docs/release-operations.md).
+
 ## 2026-09-19 — 2.6.0 local legal/privacy candidate
 
 Public bilingual legal drafts, data minimisation, explicit form permissions,

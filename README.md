@@ -1,6 +1,7 @@
 # Nerkhbaan
 
-2.6.0 is a local privacy/legal candidate, not a production compliance claim.
+2.6.1 adds confirmed owner/contact details and current free-service notices.
+Limited deployment is owner-authorized; this is not legal compliance clearance.
 See [legal readiness and release blockers](docs/legal-readiness-2026-09-19.md).
 
 Live gold, silver, currency and crypto prices for the Iranian and international

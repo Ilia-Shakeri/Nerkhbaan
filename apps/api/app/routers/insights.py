@@ -59,7 +59,7 @@ class ChatMessage(BaseModel):
 
 class ChatRequest(BaseModel):
     processing_consent: bool
-    policy_version: Literal["2026-09-19"]
+    policy_version: Literal["2026-09-19.1"]
     messages: list[ChatMessage] = Field(min_length=1, max_length=20)
     language: Literal["fa", "en"] = "fa"
     session_id: int | None = None

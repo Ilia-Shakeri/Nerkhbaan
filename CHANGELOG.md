@@ -2,6 +2,20 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.6.1] - 2026-09-19
+
+### Changed
+- Published owner-supplied identity: Ilia Shakeri / ایلیا شاکری, Tehran, Iran,
+  and public privacy/support email iliashkr@gmail.com in both languages.
+- Clarified current Iran-only target market and free service; subscriptions and
+  worldwide expansion are future plans, not active services.
+- Added an account-free email link on every legal page. No invented postal address,
+  registration, licensing, retention guarantee or legal compliance certification.
+- Revised policy receipt version to `2026-09-19.1` on client and server together.
+- Fixed Persian refresh-cookie lifetime from 31 to 30 days; chat retention unchanged.
+- Owner approved a limited deployment with backup and health checks despite
+  outstanding rights, retention and restore evidence. Normal gates remain intact.
+
 ## [2.6.0] - 2026-09-19
 
 ### Added

@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/support")
 
 class SupportConsent(BaseModel):
     support_data_consent: bool
-    policy_version: Literal["2026-09-19"]
+    policy_version: Literal["2026-09-19.1"]
 
     @field_validator("support_data_consent", mode="before")
     @classmethod

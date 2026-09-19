@@ -1,9 +1,11 @@
 # Future Tasks
 
-## Legal/privacy launch blockers (2.6.0 candidate)
+## Legal/privacy remaining work (2.6.1 limited release)
 
-Supply legal owner/contact/jurisdiction, payment facts, processor register,
-asset/data licences and approved retention/deletion procedure before deployment.
+Owner/contact/location and current free Iran service are confirmed. Still supply
+public postal address where required, processor register, asset/data licences and
+approved retention/deletion procedure. Future subscriptions and worldwide targeting
+need a separate legal review before launch. Limited deployment is not clearance.
 Complete assistive-technology and authenticated form checks. Full details:
 [legal readiness](docs/legal-readiness-2026-09-19.md).
 

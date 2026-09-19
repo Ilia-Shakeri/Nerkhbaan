@@ -18,7 +18,7 @@ class UserCreate(UserBase):
     full_name: str = Field(default="", max_length=120)
     accepted_terms: bool
     account_data_consent: bool
-    policy_version: Literal["2026-09-19"]
+    policy_version: Literal["2026-09-19.1"]
     password: str = Field(min_length=10, max_length=128)
 
     @field_validator("full_name")

@@ -1,4 +1,5 @@
-export const POLICY_VERSION = '2026-09-19';
+export const POLICY_VERSION = '2026-09-19.1';
+export const OPERATOR_EMAIL = 'iliashkr@gmail.com';
 export type PolicyKind = 'privacy' | 'terms' | 'cookies' | 'refunds' | 'business';
 type Text = { fa: string; en: string };
 export const policyTitles: Record<PolicyKind, Text> = {
@@ -10,6 +11,9 @@ export const policyTitles: Record<PolicyKind, Text> = {
 };
 export const policies: Record<PolicyKind, { title: Text; body: Text }[]> = {
   privacy: [
+    { title: { fa: 'مسئول و راه تماس', en: 'Operator and contact' }, body: {
+      fa: 'مسئول نرخ‌بان ایلیا شاکری (Ilia Shakeri)، مستقر در تهران، ایران است. برای حریم خصوصی، درخواست‌های داده و پشتیبانی به iliashkr@gmail.com ایمیل بزنید؛ داشتن حساب لازم نیست. نشانی عمومی پستی فعلاً ارائه نشده است. خدمت فعلاً رایگان و بازار هدف فعلی ایران است.',
+      en: 'Nerkhbaan is operated by Ilia Shakeri (ایلیا شاکری), based in Tehran, Iran. Email iliashkr@gmail.com for privacy, data requests and support; no account is required. No public postal address is currently provided. The service is currently free and its present target market is Iran.' } },
     { title: { fa: 'خدمات اختیاری', en: 'Optional services' }, body: {
       fa: 'برای اعلان پیامک یا تلگرام، فقط در صورت انتخاب آن خدمت شماره یا شناسه مقصد دریافت می‌شود. متن و تاریخچه گفتگو در دستیار هوشمند ذخیره و برای پاسخ به ارائه‌دهنده پردازش و مسیرهای جایگزین پیکربندی‌شده ارسال می‌شود؛ ممکن است پردازش خارج کشور باشد. اطلاعات شخصی یا محرمانه در گفتگو نفرستید. گفتگو را می‌توانید حذف کنید؛ پاک‌سازی خودکار برای گفتگوهای بدون فعالیت بیش از ۳۱ روز طراحی شده است، نه ۳۱ روز پس از هر پیام. نسخه‌های پشتیبان و سیاست ارائه‌دهنده جدا هستند.',
       en: 'SMS or Telegram destinations are collected only if you choose those services. Smart Assistant messages and conversation history are stored and sent to the configured processing provider and fallback routes for a reply; processing may be abroad. Do not submit personal or confidential information. You can delete a conversation; automatic cleanup targets conversations inactive for over 31 days, not each message after 31 days. Backups and provider retention are separate.' } },
@@ -30,6 +34,9 @@ export const policies: Record<PolicyKind, { title: Text; body: Text }[]> = {
       en: 'Push is optional; disable it in site settings and browser permissions. Email and webhook alerts can be disabled. No advertising or visitor-analytics tool is installed in the reviewed code. Absolute security is not guaranteed. Material changes to processing purposes require notice and fresh consent where required.' } },
   ],
   terms: [
+    { title: { fa: 'مالک و دامنه خدمت', en: 'Operator and service scope' }, body: {
+      fa: 'مالک خدمت ایلیا شاکری (Ilia Shakeri)، تهران، ایران است؛ راه تماس iliashkr@gmail.com است. خدمت فعلاً رایگان و برای بازار ایران ارائه می‌شود. اشتراک پولی و گسترش جهانی صرفاً برنامه آینده‌اند؛ پیش از اجرا، شرایط و سیاست‌های مرتبط بازبینی و اعلام می‌شوند. هیچ هزینه یا تمدید خودکاری اکنون فعال نیست.',
+      en: 'The operator is Ilia Shakeri (ایلیا شاکری), Tehran, Iran; contact iliashkr@gmail.com. The service is currently free and targets Iran. Paid subscriptions and worldwide expansion are future plans only; relevant terms and policies will be reviewed and announced before launch. No charges or automatic renewal are currently active.' } },
     { title: { fa: 'ماهیت خدمت', en: 'The service' }, body: {
       fa: 'نرخ‌بان ابزار مشاهده نرخ و ثبت هشدار است؛ کیف پول، صرافی یا محل معامله نیست. قیمت، نمودار و تحلیل ممکن است دیر، ناقص یا نادرست باشد. زمان و منبع نرخ را بررسی کنید. محتوا توصیه شخصی سرمایه‌گذاری یا تضمین سود نیست.',
       en: 'Nerkhbaan displays market data and price alerts; it is not a wallet, exchange or trading venue. Prices, charts and analysis can be delayed, incomplete or wrong. Check timestamps and sources. Content is not personal investment advice or a promise of returns.' } },
@@ -45,7 +52,7 @@ export const policies: Record<PolicyKind, { title: Text; body: Text }[]> = {
   ],
   cookies: [
     { title: { fa: 'نشست ضروری', en: 'Necessary sessions' }, body: {
-      fa: 'کوکی‌های first-party با نام پیش‌فرض nerkhbaan_session و nerkhbaan_refresh برای ورود و تمدید نشست هستند. مدت پیش‌فرض ۱۵ دقیقه و ۳۱ روز است؛ تنظیم سرور ممکن است متفاوت باشد. مدیریت کوکی نشست جدا دارد. مسدودکردن این کوکی‌ها ورود را مختل می‌کند. خروج، کوکی‌های ورود را پاک می‌کند.',
+      fa: 'کوکی‌های first-party با نام پیش‌فرض nerkhbaan_session و nerkhbaan_refresh برای ورود و تمدید نشست هستند. مدت پیش‌فرض ۱۵ دقیقه و ۳۰ روز است؛ تنظیم سرور ممکن است متفاوت باشد. مدیریت کوکی نشست جدا دارد. مسدودکردن این کوکی‌ها ورود را مختل می‌کند. خروج، کوکی‌های ورود را پاک می‌کند.',
       en: 'First-party cookies named nerkhbaan_session and nerkhbaan_refresh by default support sign-in and renewal. Default lifetimes are 15 minutes and 30 days; server configuration can differ. Administration has a separate session cookie. Blocking these cookies prevents sign-in. Signing out clears sign-in cookies.' } },
     { title: { fa: 'تنظیمات و کش', en: 'Preferences and cache' }, body: {
       fa: 'ذخیره محلی زبان، پوسته، واحد قیمت و ترتیب نمودار انتخابی شما را تا پاک‌شدن داده سایت نگه می‌دارد. نشان splash-shown تا پایان نشست برگه می‌ماند. سرویس‌ورکر فایل‌های عمومی را برای اجرا و به‌روزرسانی کش می‌کند؛ نه پاسخ حساب و پشتیبانی. داده سایت و مجوز اعلان را از تنظیمات مرورگر می‌توانید پاک کنید.',
@@ -56,8 +63,8 @@ export const policies: Record<PolicyKind, { title: Text; body: Text }[]> = {
   ],
   refunds: [
     { title: { fa: 'وضعیت پرداخت', en: 'Payment status' }, body: {
-      fa: 'کد این نسخه مسیر خرید، درگاه یا تمدید اشتراک ندارد. ساخت حساب مجوز برداشت وجه نیست. اگر بیرون سایت پرداخت کرده‌اید، رسید و شرایط همان معامله باید بررسی شود؛ این متن آن حقوق را از بین نمی‌برد.',
-      en: 'This release has no checkout, payment gateway or subscription-renewal flow. Creating an account does not authorize a charge. If you paid outside the site, the receipt and transaction terms need separate review; this policy does not remove those rights.' } },
+      fa: 'نرخ‌بان فعلاً رایگان است و اشتراک پولی، خرید یا تمدید خودکار ندارد؛ بنابراین برای استفاده فعلی مبلغ اشتراکی برای بازپرداخت دریافت نمی‌شود. ساخت حساب مجوز برداشت وجه نیست. اشتراک پولی فقط برنامه آینده است. اگر وجهی با نام نرخ‌بان از شما گرفته شده، برای بررسی به iliashkr@gmail.com اطلاع دهید؛ این متن حقوق قانونی شما را حذف نمی‌کند.',
+      en: 'Nerkhbaan is currently free, with no paid subscription, checkout or automatic renewal; no subscription fee is collected for current use to refund. Creating an account does not authorize a charge. Paid subscriptions are only a future plan. If someone charged you in Nerkhbaan’s name, contact iliashkr@gmail.com for review; this does not remove your legal rights.' } },
     { title: { fa: 'درخواست رسیدگی', en: 'Request a review' }, body: {
       fa: 'برای پرداخت اشتباه یا لغو، تاریخ، مبلغ و شناسه غیرحساس رسید را از راه تماس کسب‌وکار یا تیکت بفرستید. شماره کامل کارت، رمز یا کد امنیتی نفرستید. فروش پولی تا تعیین هویت فروشنده، مهلت پاسخ، روش لغو و شرایط بازپرداخت نباید آغاز شود.',
       en: 'For a mistaken charge or cancellation, send the date, amount and a non-sensitive receipt reference through the business contact channel or a support ticket. Do not send full card numbers, passwords or security codes. Paid sales must not launch until seller identity, response times, cancellation and refund rules are settled.' } },
@@ -68,7 +75,10 @@ export const policies: Record<PolicyKind, { title: Text; body: Text }[]> = {
   business: [
     { title: { fa: 'نام خدمت و دامنه', en: 'Service and domain' }, body: { fa: 'نرخ‌بان — nerkhbaan.ir. اطلاع‌رسانی نرخ و هشدار قیمت.', en: 'Nerkhbaan — nerkhbaan.ir. Market information and price alerts.' } },
     { title: { fa: 'هویت و تماس', en: 'Operator and contact' }, body: {
-      fa: 'نام قانونی مالک، کشور فعالیت، نشانی عمومی، ایمیل حریم خصوصی و شناسه ثبت هنوز تأیید و تکمیل نشده‌اند. این صفحه پیش‌نویس است؛ نشانه ثبت شرکت یا مجوز نیست. کاربران دارای حساب فعلاً می‌توانند از مرکز پشتیبانی درخواست بفرستند.',
-      en: 'The operator’s legal name, country, public address, privacy email and applicable registration details are not yet confirmed. This is a draft, not proof of incorporation or licensing. Account holders can currently send requests through the support centre.' } },
+      fa: 'مالک قانونی: ایلیا شاکری (Ilia Shakeri). محل فعالیت: تهران، ایران. ایمیل عمومی پشتیبانی و حریم خصوصی: iliashkr@gmail.com؛ تماس بدون حساب ممکن است. نشانی عمومی پستی نداریم. شناسه ثبت یا مجوز تأییدشده‌ای در این صفحه ارائه نشده؛ درج نام مالک ادعای ثبت شرکت یا داشتن مجوز نیست.',
+      en: 'Legal owner: Ilia Shakeri (ایلیا شاکری). Operating location: Tehran, Iran. Public support and privacy email: iliashkr@gmail.com; contact does not require an account. We have no public postal address. No verified registration or licence identifier is provided here; naming the owner is not a claim of incorporation or licensing.' } },
+    { title: { fa: 'بازار و هزینه فعلی', en: 'Current market and price' }, body: {
+      fa: 'بازار هدف فعلی ایران است. خدمت اکنون رایگان است. ارائه جهانی و اشتراک پولی برنامه آینده هستند و هنوز اجرا نشده‌اند. قبل از دریافت وجه، قیمت، مدت، لغو، بازپرداخت و اطلاعات لازم فروشنده باید اعلام شوند.',
+      en: 'The current target market is Iran. The service is free now. Worldwide service and paid subscriptions are future plans, not launched offerings. Pricing, duration, cancellation, refunds and required seller details must be disclosed before taking payment.' } },
   ],
 };

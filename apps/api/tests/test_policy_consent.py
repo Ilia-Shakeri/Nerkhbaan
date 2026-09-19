@@ -11,7 +11,7 @@ from app.routers.insights import ChatRequest
 class PolicyConsentTests(unittest.TestCase):
     def account(self, **changes):
         values = dict(username="sample", email="sample@example.com", password="GoodPassword12",
-                      accepted_terms=True, account_data_consent=True, policy_version="2026-09-19")
+                      accepted_terms=True, account_data_consent=True, policy_version="2026-09-19.1")
         values.update(changes)
         return UserCreate(**values)
 
@@ -33,8 +33,9 @@ class PolicyConsentTests(unittest.TestCase):
                     self.account(**{field: value})
 
     def test_old_policy_cannot_be_silently_accepted(self):
-        with self.assertRaises(ValidationError):
-            self.account(policy_version="2020-01-01")
+        for version in ("2020-01-01", "2026-09-19"):
+            with self.subTest(version=version), self.assertRaises(ValidationError):
+                self.account(policy_version=version)
 
     def test_short_or_digit_free_password_fails(self):
         for password in ("Abcd12!x", "LongPassword!"):
@@ -48,16 +49,16 @@ class PolicyConsentTests(unittest.TestCase):
                 model(**payload)
             for value in (False, "true", 1):
                 with self.assertRaises(ValidationError):
-                    model(**payload, support_data_consent=value, policy_version="2026-09-19")
+                    model(**payload, support_data_consent=value, policy_version="2026-09-19.1")
             self.assertTrue(model(**payload, support_data_consent=True,
-                                  policy_version="2026-09-19").support_data_consent)
+                                  policy_version="2026-09-19.1").support_data_consent)
 
     def test_support_receipt_has_no_message_or_identifiers(self):
         db = MagicMock()
-        _record_consent(db, 7, 12, "2026-09-19")
+        _record_consent(db, 7, 12, "2026-09-19.1")
         event = db.add.call_args.args[0]
         self.assertEqual(event.user_id, 7)
-        self.assertEqual(event.detail, {"policy_version": "2026-09-19", "ticket_id": 12,
+        self.assertEqual(event.detail, {"policy_version": "2026-09-19.1", "ticket_id": 12,
                                        "support_data_consent": True})
         self.assertIsNone(event.ip_hash)
         self.assertIsNone(event.user_agent_hash)
@@ -66,7 +67,7 @@ class PolicyConsentTests(unittest.TestCase):
         for value in (False, None, 1, "true"):
             with self.assertRaises(ValidationError):
                 ChatRequest(messages=[{"role": "user", "content": "Market question"}],
-                            processing_consent=value, policy_version="2026-09-19")
+                            processing_consent=value, policy_version="2026-09-19.1")
 
 
 if __name__ == "__main__":

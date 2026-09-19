@@ -1,5 +1,22 @@
 import assert from "node:assert/strict";
 
+test("owner facts and policy versions stay aligned without invented address", () => {
+  const policies = read("apps/web/src/app/legal/policies.ts");
+  const view = read("apps/web/src/app/views/LegalView.tsx");
+  assert.match(policies, /Ilia Shakeri/);
+  assert.match(policies, /ایلیا شاکری/);
+  assert.match(policies, /Tehran, Iran/);
+  assert.match(policies, /iliashkr@gmail\.com/);
+  assert.match(policies, /We have no public postal address/);
+  assert.match(policies, /The service is free now/);
+  assert.match(view, /mailto:\$\{OPERATOR_EMAIL\}/);
+  assert.doesNotMatch(view, /operator identity, public contact and retention periods need confirmation/);
+  const version = policies.match(/POLICY_VERSION = '([^']+)'/)[1];
+  for (const path of ['schemas.py', 'routers/support.py', 'routers/insights.py']) {
+    assert.ok(read(`apps/api/app/${path}`).includes(`Literal["${version}"]`));
+  }
+});
+
 test("legal pages are public and consent is never preselected", () => {
   const router = read("apps/web/src/app/router/AppRouter.tsx");
   const auth = read("apps/web/src/app/views/AuthView.tsx");
@@ -28,6 +45,7 @@ test("external charts never load tracking code and attribution remains", () => {
 test("cookie and chat lifetimes stay distinct in policy copy", () => {
   const policies = read("apps/web/src/app/legal/policies.ts");
   assert.match(policies, /15 minutes and 30 days/);
+  assert.match(policies, /۱۵ دقیقه و ۳۰ روز/);
   assert.match(policies, /inactive for over 31 days/);
   assert.match(read("apps/api/app/config.py"), /auth_refresh_days: int = 30/);
   assert.match(read("apps/api/app/services/background.py"), /CHAT_RETENTION_DAYS = 31/);

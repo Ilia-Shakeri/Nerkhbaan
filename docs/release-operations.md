@@ -58,6 +58,7 @@ registry is unavailable, it retries with the BuildKit npm cache and the locked
 dependency set. A cache miss remains a hard failure; never replace the lockfile
 or install unpinned packages during a production deploy.
 # Limited 2.5.1 release
+Historical release; see the current 2.6.1 record below.
 
 The user explicitly approved a limited provider-fix deployment on 2026-09-19,
 with database backup and live readiness checks despite missing formal gate
@@ -73,3 +74,15 @@ at `/home/deploy/nerkhbaan-release-backups/pre-2.5.0.env` (mode 600). Do not
 commit or print that file. An operator-approved rollback should restore the
 prior configuration and image selection, then check readiness; never remove
 data volumes. No schema migration was added by this release.
+
+## Limited 2.6.1 release
+
+On 2026-09-19 the owner explicitly approved deploying the privacy/accessibility
+changes plus supplied identity and free-service facts with a database backup and
+live health checks, despite the listed missing address, data-rights, retention and
+restore evidence. Normal gate scripts remain unchanged; no evidence is fabricated.
+Scope includes 2.6.0 and 2.6.1 together. Existing auth flip stays unchanged.
+Old clients lacking the new consent fields need an update; never infer acceptance.
+Use versioned images, preserve prior 2.5.1 images and all PostgreSQL/Redis volumes.
+Do not touch untracked server .gitea, gitea_data or gitea_runner_data directories.
+Deployment outcome and backup reference are recorded after live verification.
