@@ -115,3 +115,35 @@ Deployment verified on 2026-09-19 at approximately 11:56 UTC:
 Rollback, if approved: restore the protected configuration or select retained
 `2.5.1` images for these same services, then repeat health checks. Preserve all
 data and consent receipts. Do not roll back schema or remove volumes.
+
+## Limited 2.7.3 release
+
+On 2026-09-19 the owner-approved interface, chart and silver-feed scope was
+deployed as code `4c08b582`, tag and images `2.7.3`. The release includes the
+2.7.0 through 2.7.3 changes. No schema migration was added.
+
+- Pre-release dump `/backups/last/nerkhbaan-20260919-122825.sql.gz` is 45.4 MiB
+  and passed `gzip -t` inside the backup container. This is not restore proof.
+- Protected configuration backup is
+  `/home/deploy/nerkhbaan-release-backups/pre-2.7.3.env`. Never print or commit it.
+- Only API, web and price-feed-pull were recreated. PostgreSQL, Redis and the
+  backup service kept running. Two healthy API replicas were restored explicitly.
+- Public readiness returned 200 with `release_version=2.7.3`, connected database
+  and Redis, current migration, empty persistence backlog and operational fanout.
+- Silver returned a live USD quote, derived Toman quote, `chart_error=false`,
+  and two persisted points from the public 30-day history route.
+- Hosted feed run `35443623670` passed. Price-feed-pull accepted its fresh feed.
+- Local checks: 209 API tests passed and one PostgreSQL concurrency test skipped
+  because `TEST_DATABASE_URL` was absent; 34 frontend tests and all three builds
+  passed. The Go service test passed in the Linux container on production.
+- Existing untracked `.gitea`, `gitea_data` and `gitea_runner_data` were not
+  touched. Previous images and all data volumes remain available.
+
+The shared edge header was reloaded with the required external-chart script and
+frame origins. The live header is correct. Its Nginx host file has a backup, but
+the unrelated shared-edge Compose project still needs a separate persistence
+review before any future edge-container recreation.
+
+Rollback, if approved: restore the protected pre-2.7.3 configuration or select
+retained 2.7.1 images for API, web and price-feed-pull, keep two API replicas,
+then repeat public readiness and silver-history checks. Preserve all volumes.

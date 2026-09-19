@@ -42,12 +42,11 @@ The scheduled workflow must exist on the repository default branch. Run it once
 manually after first merge, then verify the `price-feed` branch contains only
 `prices.json`.
 
-Production proof on 2026-09-13: release 2.4.6 accepted a fresh three-route feed,
-reported healthy pricing refresh, published live silver USD/Toman values, and
-returned persisted silver chart data. The first hosted scheduled run failed
-before job startup during an upstream partial outage, so recurrence proof remains
-an operator gate. Manual publication proves transport and application behavior;
-it does not prove the hosted schedule.
+Production proof on 2026-09-19: release 2.7.3 accepted a fresh three-route feed,
+reported live silver USD/Toman values, and returned two persisted 30-day silver
+chart points. Hosted run `35443623670` completed successfully after publication
+changed from a rejected force update to a normal fast-forward update. Continue
+to monitor later scheduled runs; one success is not long-term availability proof.
 
 Build and start through the production stack:
 
@@ -63,13 +62,13 @@ Expected log: `price feed accepted at ...`. Then verify:
 curl -fsS https://nerkhbaan.ir/api/instruments/XAG_USD_OZ
 curl -fsS https://nerkhbaan.ir/api/instruments/SILVER_999_TOMAN_GRAM
 curl -fsS 'https://nerkhbaan.ir/api/prices/silver/history?timeframe=30d'
+```
 
 From 2.7.0 the public relay first requests Gold API Free XAG and falls back to
 `https://xaus.com/api/v1/spot?compact=1`. XAUS is accepted only when its
 `data_state.status` is `fresh`, the observation is no older than 15 minutes,
 and `silver_usd_oz` passes the bounded XAG range. The emitted provider identity
 is `xaus_xag`; it is never mislabeled as the original source.
-```
 
 Disable only the relay if it fails. Stored prices remain and age normally:
 

@@ -1,6 +1,6 @@
 # Project Status and Audit Baseline
 
-## 2026-09-19 — 2.7.3 chart and interface release candidate
+## 2026-09-19 — 2.7.3 chart and interface release
 
 The dashboard uses clean first-party chart surfaces with footer attribution.
 The Advanced Report route can load TradingView only after a clear visitor action.
@@ -8,7 +8,9 @@ The public price relay has a validated XAUS fallback for fresh XAG/USD. Footer,
 legal pages, sidebar recovery, coin marks and chart-card drag controls were updated.
 Local build and contract tests passed. The public feed now publishes with a
 normal fast-forward update, and silver defaults to its useful 30-day history.
-Production status is recorded after deploy.
+Production runs `2.7.3` with two healthy API replicas, healthy web, PostgreSQL,
+Redis and backup services. The live silver quote is available and its 30-day
+history returns two persisted points. The hosted price-feed run passed.
 
 ## 2026-09-19 — 2.6.1 owner details and limited release
 
