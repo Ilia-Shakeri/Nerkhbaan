@@ -2,6 +2,38 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.5.0] - 2026-09-19
+
+### Added
+
+- Public Bitpin BTC/Toman and USDT/Toman fallbacks with exact symbol, exchange
+  timestamp, bounded response size and rate budgets.
+- Public Wallgold 18K gold and 925 silver quotes, each using its own market
+  field. No key required. Receipt time is explicitly labelled because the
+  market response does not provide quote timestamps.
+- Read-only public-provider canary script and provider research report.
+
+### Fixed
+
+- Removed all Iranian gold karat and ounce-derived formulas. Separate 18K/24K
+  instruments cannot be re-enabled for derivation by old database settings.
+- Excluded old calculated and ambiguous-purity gold from current snapshots,
+  health, chart buckets and change baselines without deleting historical data.
+- Disabled the ambiguous PersianToolbox gold route even if an old environment
+  flag enables it; the payload has no karat contract. BTC remains available.
+- Enabled verified Wallex fallbacks; changed Nobitex's default to its working
+  alternate host, including history requests.
+- Corrected Nobitex IRT order-book levels from Rial to Toman, including bid/ask.
+
+### Limits
+
+- No healthy keyless direct Iranian 24K endpoint was verified. Missing prices
+  stay unavailable; neither 18K nor international gold fills that gap.
+- Existing typed Telegram source pipeline remains intact for later onboarding.
+- Public endpoint access is not a redistribution-rights signoff. Formal launch
+  evidence remains pending; the user authorized a limited deployment with
+  backup and health checks, not fabricated gate approvals.
+
 ## [2.4.10] - 2026-09-15
 
 ### Fixed

@@ -6,6 +6,19 @@ verified; formal operator evidence remains pending
 
 ## Current release update
 
+- Candidate `2.5.0`: direct Wallgold 18K/925, Bitpin crypto fallback, working
+  Nobitex alternate host and corrected Rial book units. All local gold formulas
+  removed. Direct keyless 24K remains an explicit coverage gap.
+- Local API suite: 199 tests, 198 passed, one PostgreSQL concurrency test skipped.
+  Full `npm run verify` also passed: release consistency, Python static checks,
+  29 frontend contracts, web/admin/desktop production builds. Browser test
+  discovery passed; that command did not execute a browser scenario.
+  Public API probes passed from the production host; full deployment proof is
+  recorded separately after rollout, not inferred from these probes.
+- Operator authorized limited deployment with backup/health verification;
+  formal launch evidence remains pending. See
+  [provider validation](docs/free-provider-validation-2026-09-19.md).
+
 - Release candidate `2.4.10` aligns the database-backup health cadence with the
   deployment deadline. A healthy backup process no longer makes deployment
   report a false timeout before its first image-provided health probe.

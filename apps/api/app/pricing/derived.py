@@ -60,12 +60,6 @@ class DerivedPriceEngine:
             str,
             tuple[tuple[str, ...], str, Callable[[Mapping[str, CanonicalQuote]], Decimal]],
         ] = {
-            "GOLD_18K_TOMAN_GRAM": (
-                ("GOLD_24K_TOMAN_GRAM",),
-                "GOLD_24K_TOMAN_GRAM * purity(18K)/purity(24K)",
-                lambda values: values["GOLD_24K_TOMAN_GRAM"].price
-                * _purity_ratio("GOLD_18K_TOMAN_GRAM", "GOLD_24K_TOMAN_GRAM"),
-            ),
             "SILVER_925_TOMAN_GRAM": (
                 ("SILVER_999_TOMAN_GRAM",),
                 "SILVER_999_TOMAN_GRAM * purity(925)/purity(999)",
@@ -83,10 +77,6 @@ class DerivedPriceEngine:
         }
         #: Instruments derived from a USD reference through an FX bridge.
         self._fx_formulas: dict[str, tuple[str, Decimal]] = {
-            "GOLD_24K_TOMAN_GRAM": (
-                "XAU_USD_OZ",
-                _purity_ratio("GOLD_24K_TOMAN_GRAM", "XAU_USD_OZ") / TROY_OUNCE_GRAMS,
-            ),
             "SILVER_999_TOMAN_GRAM": (
                 "XAG_USD_OZ",
                 _purity_ratio("SILVER_999_TOMAN_GRAM", "XAG_USD_OZ") / TROY_OUNCE_GRAMS,
@@ -234,9 +224,8 @@ class DerivedPriceEngine:
     ):
         """Choose the cheapest formula whose inputs are all currently usable.
 
-        Same-metal chains are preferred (18K from 24K keeps the local market's
-        own premium); only when that chain is cold do we reconstruct the price
-        from the international reference through an FX bridge.
+        Gold karats require their own direct quotes. Only the explicitly
+        registered non-gold instruments may use a formula fallback.
         """
         direct = self._formulas.get(normalized)
         if direct is not None:
@@ -249,12 +238,6 @@ class DerivedPriceEngine:
                 return input_ids, formula, calculate, None
 
         fx = self._fx_formulas.get(normalized)
-        if fx is None and normalized == "GOLD_18K_TOMAN_GRAM":
-            # The 24K chain is cold, so go straight from the ounce reference.
-            fx = (
-                "XAU_USD_OZ",
-                _purity_ratio("GOLD_18K_TOMAN_GRAM", "XAU_USD_OZ") / TROY_OUNCE_GRAMS,
-            )
         if fx is None:
             return None
         reference_id, factor = fx

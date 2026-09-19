@@ -179,3 +179,16 @@ web push. A build without it succeeds but ships push disabled.
 | PostgreSQL connections | `max_connections` | Peak per API process is `(pool + overflow) x 2`; migrate, backup and worker add more |
 | `dead_letter_backlog` | any sustained growth | Alerts are being generated and not delivered |
 | `anomaly_count` | any sustained growth | Anomalies are opening faster than they are reviewed |
+# Release 2.5.0 source policy
+
+18K/24K gold cannot use formulas. Do not re-enable PersianToolbox gold: its
+karat is unspecified. Wallgold supplies direct 18K and 925 silver; Bitpin
+supplies BTC/Toman and USDT/Toman. Nobitex uses `https://apiv2.nobitex.ir`.
+Set `PRICING_PROVIDER_MAX_RESPONSE_BYTES=1048576` for Bitpin's aggregate body;
+other providers keep their own smaller per-provider bounds. Both new base
+URLs are folded into the allowlist through normal settings validation.
+
+Run the read-only canary in `apps/api/scripts/probe_public_pricing.py` after
+host/DNS changes. See [the validation report](free-provider-validation-2026-09-19.md).
+24K coverage and formal launch evidence remain open. Never delete stored
+prices or Redis data to hide that gap.

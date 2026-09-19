@@ -605,3 +605,11 @@ Every `429` carries `Retry-After`.
 
 The edge proxy adds its own limits: 1 r/s to `/api/auth/`, 20 r/s to `/api/`,
 5 r/s to the admin API.
+# Pricing contract change — 2.5.0
+
+`GOLD_18K_TOMAN_GRAM` and `GOLD_24K_TOMAN_GRAM` no longer return formula
+fallbacks. When no independently sourced quote exists, treat the value as
+unavailable. Do not fill the missing value in client code. Old calculated
+gold is excluded from canonical charts and percentage baselines, not deleted.
+Wallgold exposes a direct 18K quote; direct 24K keyless coverage is unresolved.
+Existing Telegram ingestion remains separately attributed for future use.

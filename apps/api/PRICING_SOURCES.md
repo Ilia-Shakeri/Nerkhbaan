@@ -17,8 +17,8 @@ unit, one purity, one market. "Gold" is not an instrument. These are:
 | --- | --- | --- | --- | --- | --- | --- |
 | `XAU_USD_OZ` | XAU | USD | troy ounce | 0.9999 | global spot | no |
 | `XAG_USD_OZ` | XAG | USD | troy ounce | 0.9999 | global spot | no |
-| `GOLD_18K_TOMAN_GRAM` | XAU 18K | TOMAN | gram | 0.750 | Iran physical | yes |
-| `GOLD_24K_TOMAN_GRAM` | XAU 24K | TOMAN | gram | 0.9999 | Iran physical | yes |
+| `GOLD_18K_TOMAN_GRAM` | XAU 18K | TOMAN | gram | 0.750 | Iran physical | no |
+| `GOLD_24K_TOMAN_GRAM` | XAU 24K | TOMAN | gram | 0.9999 | Iran physical | no |
 | `SILVER_999_TOMAN_GRAM` | XAG | TOMAN | gram | 0.999 | Iran physical | yes |
 | `SILVER_925_TOMAN_GRAM` | XAG | TOMAN | gram | 0.925 | Iran physical | yes |
 | `USD_TOMAN` | USD | TOMAN | unit | — | Iran exchange | yes |
@@ -62,7 +62,7 @@ are capped — two for high-importance instruments, one otherwise.
 ### Current coverage
 
 ```
-GOLD_18K_TOMAN_GRAM    alanchand_gold18 (primary), tala_gold18_toman (verifier)
+GOLD_18K_TOMAN_GRAM    wallgold_gold18 (primary), alanchand_gold18 (key), tala_gold18_toman (key)
 GOLD_24K_TOMAN_GRAM    tala_gold24_toman (primary), nerkh_io_gold24 (fallback)
 XAU_USD_OZ             goldapi_xau (primary), gold_api_free_xau, metals_dev_gold
 SILVER_999_TOMAN_GRAM  tala_silver999_toman (primary, needs key + symbol)
@@ -143,14 +143,17 @@ computed. Derived values are marked `derived_fallback` and carry
 | Instrument | Formula |
 | --- | --- |
 | `USD_TOMAN` | `USDT_TOMAN / USDT_USD` |
-| `GOLD_24K_TOMAN_GRAM` | `XAU_USD_OZ × fx × purity(24K)/purity(XAU) / 31.1034768` |
-| `GOLD_18K_TOMAN_GRAM` | `GOLD_24K_TOMAN_GRAM × purity(18K)/purity(24K)`, or straight from `XAU_USD_OZ` |
 | `SILVER_999_TOMAN_GRAM` | `XAG_USD_OZ × fx × purity(999)/purity(XAG) / 31.1034768` |
 | `SILVER_925_TOMAN_GRAM` | `SILVER_999_TOMAN_GRAM × purity(925)/purity(999)` |
 | `BTC_TOMAN` | `BTC_USD × fx` |
 
-Purity ratios are read from the instrument definitions, not hardcoded — 18K from
-24K is `0.750 / 0.9999`, not a flat `0.75`.
+Silver purity ratios come from instrument definitions. Gold derivation is
+forbidden. Prior derived and ambiguous-purity gold records remain stored for
+audit, but are excluded from current quotes, chart aggregation and baselines.
+
+As of 2.5.0, Wallgold directly covers 18K gold and 925 silver; Bitpin and Wallex
+add no-key crypto fallbacks. See the [validated provider report](../../docs/free-provider-validation-2026-09-19.md)
+for source-time limitations and the unresolved direct 24K coverage gap.
 
 ### The FX bridge matters
 

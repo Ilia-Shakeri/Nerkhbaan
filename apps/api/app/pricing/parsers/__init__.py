@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 
 from .base import ExplicitParser, ParserContext, ParserError, ParsedProviderValue
+from .bitpin import BitpinPricesParser
+from .wallgold import WallgoldMarketParser
 from .local_reference import (
     ArzbinMarketParser,
     CoinbaseTickerParser,
@@ -22,6 +24,10 @@ from .tickers import AlanchandGold18Parser, CoinCapParser, TetherlandParser
 
 def build_parser(parser_id: str) -> ExplicitParser:
     factories = {
+        "wallgold_gold18_v1": lambda: WallgoldMarketParser(symbol="GLD_18C_750TMN"),
+        "wallgold_silver925_v1": lambda: WallgoldMarketParser(symbol="SLV_925TMN"),
+        "bitpin_btc_toman_v1": lambda: BitpinPricesParser(symbol="BTC_IRT"),
+        "bitpin_usdt_toman_v1": lambda: BitpinPricesParser(symbol="USDT_IRT"),
         "nobitex_stats_usdt_rls_v1": lambda: NobitexStatsParser(
             pair="usdt-rls", convert_rial_to_toman=True
         ),

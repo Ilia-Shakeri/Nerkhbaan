@@ -57,3 +57,12 @@ The frontend image installer tries configured npm registries first. If every
 registry is unavailable, it retries with the BuildKit npm cache and the locked
 dependency set. A cache miss remains a hard failure; never replace the lockfile
 or install unpinned packages during a production deploy.
+# Limited 2.5.0 release
+
+The user explicitly approved a limited provider-fix deployment on 2026-09-19,
+with database backup and live readiness checks despite missing formal gate
+evidence. This exception does not satisfy or remove any normal release gate.
+Retain previous images and commit for rollback; preserve all volumes. Use
+the new version as the image tag so rollback does not depend on mutable tags.
+See [provider validation](free-provider-validation-2026-09-19.md) for the known
+24K gap and source timestamp/redistribution limitations.

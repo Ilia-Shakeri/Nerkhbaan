@@ -1,5 +1,16 @@
 # Pricing API Providers — Reference
 
+## Current correction — 2026-09-19 / 2.5.0
+
+The [live validation report](free-provider-validation-2026-09-19.md) supersedes
+older availability claims below. Wallgold supplies direct 18K/925 quotes;
+Bitpin supplies BTC/Toman and USDT/Toman; Wallex fallbacks are enabled.
+Nobitex's working base is `https://apiv2.nobitex.ir`; book levels are Rial.
+PersianToolbox gold is disabled: no explicit karat. Neither gold instrument
+may use a formula. Direct 24K remains unavailable without a verified source.
+Servix offers keyed free access, not anonymous access. No key was obtained.
+Earlier legal assessments below are historical notes, not renewed signoff.
+
 Companion to `.env` / `.env.example`. Where those two files say *which variable
 holds a key*, this document says *what the provider is, whether it costs
 money, what it covers, and what else exists*. Read `apps/api/PRICING_SOURCES.md`

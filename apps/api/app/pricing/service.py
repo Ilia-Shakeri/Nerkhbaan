@@ -51,6 +51,7 @@ from .operational import OperationalPricingSettings, operational_pricing_setting
 from .providers import ProviderQuoteCollector, QuoteFetchOutcome, provider_collector
 from .registry import PROVIDERS_BY_INSTRUMENT, ProviderDefinition
 from .source_policy import SourceEligibilityPolicy, source_eligibility_policy
+from .quote_visibility import allowed_current_quote
 from .telegram import StoredTelegramQuoteRepository, stored_telegram_quotes
 
 
@@ -259,12 +260,13 @@ class InstrumentPricingService:
         normalized = get_instrument(instrument_id).instrument_id
         try:
             cached = await self.store.get_canonical(normalized)
-            if cached is not None:
+            if cached is not None and self._allowed_current_quote(cached):
                 return cached
         except Exception:
             pass
         try:
-            return await self.history.latest_canonical(normalized)
+            quote = await self.history.latest_canonical(normalized)
+            return quote if quote is not None and self._allowed_current_quote(quote) else None
         except Exception:
             return None
 
@@ -287,7 +289,16 @@ class InstrumentPricingService:
                 extra={"error_type": type(exc).__name__},
             )
             database = {}
-        return {**database, **cached}
+        return {
+            key: quote for key, quote in {
+                **database,
+                **{key: value for key, value in cached.items() if self._allowed_current_quote(value)},
+            }.items() if self._allowed_current_quote(quote)
+        }
+
+    @staticmethod
+    def _allowed_current_quote(quote: CanonicalQuote) -> bool:
+        return allowed_current_quote(quote)
 
     async def list_instruments(self, *, authenticated: bool = False) -> list[dict[str, Any]]:
         snapshots = await self.get_all_canonical()

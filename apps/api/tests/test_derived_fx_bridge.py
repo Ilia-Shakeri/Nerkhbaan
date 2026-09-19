@@ -63,11 +63,11 @@ class DerivedFxBridgeTests(unittest.TestCase):
 
     def test_free_market_usd_is_preferred_over_the_usdt_proxy(self) -> None:
         quote = derived_price_engine.derive(
-            "GOLD_24K_TOMAN_GRAM", self.snapshot, now=NOW
+            "SILVER_999_TOMAN_GRAM", self.snapshot, now=NOW
         )
         self.assertEqual(quote.metadata["fx_bridge"], "usd_toman")
         self.assertFalse(quote.metadata["fx_bridge_is_proxy"])
-        expected = Decimal("2400") * Decimal("58000") / TROY_OUNCE_GRAMS
+        expected = Decimal("30") * Decimal("58000") * Decimal("0.999") / Decimal("0.9999") / TROY_OUNCE_GRAMS
         self.assertAlmostEqual(float(quote.price), float(expected), delta=1.0)
 
     def test_usdt_bridge_is_used_only_as_a_fallback_and_is_flagged(self) -> None:
@@ -76,17 +76,17 @@ class DerivedFxBridgeTests(unittest.TestCase):
             for key, value in self.snapshot.items()
             if key != "USD_TOMAN"
         }
-        quote = derived_price_engine.derive("GOLD_24K_TOMAN_GRAM", snapshot, now=NOW)
+        quote = derived_price_engine.derive("SILVER_999_TOMAN_GRAM", snapshot, now=NOW)
         self.assertEqual(quote.metadata["fx_bridge"], "usdt_proxy")
         self.assertTrue(quote.metadata["fx_bridge_is_proxy"])
 
     def test_the_two_bridges_disagree_enough_to_matter(self) -> None:
         """Guards the reason the preference order exists at all."""
         with_usd = derived_price_engine.derive(
-            "GOLD_24K_TOMAN_GRAM", self.snapshot, now=NOW
+            "SILVER_999_TOMAN_GRAM", self.snapshot, now=NOW
         )
         without_usd = derived_price_engine.derive(
-            "GOLD_24K_TOMAN_GRAM",
+            "SILVER_999_TOMAN_GRAM",
             {k: v for k, v in self.snapshot.items() if k != "USD_TOMAN"},
             now=NOW,
         )
@@ -108,17 +108,12 @@ class DerivedFxBridgeTests(unittest.TestCase):
         )
         self.assertTrue(quote.metadata["fx_bridge_is_proxy"])
 
-    def test_gold_18k_uses_the_purity_ratio_not_a_flat_factor(self) -> None:
+    def test_gold_karats_never_use_formulas(self) -> None:
         snapshot = dict(self.snapshot)
         snapshot["GOLD_24K_TOMAN_GRAM"] = _quote("GOLD_24K_TOMAN_GRAM", "4476000")
-        quote = derived_price_engine.derive(
-            "GOLD_18K_TOMAN_GRAM", snapshot, now=NOW
-        )
-        ratio = quote.price / Decimal("4476000")
-        # 0.750 fine against a 0.9999 reference, not a flat 0.75.
-        self.assertAlmostEqual(
-            float(ratio), float(Decimal("0.750") / Decimal("0.9999")), places=9
-        )
+        for instrument in ("GOLD_18K_TOMAN_GRAM", "GOLD_24K_TOMAN_GRAM"):
+            with self.subTest(instrument=instrument), self.assertRaises(DerivedPriceUnavailable):
+                derived_price_engine.derive(instrument, snapshot, now=NOW)
 
     def test_silver_925_normalises_against_999(self) -> None:
         snapshot = {
@@ -136,7 +131,7 @@ class DerivedFxBridgeTests(unittest.TestCase):
     def test_no_bridge_means_no_derived_price(self) -> None:
         snapshot = {"XAU_USD_OZ": self.snapshot["XAU_USD_OZ"]}
         with self.assertRaises(DerivedPriceUnavailable):
-            derived_price_engine.derive("GOLD_24K_TOMAN_GRAM", snapshot, now=NOW)
+            derived_price_engine.derive("SILVER_999_TOMAN_GRAM", snapshot, now=NOW)
 
     def test_usdt_outside_the_safe_band_blocks_the_proxy_bridge(self) -> None:
         snapshot = {
@@ -146,7 +141,7 @@ class DerivedFxBridgeTests(unittest.TestCase):
         }
         snapshot["USDT_USD"] = _quote("USDT_USD", "1.40")
         with self.assertRaises(DerivedPriceUnavailable):
-            derived_price_engine.derive("GOLD_24K_TOMAN_GRAM", snapshot, now=NOW)
+            derived_price_engine.derive("SILVER_999_TOMAN_GRAM", snapshot, now=NOW)
 
 
 if __name__ == "__main__":

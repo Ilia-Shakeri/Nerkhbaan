@@ -70,6 +70,8 @@ class ProviderDefinition:
     required_settings: tuple[str, ...] = ()
 
     def configured(self, settings: object) -> bool:
+        if self.provider_id == "persian_toolbox_gold24":
+            return False  # The feed has no karat or direct-market contract.
         # A key alone is not enough when the provider also needs a symbol or a
         # proxy base; without this the provider looks healthy and then fails
         # every call with an opaque parser error.
@@ -195,6 +197,7 @@ def _provider(
     selected_price_semantic: PriceSemantic = PriceSemantic.REFERENCE,
     route_id: str | None = None,
     enabled_default: bool = True,
+    maximum_payload_bytes: int = 262_144,
     requires_https: bool = False,
     credential_placement: str = "none",
     unit_source: str | None = None,
@@ -217,6 +220,7 @@ def _provider(
         operational_ttl_seconds=ttl,
         budget=_budget(provider_id, rpm=rpm, rph=rph, rpd=rpd, interval=interval),
         enabled=enabled,
+        maximum_payload_bytes=maximum_payload_bytes,
         api_key_setting=api_key_setting,
         api_key_header=api_key_header,
         api_key_query_parameter=api_key_query_parameter,
@@ -244,6 +248,42 @@ def _provider(
 _NOBITEX_HEADERS = (("User-Agent", "Nerkhbaan-Pricing/2"),)
 
 _PROVIDERS = (
+    *(
+        _provider(
+            f"wallgold_{asset}", f"Wallgold {label}", instrument,
+            ProviderRole.PRIMARY, 0, "0.88",
+            _setting_url("wallgold_api_base_url", "/api/v1/markets"),
+            f"wallgold_{asset}_v1", "wallgold-market/1.0.0", 60,
+            rpm=2, rph=60, rpd=1500, interval=60,
+            source_semantic=SourceSemantic.EXCHANGE_TRADE,
+            source_family="wallex", venue="wallgold",
+            selected_price_semantic=PriceSemantic.LAST,
+            symbol_or_pair=symbol,
+        )
+        for asset, label, instrument, symbol in (
+            ("gold18", "18K Gold", "GOLD_18K_TOMAN_GRAM", "GLD_18C_750TMN"),
+            ("silver925", "925 Silver", "SILVER_925_TOMAN_GRAM", "SLV_925TMN"),
+        )
+    ),
+    *(
+        _provider(
+            f"bitpin_{asset}_toman", f"Bitpin {asset.upper()}-Toman", instrument,
+            ProviderRole.FALLBACK, 3, "0.90",
+            _setting_url("bitpin_api_base_url", "/v4/mkt/prices/"),
+            f"bitpin_{asset}_toman_v1", "bitpin-prices/1.0.0", 20,
+            rpm=4, rph=180, rpd=4400, interval=20,
+            maximum_payload_bytes=1_048_576,
+            maximum_source_age_seconds=60,
+            source_semantic=SourceSemantic.EXCHANGE_TRADE,
+            source_family="bitpin", venue="bitpin",
+            selected_price_semantic=PriceSemantic.LAST,
+            symbol_or_pair=symbol,
+        )
+        for asset, instrument, symbol in (
+            ("btc", "BTC_TOMAN", "BTC_IRT"),
+            ("usdt", "USDT_TOMAN", "USDT_IRT"),
+        )
+    ),
     _provider(
         "alanchand_gold18", "Alanchand Gold 18K", "GOLD_18K_TOMAN_GRAM",
         ProviderRole.PRIMARY, 1, "0.80", _setting_url("alanchand_api_base_url", "/v1/markets/gold"),
@@ -313,7 +353,7 @@ _PROVIDERS = (
         "0.93", _setting_url("nobitex_api_base_url", "/market/stats"), "nobitex_stats_usdt_rls_v1",
         "nobitex-stats/1.0.0", 20, rpm=12, rph=360, rpd=5000, interval=20,
         headers=_NOBITEX_HEADERS,
-        history_url="https://api.nobitex.ir/market/udf/history",
+        history_url=_setting_url("nobitex_api_base_url", "/market/udf/history"),
         history_parser_id="nobitex_udf_usdtirt_v1",
         source_semantic=SourceSemantic.EXCHANGE_TRADE,
         source_family="nobitex", venue="nobitex",
@@ -322,7 +362,7 @@ _PROVIDERS = (
     _provider(
         "nobitex_orderbook_usdt", "Nobitex USDT Order Book", "USDT_TOMAN",
         ProviderRole.VERIFIER, 2, "0.91", _setting_url("nobitex_api_base_url", "/v3/orderbook/all"),
-        "nobitex_orderbook_usdtirt_v1", "nobitex-orderbook/1.0.0", 20,
+        "nobitex_orderbook_usdtirt_v1", "nobitex-orderbook/1.0.1", 20,
         rpm=12, rph=360, rpd=5000, interval=20, headers=_NOBITEX_HEADERS,
         source_semantic=SourceSemantic.EXCHANGE_ORDERBOOK,
         source_family="nobitex", venue="nobitex",
@@ -367,7 +407,7 @@ _PROVIDERS = (
         "0.93", _setting_url("nobitex_api_base_url", "/market/stats"), "nobitex_stats_btc_rls_v1",
         "nobitex-stats/1.0.0", 20, rpm=12, rph=360, rpd=5000, interval=20,
         headers=_NOBITEX_HEADERS,
-        history_url="https://api.nobitex.ir/market/udf/history",
+        history_url=_setting_url("nobitex_api_base_url", "/market/udf/history"),
         history_parser_id="nobitex_udf_btcirt_v1",
         source_semantic=SourceSemantic.EXCHANGE_TRADE,
         source_family="nobitex", venue="nobitex",
@@ -376,7 +416,7 @@ _PROVIDERS = (
     _provider(
         "nobitex_orderbook_btc", "Nobitex BTC Order Book", "BTC_TOMAN",
         ProviderRole.VERIFIER, 2, "0.91", _setting_url("nobitex_api_base_url", "/v3/orderbook/all"),
-        "nobitex_orderbook_btcirt_v1", "nobitex-orderbook/1.0.0", 20,
+        "nobitex_orderbook_btcirt_v1", "nobitex-orderbook/1.0.1", 20,
         rpm=12, rph=360, rpd=5000, interval=20, headers=_NOBITEX_HEADERS,
         source_semantic=SourceSemantic.EXCHANGE_ORDERBOOK,
         source_family="nobitex", venue="nobitex",
@@ -433,6 +473,7 @@ _PROVIDERS = (
         source_family="persian_toolbox", venue="opaque_aggregator",
         selected_price_semantic=PriceSemantic.REFERENCE,
         symbol_or_pair="GOLD/IRR/GRAM",
+        enabled_default=False,
     ),
     _provider(
         "coincap_btc", "CoinCap Bitcoin", "BTC_USD", ProviderRole.FALLBACK, 99,
@@ -447,7 +488,7 @@ _PROVIDERS = (
         "wallex_usdt_toman", "Wallex USDT-Toman", "USDT_TOMAN", ProviderRole.FALLBACK, 4,
         "0.90", _setting_url("wallex_api_base_url", "/v1/markets"), "wallex_usdt_toman_v1",
         "wallex-market/1.0.0", 20, rpm=12, rph=360, rpd=5000, interval=20,
-        enabled_default=False,
+        enabled_default=True,
         source_semantic=SourceSemantic.EXCHANGE_TRADE,
         source_family="wallex", venue="wallex",
         selected_price_semantic=PriceSemantic.LAST,
@@ -457,7 +498,7 @@ _PROVIDERS = (
         "wallex_btc_toman", "Wallex BTC-Toman", "BTC_TOMAN", ProviderRole.FALLBACK, 4,
         "0.90", _setting_url("wallex_api_base_url", "/v1/markets"), "wallex_btc_toman_v1",
         "wallex-market/1.0.0", 20, rpm=12, rph=360, rpd=5000, interval=20,
-        enabled_default=False,
+        enabled_default=True,
         source_semantic=SourceSemantic.EXCHANGE_TRADE,
         source_family="wallex", venue="wallex",
         selected_price_semantic=PriceSemantic.LAST,

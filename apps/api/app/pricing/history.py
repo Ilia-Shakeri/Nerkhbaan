@@ -33,6 +33,18 @@ _ACCEPTED_STATUSES = (
 
 logger = logging.getLogger(__name__)
 
+# Preserve historical evidence, but never blend old calculated gold into
+# current prices, chart buckets, anomaly baselines, or percentage changes.
+_DIRECT_GOLD_SQL = """(
+    instrument_id NOT IN ('GOLD_18K_TOMAN_GRAM', 'GOLD_24K_TOMAN_GRAM') OR (
+        status <> 'derived_fallback'
+        AND COALESCE(source_summary->>'derived', 'false') = 'false'
+        AND COALESCE(source_summary->>'primary_provider_id', '') NOT LIKE 'derived:%'
+        AND COALESCE(source_summary->>'primary_provider_id', '') <> 'persian_toolbox_gold24'
+        AND NOT (COALESCE(source_summary->'provider_ids', '[]'::jsonb) ? 'persian_toolbox_gold24')
+    )
+)"""
+
 
 @dataclass(frozen=True, slots=True)
 class TimeframePolicy:
@@ -194,7 +206,7 @@ class InternalPriceHistory:
         bucket: str,
     ) -> list[dict[str, Any]]:
         query = text(
-            """
+            f"""
             WITH bucketed AS (
                 SELECT
                     date_bin(CAST(:bucket AS interval), canonical_at, TIMESTAMPTZ '2000-01-01') AS bucket,
@@ -205,6 +217,7 @@ class InternalPriceHistory:
                   AND canonical_at >= :start
                   AND canonical_at <= :end
                   AND status = ANY(:statuses)
+                  AND {_DIRECT_GOLD_SQL}
             )
             SELECT
                 bucket,
@@ -345,11 +358,12 @@ class InternalPriceHistory:
     @staticmethod
     def _query_recent_prices(instrument_id: str, limit: int) -> list[Decimal]:
         query = text(
-            """
+            f"""
             SELECT price
             FROM canonical_quotes
             WHERE instrument_id = :instrument_id
               AND status = ANY(:statuses)
+              AND {_DIRECT_GOLD_SQL}
             ORDER BY canonical_at DESC
             LIMIT :limit
             """
@@ -371,11 +385,12 @@ class InternalPriceHistory:
         earliest: datetime,
     ) -> Decimal | None:
         query = text(
-            """
+            f"""
             SELECT price
             FROM canonical_quotes
             WHERE instrument_id = :instrument_id
               AND status = ANY(:statuses)
+              AND {_DIRECT_GOLD_SQL}
               AND canonical_at <= :target
               AND canonical_at >= :earliest
             ORDER BY canonical_at DESC
@@ -425,7 +440,7 @@ class InternalPriceHistory:
 
     @staticmethod
     def _query_latest_rows(instrument_id: str | None) -> list[Any]:
-        query_sql = """
+        query_sql = f"""
             SELECT DISTINCT ON (instrument_id)
                 id, instrument_id, price, status, primary_quote_id,
                 verification_quote_ids, source_summary, candidate_price,
@@ -434,10 +449,11 @@ class InternalPriceHistory:
                 verification_status, change_1h, change_24h, change_7d,
                 change_30d, idempotency_key, sequence_number
             FROM canonical_quotes
+            WHERE {_DIRECT_GOLD_SQL}
         """
         parameters: dict[str, str] = {}
         if instrument_id is not None:
-            query_sql += " WHERE instrument_id = :instrument_id"
+            query_sql += " AND instrument_id = :instrument_id"
             parameters["instrument_id"] = instrument_id
         query_sql += " ORDER BY instrument_id, canonical_at DESC"
 

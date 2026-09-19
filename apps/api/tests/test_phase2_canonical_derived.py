@@ -490,7 +490,7 @@ class DerivedPriceTests(unittest.TestCase):
 
     def test_derivation_depth_is_max_input_depth_plus_one(self) -> None:
         inputs = {
-            "XAU_USD_OZ": _canonical("XAU_USD_OZ", "2400"),
+            "XAG_USD_OZ": _canonical("XAG_USD_OZ", "30"),
             "USDT_TOMAN": _canonical(
                 "USDT_TOMAN",
                 "60000",
@@ -501,7 +501,7 @@ class DerivedPriceTests(unittest.TestCase):
         }
 
         result = self.engine.derive(
-            "GOLD_18K_TOMAN_GRAM",
+            "SILVER_999_TOMAN_GRAM",
             inputs,
             now=FROZEN_NOW,
         )
@@ -510,28 +510,28 @@ class DerivedPriceTests(unittest.TestCase):
 
     def test_derivation_rejects_cycle_in_input_provenance(self) -> None:
         inputs = {
-            "XAU_USD_OZ": _canonical("XAU_USD_OZ", "2400"),
+            "XAG_USD_OZ": _canonical("XAG_USD_OZ", "30"),
             "USDT_TOMAN": _canonical(
                 "USDT_TOMAN",
                 "60000",
                 status=CanonicalStatus.DERIVED_FALLBACK,
                 derivation_depth=1,
-                provenance=["GOLD_18K_TOMAN_GRAM", "USDT_TOMAN"],
+                provenance=["SILVER_999_TOMAN_GRAM", "USDT_TOMAN"],
             ),
             "USDT_USD": _canonical("USDT_USD", "1"),
         }
 
         with self.assertRaises(DerivedPriceUnavailable):
             self.engine.derive(
-                "GOLD_18K_TOMAN_GRAM",
+                "SILVER_999_TOMAN_GRAM",
                 inputs,
                 now=FROZEN_NOW,
             )
 
     def test_derived_confidence_decays_below_weakest_input(self) -> None:
         inputs = {
-            "XAU_USD_OZ": _canonical(
-                "XAU_USD_OZ", "2400", confidence_score="0.60"
+            "XAG_USD_OZ": _canonical(
+                "XAG_USD_OZ", "30", confidence_score="0.60"
             ),
             "USDT_TOMAN": _canonical(
                 "USDT_TOMAN", "60000", confidence_score="0.60"
@@ -542,7 +542,7 @@ class DerivedPriceTests(unittest.TestCase):
         }
 
         result = self.engine.derive(
-            "GOLD_18K_TOMAN_GRAM",
+            "SILVER_999_TOMAN_GRAM",
             inputs,
             now=FROZEN_NOW,
         )
@@ -551,8 +551,8 @@ class DerivedPriceTests(unittest.TestCase):
 
     def test_derived_observation_time_is_oldest_required_input(self) -> None:
         inputs = {
-            "XAU_USD_OZ": _canonical(
-                "XAU_USD_OZ", "2400", observed_seconds_ago=10
+            "XAG_USD_OZ": _canonical(
+                "XAG_USD_OZ", "30", observed_seconds_ago=10
             ),
             "USDT_TOMAN": _canonical(
                 "USDT_TOMAN", "60000", observed_seconds_ago=40
@@ -563,7 +563,7 @@ class DerivedPriceTests(unittest.TestCase):
         }
 
         result = self.engine.derive(
-            "GOLD_18K_TOMAN_GRAM",
+            "SILVER_999_TOMAN_GRAM",
             inputs,
             now=FROZEN_NOW,
         )
@@ -575,9 +575,9 @@ class DerivedPriceTests(unittest.TestCase):
 
     def test_derived_live_window_ends_with_weakest_input(self) -> None:
         inputs = {
-            "XAU_USD_OZ": _canonical(
-                "XAU_USD_OZ",
-                "2400",
+            "XAG_USD_OZ": _canonical(
+                "XAG_USD_OZ",
+                "30",
                 observed_seconds_ago=400,
                 valid_for_seconds=5,
             ),
@@ -586,14 +586,14 @@ class DerivedPriceTests(unittest.TestCase):
         }
 
         result = self.engine.derive(
-            "GOLD_18K_TOMAN_GRAM",
+            "SILVER_999_TOMAN_GRAM",
             inputs,
             now=FROZEN_NOW,
         )
         result.persistence_status = PersistenceStatus.PERSISTED
         policy = CanonicalPricePolicy()
         canonical = policy.derived_fallback(
-            instrument=get_instrument("GOLD_18K_TOMAN_GRAM"),
+            instrument=get_instrument("SILVER_999_TOMAN_GRAM"),
             derived=result,
             current=FROZEN_NOW,
         )
@@ -608,7 +608,7 @@ class DerivedPriceTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             policy.derived_fallback(
-                instrument=get_instrument("GOLD_18K_TOMAN_GRAM"),
+                instrument=get_instrument("SILVER_999_TOMAN_GRAM"),
                 derived=result,
                 current=FROZEN_NOW + timedelta(seconds=6),
             )

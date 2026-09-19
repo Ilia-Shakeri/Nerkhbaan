@@ -90,7 +90,7 @@ class PricingProviderRepairTests(unittest.TestCase):
             for instrument_id, row in instrument_source_coverage(settings).items()
             if row["unservable"]
         ]
-        self.assertEqual(unservable, [])
+        self.assertEqual(set(unservable), {"GOLD_24K_TOMAN_GRAM"})
 
     def test_every_instrument_is_refreshed(self) -> None:
         from app.pricing.service import _REFRESH_ORDER
@@ -128,13 +128,13 @@ class PricingProviderRepairTests(unittest.TestCase):
         ]
         self.assertEqual(btc_primary_ids, ["coinbase_btc_usd"])
 
-    def test_persian_toolbox_btc_and_gold_are_enabled_but_reference_usd_stays_disabled(self) -> None:
+    def test_ambiguous_gold_is_disabled_but_btc_remains_enabled(self) -> None:
         btc = PROVIDERS["persian_toolbox_btc"]
         self.assertTrue(btc.enabled)
         self.assertEqual(btc.maximum_source_age_seconds, 300)
         self.assertTrue(btc.anchor_live_window_at_receive_time)
         gold = PROVIDERS["persian_toolbox_gold24"]
-        self.assertTrue(gold.enabled)
+        self.assertFalse(gold.enabled)
         self.assertEqual(gold.instrument_id, "GOLD_24K_TOMAN_GRAM")
         self.assertEqual(gold.budget.minimum_interval_seconds, 300)
         self.assertEqual(gold.maximum_source_age_seconds, 300)
@@ -149,18 +149,18 @@ class PricingProviderRepairTests(unittest.TestCase):
         )
         self.assertFalse(PROVIDERS["persian_toolbox_usd_toman"].enabled)
 
-    def test_gold_24k_derivation_uses_decimal_metadata(self) -> None:
+    def test_silver_999_derivation_uses_decimal_metadata(self) -> None:
         quote = derived_price_engine.derive(
-            "GOLD_24K_TOMAN_GRAM",
+            "SILVER_999_TOMAN_GRAM",
             {
-                "XAU_USD_OZ": _canonical("XAU_USD_OZ", "2400"),
+                "XAG_USD_OZ": _canonical("XAG_USD_OZ", "30"),
                 "USDT_TOMAN": _canonical("USDT_TOMAN", "60000"),
                 "USDT_USD": _canonical("USDT_USD", "1.00"),
             },
             now=datetime(2026, 8, 8, 12, 1, tzinfo=UTC),
         )
 
-        expected = Decimal("2400") * Decimal("60000") / Decimal("31.1034768")
+        expected = Decimal("30") * Decimal("60000") * (Decimal("0.999") / Decimal("0.9999") / Decimal("31.1034768"))
         self.assertEqual(quote.price, expected)
         self.assertIsInstance(quote.metadata["inputs"][0]["price"], str)
         self.assertEqual(quote.source_type, SourceType.DERIVED)
@@ -220,15 +220,14 @@ class PricingProviderRepairTests(unittest.TestCase):
         usd = build_parser("persian_toolbox_usd_toman_v1").parse(
             payload, _context("USD_TOMAN")
         )
-        gold = build_parser("persian_toolbox_gold24_toman_v1").parse(
-            payload, _context("GOLD_24K_TOMAN_GRAM")
-        )
+        with self.assertRaisesRegex(ParserError, "direct 24K"):
+            build_parser("persian_toolbox_gold24_toman_v1").parse(
+                payload, _context("GOLD_24K_TOMAN_GRAM")
+            )
 
         self.assertEqual(btc.price, Decimal("77000"))
         self.assertEqual(usd.price, Decimal("142000"))
         self.assertEqual(usd.metadata["normalization"], "rial_to_toman")
-        self.assertEqual(gold.price, Decimal("21200000.0"))
-        self.assertEqual(gold.metadata["normalization"], "rial_to_toman")
 
     def test_persian_toolbox_gold_rejects_wrong_unit(self) -> None:
         timestamp = int(self._provider_time().timestamp() * 1000)
@@ -372,8 +371,7 @@ class PricingProviderRepairTests(unittest.TestCase):
     def test_quarantined_routes_stay_disabled_when_database_rows_are_enabled(self) -> None:
         for provider_id in (
             "tetherland_btc",
-            "wallex_usdt_toman",
-            "wallex_btc_toman",
+            "persian_toolbox_gold24",
         ):
             self.assertFalse(PROVIDERS[provider_id].enabled)
 

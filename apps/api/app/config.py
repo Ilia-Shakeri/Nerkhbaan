@@ -79,8 +79,10 @@ class Settings(BaseSettings):
     goldapi_api_base_url: str = "https://www.goldapi.io/api"
     alanchand_api_base_url: str = "https://api.alanchand.com"
     alanchand_api_token: str | None = None
-    nobitex_api_base_url: str = "https://api.nobitex.ir"
+    nobitex_api_base_url: str = "https://apiv2.nobitex.ir"
     wallex_api_base_url: str = "https://api.wallex.ir"
+    bitpin_api_base_url: str = "https://api.bitpin.org"
+    wallgold_api_base_url: str = "https://api.wallgold.ir"
     tetherland_api_base_url: str = "https://api.tetherland.com"
     coinbase_api_base_url: str = "https://api.exchange.coinbase.com"
     coingecko_api_base_url: str = "https://api.coingecko.com/api/v3"
@@ -132,14 +134,14 @@ class Settings(BaseSettings):
     pricing_provider_max_retries: int = 2
     pricing_provider_backoff_base_seconds: Decimal = Decimal("0.5")
     pricing_provider_aggregate_cache_seconds: int = 5
-    pricing_provider_max_response_bytes: int = 262_144
+    pricing_provider_max_response_bytes: int = 1_048_576
     pricing_relay_base_url: str | None = None
     pricing_relay_shared_token: str | None = None
     pricing_worker_shared_secret: str | None = None
     pricing_provider_allowed_hosts: str = (
         "api.alanchand.com,api.gold-api.com,www.goldapi.io,api.metals.dev,"
         "api.exchange.coinbase.com,api.coingecko.com,api.coincap.io,"
-        "api.nobitex.ir,api.wallex.ir,api.tetherland.com,"
+        "api.nobitex.ir,apiv2.nobitex.ir,api.wallex.ir,api.bitpin.org,api.wallgold.ir,api.tetherland.com,"
         "servix.cc,persiantoolbox.ir,api.tala.ir,api.navasan.tech,api.nerkh.io"
     )
     pricing_require_provider_keys: bool = False
@@ -289,6 +291,8 @@ class Settings(BaseSettings):
             "gold_api_base_url",
             "metals_dev_api_base_url",
             "nobitex_api_base_url",
+            "bitpin_api_base_url",
+            "wallgold_api_base_url",
             "tetherland_api_base_url",
             "coinbase_api_base_url",
             "coingecko_api_base_url",

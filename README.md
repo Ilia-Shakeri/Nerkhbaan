@@ -26,8 +26,9 @@ it was observed or computed.
 - **Explicit units.** Gold in USD is a troy ounce at 0.9999 fine on the global
   spot market. Gold in Toman is one gram at 0.750 fine in the Iranian physical
   market. These are different instruments and the API says so.
-- **Honest degradation.** When no direct source is available, values are derived
-  from a formula and marked as such. Nothing is dressed up as an observation.
+- **Honest degradation.** Only eligible non-gold instruments may use labelled
+  formulas. Iranian 18K and 24K gold require separate direct quotes; missing
+  gold is unavailable, never reconstructed from another karat or an ounce.
 - **Durable alerts.** Triggers are idempotent, delivery is a work queue with
   backoff, retry and a dead-letter path, and an alert never fires on a
   suspicious, expired or unpersisted price.
@@ -117,7 +118,10 @@ Full setup, conventions and troubleshooting: [`README.developer.md`](README.deve
 
 ## Releases
 
-Current release: **2.4.10**. The authoritative value is [`VERSION`](VERSION).
+Current release: **2.5.0**. The authoritative value is [`VERSION`](VERSION).
+
+Public Iranian providers and the remaining direct 24K gap are recorded in
+[`docs/free-provider-validation-2026-09-19.md`](docs/free-provider-validation-2026-09-19.md).
 Every release updates [`CHANGELOG.md`](CHANGELOG.md), package manifests and API
 health metadata together. Run this check before a release:
 

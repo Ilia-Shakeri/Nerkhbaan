@@ -1,5 +1,10 @@
 # Nerkhbaan — Production Readiness Roadmap
 
+> 2.5.0 update: direct 18K and 925 routes added; direct 24K remains open.
+> Gold formulas are forbidden. Formal launch evidence remains pending despite
+> explicit approval for a limited provider-fix deployment. See the
+> [2026-09-19 validation](free-provider-validation-2026-09-19.md).
+
 > Current correction, 2026-09-13: this file preserves the 2026-08-24 plan as a
 > historical baseline. Structured metrics/logging, a two-replica production
 > backend, real PostgreSQL/Redis integration gates, browser sign-up and alert

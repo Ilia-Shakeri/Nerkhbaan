@@ -40,6 +40,7 @@ class ProviderContract:
 
 
 _DOCS = {
+    "bitpin": ("https://docs.bitpin.ir/v1/", "https://api.bitpin.org/v4/mkt/prices/"),
     "coinbase": ("https://docs.cdp.coinbase.com/exchange/reference/exchangerestapi_getproductticker",),
     "coingecko": ("https://docs.coingecko.com/reference/simple-price",),
     "goldapi": ("https://www.goldapi.io/",),
@@ -60,7 +61,7 @@ _DOCS = {
 }
 
 _TIER_B = ("servix", "tala", "ticaro", "arzbin", "navasan", "nerkh_io")
-_DIRECT = ("coinbase", "nobitex", "wallex")
+_DIRECT = ("coinbase", "nobitex", "wallex", "bitpin")
 _REFERENCE = ("goldapi", "gold_api_free", "metals_dev", "persian_toolbox")
 
 PENDING_PROVIDER_CANDIDATES = (
@@ -113,7 +114,8 @@ def provider_contract(provider: ProviderDefinition) -> ProviderContract:
         redistribution_status=redistribution_status,
         commercial_status=commercial_status,
         owner="pricing-ops",
-        docs=_DOCS.get(family, ()),
+        docs=(("https://developers.wallgold.ir/", "https://wallgold.ir/")
+              if provider.venue == "wallgold" else _DOCS.get(family, ())),
         attribution_required=attribution_required,
         enabled_acceptance=(
             "official_endpoint_docs_present",

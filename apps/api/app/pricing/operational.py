@@ -48,7 +48,9 @@ class OperationalPricingSettings:
                 maximum_price=Decimal(str(row["maximum_sanity_price"])),
                 importance=int(row["importance"]),
                 enabled=bool(row["enabled"]),
-                allow_derived_fallback=bool(row["allow_derived_fallback"]),
+                allow_derived_fallback=(
+                    fallback.allow_derived_fallback and bool(row["allow_derived_fallback"])
+                ),
             )
         except (TypeError, ValueError):
             return fallback

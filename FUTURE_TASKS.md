@@ -6,6 +6,10 @@ is partial, and what production readiness still requires — see
 
 ## Engineering
 
+- [ ] Obtain a verified direct 24K Iranian gold source. Do not restore karat
+      or international-ounce formulas. Free Servix requires a private account
+      key; sampled public alternatives were unreachable or key-gated.
+
 - [ ] Extract the shared web/desktop React layer. `apps/desktop` currently
       duplicates `apps/web`'s API client and views (~2,500 lines) and the two
       have already drifted.
@@ -16,8 +20,8 @@ is partial, and what production readiness still requires — see
 - [ ] A real free-market USD/Toman source. Without one, every Toman metal price
       without a direct provider is bridged through USDT and runs percent-level
       high.
-- [ ] Direct Iranian silver source. `SILVER_999_TOMAN_GRAM` has one key-gated
-      provider; `SILVER_925_TOMAN_GRAM` is formula-only.
+- [ ] Direct Iranian 999 silver source. 925 silver has a direct Wallgold route
+      since 2.5.0; 999 silver still has only a key-gated route plus a formula.
 - [ ] Confirm PersianToolbox redistribution terms and whether its USD/IRR
       reference can legally and semantically be shown to customers.
 - [ ] Create the free Servix account, add visible source attribution, store its

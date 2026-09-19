@@ -56,7 +56,7 @@ class NobitexStatsParser:
 @dataclass(frozen=True, slots=True)
 class NobitexOrderBookParser:
     symbol: str
-    parser_version: str = "nobitex-orderbook/1.0.0"
+    parser_version: str = "nobitex-orderbook/1.0.1"
 
     def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
         root = require_object(payload, "orderbook response")
@@ -68,6 +68,11 @@ class NobitexOrderBookParser:
         asks = require_list(book.get("asks"), f"{self.symbol}.asks")
         bid = self._level_price(bids, "bid")
         ask = self._level_price(asks, "ask")
+        # Nobitex's IRT book symbols still contain Rial-valued levels.
+        if self.symbol not in {"BTCIRT", "USDTIRT"}:
+            raise ParserError("unsupported_symbol", "Unsupported Nobitex book unit")
+        bid /= Decimal(10)
+        ask /= Decimal(10)
         if bid > ask:
             raise ParserError("crossed_orderbook", "Best bid exceeds best ask")
         midpoint = (bid + ask) / Decimal(2)
@@ -84,7 +89,9 @@ class NobitexOrderBookParser:
             observed_at=timestamp,
             bid=bid,
             ask=ask,
-            metadata={"market_symbol": self.symbol, "selection": "best_bid_ask_midpoint"},
+            metadata={"market_symbol": self.symbol, "selection": "best_bid_ask_midpoint",
+                      "source_currency": "RIAL", "normalization": "rial_to_toman",
+                      "conversion_factor": "0.1"},
         )
         return validate_parsed_value(parsed, context)
 

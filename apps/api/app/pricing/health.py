@@ -14,6 +14,7 @@ from .instruments import get_instrument
 from .models import utc_now
 from .registry import PROVIDERS, PROVIDERS_BY_INSTRUMENT
 from .contracts import provider_contract, provider_contract_inventory
+from .quote_visibility import allowed_current_quote
 
 
 class PricingHealthService:
@@ -42,11 +43,15 @@ class PricingHealthService:
                 quote = await self.store.get_canonical(normalized)
             except Exception:
                 quote = None
+        if quote is not None and not allowed_current_quote(quote):
+            quote = None
         if quote is None and database["connected"]:
             try:
                 quote = await self.history.latest_canonical(normalized)
             except Exception:
                 quote = None
+        if quote is not None and not allowed_current_quote(quote):
+            quote = None
         backlog = await self.store.persistence_backlog() if redis_ok else None
         payload: dict[str, Any] = {
             "instrument_id": normalized,

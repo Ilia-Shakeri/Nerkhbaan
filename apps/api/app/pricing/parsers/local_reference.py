@@ -149,10 +149,7 @@ class PersianToolboxMarketParser:
                     "unknown_unit",
                     "PersianToolbox gold unit must be IRR per gram",
                 )
-            gold = require_object(exact_path(data, "gold"), "PersianToolbox gold")
-            raw = strict_decimal(exact_path(gold, "pricePerGram"), "gold pricePerGram")
-            factor = Decimal("0.1")
-            source_currency = "RIAL"
+            raise ParserError("ambiguous_purity", "Gold feed does not identify a direct 24K quote")
         elif self.asset == "USD_TOMAN":
             if units.get("currencyBase") != "USD" or units.get("iranCurrency") != "IRR":
                 raise ParserError("unknown_unit", "PersianToolbox currency units must be USD and IRR")
