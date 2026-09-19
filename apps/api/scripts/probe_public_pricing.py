@@ -49,7 +49,8 @@ async def main() -> int:
             except Exception as exc:
                 failures += 1
                 print(json.dumps({"provider": provider_id, "status": "failed",
-                                  "error_type": type(exc).__name__, "code": getattr(exc, "code", None)}))
+                                  "error_type": type(exc).__name__, "code": getattr(exc, "code", None)
+                                  or ("payload_too_large" if str(exc) == "payload_too_large" else None)}))
     return 1 if failures else 0
 
 

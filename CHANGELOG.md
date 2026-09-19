@@ -2,6 +2,21 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.5.1] - 2026-09-19
+
+### Fixed
+
+- Pre-deployment container canaries found Wallex markets and Nobitex aggregate
+  order books exceed 256 KiB (about 461/450 KiB). Their per-provider ceilings
+  are now 1 MiB, still bounded by the global ceiling. Added a regression test.
+- Canary output explicitly identifies payload-size failures. Stale Bitpin
+  exchange timestamps continue to be rejected, not freshened at receipt.
+
+### Validation
+
+- 2.5.0 was tagged and built but not promoted to the live services; 2.5.1 is
+  the corrected deployment candidate.
+
 ## [2.5.0] - 2026-09-19
 
 ### Added

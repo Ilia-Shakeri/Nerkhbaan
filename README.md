@@ -118,7 +118,7 @@ Full setup, conventions and troubleshooting: [`README.developer.md`](README.deve
 
 ## Releases
 
-Current release: **2.5.0**. The authoritative value is [`VERSION`](VERSION).
+Current release: **2.5.1**. The authoritative value is [`VERSION`](VERSION).
 
 Public Iranian providers and the remaining direct 24K gap are recorded in
 [`docs/free-provider-validation-2026-09-19.md`](docs/free-provider-validation-2026-09-19.md).

@@ -83,6 +83,11 @@ class BitpinTests(unittest.TestCase):
         self.assertIn("api.wallgold.ir", hosts)
         self.assertIn("apiv2.nobitex.ir", hosts)
 
+    def test_aggregate_market_bodies_fit_explicit_bounds(self) -> None:
+        for provider_id in ("wallex_usdt_toman", "wallex_btc_toman",
+                            "nobitex_orderbook_usdt", "nobitex_orderbook_btc"):
+            self.assertEqual(PROVIDERS[provider_id].maximum_payload_bytes, 1048576)
+
 
 class DirectGoldTests(unittest.IsolatedAsyncioTestCase):
     async def test_no_formula_even_with_fresh_inputs(self) -> None:

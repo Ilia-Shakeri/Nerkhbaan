@@ -6,10 +6,10 @@ verified; formal operator evidence remains pending
 
 ## Current release update
 
-- Candidate `2.5.0`: direct Wallgold 18K/925, Bitpin crypto fallback, working
+- Candidate `2.5.1`: direct Wallgold 18K/925, Bitpin crypto fallback, working
   Nobitex alternate host and corrected Rial book units. All local gold formulas
   removed. Direct keyless 24K remains an explicit coverage gap.
-- Local API suite: 199 tests, 198 passed, one PostgreSQL concurrency test skipped.
+- Local API suite: 200 tests, 199 passed, one PostgreSQL concurrency test skipped.
   Full `npm run verify` also passed: release consistency, Python static checks,
   29 frontend contracts, web/admin/desktop production builds. Browser test
   discovery passed; that command did not execute a browser scenario.
