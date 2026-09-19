@@ -1,7 +1,7 @@
 # Nerkhbaan
 
 2.6.1 adds confirmed owner/contact details and current free-service notices.
-Limited deployment is owner-authorized; this is not legal compliance clearance.
+Limited deployment completed with owner approval; this is not legal compliance clearance.
 See [legal readiness and release blockers](docs/legal-readiness-2026-09-19.md).
 
 Live gold, silver, currency and crypto prices for the Iranian and international

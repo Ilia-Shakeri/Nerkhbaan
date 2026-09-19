@@ -85,4 +85,33 @@ Scope includes 2.6.0 and 2.6.1 together. Existing auth flip stays unchanged.
 Old clients lacking the new consent fields need an update; never infer acceptance.
 Use versioned images, preserve prior 2.5.1 images and all PostgreSQL/Redis volumes.
 Do not touch untracked server .gitea, gitea_data or gitea_runner_data directories.
-Deployment outcome and backup reference are recorded after live verification.
+Deployment verified on 2026-09-19 at approximately 11:56 UTC:
+
+- Code `2cf2c17`, tag `v2.6.1`; API, web and price-feed-pull images `2.6.1`.
+- Pre-release database dump `/backups/last/nerkhbaan-20260919-115138.sql.gz`,
+  45.3 MiB, passed `gzip -t`. Dump warned about Timescale circular foreign-key
+  constraints; successful dump/compression checks are not restore-drill evidence.
+- Protected config backup `/home/deploy/nerkhbaan-release-backups/pre-2.6.1.env`
+  mode 600. Do not print or commit it. Previous images `2.5.1` retained.
+- Version persisted in `.env`; built migrate/frontend/price-feed-pull images,
+  then recreated only backend (two replicas), frontend and price-feed-pull with
+  `--no-deps --wait`. No new schema changes; database/Redis/backup containers
+  remained running. Price-feed-pull runs but has no configured healthcheck.
+- Public liveness and readiness returned 200, `release_version=2.6.1`, database
+  and Redis connected, current migration and operational websocket fanout.
+- Five legal routes returned 200. Empty signup returned 422 without creating
+  an account. Runtime `AUTH_REFRESH_DAYS=30` confirmed.
+- Live browser verified all five public pages, public email links, owner details
+  in both languages, and the existing update prompt from 2.5.1 to the new bundle.
+  Returning installed clients must select the update/reload prompt.
+- Local validation: 207 backend tests passed, one PostgreSQL concurrency test
+  skipped; 34 frontend contracts passed; web/admin/desktop builds passed.
+  Browser-test discovery is not a full end-to-end account test. No consent accepted
+  on behalf of the owner and no support/chat message submitted during smoke tests.
+- Disk after deployment: 3.7 GiB available, 87% used. No data or image pruning.
+- Existing price gaps remain: readiness snapshot included expired/unavailable
+  sources and 94 anomaly records. This legal release does not claim to fix them.
+
+Rollback, if approved: restore the protected configuration or select retained
+`2.5.1` images for these same services, then repeat health checks. Preserve all
+data and consent receipts. Do not roll back schema or remove volumes.

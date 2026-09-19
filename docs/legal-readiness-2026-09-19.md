@@ -1,6 +1,6 @@
 # Legal, privacy and accessibility readiness — 2026-09-19
 
-Current release: 2.6.1. **Limited deployment authorized. Not legal clearance.**
+Current release: 2.6.1. **Limited deployment completed. Not legal clearance.**
 
 ## Owner confirmation and publication decision — 2.6.1
 
@@ -22,8 +22,11 @@ restore drill and full accessibility proof remain open. No claims of full compli
 
 Correction loop: initial scoped quality 8/10. Found stale missing-owner copy,
 missing public email link and Persian cookie-duration mismatch; fixed these and
-added regression checks. Final scoped implementation score depends on tests and
-deployment evidence; overall legal readiness remains below 9 pending external proof.
+added regression checks. Final scoped implementation score: **9/10** after 207
+backend passes (one skip), 34 frontend passes, three builds, live readiness and
+public bilingual page checks. This score covers the requested owner-details
+patch, not the entire infrastructure or legal readiness; those remain below 9
+pending external proof. See the deployment record in `release-operations.md`.
 
 ## Scope and decision
 
