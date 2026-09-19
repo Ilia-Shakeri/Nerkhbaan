@@ -163,6 +163,15 @@ test("web keeps cookies while desktop uses secure native storage", () => {
   assert.doesNotMatch(api, /localStorage\.setItem\([^,]*(token|session)/i);
 });
 
+test("shared edge re-resolves replaced application containers", () => {
+  const config = read("nginx/shared-edge.conf");
+  assert.match(config, /resolver 127\.0\.0\.11 valid=10s ipv6=off/);
+  assert.match(config, /server nerkhbaan-backend:8000 resolve/);
+  assert.match(config, /server nerkhbaan-frontend:80 resolve/);
+  assert.match(config, /script-src 'self' https:\/\/s3\.tradingview\.com/);
+  assert.match(config, /frame-src https:\/\/s\.tradingview\.com https:\/\/www\.tradingview\.com/);
+});
+
 test("service worker cannot turn API routes into app shell", () => {
   const sw = read("apps/web/src/pwa/sw.ts");
   assert.match(sw, /denylist:\s*\[\/\^\\\/api\\\//);

@@ -2,6 +2,14 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.7.4] - 2026-09-19
+
+### Fixed
+- Shared edge Nginx now re-resolves API and web container addresses after a
+  rolling replacement, preventing stale-upstream 502 responses.
+- Kept the external-chart script and frame policy in the tracked shared-edge
+  configuration so a future configuration refresh does not block the chart.
+
 ## [2.7.3] - 2026-09-19
 
 ### Fixed
