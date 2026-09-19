@@ -15,7 +15,26 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
+    full_name: str = Field(default="", max_length=120)
+    accepted_terms: bool
+    account_data_consent: bool
+    policy_version: Literal["2026-09-19"]
     password: str = Field(min_length=10, max_length=128)
+
+    @field_validator("full_name")
+    @classmethod
+    def optional_display_name(cls, value: str) -> str:
+        value = value.strip()
+        if value and len(value) < 2:
+            raise ValueError("Display name must be empty or at least two characters")
+        return value
+
+    @field_validator("accepted_terms", "account_data_consent", mode="before")
+    @classmethod
+    def explicit_agreement(cls, value: object) -> bool:
+        if value is not True:
+            raise ValueError("Explicit agreement is required")
+        return True
 
     @field_validator("password")
     @classmethod

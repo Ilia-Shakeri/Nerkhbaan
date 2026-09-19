@@ -18,7 +18,7 @@ export function RequiredPasswordView() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (newPassword.length < 8 || newPassword !== confirmation) {
+    if (newPassword.length < 10 || newPassword.length > 128 || !/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword) || newPassword !== confirmation) {
       toast.error(language === 'fa' ? 'رمز جدید معتبر نیست یا تکرار آن یکسان نیست.' : 'New password is invalid or confirmation does not match.');
       return;
     }
@@ -52,8 +52,9 @@ export function RequiredPasswordView() {
         </div>
         <form onSubmit={submit} className="space-y-3">
           <Input name="current-password" autoComplete="current-password" type="password" passwordToggleLabels={passwordToggleLabels} value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} placeholder={language === 'fa' ? 'رمز فعلی' : 'Current password'} required />
-          <Input name="new-password" autoComplete="new-password" type="password" passwordToggleLabels={passwordToggleLabels} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={language === 'fa' ? 'رمز جدید' : 'New password'} minLength={8} required />
-          <Input name="confirm-password" autoComplete="new-password" type="password" passwordToggleLabels={passwordToggleLabels} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder={language === 'fa' ? 'تکرار رمز جدید' : 'Confirm new password'} minLength={8} required />
+          <p className="text-sm">{language === 'fa' ? 'رمز جدید: ۱۰ تا ۱۲۸ کاراکتر، حرف کوچک، بزرگ و عدد.' : 'New password: 10–128 characters, lower case, upper case and a digit.'}</p>
+          <Input name="new-password" aria-label={language === 'fa' ? 'رمز جدید' : 'New password'} autoComplete="new-password" type="password" passwordToggleLabels={passwordToggleLabels} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={language === 'fa' ? 'رمز جدید' : 'New password'} minLength={10} maxLength={128} required />
+          <Input name="confirm-password" aria-label={language === 'fa' ? 'تکرار رمز جدید' : 'Confirm new password'} autoComplete="new-password" type="password" passwordToggleLabels={passwordToggleLabels} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} placeholder={language === 'fa' ? 'تکرار رمز جدید' : 'Confirm new password'} minLength={10} maxLength={128} required />
           <Button type="submit" disabled={saving} className="w-full bg-[#D4AF37] text-black">{saving ? '...' : language === 'fa' ? 'تغییر رمز' : 'Change password'}</Button>
         </form>
       </Card>

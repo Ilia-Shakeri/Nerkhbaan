@@ -220,7 +220,7 @@ def signup(
 
     user = User(
         username=payload.username.lower(),
-        full_name=payload.full_name.strip(),
+        full_name=payload.full_name.strip() or payload.username,
         email=payload.email.lower(),
         password_hash=hash_password(payload.password),
         password_changed_at=datetime.now(UTC),
@@ -237,7 +237,11 @@ def signup(
             detail="Email or username is already registered",
         ) from None
     token, refresh_token, _ = _issue_session(db, user, request)
-    _record_security_event(db, request, "signup", "success", user.id)
+    _record_security_event(db, request, "signup", "success", user.id, detail={
+        "policy_version": payload.policy_version,
+        "accepted_terms": payload.accepted_terms,
+        "account_data_consent": payload.account_data_consent,
+    })
     db.commit()
     db.refresh(user)
     _set_auth_cookies(response, token, refresh_token)

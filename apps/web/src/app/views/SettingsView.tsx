@@ -273,7 +273,7 @@ export function SettingsView() {
           <div className={rowCls}>
             <div className="flex items-center gap-4">
               <div className={iconWrap(isDark ? 'bg-[#D4AF37]/10 text-[#D4AF37]' : 'bg-[#D4AF37]/15 text-[#8A6A20]')}>{isDark ? <Moon size={20} /> : <Sun size={20} />}</div>
-              <div><div className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.darkTheme[language]}</div><div className={`text-sm ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.darkThemeSub[language]}</div></div>
+              <div><div className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.darkTheme[language]}</div><div className={`text-sm ${isDark ? 'text-[#CDBB8C]' : 'text-[#6A4E11]'}`}>{t.darkThemeSub[language]}</div></div>
             </div>
             <Switch checked={isDark} onCheckedChange={toggleTheme} aria-label={t.darkTheme[language]} />
           </div>

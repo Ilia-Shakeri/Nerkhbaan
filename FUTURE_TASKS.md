@@ -1,5 +1,12 @@
 # Future Tasks
 
+## Legal/privacy launch blockers (2.6.0 candidate)
+
+Supply legal owner/contact/jurisdiction, payment facts, processor register,
+asset/data licences and approved retention/deletion procedure before deployment.
+Complete assistive-technology and authenticated form checks. Full details:
+[legal readiness](docs/legal-readiness-2026-09-19.md).
+
 Tracked work that is not yet done. For the full picture — what is complete, what
 is partial, and what production readiness still requires — see
 [`PROJECT_STATUS.md`](PROJECT_STATUS.md).

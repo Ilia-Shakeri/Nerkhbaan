@@ -17,10 +17,10 @@ from app.services.insights import InsightUnavailableError
 class InsightRouterContractTests(unittest.IsolatedAsyncioTestCase):
     def test_chat_requires_user_message_last(self) -> None:
         with self.assertRaises(ValidationError):
-            ChatRequest(messages=[ChatMessage(role="assistant", content="old reply")])
+            ChatRequest(messages=[ChatMessage(role="assistant", content="old reply")], processing_consent=True, policy_version="2026-09-19")
 
     async def test_failed_new_chat_does_not_create_blank_session(self) -> None:
-        payload = ChatRequest(messages=[ChatMessage(role="user", content="price view")])
+        payload = ChatRequest(messages=[ChatMessage(role="user", content="price view")], processing_consent=True, policy_version="2026-09-19")
         db = MagicMock()
         db.scalars.return_value.all.return_value = []
 
@@ -33,5 +33,6 @@ class InsightRouterContractTests(unittest.IsolatedAsyncioTestCase):
                 await chat(payload, SimpleNamespace(id=42), db)
 
         self.assertEqual(getattr(raised.exception, "status_code", None), 503)
-        db.add.assert_not_called()
-        db.commit.assert_not_called()
+        db.add.assert_called_once()
+        self.assertEqual(db.add.call_args.args[0].event_type, "chat_processing_consent")
+        db.commit.assert_called_once()

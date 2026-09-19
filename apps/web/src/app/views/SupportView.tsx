@@ -7,6 +7,8 @@ import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { useAppContext } from '../context/AppContext';
 import { api, type SupportMessage, type SupportTicket } from '../services/api';
 import { toast } from 'sonner';
+import { SupportConsent } from '../components/SupportConsent';
+import { POLICY_VERSION } from '../legal/policies';
 
 export function SupportView() {
   const { language, theme } = useAppContext();
@@ -27,6 +29,8 @@ export function SupportView() {
   const [newTicketMessage, setNewTicketMessage] = useState('');
   const [showNewTicketForm, setShowNewTicketForm] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [ticketConsent, setTicketConsent] = useState(false);
+  const [replyConsent, setReplyConsent] = useState(false);
 
   const t = {
     title: { fa: 'پشتیبانی', en: 'Support' },
@@ -100,12 +104,13 @@ export function SupportView() {
   }, [selectedTicket]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || selectedTicket === null || isSending) return;
+    if (!newMessage.trim() || selectedTicket === null || isSending || !replyConsent) return;
     setIsSending(true);
     try {
-      const sent = await api.support.sendMessage(selectedTicket, newMessage.trim());
+      const sent = await api.support.sendMessage(selectedTicket, newMessage.trim(), { support_data_consent: replyConsent, policy_version: POLICY_VERSION });
       setMessages((prev) => [...prev, sent]);
       setNewMessage('');
+      setReplyConsent(false);
       setTickets((prev) =>
         prev.map((ticket) =>
           ticket.id === selectedTicket ? { ...ticket, last_message: sent.content } : ticket
@@ -119,16 +124,19 @@ export function SupportView() {
   };
 
   const handleCreateTicket = async () => {
-    if (!newTicketSubject.trim() || !newTicketMessage.trim() || isCreating) return;
+    if (!newTicketSubject.trim() || !newTicketMessage.trim() || isCreating || !ticketConsent) return;
     setIsCreating(true);
     try {
       const ticket = await api.support.createTicket({
         subject: newTicketSubject.trim(),
-        message: newTicketMessage.trim()
+        message: newTicketMessage.trim(),
+        support_data_consent: ticketConsent,
+        policy_version: POLICY_VERSION,
       });
       setTickets((prev) => [ticket, ...prev]);
       setNewTicketSubject('');
       setNewTicketMessage('');
+      setTicketConsent(false);
       setShowNewTicketForm(false);
       setSelectedTicket(ticket.id);
       toast.success(t.ticketCreated[language]);
@@ -182,6 +190,7 @@ export function SupportView() {
                   ref={subjectRef}
                   id="new-ticket-subject"
                   name="subject"
+                  maxLength={200}
                   value={newTicketSubject}
                   onChange={(e) => setNewTicketSubject(e.target.value)}
                   placeholder={language === 'fa' ? 'موضوع تیکت' : 'Ticket subject'}
@@ -195,6 +204,7 @@ export function SupportView() {
                 <textarea
                   id="new-ticket-message"
                   name="message"
+                  maxLength={8000}
                   value={newTicketMessage}
                   onChange={(e) => setNewTicketMessage(e.target.value)}
                   placeholder={language === 'fa' ? 'توضیحات' : 'Description'}
@@ -206,10 +216,13 @@ export function SupportView() {
                   }`}
                 />
               </div>
+              <SupportConsent checked={ticketConsent} onChange={setTicketConsent} />
               <div className="flex gap-3">
                 <Button
                   onClick={handleCreateTicket}
-                  disabled={isCreating || !newTicketSubject.trim() || !newTicketMessage.trim()}
+                  disabled={isCreating || !ticketConsent || !newTicketSubject.trim() || !newTicketMessage.trim()}
+                  aria-label={t.createTicket[language]}
+                  aria-busy={isCreating}
                   className="flex-1 bg-[#D4AF37] text-black disabled:opacity-50"
                 >
                   {isCreating ? <Loader2 size={16} className="animate-spin" /> : t.createTicket[language]}
@@ -312,9 +325,12 @@ export function SupportView() {
               </div>
 
               <div className={`p-4 border-t ${isDark ? 'border-white/10' : 'border-black/10'}`}>
+                <SupportConsent checked={replyConsent} onChange={setReplyConsent} />
                 <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void handleSendMessage(); }}>
                   <Input
                     name="reply"
+                    aria-label={language === 'fa' ? 'متن پاسخ پشتیبانی' : 'Support reply'}
+                    maxLength={8000}
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onKeyDown={(e) => {
@@ -326,7 +342,7 @@ export function SupportView() {
                     placeholder={t.typeMessage[language]}
                     className={`flex-1 ${isDark ? 'bg-[#141414] border-[#D4AF37]/20' : 'bg-white border-[#D4AF37]/30'}`}
                   />
-                  <Button type="submit" disabled={isSending || !newMessage.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={t.send[language]}>
+                  <Button type="submit" disabled={isSending || !replyConsent || !newMessage.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={language === 'fa' ? 'ارسال پاسخ پشتیبانی' : 'Send support reply'}>
                     {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                   </Button>
                 </form>

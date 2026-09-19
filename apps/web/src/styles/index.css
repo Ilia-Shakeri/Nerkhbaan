@@ -117,6 +117,21 @@
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
+
+  :where(a, button, input, textarea, select):focus-visible {
+    outline: 2px solid #6A4E11 !important;
+    outline-offset: 3px !important;
+  }
+  .dark :where(a, button, input, textarea, select):focus-visible {
+    outline-color: #E8D9AE !important;
+  }
+  input::placeholder, textarea::placeholder {
+    color: #686868 !important;
+    opacity: 1;
+  }
+  .dark input::placeholder, .dark textarea::placeholder {
+    color: #A3A3A3 !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

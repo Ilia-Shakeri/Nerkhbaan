@@ -7,6 +7,8 @@ import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { useAppContext } from '../context/AppContext';
 import { api, type ChatMessage, type ChatSessionSummary } from '../services/api';
 import { toast } from 'sonner';
+import { Link } from 'react-router-dom';
+import { POLICY_VERSION } from '../legal/policies';
 
 export function AssistantView() {
   const { language, theme } = useAppContext();
@@ -17,6 +19,7 @@ export function AssistantView() {
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const [processingConsent, setProcessingConsent] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -35,7 +38,7 @@ export function AssistantView() {
     sendFail: { fa: 'پاسخ در دسترس نیست', en: 'Reply is unavailable' },
     saved: { fa: 'ذخیره شد', en: 'Saved' },
     deleted: { fa: 'حذف شد', en: 'Deleted' },
-    ttl: { fa: 'تاریخچه پس از یک ماه حذف می‌شود', en: 'History is deleted after one month' },
+    ttl: { fa: 'پاک‌سازی گفتگوهای بدون فعالیت بیش از ۳۱ روز؛ نسخه پشتیبان جداست', en: 'Cleanup targets chats inactive for over 31 days; backups are separate' },
     rename: { fa: 'تغییر نام گفتگو', en: 'Rename chat' },
     cancelRename: { fa: 'لغو تغییر نام', en: 'Cancel rename' },
     delete: { fa: 'حذف گفتگو', en: 'Delete chat' },
@@ -84,14 +87,14 @@ export function AssistantView() {
 
   const handleSend = async () => {
     const text = draft.trim();
-    if (!text || isSending) return;
+    if (!text || isSending || !processingConsent) return;
 
     const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
     setMessages(nextMessages);
     setDraft('');
     setIsSending(true);
     try {
-      const result = await api.insights.chat(nextMessages, language, activeSessionId);
+      const result = await api.insights.chat(nextMessages, language, activeSessionId, { processing_consent: processingConsent, policy_version: POLICY_VERSION });
       setActiveSessionId(result.session_id);
       setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
       await refreshSessions();
@@ -218,8 +221,12 @@ export function AssistantView() {
           </div>
 
           <div className={`border-t p-4 ${isDark ? 'border-white/10' : 'border-black/10'}`}>
+            <label className={`mb-3 flex min-h-11 items-start gap-3 text-sm leading-6 ${isDark ? 'text-[#E8D9AE]' : 'text-[#3B2E13]'}`}><input type="checkbox" className="mt-1 h-5 w-5 shrink-0" checked={processingConsent} onChange={(e) => setProcessingConsent(e.target.checked)} />{language === 'fa' ? 'با ذخیره گفتگو و ارسال متن و تاریخچه به سرویس پردازش بیرونی برای پاسخ موافقم. داده شخصی یا محرمانه نمی‌فرستم. با برداشتن تیک، ارسال بعدی متوقف می‌شود.' : 'I agree to chat storage and sending text and history to external processing services for replies. I will not send personal or confidential data. Uncheck to stop further sends.'}</label>
+            <p className="mb-3 text-sm"><Link className="underline" to="/privacy" target="_blank" rel="noopener">{language === 'fa' ? 'حریم خصوصی (برگه جدید)' : 'Privacy (new tab)'}</Link></p>
             <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void handleSend(); }}>
               <Input
+                aria-label={language === 'fa' ? 'پرسش از دستیار' : 'Question for assistant'}
+                maxLength={4000}
                 value={draft}
                 onChange={(event: React.ChangeEvent<HTMLInputElement>) => setDraft(event.target.value)}
                 onKeyDown={(event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -231,7 +238,7 @@ export function AssistantView() {
                 placeholder={t.placeholder[language]}
                 className={`flex-1 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414]' : 'border-[#D4AF37]/30 bg-white'}`}
               />
-              <Button type="submit" disabled={isSending || !draft.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={t.send[language]}>
+              <Button type="submit" disabled={isSending || !processingConsent || !draft.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={t.send[language]}>
                 {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
               </Button>
             </form>

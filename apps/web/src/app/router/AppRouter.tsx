@@ -10,7 +10,7 @@ const DesktopLayout = lazy(() => import('../layouts/DesktopLayout').then((module
 const DashboardView = lazy(() => import('../views/DashboardView').then((module) => ({ default: module.DashboardView })));
 const SettingsView = lazy(() => import('../views/SettingsView').then((module) => ({ default: module.SettingsView })));
 const ContactView = lazy(() => import('../views/ContactView').then((module) => ({ default: module.ContactView })));
-const PrivacyView = lazy(() => import('../views/PrivacyView').then((module) => ({ default: module.PrivacyView })));
+const LegalView = lazy(() => import('../views/LegalView').then((module) => ({ default: module.LegalView })));
 const AdvancedReportView = lazy(() => import('../views/AdvancedReportView').then((module) => ({ default: module.AdvancedReportView })));
 const SupportView = lazy(() => import('../views/SupportView').then((module) => ({ default: module.SupportView })));
 const ChartAnalysisView = lazy(() => import('../views/ChartAnalysisView').then((module) => ({ default: module.ChartAnalysisView })));
@@ -29,6 +29,7 @@ export const AppRouter = () => {
     <Routes>
       <Route path="/auth" element={<AuthView />} />
       <Route path="/forgot-password" element={<ForgotPasswordView />} />
+      {(['privacy', 'terms', 'cookies', 'refunds', 'business'] as const).map((kind) => <Route key={kind} path={`/${kind}`} element={<DeferredPage><LegalView kind={kind} /></DeferredPage>} />)}
       <Route path="/change-password" element={<ProtectedRoute allowPasswordChange><RequiredPasswordView /></ProtectedRoute>} />
 
       <Route
@@ -46,7 +47,6 @@ export const AppRouter = () => {
         <Route path="assistant" element={<DeferredPage><AssistantView /></DeferredPage>} />
         <Route path="settings" element={<DeferredPage><SettingsView /></DeferredPage>} />
         <Route path="contact" element={<DeferredPage><ContactView /></DeferredPage>} />
-        <Route path="privacy" element={<DeferredPage><PrivacyView /></DeferredPage>} />
         <Route path="support" element={<DeferredPage><SupportView /></DeferredPage>} />
       </Route>
 

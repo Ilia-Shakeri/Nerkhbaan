@@ -7,6 +7,7 @@ import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { Link, useNavigate } from 'react-router-dom';
+import { LegalLinks } from '../components/LegalLinks';
 
 export function ForgotPasswordView() {
   const { language, theme } = useAppContext();
@@ -38,7 +39,7 @@ export function ForgotPasswordView() {
     desc2: { fa: 'کد ارسال شده به ایمیل خود و رمز عبور جدید را وارد کنید.', en: 'Enter the code sent to your email and your new password.' },
     codeLabel: { fa: 'کد تایید ۶ رقمی', en: '6-digit Recovery Code' },
     codePlaceholder: { fa: '123456', en: '123456' },
-    newPassLabel: { fa: 'رمز عبور جدید', en: 'New Password' },
+    newPassLabel: { fa: 'رمز جدید: ۱۰ تا ۱۲۸ کاراکتر، حرف کوچک، بزرگ و عدد', en: 'New password: 10–128 characters, lower case, upper case and digit' },
     newPassPlaceholder: { fa: '••••••••', en: '••••••••' },
     resetBtn: { fa: 'تغییر رمز عبور', en: 'Reset Password' },
     title3: { fa: 'رمز عبور تغییر کرد!', en: 'Password Reset Successful!' },
@@ -63,7 +64,7 @@ export function ForgotPasswordView() {
     try {
       // Connects to existing endpoint logic
       await api.auth.forgotPassword(email);
-      toast.success(language === 'fa' ? 'کد بازیابی ارسال شد' : 'Recovery code sent');
+      toast.success(language === 'fa' ? 'اگر حساب واجد شرایط باشد، کد بازیابی ارسال می‌شود.' : 'If the account is eligible, a recovery code will be sent.');
       setStep(2);
     } catch (error: any) {
       const message = readableError(error, 'ارسال کد انجام نشد. دوباره تلاش کنید.', 'The recovery code could not be sent. Try again.');
@@ -179,6 +180,7 @@ export function ForgotPasswordView() {
                     )}
                     <Button
                         type="submit" disabled={isSubmitting}
+                        aria-label={t.sendCode[language]} aria-busy={isSubmitting}
                         className={`mt-6 h-12 w-full rounded-2xl text-sm font-bold transition-all duration-300 ${
                         isDark 
                             ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB] text-black shadow-[0_8px_32px_0_rgba(212,175,55,0.25)] hover:shadow-[0_8px_32px_0_rgba(212,175,55,0.4)] hover:scale-[1.02]' 
@@ -224,7 +226,8 @@ export function ForgotPasswordView() {
                       </div>
                     )}
                     <Button
-                        type="submit" disabled={isSubmitting || newPassword.length < 8}
+                        type="submit" disabled={isSubmitting || newPassword.length < 10 || newPassword.length > 128 || !/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)}
+                        aria-label={t.resetBtn[language]} aria-busy={isSubmitting}
                         className={`mt-6 h-12 w-full rounded-2xl text-sm font-bold transition-all duration-300 ${
                         isDark 
                             ? 'bg-gradient-to-r from-[#D4AF37] to-[#F3E2AB] text-black shadow-[0_8px_32px_0_rgba(212,175,55,0.25)] hover:shadow-[0_8px_32px_0_rgba(212,175,55,0.4)] hover:scale-[1.02]' 
@@ -255,6 +258,8 @@ export function ForgotPasswordView() {
         </AnimatePresence>
         
         {/* Global Professional Footer */}
+        <p className={`mt-4 text-sm ${isDark ? 'text-[#E8D9AE]' : 'text-[#3B2E13]'}`}>{language === 'fa' ? 'ایمیل فقط برای بازیابی درخواستی شما پردازش می‌شود؛ اجازه بازاریابی نیست.' : 'Your email is processed for the recovery you request, not marketing.'}</p>
+        <LegalLinks />
         <div className={`mt-8 flex w-full flex-col items-center justify-center border-t border-black/10 pt-5 dark:border-white/10`}>
           <p className={`text-center text-[13px] font-medium leading-relaxed transition-colors duration-300 ${isDark ? 'text-gray-400' : 'text-gray-500'}`} style={isRtl ? { fontFamily: 'Vazirmatn, sans-serif' } : undefined}>
             {t.footerText[language]}

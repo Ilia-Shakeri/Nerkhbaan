@@ -1,5 +1,8 @@
 # Nerkhbaan
 
+2.6.0 is a local privacy/legal candidate, not a production compliance claim.
+See [legal readiness and release blockers](docs/legal-readiness-2026-09-19.md).
+
 Live gold, silver, currency and crypto prices for the Iranian and international
 markets, with verified pricing, price alerts and a market assistant.
 

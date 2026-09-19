@@ -2,6 +2,17 @@
 
 Base path: `/api`. All responses are JSON. All timestamps are RFC 3339 in UTC.
 
+## 2.6.0 candidate — explicit permissions
+
+Not yet deployed. Signup requires JSON booleans `accepted_terms: true` and
+`account_data_consent: true`, plus `policy_version: "2026-09-19"`.
+`full_name` is optional; omitted/blank falls back to the username.
+Support ticket/message POST requests require `support_data_consent: true` and
+the same version. Chat POST requires `processing_consent: true` and that version.
+Missing/false/coerced permission or a different version is rejected with 422.
+Permission receipts are server-timestamped security events. Existing users are
+not retroactively marked as accepting terms. API and clients must ship together.
+
 - **Instrument model and price semantics** — [`apps/api/PRICING_SOURCES.md`](apps/api/PRICING_SOURCES.md)
 - **Provider onboarding and operations** — [`docs/pricing-operations-runbook.md`](docs/pricing-operations-runbook.md)
 - **Deployment** — [`README.md`](README.md)

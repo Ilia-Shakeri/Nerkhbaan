@@ -4,13 +4,13 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import get_current_user
-from ..models import AssistantChatMessage, AssistantChatSession, User
+from ..models import AssistantChatMessage, AssistantChatSession, SecurityEvent, User
 from ..pricing.compatibility import legacy_pricing_adapter
 from ..pricing.instruments import LEGACY_ASSET_MAPPING
 from ..security import rate_limit_hit
@@ -58,9 +58,18 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequest(BaseModel):
+    processing_consent: bool
+    policy_version: Literal["2026-09-19"]
     messages: list[ChatMessage] = Field(min_length=1, max_length=20)
     language: Literal["fa", "en"] = "fa"
     session_id: int | None = None
+
+    @field_validator("processing_consent", mode="before")
+    @classmethod
+    def explicit_agreement(cls, value: object) -> bool:
+        if value is not True:
+            raise ValueError("Explicit external processing permission is required")
+        return True
 
     @model_validator(mode="after")
     def last_message_must_be_user(self) -> "ChatRequest":
@@ -191,6 +200,11 @@ async def chat(
         session = _owned_session(db, current_user.id, payload.session_id)
 
     messages = [{"role": message.role, "content": message.content} for message in payload.messages]
+    # Record the user's permission before any external transmission, including failed attempts.
+    db.add(SecurityEvent(user_id=current_user.id, event_type="chat_processing_consent",
+                         result="accepted", detail={"policy_version": payload.policy_version,
+                                                    "processing_consent": True}))
+    db.commit()
     try:
         reply = await insight_engine.chat(messages, payload.language, str(current_user.id))
     except InsightQuotaExceeded as exc:

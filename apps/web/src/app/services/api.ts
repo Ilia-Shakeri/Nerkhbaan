@@ -138,7 +138,7 @@ export const api = {
       if (isDesktop && data.access_token) await storeDesktopCredentials({ access_token: data.access_token, refresh_token: data.refresh_token ?? null });
       return data;
     },
-    async signup(userData: { username: string; full_name: string; email: string; password: string }): Promise<AuthResponse> {
+    async signup(userData: { username: string; full_name?: string; email: string; password: string; accepted_terms: boolean; account_data_consent: boolean; policy_version: string }): Promise<AuthResponse> {
       const { data } = await apiInstance.post<AuthResponse>('auth/signup', userData, { headers: isDesktop ? { 'X-Client-Type': 'desktop' } : {} });
       if (isDesktop && data.access_token) await storeDesktopCredentials({ access_token: data.access_token, refresh_token: data.refresh_token ?? null });
       return data;
@@ -169,7 +169,7 @@ export const api = {
       const { data } = await apiInstance.get<SupportTicket[]>('support/tickets');
       return data;
     },
-    async createTicket(payload: { subject: string; message: string }): Promise<SupportTicket> {
+    async createTicket(payload: { subject: string; message: string; support_data_consent: boolean; policy_version: string }): Promise<SupportTicket> {
       const { data } = await apiInstance.post<SupportTicket>('support/ticket', payload);
       return data;
     },
@@ -177,8 +177,8 @@ export const api = {
       const { data } = await apiInstance.get<SupportMessage[]>(`support/ticket/${ticketId}/messages`);
       return data;
     },
-    async sendMessage(ticketId: number, content: string): Promise<SupportMessage> {
-      const { data } = await apiInstance.post<SupportMessage>(`support/ticket/${ticketId}/message`, { content });
+    async sendMessage(ticketId: number, content: string, consent: { support_data_consent: boolean; policy_version: string }): Promise<SupportMessage> {
+      const { data } = await apiInstance.post<SupportMessage>(`support/ticket/${ticketId}/message`, { content, ...consent });
       return data;
     },
   },
@@ -204,8 +204,8 @@ export const api = {
       const { data } = await apiInstance.post<AnalyzeResponse>('insights/analyze', { asset, language });
       return data;
     },
-    async chat(messages: ChatMessage[], language: 'fa' | 'en', session_id?: number | null): Promise<ChatResponse> {
-      const { data } = await apiInstance.post<ChatResponse>('insights/chat', { messages, language, session_id });
+    async chat(messages: ChatMessage[], language: 'fa' | 'en', session_id: number | null | undefined, consent: { processing_consent: boolean; policy_version: string }): Promise<ChatResponse> {
+      const { data } = await apiInstance.post<ChatResponse>('insights/chat', { messages, language, session_id, ...consent });
       return data;
     },
     async listSessions(): Promise<ChatSessionSummary[]> {

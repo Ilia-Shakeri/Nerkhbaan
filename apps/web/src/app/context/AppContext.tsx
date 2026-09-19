@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { api, type UserProfile } from '../services/api';
 import { disablePushNotifications, syncPushSubscription } from '@/pwa/push';
+import { readPreference, rememberPreference } from '../legal/storage';
 
 type Language = 'fa' | 'en';
 type Theme = 'dark' | 'light';
@@ -43,17 +44,17 @@ export function AppProvider({
   const [mustChangePassword, setMustChangePassword] = useState(false);
 
   const [language, setLanguage] = useState<Language>(() => {
-    const savedLanguage = localStorage.getItem('language');
+    const savedLanguage = readPreference('language');
     return savedLanguage === 'en' || savedLanguage === 'fa' ? savedLanguage : 'fa';
   });
 
   const [theme, setTheme] = useState<Theme>(() => {
-    const savedTheme = localStorage.getItem('theme');
+    const savedTheme = readPreference('theme');
     return savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : 'dark';
   });
 
-  const [currencyMode, setCurrencyMode] = useState<CurrencyMode>(() => {
-    const saved = localStorage.getItem('currencyMode');
+  const [currencyMode, updateCurrencyMode] = useState<CurrencyMode>(() => {
+    const saved = readPreference('currencyMode');
     return saved === 'usd' || saved === 'toman' ? saved : 'usd';
   });
 
@@ -84,13 +85,11 @@ export function AppProvider({
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('language', language);
     document.documentElement.dir = language === 'fa' ? 'rtl' : 'ltr';
     document.documentElement.lang = language;
   }, [language]);
 
   useEffect(() => {
-    localStorage.setItem('theme', theme);
 
     if (theme === 'dark') {
       document.documentElement.classList.add('dark');
@@ -99,9 +98,10 @@ export function AppProvider({
     }
   }, [theme]);
 
-  useEffect(() => {
-    localStorage.setItem('currencyMode', currencyMode);
-  }, [currencyMode]);
+  const setCurrencyMode = (mode: CurrencyMode) => {
+    rememberPreference('currencyMode', mode);
+    updateCurrencyMode(mode);
+  };
 
   const login = useCallback((user: UserProfile) => {
     setIsAuthenticated(true);
@@ -125,11 +125,15 @@ export function AppProvider({
   }, []);
 
   const toggleTheme = () => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    const next = theme === 'dark' ? 'light' : 'dark';
+    rememberPreference('theme', next);
+    setTheme(next);
   };
 
   const toggleLanguage = () => {
-    setLanguage((prev) => (prev === 'fa' ? 'en' : 'fa'));
+    const next = language === 'fa' ? 'en' : 'fa';
+    rememberPreference('language', next);
+    setLanguage(next);
   };
 
   const value = useMemo(

@@ -11,8 +11,8 @@ export function ContactView() {
   const t = {
     title: { fa: 'تماس با ما', en: 'Contact Us' },
     subtitle: {
-      fa: 'درخواست خود را امن و مستقیم برای تیم پشتیبانی بفرستید',
-      en: 'Send your request securely to the support team',
+      fa: 'درخواست خود را برای تیم پشتیبانی بفرستید؛ اطلاعات حساس لازم نیست',
+      en: 'Send your request to support; sensitive details are not needed',
     },
     support: { fa: 'پشتیبانی', en: 'Support' },
     supportValue: { fa: 'ورود به مرکز پشتیبانی', en: 'Open Support Center' },

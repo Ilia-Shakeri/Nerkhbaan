@@ -28,7 +28,7 @@ export function ChangePasswordModal({ isOpen, onClose, language, isDark }: Chang
     cancel: { fa: 'لغو', en: 'Cancel' },
     success: { fa: 'رمز عبور با موفقیت تغییر کرد', en: 'Password changed successfully' },
     mismatch: { fa: 'رمزهای عبور مطابقت ندارند', en: 'Passwords do not match' },
-    tooShort: { fa: 'رمز عبور جدید باید حداقل ۸ کاراکتر باشد', en: 'New password must be at least 8 characters' },
+    tooShort: { fa: 'رمز جدید: ۱۰ تا ۱۲۸ کاراکتر، حرف کوچک، بزرگ و عدد', en: 'Use 10–128 characters, lower case, upper case and a digit' },
     failed: { fa: 'رمز عبور فعلی نادرست است', en: 'Current password is incorrect' },
   };
 
@@ -46,7 +46,7 @@ export function ChangePasswordModal({ isOpen, onClose, language, isDark }: Chang
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 8) {
+    if (newPassword.length < 10 || newPassword.length > 128 || !/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
       toast.error(t.tooShort[language]);
       return;
     }

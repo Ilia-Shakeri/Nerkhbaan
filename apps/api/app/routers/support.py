@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import List
+from typing import List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -10,14 +10,26 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import get_current_user
-from ..models import SupportMessage, SupportTicket, User
+from ..models import SecurityEvent, SupportMessage, SupportTicket, User
 from ..security import rate_limit_hit
 from ..admin.models import AdminSupportTicketState
 
 router = APIRouter(prefix="/api/support")
 
 
-class TicketCreate(BaseModel):
+class SupportConsent(BaseModel):
+    support_data_consent: bool
+    policy_version: Literal["2026-09-19"]
+
+    @field_validator("support_data_consent", mode="before")
+    @classmethod
+    def explicit_agreement(cls, value: object) -> bool:
+        if value is not True:
+            raise ValueError("Explicit support processing permission is required")
+        return True
+
+
+class TicketCreate(SupportConsent):
     subject: str = Field(min_length=1, max_length=200)
     message: str = Field(min_length=1, max_length=8000)
 
@@ -30,7 +42,7 @@ class TicketCreate(BaseModel):
         return clean
 
 
-class MessageCreate(BaseModel):
+class MessageCreate(SupportConsent):
     content: str = Field(min_length=1, max_length=8000)
 
     @field_validator("content")
@@ -119,6 +131,7 @@ def create_ticket(
     db.add(
         SupportMessage(ticket_id=new_ticket.id, from_user="user", content=ticket.message)
     )
+    _record_consent(db, current_user.id, new_ticket.id, ticket.policy_version)
     db.commit()
     db.refresh(new_ticket)
     return _serialize_ticket(new_ticket)
@@ -135,6 +148,13 @@ def get_tickets(
         .order_by(SupportTicket.updated_at.desc())
     ).all()
     return [_serialize_ticket(ticket) for ticket in tickets]
+
+
+def _record_consent(db: Session, user_id: int, ticket_id: int, version: str) -> None:
+    # No duplicate message body or network identifier in this receipt.
+    db.add(SecurityEvent(user_id=user_id, event_type="support_consent", result="accepted",
+                         detail={"policy_version": version, "ticket_id": ticket_id,
+                                 "support_data_consent": True}))
 
 
 @router.get("/ticket/{ticket_id}/messages", response_model=List[MessageResponse])
@@ -172,6 +192,7 @@ def send_message(
         content=message.content,
     )
     db.add(new_message)
+    _record_consent(db, current_user.id, ticket.id, message.policy_version)
     ticket.last_message = message.content
     ticket.last_user_response_at = datetime.now(UTC)
     if ticket.status in {"resolved", "waiting_for_user"}:

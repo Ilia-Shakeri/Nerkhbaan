@@ -7,6 +7,8 @@ import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { api } from '../services/api';
 import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
+import { LegalLinks } from '../components/LegalLinks';
+import { POLICY_VERSION } from '../legal/policies';
 
 export function AuthView() {
   const { language, toggleLanguage, login, theme, toggleTheme } = useAppContext();
@@ -24,14 +26,16 @@ export function AuthView() {
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fullName, setFullName] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [dataConsent, setDataConsent] = useState(false);
   const [formError, setFormError] = useState('');
   const errorRef = useRef<HTMLDivElement>(null);
 
   // Password live validation checks
-  const hasLength = password.length >= 8;
+  const hasLength = password.length >= 10 && password.length <= 128;
   const hasUpper = /[A-Z]/.test(password);
   const hasLower = /[a-z]/.test(password);
-  const hasNumSym = /[0-9!@#$%^&*(),.?":{}|<>\-_]/.test(password);
+  const hasNumSym = /[0-9]/.test(password);
   const isPasswordValid = hasLength && hasUpper && hasLower && hasNumSym;
 
   const t = {
@@ -52,7 +56,7 @@ export function AuthView() {
     emailPlaceholder: { fa: 'name@example.com', en: 'name@example.com' },
     password: { fa: 'رمز عبور', en: 'Password' },
     passwordPlaceholder: { fa: '********', en: '********' },
-    fullName: { fa: 'نام و نام خانوادگی', en: 'Full Name' },
+    fullName: { fa: 'نام نمایشی (اختیاری؛ نام واقعی لازم نیست)', en: 'Display name (optional; no legal name needed)' },
     fullNamePlaceholder: { fa: 'مثال: علی رضایی', en: 'e.g., John Doe' },
     forgotPass: { fa: 'رمز عبور خود را فراموش کرده‌اید؟', en: 'Forgot your password?' },
     noAccount: { fa: 'حساب کاربری ندارید؟', en: "Don't have an account?" },
@@ -60,10 +64,10 @@ export function AuthView() {
     success: { fa: 'با موفقیت وارد شدید', en: 'Successfully logged in' },
     created: { fa: 'حساب کاربری با موفقیت ایجاد شد', en: 'Account created successfully' },
     failed: { fa: 'خطا در ارتباط با سرور', en: 'Server connection failed' },
-    pwdLength: { fa: 'حداقل ۸ کاراکتر', en: 'At least 8 characters' },
+    pwdLength: { fa: '۱۰ تا ۱۲۸ کاراکتر', en: '10 to 128 characters' },
     pwdUpper: { fa: 'یک حرف بزرگ', en: 'Uppercase letter' },
     pwdLower: { fa: 'یک حرف کوچک', en: 'Lowercase letter' },
-    pwdNumSym: { fa: 'عدد یا نماد', en: 'Number or Symbol' },
+    pwdNumSym: { fa: 'حداقل یک عدد', en: 'At least one digit' },
     invalidPwdMsg: { fa: 'رمز عبور ضعیف است', en: 'Password is too weak' },
     networkError:  { fa: 'ارتباط با سرویس برقرار نشد. چند لحظه دیگر دوباره تلاش کنید.', en: 'The service could not be reached. Try again shortly.' },
     badCredentials:{ fa: 'نام کاربری یا رمز عبور اشتباه است', en: 'Invalid username or password' },
@@ -85,6 +89,10 @@ export function AuthView() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError('');
+    if (!isLogin && (!acceptedTerms || !dataConsent)) {
+      setFormError(language === 'fa' ? 'شرایط و پردازش داده حساب را بررسی و تأیید کنید.' : 'Review and confirm the terms and account data processing.');
+      return;
+    }
     if (!isLogin && !isPasswordValid) {
         toast.error(t.invalidPwdMsg[language]);
         return;
@@ -104,7 +112,10 @@ export function AuthView() {
           username: username.trim(),
           full_name: fullName.trim(),
           email: email.trim(),
-          password
+          password,
+          accepted_terms: acceptedTerms,
+          account_data_consent: dataConsent,
+          policy_version: POLICY_VERSION,
         });
         login(response.user);
         toast.success(t.created[language]);
@@ -188,7 +199,7 @@ export function AuthView() {
                       <User size={18} className="pointer-events-none absolute start-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                       <Input
                         name="name" autoComplete="name" type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
-                        placeholder={t.fullNamePlaceholder[language]} required dir="auto"
+                        placeholder={t.fullNamePlaceholder[language]} minLength={2} maxLength={120} dir="auto"
                         className={`h-11 rounded-2xl ps-11 pe-4 text-start text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-500' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>
@@ -199,7 +210,7 @@ export function AuthView() {
                       <User size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                       <Input
                         name="username" autoComplete="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-                        placeholder={t.usernamePlaceholder[language]} required dir="ltr"
+                        placeholder={t.usernamePlaceholder[language]} required minLength={3} maxLength={50} pattern="[a-zA-Z0-9._-]+" dir="ltr"
                         className={`h-11 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>
@@ -241,6 +252,7 @@ export function AuthView() {
                     autoComplete={isLogin ? 'current-password' : 'new-password'}
                     type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                     required dir="ltr" placeholder={t.passwordPlaceholder[language]}
+                    minLength={isLogin ? 8 : 10} maxLength={128}
                     passwordToggleLabels={{
                       show: language === 'fa' ? 'نمایش رمز عبور' : 'Show password',
                       hide: language === 'fa' ? 'پنهان کردن رمز عبور' : 'Hide password',
@@ -278,6 +290,12 @@ export function AuthView() {
                 </motion.div>
               )}
 
+              {!isLogin && <fieldset className={`space-y-3 text-sm leading-6 ${isDark ? 'text-[#E8D9AE]' : 'text-[#3B2E13]'}`}>
+                <legend className="mb-2 font-bold">{language === 'fa' ? 'پیش از ساخت حساب' : 'Before creating an account'}</legend>
+                <p><Link className="underline" to="/terms" target="_blank" rel="noopener">{language === 'fa' ? 'شرایط استفاده (برگه جدید)' : 'Terms (new tab)'}</Link> · <Link className="underline" to="/privacy" target="_blank" rel="noopener">{language === 'fa' ? 'حریم خصوصی (برگه جدید)' : 'Privacy (new tab)'}</Link></p>
+                <label className="flex min-h-11 items-start gap-3"><input className="mt-1 h-5 w-5 shrink-0" type="checkbox" required checked={acceptedTerms} onChange={(e) => setAcceptedTerms(e.target.checked)} />{language === 'fa' ? 'شرایط استفاده را خواندم و می‌پذیرم.' : 'I have read and accept the terms.'}</label>
+                <label className="flex min-h-11 items-start gap-3"><input className="mt-1 h-5 w-5 shrink-0" type="checkbox" required checked={dataConsent} onChange={(e) => setDataConsent(e.target.checked)} />{language === 'fa' ? 'با پردازش داده لازم برای حساب و امنیت، طبق حریم خصوصی، موافقم. این اجازه بازاریابی نیست.' : 'I agree to account and security data processing described in the privacy notice. This is not marketing consent.'}</label>
+              </fieldset>}
               {formError && (
                 <div ref={errorRef} tabIndex={-1} role="alert" className={`rounded-xl border px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-400 ${isDark ? 'border-red-500/30 bg-red-500/10 text-red-300' : 'border-red-300 bg-red-50 text-red-700'}`}>
                   {formError}
@@ -286,6 +304,8 @@ export function AuthView() {
 
               <Button
                 type="submit"
+                aria-label={isLogin ? t.submitLogin[language] : t.submitSignup[language]}
+                aria-busy={isSubmitting}
                 disabled={isSubmitting || (!isLogin && !isPasswordValid)}
                 className={`w-full rounded-2xl text-sm font-bold transition-all duration-300 ${isLogin ? 'mt-6 h-12' : 'mt-4 h-11'} ${
                   (!isLogin && !isPasswordValid) ? 'opacity-50 cursor-not-allowed' : ''
@@ -313,6 +333,8 @@ export function AuthView() {
                       setIsLogin(!isLogin);
                       setPassword('');
                       setFormError('');
+                      setAcceptedTerms(false);
+                      setDataConsent(false);
                     }}
                     className={`font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}
                   >
@@ -332,6 +354,7 @@ export function AuthView() {
             </p>
           </div>
         )}
+        <LegalLinks />
       </div>
     </div>
   );

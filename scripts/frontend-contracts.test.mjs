@@ -1,4 +1,48 @@
 import assert from "node:assert/strict";
+
+test("legal pages are public and consent is never preselected", () => {
+  const router = read("apps/web/src/app/router/AppRouter.tsx");
+  const auth = read("apps/web/src/app/views/AuthView.tsx");
+  const support = read("apps/web/src/app/views/SupportView.tsx");
+  const chat = read("apps/web/src/app/views/AssistantView.tsx");
+  assert.ok(router.indexOf("['privacy', 'terms', 'cookies', 'refunds', 'business']") < router.indexOf('path="/change-password"'));
+  assert.match(auth, /acceptedTerms, setAcceptedTerms\] = useState\(false\)/);
+  assert.match(auth, /dataConsent, setDataConsent\] = useState\(false\)/);
+  assert.match(auth, /accepted_terms: acceptedTerms/);
+  assert.match(auth, /policy_version: POLICY_VERSION/);
+  assert.match(support, /!ticketConsent/);
+  assert.match(support, /!replyConsent/);
+  assert.match(chat, /!processingConsent/);
+  assert.match(auth, /rotateY: isRtl \? -90 : 90/);
+});
+
+test("external charts never load tracking code and attribution remains", () => {
+  const report = read("apps/web/src/app/views/AdvancedReportView.tsx");
+  const dashboard = read("apps/web/src/app/views/DashboardView.tsx");
+  assert.doesNotMatch(report, /createElement|<iframe|tv\.js|TradingView\.widget/);
+  assert.match(report, /rel="noopener noreferrer"/);
+  assert.match(dashboard, /attributionLogo: true/);
+  assert.match(read("NOTICE"), /Copyright/);
+});
+
+test("cookie and chat lifetimes stay distinct in policy copy", () => {
+  const policies = read("apps/web/src/app/legal/policies.ts");
+  assert.match(policies, /15 minutes and 30 days/);
+  assert.match(policies, /inactive for over 31 days/);
+  assert.match(read("apps/api/app/config.py"), /auth_refresh_days: int = 30/);
+  assert.match(read("apps/api/app/services/background.py"), /CHAT_RETENTION_DAYS = 31/);
+});
+
+test("legal body, focus and placeholder colours meet AA contrast pairs", () => {
+  const lum = (hex) => {
+    const values = hex.match(/[a-f0-9]{2}/gi).map((v) => parseInt(v, 16) / 255).map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+    return values[0] * 0.2126 + values[1] * 0.7152 + values[2] * 0.0722;
+  };
+  for (const [foreground, background] of [['E8D9AE', '0E0E0E'], ['3B2E13', 'FAF3E2'], ['686868', 'FFFFFF'], ['A3A3A3', '141414'], ['CDBB8C', '141414'], ['6A4E11', 'FAF3E2']]) {
+    const [a, b] = [lum(foreground), lum(background)].sort((a, b) => b - a);
+    assert.ok((a + 0.05) / (b + 0.05) >= 4.5, `${foreground}/${background}`);
+  }
+});
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 

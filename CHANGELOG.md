@@ -2,6 +2,33 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.6.0] - 2026-09-19
+
+### Added
+
+- Public bilingual privacy, terms, cookies, refund and business-detail draft pages.
+- Explicit, server-validated registration, support and external chat processing
+  permissions with policy-version receipts. No marketing permission is bundled.
+- Legal/accessibility risk register and asset provenance inventory.
+
+### Changed
+
+- Display name optional at signup; username used when omitted. No identity document collection.
+- Preferences written on user choice, not first render; storage failures tolerated.
+- Removed automatic third-party chart script; an explicit external link remains,
+  while the first-party dashboard charts stay available.
+- Restored chart-library attribution, strengthened focus/placeholder contrast,
+  labelled reply fields and busy buttons, corrected password guidance and chat retention copy.
+- Login card flip preserved. Removed unsupported blanket privacy/security promises.
+
+### Release gate
+
+- Local candidate only. Do not deploy these draft legal terms until operator
+  identity, contact, jurisdiction, processor details and retention are approved.
+- Required request fields change signup/support/chat contracts; release clients
+  and API together. Old clients receive validation errors, not assumed consent.
+- Tests and remaining evidence: `docs/legal-readiness-2026-09-19.md`.
+
 ## [2.5.1] - 2026-09-19
 
 ### Fixed

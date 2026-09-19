@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
+import { LegalLinks } from '../components/LegalLinks';
 import {
   Settings,
   LayoutDashboard,
@@ -274,6 +275,7 @@ export function DesktopLayout() {
         isDark ? 'bg-[#050505] text-[#F2E8CC]' : 'bg-[#FFF8E8] text-[#4A3913]'
       }`}
     >
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:start-4 focus:top-4 focus:z-[110] focus:rounded-lg focus:bg-[#FAF3E2] focus:p-4 focus:text-[#3B2E13]">{language === 'fa' ? 'رفتن به محتوای اصلی' : 'Skip to main content'}</a>
       <AnimatePresence>
         {apiAlert && (
           <motion.div
@@ -638,8 +640,9 @@ export function DesktopLayout() {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Outlet />
+          <LegalLinks />
         </main>
       </div>
 

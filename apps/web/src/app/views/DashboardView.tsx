@@ -378,7 +378,7 @@ function FinancialChart({
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: isDark ? '#AA986A' : '#7A5E24',
-        attributionLogo: false,
+        attributionLogo: true,
       },
       grid: {
         vertLines: { color: isDark ? 'rgba(212,175,55,0.06)' : 'rgba(122,94,36,0.08)' },
@@ -451,6 +451,7 @@ function FinancialChart({
   return (
     <div className={`relative w-full ${className}`} dir="ltr" data-chart-interactive="true">
       <p id={descriptionId} className="sr-only">{chartDescription}</p>
+      {/* TradingView Lightweight Charts™ Copyright (с) 2025 TradingView, Inc. https://www.tradingview.com/ */}
       <div ref={containerRef} className="h-full w-full" role="img" tabIndex={0} aria-describedby={descriptionId} />
       {crosshairPoint && (
         <div className={`pointer-events-none absolute start-3 top-3 z-10 rounded-lg border px-2 py-1 text-xs font-bold backdrop-blur ${
@@ -508,8 +509,12 @@ export function DashboardView() {
   const lastWsEventsRef = useRef(new Map<string, { sequence: number | null; timestamp: number | null }>());
   const dragActivationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const previousOrderRef = useRef(JSON.stringify(assetOrder));
   useEffect(() => {
-    window.localStorage.setItem(CHART_ORDER_STORAGE_KEY, JSON.stringify(assetOrder));
+    const nextOrder = JSON.stringify(assetOrder);
+    if (nextOrder === previousOrderRef.current) return;
+    previousOrderRef.current = nextOrder;
+    try { window.localStorage.setItem(CHART_ORDER_STORAGE_KEY, nextOrder); } catch { /* Persistence may be blocked. */ }
   }, [assetOrder]);
 
   useEffect(() => () => {

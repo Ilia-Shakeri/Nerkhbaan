@@ -1,5 +1,13 @@
 # Project Status and Audit Baseline
 
+## 2026-09-19 — 2.6.0 local legal/privacy candidate
+
+Public bilingual legal drafts, data minimisation, explicit form permissions,
+third-party embed removal, attribution and accessibility fixes implemented.
+**Not deployed; not legally cleared.** Operator identity/contact, target markets,
+retention and licensing remain blockers. See [readiness review](docs/legal-readiness-2026-09-19.md).
+Earlier release statements below are historical, not proof of legal readiness.
+
 **Updated:** 2026-09-15 · **Release:** `2.4.10` · **Verdict:** frontend
 speed, usability, accessibility, clean images, and production deployment are
 verified; formal operator evidence remains pending
