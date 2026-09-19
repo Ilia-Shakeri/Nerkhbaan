@@ -63,6 +63,12 @@ Expected log: `price feed accepted at ...`. Then verify:
 curl -fsS https://nerkhbaan.ir/api/instruments/XAG_USD_OZ
 curl -fsS https://nerkhbaan.ir/api/instruments/SILVER_999_TOMAN_GRAM
 curl -fsS 'https://nerkhbaan.ir/api/prices/silver/history?timeframe=30d'
+
+From 2.7.0 the public relay first requests Gold API Free XAG and falls back to
+`https://xaus.com/api/v1/spot?compact=1`. XAUS is accepted only when its
+`data_state.status` is `fresh`, the observation is no older than 15 minutes,
+and `silver_usd_oz` passes the bounded XAG range. The emitted provider identity
+is `xaus_xag`; it is never mislabeled as the original source.
 ```
 
 Disable only the relay if it fails. Stored prices remain and age normally:

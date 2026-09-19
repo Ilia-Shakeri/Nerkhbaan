@@ -139,7 +139,7 @@ class Settings(BaseSettings):
     pricing_relay_shared_token: str | None = None
     pricing_worker_shared_secret: str | None = None
     pricing_provider_allowed_hosts: str = (
-        "api.alanchand.com,api.gold-api.com,www.goldapi.io,api.metals.dev,"
+        "api.alanchand.com,api.gold-api.com,www.goldapi.io,api.metals.dev,xaus.com,"
         "api.exchange.coinbase.com,api.coingecko.com,api.coincap.io,"
         "api.nobitex.ir,apiv2.nobitex.ir,api.wallex.ir,api.bitpin.org,api.wallgold.ir,api.tetherland.com,"
         "servix.cc,persiantoolbox.ir,api.tala.ir,api.navasan.tech,api.nerkh.io"

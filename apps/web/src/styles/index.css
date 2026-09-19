@@ -132,6 +132,38 @@
   .dark input::placeholder, .dark textarea::placeholder {
     color: #A3A3A3 !important;
   }
+
+  :where(button, [role="button"]) {
+    transition-timing-function: cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app-button:hover {
+    transform: translateY(-1px);
+  }
+
+  .app-button:hover:active {
+    transform: scale(0.97);
+  }
+
+  .sidebar-reopen svg {
+    transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  .sidebar-reopen:hover svg {
+    transform: translateX(-2px) scale(1.06);
+  }
+
+  [dir="ltr"] .sidebar-reopen:hover svg {
+    transform: translateX(2px) scale(1.06);
+  }
+
+  .legal-footer-link:hover {
+    color: #B8942A;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

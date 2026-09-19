@@ -170,18 +170,24 @@ export function DesktopLayout() {
   }) => (
     <>
       <div className="group relative flex h-20 shrink-0 items-center justify-center border-b border-[#D4AF37]/15">
-        <NavLink
-          to="/"
-          onClick={() => setIsSidebarOpen(false)}
-          className="transition-opacity hover:opacity-80"
-        >
-          <img
-          src={logo}
-          alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'}
-          className={`object-contain transition-[width,height] duration-200 ease-out ${collapsed ? 'h-12 w-12' : 'h-16 w-16'}`}
-        />
-        </NavLink>
-        {canCollapse && (
+        {collapsed && canCollapse ? (
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed(false)}
+            className={`sidebar-reopen flex h-12 w-12 items-center justify-center rounded-2xl border shadow-sm ${
+              isDark ? 'border-[#D4AF37]/25 bg-[#17140D] text-[#E2C05A]' : 'border-[#D4AF37]/35 bg-[#FFF8E8] text-[#7A5A14]'
+            }`}
+            aria-label={language === 'fa' ? 'باز کردن منو' : 'Expand sidebar'}
+            title={language === 'fa' ? 'باز کردن منو' : 'Expand sidebar'}
+          >
+            <PanelLeftOpen size={21} />
+          </button>
+        ) : (
+          <NavLink to="/" onClick={() => setIsSidebarOpen(false)} className="transition-opacity hover:opacity-80">
+            <img src={logo} alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'} className="h-16 w-16 object-contain" />
+          </NavLink>
+        )}
+        {canCollapse && !collapsed && (
           <button
             type="button"
             onClick={() => setIsSidebarCollapsed((prev) => !prev)}
@@ -201,7 +207,7 @@ export function DesktopLayout() {
                 : isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'
             }
           >
-            {isSidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            <PanelLeftClose size={17} />
           </button>
         )}
       </div>
@@ -640,9 +646,11 @@ export function DesktopLayout() {
         </header>
 
         {/* Page Content */}
-        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-          <Outlet />
-          <LegalLinks />
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto">
+          <div className="flex min-h-full flex-col">
+            <div className="flex-1 p-4 sm:p-6 lg:p-8"><Outlet /></div>
+            <LegalLinks variant="footer" />
+          </div>
         </main>
       </div>
 

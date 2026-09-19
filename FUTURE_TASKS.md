@@ -1,6 +1,6 @@
 # Future Tasks
 
-## Legal/privacy remaining work (2.6.1 limited release)
+## Legal/privacy remaining work (2.7.0 limited release)
 
 Owner/contact/location and current free Iran service are confirmed. Still supply
 public postal address where required, processor register, asset/data licences and

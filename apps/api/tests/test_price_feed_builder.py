@@ -66,6 +66,26 @@ class PriceFeedBuilderTests(unittest.TestCase):
                 now,
             )
 
+    def test_builds_fresh_xaus_silver_fallback(self) -> None:
+        now = datetime(2026, 9, 19, 12, 0, tzinfo=UTC)
+        feed = MODULE.build_feed(
+            {
+                "silver_usd_oz": 66.37,
+                "data_state": {
+                    "status": "fresh",
+                    "as_of": (now - timedelta(seconds=10)).isoformat(),
+                },
+            },
+            {
+                "bitcoin": {"usd": 77000, "last_updated_at": int(now.timestamp())},
+                "tether": {"usd": 0.999, "last_updated_at": int(now.timestamp())},
+            },
+            now,
+            silver_provider="xaus_xag",
+        )
+        self.assertEqual(feed["quotes"][0]["provider_id"], "xaus_xag")
+        self.assertEqual(feed["quotes"][0]["price"], "66.37")
+
 
 if __name__ == "__main__":
     unittest.main()

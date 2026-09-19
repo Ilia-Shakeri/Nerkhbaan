@@ -52,7 +52,9 @@ remain unanswered. No invented business identity, refund deadline or licence.
   These records do not prove consent was legally informed without processor details.
 - No inferred consent for existing accounts. No marketing checkbox or tracking
   permission bundled with account/support forms. Recovery requests have a purpose notice.
-- Automatic TradingView script removed, not merely hidden behind a banner.
+- TradingView remains blocked by default. Version 2.7.0 loads its chart script
+  only after the visitor presses the dedicated load button; the choice lasts
+  for that view and is not stored by Nerkhbaan.
   Advanced report links to the external chart; dashboard charts stay local.
   This also removes a script that the existing production CSP did not allow.
 - Restored Lightweight Charts attribution and creator link; preserved the NOTICE.

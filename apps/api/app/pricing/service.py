@@ -427,6 +427,7 @@ class InstrumentPricingService:
             "coingecko_btc",
             "coingecko_usdt",
             "gold_api_free_xag",
+            "xaus_xag",
         }:
             raise ValueError("Worker provider is not allowed for this instrument")
         observed_at = ensure_utc(observed_at)
@@ -437,7 +438,7 @@ class InstrumentPricingService:
             seconds=_WORKER_MAXIMUM_SOURCE_AGE_SECONDS
         ):
             raise ValueError("Worker quote timestamp is too old")
-        if historical and provider_id == "gold_api_free_xag":
+        if historical and provider_id in {"gold_api_free_xag", "xaus_xag"}:
             raise ValueError("Worker provider does not support historical quotes")
         instrument = await self.operational.instrument(instrument_id)
         if not instrument.enabled or not instrument.accepts(price):

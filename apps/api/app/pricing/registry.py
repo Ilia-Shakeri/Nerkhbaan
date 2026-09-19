@@ -339,7 +339,16 @@ _PROVIDERS = (
         selected_price_semantic=PriceSemantic.REFERENCE,
     ),
     _provider(
-        "metals_dev_silver", "Metals.dev Silver", "XAG_USD_OZ", ProviderRole.FALLBACK, 3,
+        "xaus_xag", "XAUS Silver", "XAG_USD_OZ", ProviderRole.FALLBACK, 3,
+        "0.78", "https://xaus.com/api/v1/spot?compact=1", "xaus_xag_v1",
+        "xaus/1.0.0", 3600, rpm=2, rph=30, rpd=300, interval=3600,
+        source_semantic=SourceSemantic.REFERENCE_RATE,
+        source_family="xaus", venue="xaus",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        enabled_default=False,
+    ),
+    _provider(
+        "metals_dev_silver", "Metals.dev Silver", "XAG_USD_OZ", ProviderRole.FALLBACK, 4,
         "0.90", _setting_url("metals_dev_api_base_url", "/latest?currency=USD&unit=toz"),
         "metals_dev_silver_v1", "metals-dev/1.0.0", 7200,
         rpm=2, rph=20, rpd=200, interval=7200,

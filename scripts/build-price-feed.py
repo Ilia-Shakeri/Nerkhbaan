@@ -48,23 +48,44 @@ def _time(value: object, label: str, now: datetime, maximum_age: timedelta) -> d
     return parsed
 
 
-def build_feed(metals: object, crypto: object, now: datetime | None = None) -> dict:
+def build_feed(
+    metals: object,
+    crypto: object,
+    now: datetime | None = None,
+    silver_provider: str = "gold_api_free_xag",
+) -> dict:
     current = (now or datetime.now(UTC)).astimezone(UTC)
-    if not isinstance(metals, dict) or metals.get("symbol") != "XAG":
+    if not isinstance(metals, dict):
         raise ValueError("Silver source contract changed")
-    if metals.get("currency") != "USD":
-        raise ValueError("Silver source currency changed")
-    silver_time = _time(
-        metals.get("updatedAt"), "Silver timestamp", current, timedelta(minutes=15)
-    )
-    silver = _decimal(metals.get("price"), "Silver price", "5", "500")
+    if silver_provider == "gold_api_free_xag":
+        if metals.get("symbol") != "XAG":
+            raise ValueError("Silver source contract changed")
+        if metals.get("currency") != "USD":
+            raise ValueError("Silver source currency changed")
+        silver_time = _time(
+            metals.get("updatedAt"), "Silver timestamp", current, timedelta(minutes=15)
+        )
+        silver = _decimal(metals.get("price"), "Silver price", "5", "500")
+    elif silver_provider == "xaus_xag":
+        state = metals.get("data_state")
+        if not isinstance(state, dict) or state.get("status") != "fresh":
+            raise ValueError("XAUS silver source is not fresh")
+        silver_time = _time(
+            state.get("as_of") or metals.get("price_as_of"),
+            "Silver timestamp",
+            current,
+            timedelta(minutes=15),
+        )
+        silver = _decimal(metals.get("silver_usd_oz"), "Silver price", "5", "500")
+    else:
+        raise ValueError("Silver provider is not allowed")
 
     if not isinstance(crypto, dict):
         raise ValueError("Crypto source contract changed")
     quotes = [
         {
             "instrument_id": "XAG_USD_OZ",
-            "provider_id": "gold_api_free_xag",
+            "provider_id": silver_provider,
             "price": str(silver),
             "observed_at": silver_time.isoformat(),
             "historical": False,
@@ -99,12 +120,17 @@ def build_feed(metals: object, crypto: object, now: datetime | None = None) -> d
 
 
 def main(output: Path) -> None:
-    metals = _get_json("https://api.gold-api.com/price/XAG")
+    silver_provider = "gold_api_free_xag"
+    try:
+        metals = _get_json("https://api.gold-api.com/price/XAG")
+    except Exception:
+        metals = _get_json("https://xaus.com/api/v1/spot?compact=1")
+        silver_provider = "xaus_xag"
     crypto = _get_json(
         "https://api.coingecko.com/api/v3/simple/price"
         "?ids=bitcoin,tether&vs_currencies=usd&include_last_updated_at=true"
     )
-    payload = build_feed(metals, crypto)
+    payload = build_feed(metals, crypto, silver_provider=silver_provider)
     output.write_text(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
         encoding="utf-8",

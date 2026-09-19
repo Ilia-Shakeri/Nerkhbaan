@@ -2,7 +2,9 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellPlus, ArrowUp, ArrowDown, ArrowUpRight, ArrowDownRight, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
+import { BellPlus, ArrowUpRight, ArrowDownRight, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
+import bitcoinIcon from 'cryptocurrency-icons/svg/color/btc.svg';
+import tetherIcon from 'cryptocurrency-icons/svg/color/usdt.svg';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -378,7 +380,7 @@ function FinancialChart({
       layout: {
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: isDark ? '#AA986A' : '#7A5E24',
-        attributionLogo: true,
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: isDark ? 'rgba(212,175,55,0.06)' : 'rgba(122,94,36,0.08)' },
@@ -477,8 +479,22 @@ function FinancialChart({
 }
 
 function AssetIcon({ id, className = '' }: { id: AssetId; className?: string }) {
-  const symbols: Record<AssetId, string> = { gold: 'Au', silver: 'Ag', usdt: '₮', btc: '₿' };
-  return <span className={`inline-flex items-center justify-center rounded-full bg-black/10 font-black ${className}`} dir="ltr">{symbols[id]}</span>;
+  if (id === 'btc' || id === 'usdt') {
+    return <img src={id === 'btc' ? bitcoinIcon : tetherIcon} alt="" aria-hidden="true" className={`rounded-full ${className}`} />;
+  }
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-full border font-black shadow-inner ${
+        id === 'gold'
+          ? 'border-[#8D6811]/35 bg-[#F2CE63] text-[#5B4008]'
+          : 'border-[#68717F]/35 bg-[#DCE2EA] text-[#3F4753]'
+      } ${className}`}
+      aria-hidden="true"
+      dir="ltr"
+    >
+      {id === 'gold' ? 'Au' : 'Ag'}
+    </span>
+  );
 }
 
 export function DashboardView() {
@@ -889,7 +905,7 @@ export function DashboardView() {
           <motion.div
             key={asset.id}
             layoutId={asset.id}
-            draggable
+            draggable={dragReadyAssetId === asset.id}
             title={language === 'fa' ? 'برای جابه‌جایی کارت را نگه دارید و بکشید' : 'Hold, then drag to reorder'}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0, scale: dragOverAssetId === asset.id ? 1.02 : 1 }}
@@ -908,6 +924,12 @@ export function DashboardView() {
             onPointerCancel={() => {
               clearDragActivation();
               setDragReadyAssetId(null);
+            }}
+            onPointerLeave={() => {
+              if (!draggedAssetId && dragReadyAssetId !== asset.id) {
+                clearDragActivation();
+                setDragReadyAssetId(null);
+              }
             }}
             onDragStartCapture={(event) => {
               if (dragReadyAssetId !== asset.id) {
@@ -1012,26 +1034,6 @@ export function DashboardView() {
                   >
                     <BellPlus size={18} />
                   </Button>
-                  <div className="flex items-center gap-1" aria-label={language === 'fa' ? 'تغییر جای کارت' : 'Move card'}>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      disabled={idx === 0}
-                      onClick={() => idx > 0 && reorderAssets(asset.id, orderedAssets[idx - 1].id)}
-                      className="h-11 w-11 rounded-xl"
-                      aria-label={language === 'fa' ? `بردن کارت ${asset.label.fa} به بالا` : `Move ${asset.label.en} card up`}
-                    ><ArrowUp size={16} /></Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      disabled={idx === orderedAssets.length - 1}
-                      onClick={() => idx < orderedAssets.length - 1 && reorderAssets(asset.id, orderedAssets[idx + 1].id)}
-                      className="h-11 w-11 rounded-xl"
-                      aria-label={language === 'fa' ? `بردن کارت ${asset.label.fa} به پایین` : `Move ${asset.label.en} card down`}
-                    ><ArrowDown size={16} /></Button>
-                  </div>
                 </div>
               </CardHeader>
               <CardContent>

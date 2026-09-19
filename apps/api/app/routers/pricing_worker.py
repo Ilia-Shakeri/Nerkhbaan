@@ -17,6 +17,7 @@ _WORKER_ROUTES = {
     "coingecko_btc": "BTC_USD",
     "coingecko_usdt": "USDT_USD",
     "gold_api_free_xag": "XAG_USD_OZ",
+    "xaus_xag": "XAG_USD_OZ",
 }
 
 

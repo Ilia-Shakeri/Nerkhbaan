@@ -4,17 +4,17 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "./utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-2xl text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border border-white/10 dark:border-white/5 active:scale-[0.97]",
+  "app-button inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl text-sm font-semibold transition-[color,background-color,border-color,box-shadow,transform] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 border active:scale-[0.97]",
   {
     variants: {
       variant: {
-        default: "bg-primary/90 text-primary-foreground shadow-lg hover:bg-primary/100 hover:shadow-xl",
-        destructive: "bg-destructive/90 text-destructive-foreground shadow-md hover:bg-destructive/100 hover:shadow-lg",
-        outline: "border border-input bg-background/50 shadow-sm hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary/80 text-secondary-foreground shadow-md hover:bg-secondary/100 hover:shadow-lg",
+        default: "border-[#B8942A] bg-[#D4AF37] text-[#151006] shadow-sm hover:bg-[#E2C05A] hover:shadow-md",
+        destructive: "border-red-700/40 bg-red-600 text-white shadow-sm hover:bg-red-500 hover:shadow-md",
+        outline: "border-[#D4AF37]/35 bg-transparent text-inherit shadow-sm hover:border-[#D4AF37]/60 hover:bg-[#D4AF37]/10",
+        secondary: "border-[#D4AF37]/20 bg-[#D4AF37]/10 text-inherit shadow-sm hover:bg-[#D4AF37]/18",
         ghost: "hover:bg-accent/50 hover:text-accent-foreground border-transparent",
         link: "text-primary underline-offset-4 hover:underline border-transparent",
-        primary: "bg-gradient-to-br from-[#D4AF37]/90 to-[#F3E2AB]/90 dark:from-[#D4AF37]/80 dark:to-[#B5952F]/80 text-black shadow-[0_4px_15px_rgba(212,175,55,0.2)] hover:shadow-[0_6px_20px_rgba(212,175,55,0.3)]",
+        primary: "border-[#B8942A] bg-[#D4AF37] text-[#151006] shadow-sm hover:bg-[#E2C05A] hover:shadow-md",
       },
       size: {
         default: "h-11 px-6 py-2",

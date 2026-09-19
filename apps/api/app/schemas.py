@@ -18,7 +18,7 @@ class UserCreate(UserBase):
     full_name: str = Field(default="", max_length=120)
     accepted_terms: bool
     account_data_consent: bool
-    policy_version: Literal["2026-09-19.1"]
+    policy_version: Literal["2026-09-19.2"]
     password: str = Field(min_length=10, max_length=128)
 
     @field_validator("full_name")
@@ -122,7 +122,7 @@ class PricePoint(BaseModel):
 
 class PricingWorkerQuote(BaseModel):
     instrument_id: str = Field(pattern=r"^(BTC_USD|USDT_USD|XAG_USD_OZ)$")
-    provider_id: str = Field(pattern=r"^(coingecko_(btc|usdt)|gold_api_free_xag)$")
+    provider_id: str = Field(pattern=r"^(coingecko_(btc|usdt)|gold_api_free_xag|xaus_xag)$")
     price: Decimal = Field(gt=0)
     observed_at: datetime
     historical: bool = False

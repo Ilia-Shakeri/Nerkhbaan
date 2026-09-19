@@ -33,12 +33,16 @@ test("legal pages are public and consent is never preselected", () => {
   assert.match(auth, /rotateY: isRtl \? -90 : 90/);
 });
 
-test("external charts never load tracking code and attribution remains", () => {
+test("external chart waits for explicit action and attribution remains", () => {
   const report = read("apps/web/src/app/views/AdvancedReportView.tsx");
   const dashboard = read("apps/web/src/app/views/DashboardView.tsx");
-  assert.doesNotMatch(report, /createElement|<iframe|tv\.js|TradingView\.widget/);
+  assert.match(report, /if \(!allowed/);
+  assert.match(report, /onClick=\{\(\) => setAllowed\(true\)\}/);
+  assert.match(report, /embed-widget-advanced-chart\.js/);
   assert.match(report, /rel="noopener noreferrer"/);
-  assert.match(dashboard, /attributionLogo: true/);
+  assert.match(dashboard, /attributionLogo: false/);
+  assert.match(read("apps/web/src/app/components/LegalLinks.tsx"), /TradingView Lightweight Charts/);
+  assert.match(read("apps/web/security-headers.conf"), /https:\/\/s3\.tradingview\.com/);
   assert.match(read("NOTICE"), /Copyright/);
 });
 
@@ -281,7 +285,9 @@ test("motion and charts have accessible alternatives", () => {
   assert.match(styles, /prefers-reduced-transparency:\s*reduce/);
   assert.match(dashboard, /ref=\{containerRef\}[\s\S]{0,160}role="img"/);
   assert.match(dashboard, /<table id=\{tableId\} className="sr-only">/);
-  assert.match(dashboard, /Move .* card up|بردن کارت/);
+  assert.match(dashboard, /Hold, then drag to reorder/);
+  assert.match(dashboard, /draggable=\{dragReadyAssetId === asset\.id\}/);
+  assert.doesNotMatch(dashboard, /Move .* card up|بردن کارت/);
 });
 
 test("admin navigation survives history and dangerous dialogs contain focus", () => {

@@ -7,4 +7,4 @@ add_header X-Frame-Options "DENY" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;
 add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()" always;
 add_header Cross-Origin-Opener-Policy "same-origin" always;
-add_header Content-Security-Policy "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss:; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests" always;
+add_header Content-Security-Policy "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; object-src 'none'; script-src 'self' https://s3.tradingview.com; frame-src https://s.tradingview.com https://www.tradingview.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss:; font-src 'self' data:; manifest-src 'self'; worker-src 'self'; upgrade-insecure-requests" always;

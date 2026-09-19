@@ -1,6 +1,7 @@
 # Nerkhbaan
 
-2.6.1 adds confirmed owner/contact details and current free-service notices.
+2.7.0 adds a consent-gated TradingView chart, a second validated silver source,
+cleaner dashboard controls, a themed footer and refreshed legal pages.
 Limited deployment completed with owner approval; this is not legal compliance clearance.
 See [legal readiness and release blockers](docs/legal-readiness-2026-09-19.md).
 

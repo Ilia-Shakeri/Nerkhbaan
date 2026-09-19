@@ -17,7 +17,7 @@ from .local_reference import (
     TicaroPricesParser,
     WallexMarketParser,
 )
-from .metals import GoldApiFreeParser, GoldApiParser, MetalsDevParser
+from .metals import GoldApiFreeParser, GoldApiParser, MetalsDevParser, XausSilverParser
 from .nobitex import NobitexOrderBookParser, NobitexStatsParser
 from .tickers import AlanchandGold18Parser, CoinCapParser, TetherlandParser
 
@@ -44,6 +44,7 @@ def build_parser(parser_id: str) -> ExplicitParser:
         "goldapi_xag_v1": lambda: GoldApiParser(symbol="XAG"),
         "gold_api_free_xau_v1": lambda: GoldApiFreeParser(symbol="XAU"),
         "gold_api_free_xag_v1": lambda: GoldApiFreeParser(symbol="XAG"),
+        "xaus_xag_v1": XausSilverParser,
         "metals_dev_gold_v1": lambda: MetalsDevParser(metal="gold"),
         "metals_dev_silver_v1": lambda: MetalsDevParser(metal="silver"),
         "coinbase_btc_usd_v1": lambda: CoinbaseTickerParser(product_id="BTC-USD"),

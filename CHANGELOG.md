@@ -2,6 +2,29 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.7.0] - 2026-09-19
+
+### Added
+- Consent-gated TradingView Advanced Chart. No third-party chart request occurs
+  until the visitor presses the clear load button.
+- Keyless XAUS XAG/USD fallback for the public relay, with strict freshness,
+  timestamp and safe-range validation.
+- Licensed CC0 Bitcoin and Tether icons, plus clearer gold and silver marks.
+
+### Changed
+- Removed the in-chart Lightweight Charts attribution mark while retaining the
+  required public TradingView notice and link in the site footer.
+- Rebuilt the footer and legal pages in the existing gold/charcoal visual system.
+- Unified shared button shape, focus, press and restrained hover feedback.
+- Collapsed sidebar now uses an animated expand control instead of the brand logo.
+- Chart cards reorder only after hold-and-drag; visible up/down controls removed.
+- Policy receipt advanced to `2026-09-19.2` for the optional external chart.
+
+### Fixed
+- Silver feed can continue through a second free source when the original XAG
+  endpoint fails, preventing the chart from remaining permanently empty.
+- Footer now stays at the bottom on short pages without covering page content.
+
 ## [2.6.1] - 2026-09-19
 
 ### Changed

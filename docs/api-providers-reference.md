@@ -92,6 +92,11 @@ marked **freemium**.
 
 ### 2.1 `XAU_USD_OZ` / `XAG_USD_OZ` — international gold & silver spot
 
+The public relay also supports [XAUS](https://xaus.com/api/) as a keyless
+XAG/USD fallback. The relay requires a fresh upstream state and a source
+timestamp within 15 minutes. Core-server polling stays disabled by default;
+the foreign relay is the intended route where Iran egress is restricted.
+
 | Provider | Role | Cost | Auth (env var) | Enabled by default | Notes |
 | --- | --- | --- | --- | --- | --- |
 | GoldAPI.io (`goldapi_xau`/`goldapi_xag`) | PRIMARY | **Freemium** | `GOLDAPI_API_KEY` (header) | Yes, but skipped if no key | Free tier historically ~100 req/month; paid plans scale up. Verify current terms at goldapi.io before relying on it. |

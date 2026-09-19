@@ -64,6 +64,28 @@ class GoldApiFreeParser:
 
 
 @dataclass(frozen=True, slots=True)
+class XausSilverParser:
+    parser_version: str = "xaus/1.0.0"
+
+    def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
+        root = require_object(payload, "XAUS response")
+        state = require_object(root.get("data_state"), "XAUS data state")
+        if state.get("status") != "fresh":
+            raise ParserError("stale_quote", "XAUS silver quote is not fresh")
+        parsed = ParsedProviderValue(
+            price=strict_decimal(exact_path(root, "silver_usd_oz"), "silver_usd_oz"),
+            currency=context.instrument.quote_currency,
+            weight_unit=context.instrument.weight_unit,
+            purity=context.instrument.purity,
+            observed_at=optional_timestamp(
+                state.get("as_of") or root.get("price_as_of"), context, "quote timestamp"
+            ),
+            metadata={"source": root.get("silver_source") or "xaus"},
+        )
+        return validate_parsed_value(parsed, context)
+
+
+@dataclass(frozen=True, slots=True)
 class MetalsDevParser:
     metal: str
     parser_version: str = "metals-dev/1.0.0"
