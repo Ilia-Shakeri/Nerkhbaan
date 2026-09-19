@@ -57,7 +57,7 @@ The frontend image installer tries configured npm registries first. If every
 registry is unavailable, it retries with the BuildKit npm cache and the locked
 dependency set. A cache miss remains a hard failure; never replace the lockfile
 or install unpinned packages during a production deploy.
-# Limited 2.5.0 release
+# Limited 2.5.1 release
 
 The user explicitly approved a limited provider-fix deployment on 2026-09-19,
 with database backup and live readiness checks despite missing formal gate
@@ -66,3 +66,10 @@ Retain previous images and commit for rollback; preserve all volumes. Use
 the new version as the image tag so rollback does not depend on mutable tags.
 See [provider validation](free-provider-validation-2026-09-19.md) for the known
 24K gap and source timestamp/redistribution limitations.
+
+Final code: `2a26ca5d`, images tagged `2.5.1`. Previous code: `2b2972d8`;
+previous images tagged `c580745` are retained. Prior configuration is protected
+at `/home/deploy/nerkhbaan-release-backups/pre-2.5.0.env` (mode 600). Do not
+commit or print that file. An operator-approved rollback should restore the
+prior configuration and image selection, then check readiness; never remove
+data volumes. No schema migration was added by this release.

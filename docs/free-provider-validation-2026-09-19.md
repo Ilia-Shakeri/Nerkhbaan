@@ -1,4 +1,4 @@
-# Public pricing validation — 2.5.0
+# Public pricing validation — 2.5.1
 
 Checked from the Iranian production host on 2026-09-19. Successful keyless
 access means no payment/authentication was needed for these probes, not a
@@ -71,3 +71,22 @@ Any failed route causes nonzero exit. Retest after changing host, DNS or API.
 The operator explicitly authorized a limited release with a backup and health
 checks while formal provider-rights, restore and launch evidence stays pending.
 The normal gated deploy script is unchanged; no evidence file is fabricated.
+
+## Final production evidence
+
+- Code `2a26ca5d`, tag `v2.5.1`, images `nerkhbaan-api:2.5.1`,
+  `nerkhbaan-web:2.5.1`, `nerkhbaan-price-feed-pull:2.5.1` deployed.
+- All 11 parser canaries passed at 10:56 UTC. An earlier Bitpin BTC response
+  was correctly rejected as stale; success is not a perpetual freshness claim.
+- Wallex/Nobitex aggregate payloads measured about 461/450 KiB; 2.5.1 raises
+  their explicit bounds to 1 MiB. 2.5.0 was not promoted to live services.
+- Python 3.12 container suite: 200 tests, 199 pass, one skipped (no separate
+  test database). Earlier harness mount/import errors were fixed by mounting
+  only test/script directories read-only; production secret file permissions
+  were not changed.
+- New SQL filters executed against production PostgreSQL before rollout.
+- Public web HTTP 200; API readiness true; real direct 18K/925 quotes persisted;
+  24K unavailable. New charts have short real history, not fabricated backfill.
+- Backup gzip integrity passed. Full restore, rights and formal launch gates
+  remain pending. Six healthchecked service instances healthy; feed pull running
+  without a configured healthcheck. No production volume was reset or removed.

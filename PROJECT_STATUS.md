@@ -6,15 +6,27 @@ verified; formal operator evidence remains pending
 
 ## Current release update
 
-- Candidate `2.5.1`: direct Wallgold 18K/925, Bitpin crypto fallback, working
+- Production `2.5.1` (code commit `2a26ca5d`): direct Wallgold 18K/925, Bitpin crypto fallback, working
   Nobitex alternate host and corrected Rial book units. All local gold formulas
   removed. Direct keyless 24K remains an explicit coverage gap.
 - Local API suite: 200 tests, 199 passed, one PostgreSQL concurrency test skipped.
   Full `npm run verify` also passed: release consistency, Python static checks,
   29 frontend contracts, web/admin/desktop production builds. Browser test
   discovery passed; that command did not execute a browser scenario.
-  Public API probes passed from the production host; full deployment proof is
-  recorded separately after rollout, not inferred from these probes.
+  The same 200-test suite passed in the production Python 3.12 image (one
+  skipped). All 11 selected live parser canaries passed on the final retry.
+- Limited production rollout completed on 2026-09-19: public web HTTP 200,
+  `/api/health` release 2.5.1 and `ready=true`, connected database/Redis, current
+  migrations, zero persistence/backfill/dead-letter backlog. Two API replicas,
+  web, PostgreSQL, Redis and backup are healthy; price-feed-pull is running and
+  has no configured healthcheck. Database/Redis containers were not recreated.
+- Public instrument API confirmed live, persisted, non-derived 18K and 925
+  quotes. 24K returns `price=null`, `status=unavailable`. One-hour charts contain
+  newly recorded real points for 18K/925/BTC; no historical gold was invented.
+- Fresh 45.2 MiB database backup passed gzip integrity validation at
+  `/backups/last/nerkhbaan-20260919-104835.sql.gz` in the backup volume. This is
+  not a restore drill. Protected prior environment and previous images remain
+  available for rollback. Root filesystem has 3.7 GiB free after the build.
 - Operator authorized limited deployment with backup/health verification;
   formal launch evidence remains pending. See
   [provider validation](docs/free-provider-validation-2026-09-19.md).
