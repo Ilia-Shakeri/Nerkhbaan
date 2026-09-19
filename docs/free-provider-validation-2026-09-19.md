@@ -87,6 +87,9 @@ The normal gated deploy script is unchanged; no evidence file is fabricated.
 - New SQL filters executed against production PostgreSQL before rollout.
 - Public web HTTP 200; API readiness true; real direct 18K/925 quotes persisted;
   24K unavailable. New charts have short real history, not fabricated backfill.
+- Final pricing refresh is degraded: 5 fresh, 4 expired, 2 unavailable.
+  XAU and 24K are unavailable; XAG, 999 silver, USD/Toman and USDT/USD expired.
+  The deployment is healthy; complete price coverage is not achieved.
 - Backup gzip integrity passed. Full restore, rights and formal launch gates
   remain pending. Six healthchecked service instances healthy; feed pull running
   without a configured healthcheck. No production volume was reset or removed.

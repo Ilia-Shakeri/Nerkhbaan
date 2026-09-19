@@ -23,6 +23,10 @@ verified; formal operator evidence remains pending
 - Public instrument API confirmed live, persisted, non-derived 18K and 925
   quotes. 24K returns `price=null`, `status=unavailable`. One-hour charts contain
   newly recorded real points for 18K/925/BTC; no historical gold was invented.
+- Final refresh is **degraded**, not full-market completion: 5 fresh, 4 expired,
+  2 unavailable. Direct 24K and global XAU are unavailable; XAG, 999 silver,
+  free-market USD and USDT/USD are expired. Public readiness remains true.
+  The one-hour direct 18K chart grew to two real points after the next cycle.
 - Fresh 45.2 MiB database backup passed gzip integrity validation at
   `/backups/last/nerkhbaan-20260919-104835.sql.gz` in the backup volume. This is
   not a restore drill. Protected prior environment and previous images remain
