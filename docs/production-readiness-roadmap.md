@@ -1,5 +1,9 @@
 # Nerkhbaan — Production Readiness Roadmap
 
+> این سند تحلیل تفصیلی قدیمی را نگه می‌دارد. برنامه اجرایی فعلی تحویل به
+> کارفرما، با baseline نسخه 2.7.4، در
+> [`client-delivery-roadmap-fa.md`](client-delivery-roadmap-fa.md) است.
+
 > 2.5.0 update: direct 18K and 925 routes added; direct 24K remains open.
 > Gold formulas are forbidden. Formal launch evidence remains pending despite
 > explicit approval for a limited provider-fix deployment. See the

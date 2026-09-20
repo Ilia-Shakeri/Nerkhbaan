@@ -1,5 +1,9 @@
 # Project Status and Audit Baseline
 
+> برنامه اجرایی فعلی تحویل به کارفرما در
+> [`docs/client-delivery-roadmap-fa.md`](docs/client-delivery-roadmap-fa.md) است.
+> این فایل تاریخچه فنی و شواهد ممیزی را نگه می‌دارد.
+
 ## 2026-09-19 — 2.7.4 chart and interface release
 
 The dashboard uses clean first-party chart surfaces with footer attribution.

@@ -1,5 +1,9 @@
 # Future Tasks
 
+> اولویت، ترتیب اجرا، معیار قبولی و بسته تحویل در
+> [`docs/client-delivery-roadmap-fa.md`](docs/client-delivery-roadmap-fa.md)
+> نگه‌داری می‌شود. این فایل backlog جزئی است.
+
 ## Legal/privacy remaining work (2.7.0 limited release)
 
 Owner/contact/location and current free Iran service are confirmed. Still supply

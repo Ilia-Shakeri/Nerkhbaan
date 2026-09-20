@@ -4,6 +4,8 @@
 cleaner dashboard controls, a themed footer and refreshed legal pages.
 Limited deployment completed with owner approval; this is not legal compliance clearance.
 See [legal readiness and release blockers](docs/legal-readiness-2026-09-19.md).
+For the current Persian employer handoff plan, see
+[client delivery roadmap](docs/client-delivery-roadmap-fa.md).
 
 Live gold, silver, currency and crypto prices for the Iranian and international
 markets, with verified pricing, price alerts and a market assistant.
