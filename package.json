@@ -1,6 +1,6 @@
 {
   "name": "nerkhbaan-monorepo",
-  "version": "2.7.4",
+  "version": "2.7.5",
   "private": true,
   "packageManager": "npm@10.9.8",
   "engines": {
@@ -30,6 +30,7 @@
     "verify": "npm run check:release && npm run check:api && npm run test:api && npm run test:frontend && npm run build && npm run test:e2e -- --list"
   },
   "devDependencies": {
-    "@playwright/test": "^1.55.0"
+    "@playwright/test": "^1.55.0",
+    "vite": "6.4.3"
   }
 }

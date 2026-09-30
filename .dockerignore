@@ -1,6 +1,5 @@
 .git
 .agents
-.codex
 .vscode
 .idea
 
@@ -25,4 +24,3 @@ gitea_data
 
 full_Nerkhbaan_project_code.txt
 _export*.tar.gz
-_claude_tmp

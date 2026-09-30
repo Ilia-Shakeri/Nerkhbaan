@@ -1,7 +1,7 @@
 {
   "name": "nerkhbaan-web",
   "private": true,
-  "version": "2.7.4",
+  "version": "2.7.5",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -81,7 +81,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.6.3",
-    "vite": "^6.0.5",
+    "vite": "6.4.3",
     "vite-plugin-pwa": "^0.21.1",
     "workbox-precaching": "^7.4.1",
     "workbox-routing": "^7.4.1"

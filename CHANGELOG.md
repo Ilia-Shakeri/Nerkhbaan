@@ -2,6 +2,24 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.7.5] - 2026-09-30
+
+### Fixed
+- Browser checks now start the web workspace on the port expected by the test
+  runner instead of silently falling back to Vite's default port.
+- Integration checks now expose the API package root to direct test scripts.
+- Compose validation now supplies the required worker secret with a CI-only value.
+
+### Changed
+- Pinned checkout, Node.js setup and Python setup actions to current supported
+  immutable releases.
+- Updated Vite, Electron and transitive Node packages to patched compatible
+  releases; the HIGH/CRITICAL npm audit gate is now clean.
+
+### Validation
+- Release identity, frontend contracts and browser test discovery pass locally.
+- Full hosted CI and image scans remain the release gate for this candidate.
+
 ## [2.7.4] - 2026-09-19
 
 ### Fixed
