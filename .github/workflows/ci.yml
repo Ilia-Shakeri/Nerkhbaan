@@ -299,14 +299,24 @@ jobs:
 
       - name: Validate relay configuration
         run: |
-          mkdir -p /tmp/relay-tls
-          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=relay.example.com" -keyout /tmp/relay-tls/privkey.pem -out /tmp/relay-tls/fullchain.pem >/dev/null 2>&1
+          relay_fixture_tls="$(mktemp -d)"
+          trap 'rm -rf -- "$relay_fixture_tls"' EXIT
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=relay.example.com" \
+            -keyout "$relay_fixture_tls/privkey.pem" \
+            -out "$relay_fixture_tls/fullchain.pem" >/dev/null 2>&1
+          # Syntax validation uses local fixture addresses; provider DNS and
+          # reachability belong to the separate live canary checks.
           docker run --rm \
+            --add-host api.exchange.coinbase.com:127.0.0.1 \
+            --add-host api.coingecko.com:127.0.0.1 \
+            --add-host www.goldapi.io:127.0.0.1 \
+            --add-host api.gold-api.com:127.0.0.1 \
+            --add-host api.metals.dev:127.0.0.1 \
             -e CORE_IP_CIDR=203.0.113.10/32 \
             -e RELAY_SHARED_TOKEN=ci-relay-token-not-for-runtime-000000000000 \
             -e 'NGINX_ENVSUBST_FILTER=^(CORE_IP_CIDR|RELAY_SHARED_TOKEN)$' \
             -v "$PWD/infra/relay/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro" \
-            -v "/tmp/relay-tls:/etc/nginx/tls:ro" \
+            -v "$relay_fixture_tls:/etc/nginx/tls:ro" \
             nginx:1.30.4-alpine3.24 nginx -t
 
   browser-e2e:

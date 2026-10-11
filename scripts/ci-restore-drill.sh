@@ -62,6 +62,10 @@ psql -X -v ON_ERROR_STOP=1 --dbname="$RESTORE_DATABASE" --command='SELECT timesc
 pg_dump --format=custom --no-owner --no-acl --file="$dump_path" "$SOURCE_DATABASE"
 test -s "$dump_path"
 pg_restore --exit-on-error --no-owner --no-acl --dbname="$RESTORE_DATABASE" "$dump_path"
+# Keep restored cleanup and retention jobs idle. Releasing restore mode first
+# can delete expired rows before the preserved snapshot is compared.
+psql -X -v ON_ERROR_STOP=1 --dbname="$RESTORE_DATABASE" \
+  --command='SELECT alter_job(job_id, scheduled => false) FROM timescaledb_information.jobs WHERE job_id >= 1000;'
 psql -X -v ON_ERROR_STOP=1 --dbname="$RESTORE_DATABASE" --command='SELECT timescaledb_post_restore();'
 
 migration_count="$(psql --dbname="$RESTORE_DATABASE" --tuples-only --no-align --command='SELECT count(*) FROM schema_migrations;')"
