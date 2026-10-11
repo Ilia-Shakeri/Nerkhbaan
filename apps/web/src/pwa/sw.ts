@@ -19,7 +19,8 @@ cleanupOutdatedCaches();
 
 registerRoute(
   new NavigationRoute(createHandlerBoundToURL("index.html"), {
-    denylist: [/^\/api\//],
+    // The admin panel is a separate application on the same origin.
+    denylist: [/^\/api\//, /^\/admin(?:\/|$)/],
   }),
 );
 
