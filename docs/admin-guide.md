@@ -40,6 +40,18 @@ Recovery codes can sign in, re-authenticate, rotate recovery codes and disable
 optional MFA when the deployment policy allows it. Required MFA cannot be disabled through the console. Rotating
 recovery codes invalidates all previous recovery codes.
 
+### Console on an existing HTTPS host
+
+The default build path is `/`. To serve the console at `https://nerkhbaan.ir/admin/`,
+build with `VITE_ADMIN_BASE_PATH=/admin/` and set `ADMIN_FRONTEND_ORIGIN=https://nerkhbaan.ir`.
+The origin contains no path. Preserve `/api/admin` for API requests and the administrator
+cookie path; use `nerkhbaan.ir` as the cookie domain or leave the domain unset for a host-only cookie.
+Production Compose passes the build variable to the administrator image. Rebuild the image
+when changing it. The HTTPS proxy must route `/admin/` and its assets to the administrator
+frontend while routing `/api/admin/` directly to the API; redirect `/admin` to `/admin/`.
+Hash navigation stays inside `/admin/`. This setup uses the existing host certificate and
+does not require a separate administrator DNS record.
+
 ## Session and mutation contract
 
 - All non-read requests require the exact allowed `Origin`; authenticated

@@ -60,6 +60,17 @@ Browser mocks do not prove administrator HTTP/database integration or real assis
 The desktop smoke proves the unpacked local runtime; a signed installer on every supported target remains
 a separate acceptance step. CI definitions were updated but were not reported as completed remote runs.
 
+## Container and hosted application evidence — 2026-10-11
+
+- [Hosted run 38130107435](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38130107435), commit `581fe7a`: Node, Python, desktop package, actual Timescale/Redis/migration/restore, browser, Go and repository security jobs passed. The full run failed its nginx fixture and image scans; those failures must not be reported as a successful full CI run.
+- The nginx fixture now creates synthetic certificates on the runner and resolves backend hostnames. Actual edge/web/admin nginx syntax checks pass on disposable local Docker containers.
+- Patched API, web, admin, Telegram, feed-pull, relay and edge images all build. Trivy 0.70.0 reports zero HIGH/CRITICAL findings on all seven, with unfixed findings included and no waiver file. The `/admin/` image also passes the same scan.
+- The final Alpine API imports native drivers and passes 20 auth/JWT/body-limit/connection tests; the Telegram worker imports successfully. Go 1.26.9 tests pass. These checks validate runtime compatibility and do not replace target acceptance.
+- The `/admin/` build is checked in an actual Edge browser: JavaScript and CSS load, the login form appears and no page error occurs. API paths remain `/api/admin`.
+
+Source manifest and Python lock scans are separate from OS image scans. Evidence belongs to the
+recorded image/source snapshot; repeat the complete CI run on the commit containing these corrections.
+
 ## Local database browser fixture
 
 `scripts/prepare-browser-db.py` and `apps/api/scripts/browser_test_server.py` require an explicit

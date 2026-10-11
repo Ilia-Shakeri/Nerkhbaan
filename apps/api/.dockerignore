@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!.dockerignore
+!requirements.lock
+!app/
+!app/**
+!db/
+!db/**
+**/__pycache__
+**/*.py[cod]

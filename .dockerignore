@@ -8,6 +8,7 @@
 **/build
 **/coverage
 **/.cache
+**/.pytest_cache
 **/__pycache__
 **/*.py[cod]
 
@@ -24,3 +25,10 @@ gitea_data
 
 full_Nerkhbaan_project_code.txt
 _export*.tar.gz
+.local-keys
+_archives
+backups
+data
+apps/desktop/release
+playwright-report
+test-results

@@ -1,4 +1,6 @@
-FROM python:3.12.13-slim-bookworm
+FROM python:3.12.13-alpine3.24
+
+RUN apk upgrade --no-cache
 
 WORKDIR /app
 
@@ -14,7 +16,7 @@ COPY db ./db
 
 
 # Create a non-root runtime account.
-RUN addgroup --system deploy && adduser --system --group deploy
+RUN addgroup -S deploy && adduser -S -G deploy deploy
 
 RUN chown -R deploy:deploy /app
 

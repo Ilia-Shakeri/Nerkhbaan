@@ -232,6 +232,8 @@ services:
     build:
       context: .
       dockerfile: apps/admin-web/Dockerfile
+      args:
+        VITE_ADMIN_BASE_PATH: ${VITE_ADMIN_BASE_PATH:-/}
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -292,7 +294,10 @@ services:
   #   docker compose --profile edge up -d
   edge:
     profiles: ["edge"]
-    image: nginx:1.30.4-alpine3.24
+    image: nerkhbaan-edge:${APP_IMAGE_TAG:-local}
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true

@@ -36,6 +36,8 @@ RUN npm run build --workspace=nerkhbaan-web
 
 FROM nginx:1.30.4-alpine3.24 AS runtime
 
+RUN apk upgrade --no-cache
+
 RUN rm -rf /usr/share/nginx/html/*
 
 COPY apps/web/security-headers.conf /etc/nginx/security-headers.inc

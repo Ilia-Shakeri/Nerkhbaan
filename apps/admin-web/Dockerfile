@@ -35,9 +35,13 @@ RUN --mount=type=cache,id=nerkhbaan-admin-npm,target=/root/.npm,sharing=locked \
     test ! -d apps/admin-web/node_modules/electron
 
 COPY apps/admin-web ./apps/admin-web
+ARG VITE_ADMIN_BASE_PATH="/"
+ENV VITE_ADMIN_BASE_PATH=$VITE_ADMIN_BASE_PATH
 RUN npm run build --workspace=nerkhbaan-admin-web
 
 FROM nginx:1.30.4-alpine3.24 AS runtime
+
+RUN apk upgrade --no-cache
 
 RUN rm -rf /usr/share/nginx/html/*
 COPY apps/admin-web/security-headers.conf /etc/nginx/security-headers.inc

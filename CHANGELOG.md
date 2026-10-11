@@ -16,6 +16,8 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Corrected relay upstream TLS, Docker service DNS, staging subnet isolation, source timestamp feed contracts and Windows install failures.
 - Updated vulnerable HTTP/multipart dependencies and replaced the previous token package with pinned PyJWT and required-claim validation.
 - Isolated historical backfills from current snapshots, repaired legacy XAG fallback defaults and preserved explicit operator overrides.
+- Updated container OS packages and Go to remove image scan findings; kept strict HIGH/CRITICAL gates for API, clients, Telegram, feed, relay and edge.
+- Generated disposable TLS certificates on the CI runner and resolved backend names in nginx syntax fixtures.
 
 ### Added
 
@@ -25,6 +27,7 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Generated complete API schema/route index, delivery acceptance matrix and verified source archive with file hashes.
 - Hashed Python runtime/development locks, exact-package vulnerability gates and guarded PostgreSQL browser fixtures.
 - Restore target ownership checks and streaming fingerprints that preserve existing databases and large histories.
+- Configurable admin asset base for a secure path deployment when a separate admin hostname is unavailable.
 
 ### Validation boundary
 

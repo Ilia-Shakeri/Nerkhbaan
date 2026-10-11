@@ -16,8 +16,11 @@ Local unit, static, build and fixture checks belong to the delivery evidence.
 The local record includes 298 backend cases, 49 frontend cases, 10 executed Edge browser cases,
 all three client builds, an actual unpacked desktop smoke, real disposable PostgreSQL concurrency/fixture
 checks and zero reported npm/API/Telegram dependency advisories. The exact limits are in the delivery matrix.
-Container builds, Timescale/Redis integration, signed target installation and live operational acceptance
-still need their own successful run. Production needs fresh operator evidence.
+Seven patched container builds and strict image scans pass locally. The hosted application jobs on
+commit `581fe7a` pass Timescale/Redis, migrations, restore, browser, desktop and Go checks; that run's
+nginx fixture and image findings were subsequently corrected and require a fresh full CI run.
+Signed target installation and live operational acceptance still need their own successful run.
+Production needs fresh operator evidence.
 A historical success, a compressed backup and a green process are not proof of a current restore,
 current provider rights, current clock health or delivered alerts.
 
