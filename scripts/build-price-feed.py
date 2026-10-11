@@ -52,13 +52,7 @@ def _time(value: object, label: str, now: datetime, maximum_age: timedelta) -> d
     return parsed
 
 
-def build_feed(
-    metals: object,
-    crypto: object,
-    now: datetime | None = None,
-    silver_provider: str = "gold_api_free_xag",
-) -> dict:
-    current = (now or datetime.now(UTC)).astimezone(UTC)
+def _silver_quote(metals: object, current: datetime, silver_provider: str) -> dict:
     if not isinstance(metals, dict):
         raise ValueError("Silver source contract changed")
     if silver_provider == "gold_api_free_xag":
@@ -84,57 +78,104 @@ def build_feed(
     else:
         raise ValueError("Silver provider is not allowed")
 
+    return {
+        "instrument_id": "XAG_USD_OZ", "provider_id": silver_provider,
+        "price": str(silver), "observed_at": silver_time.isoformat(), "historical": False,
+    }
+
+
+def _crypto_quote(crypto: object, current: datetime, asset: str, provider: str,
+                  instrument: str, low: str, high: str) -> dict:
     if not isinstance(crypto, dict):
         raise ValueError("Crypto source contract changed")
-    quotes = [
-        {
-            "instrument_id": "XAG_USD_OZ",
-            "provider_id": silver_provider,
-            "price": str(silver),
-            "observed_at": silver_time.isoformat(),
-            "historical": False,
-        }
-    ]
-    for asset, provider, instrument, low, high in (
-        ("bitcoin", "coingecko_btc", "BTC_USD", "1000", "1000000"),
-        ("tether", "coingecko_usdt", "USDT_USD", "0.8", "1.2"),
-    ):
-        row = crypto.get(asset)
-        if not isinstance(row, dict):
-            raise ValueError(f"Crypto source omitted {asset}")
-        observed = datetime.fromtimestamp(int(row.get("last_updated_at", 0)), UTC)
-        if observed > current + timedelta(minutes=5) or current - observed > timedelta(seconds=MAX_QUOTE_AGE_SECONDS):
-            raise ValueError(f"Crypto timestamp for {asset} is stale")
-        price = _decimal(row.get("usd"), f"{asset} price", low, high)
-        quotes.append(
-            {
-                "instrument_id": instrument,
-                "provider_id": provider,
-                "price": str(price),
-                "observed_at": observed.isoformat(),
-                "historical": False,
-            }
-        )
+    row = crypto.get(asset)
+    if not isinstance(row, dict):
+        raise ValueError(f"Crypto source omitted {asset}")
+    observed = datetime.fromtimestamp(int(row.get("last_updated_at", 0)), UTC)
+    if observed > current + timedelta(minutes=5) or current - observed > timedelta(seconds=MAX_QUOTE_AGE_SECONDS):
+        raise ValueError(f"Crypto timestamp for {asset} is stale")
+    price = _decimal(row.get("usd"), f"{asset} price", low, high)
     return {
-        "feed_version": 1,
-        "source": "public-market-relay",
-        "updated_at": current.isoformat(),
-        "quotes": quotes,
+        "instrument_id": instrument, "provider_id": provider, "price": str(price),
+        "observed_at": observed.isoformat(), "historical": False,
     }
+
+
+_CRYPTO_ROUTES = (
+    ("bitcoin", "coingecko_btc", "BTC_USD", "1000", "1000000"),
+    ("tether", "coingecko_usdt", "USDT_USD", "0.8", "1.2"),
+)
+
+
+def build_feed(metals: object, crypto: object, now: datetime | None = None,
+               silver_provider: str = "gold_api_free_xag") -> dict:
+    """The legacy version-one contract still requires all three instruments."""
+    current = (now or datetime.now(UTC)).astimezone(UTC)
+    quotes = [_silver_quote(metals, current, silver_provider)]
+    for route in _CRYPTO_ROUTES:
+        quotes.append(_crypto_quote(crypto, current, *route))
+    return {"feed_version": 1, "source": "public-market-relay",
+            "updated_at": current.isoformat(), "quotes": quotes}
+
+
+def _gold_quote(gold: object, current: datetime) -> dict:
+    if not isinstance(gold, dict) or gold.get("symbol") != "XAU" or gold.get("currency") != "USD":
+        raise ValueError("Gold source symbol or USD contract changed")
+    observed = _time(gold.get("updatedAt"), "Gold timestamp", current,
+                     timedelta(seconds=MAX_QUOTE_AGE_SECONDS))
+    price = _decimal(gold.get("price"), "Gold price", "500", "10000")
+    return {"instrument_id": "XAU_USD_OZ", "provider_id": "gold_api_free_xau",
+            "price": str(price), "observed_at": observed.isoformat(), "historical": False}
+
+
+def build_partial_feed(metals: object, crypto: object, now: datetime | None = None,
+                       silver_provider: str = "gold_api_free_xag", gold: object = None) -> dict:
+    """Each failed instrument is omitted; healthy observations keep their source time."""
+    current = (now or datetime.now(UTC)).astimezone(UTC)
+    quotes = []
+    omitted = []
+    try:
+        quotes.append(_silver_quote(metals, current, silver_provider))
+    except (TypeError, ValueError, OverflowError, OSError):
+        omitted.append({"instrument_id": "XAG_USD_OZ", "reason": "source_contract_or_freshness_rejected"})
+    for route in _CRYPTO_ROUTES:
+        try:
+            quotes.append(_crypto_quote(crypto, current, *route))
+        except (TypeError, ValueError, OverflowError, OSError):
+            omitted.append({"instrument_id": route[2], "reason": "source_contract_or_freshness_rejected"})
+    try:
+        quotes.append(_gold_quote(gold, current))
+    except (TypeError, ValueError, OverflowError, OSError):
+        omitted.append({"instrument_id": "XAU_USD_OZ", "reason": "source_contract_or_freshness_rejected"})
+    if not quotes:
+        raise ValueError("No validated fresh instrument available; previous feed preserved")
+    return {"feed_version": 2, "source": "public-market-relay",
+            "updated_at": current.isoformat(), "quotes": quotes, "omitted": omitted}
 
 
 def main(output: Path) -> None:
     silver_provider = "gold_api_free_xag"
+    metals = None
     try:
         metals = _get_json("https://api.gold-api.com/price/XAG")
     except Exception:
-        metals = _get_json("https://xaus.com/api/v1/spot?compact=1")
-        silver_provider = "xaus_xag"
-    crypto = _get_json(
-        "https://api.coingecko.com/api/v3/simple/price"
-        "?ids=bitcoin,tether&vs_currencies=usd&include_last_updated_at=true"
-    )
-    payload = build_feed(metals, crypto, silver_provider=silver_provider)
+        try:
+            metals = _get_json("https://xaus.com/api/v1/spot?compact=1")
+            silver_provider = "xaus_xag"
+        except Exception:
+            pass
+    try:
+        crypto = _get_json(
+            "https://api.coingecko.com/api/v3/simple/price"
+            "?ids=bitcoin,tether&vs_currencies=usd&include_last_updated_at=true"
+        )
+    except Exception:
+        crypto = None
+    try:
+        gold = _get_json("https://api.gold-api.com/price/XAU")
+    except Exception:
+        gold = None
+    payload = build_partial_feed(metals, crypto, silver_provider=silver_provider, gold=gold)
     output.write_text(
         json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
         encoding="utf-8",

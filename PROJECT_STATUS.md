@@ -1,6 +1,6 @@
 # Project Status
 
-Code release: **2.8.0**. Record updated: 2026-10-11.
+Code release: **2.8.1**. Record updated: 2026-10-11.
 
 ## Current code
 

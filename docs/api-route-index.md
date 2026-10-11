@@ -2,7 +2,7 @@
 
 Generated from the current application. Regenerate with `python scripts/export_api_contracts.py`.
 
-Release: `2.8.0`. Full schemas: [api-contracts.json](api-contracts.json).
+Release: `2.8.1`. Full schemas: [api-contracts.json](api-contracts.json).
 
 | Method | Path | Request | Success |
 | --- | --- | --- | --- |

@@ -1,6 +1,6 @@
 {
   "name": "nerkhbaan-desktop",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "description": "Secure desktop client for Nerkhbaan price tracking.",
   "author": "Nerkhbaan",
   "private": true,
@@ -10,7 +10,9 @@
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "build": "tsc -b && vite build --configLoader runner",
     "package:dir": "npm run build && electron-builder --dir --publish never",
-    "package:win": "npm run build && electron-builder --win nsis --x64 --publish never",
+    "package:win": "npm run package:win:signed",
+    "package:win:signed": "npm run build && electron-builder --win nsis --x64 --publish never --config.forceCodeSigning=true",
+    "package:win:unsigned": "npm run build && electron-builder --win nsis --x64 --publish never --config.forceCodeSigning=false --config.win.signExecutable=false --config.directories.output=release-unsigned",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -93,10 +95,16 @@
       "package.json"
     ],
     "win": {
+      "icon": "src/logo/logo.png",
       "target": [
         "nsis"
       ],
-      "signAndEditExecutable": false
+      "signAndEditExecutable": true,
+      "signtoolOptions": {
+        "signingHashAlgorithms": [
+          "sha256"
+        ]
+      }
     },
     "nsis": {
       "oneClick": false,

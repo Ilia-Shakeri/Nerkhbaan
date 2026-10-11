@@ -463,6 +463,13 @@ class CanonicalPricePolicy:
         # Carry the instrument's spread bound with the quote so downstream
         # eligibility checks have something to compare against.
         summary = dict(source_summary)
+        # Persist the vetted anchor so later policy reads preserve the accepted
+        # receipt window without moving the original source timestamp.
+        summary["freshness_anchor"] = freshness_anchor.isoformat()
+        if source_live_eligible_until is not None:
+            summary["source_live_eligible_until"] = ensure_utc(
+                source_live_eligible_until
+            ).isoformat()
         summary.setdefault(
             "maximum_spread_bps", json_number(instrument.maximum_spread_bps)
         )

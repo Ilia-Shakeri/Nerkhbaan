@@ -44,7 +44,7 @@ _DOCS = {
     "coinbase": ("https://docs.cdp.coinbase.com/exchange/reference/exchangerestapi_getproductticker",),
     "coingecko": ("https://docs.coingecko.com/reference/simple-price",),
     "goldapi": ("https://www.goldapi.io/",),
-    "gold_api_free": ("https://api.gold-api.com/",),
+    "gold_api_free": ("https://gold-api.com/docs", "https://gold-api.com/assets/gold", "https://gold-api.com/terms"),
     "metals_dev": ("https://metals.dev/",),
     "nobitex": ("https://apidocs.nobitex.ir/",),
     "wallex": ("https://api-docs.wallex.ir/",),
@@ -93,6 +93,11 @@ def provider_contract(provider: ProviderDefinition) -> ProviderContract:
         commercial_status = "internal_or_deprecated"
         redistribution_status = "not_for_consensus_without_review"
     attribution_required = family in {"servix", "arzbin", "coingecko"}
+    if family == "gold_api_free":
+        # Official terms effective 2026-09-10 permit use in commercial applications.
+        # This records that narrow product-use statement, not a data-resale licence.
+        commercial_status = "official_terms_allow_commercial_apps"
+        redistribution_status = "app_display_per_official_terms_no_resale_attestation"
     unit_contract = "parser_strict_allowlist"
     if family == "navasan":
         unit_contract = "documented_rial_to_toman_0.1"

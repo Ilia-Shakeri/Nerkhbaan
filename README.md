@@ -1,6 +1,6 @@
 # Nerkhbaan
 
-Current code release: **2.8.0**. `VERSION` is the source of release truth.
+Current code release: **2.8.1**. `VERSION` is the source of release truth.
 Target checked on 2026-10-11: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.0.
 See the [server handoff](docs/production-handoff-fa.md) and [saved proof](docs/delivery-readiness.md).
 
@@ -106,7 +106,7 @@ Dated vendor/legal reports and historical audits remain dated records. They do n
 ## Source delivery
 
 ```powershell
-python scripts/build_delivery_archive.py C:/path/outside/repository/nerkhbaan-2.8.0-source.zip
+python scripts/build_delivery_archive.py C:/path/outside/repository/nerkhbaan-2.8.1-source.zip
 ```
 
 The builder excludes private environments, keys, databases, logs, dependencies and generated artifacts.

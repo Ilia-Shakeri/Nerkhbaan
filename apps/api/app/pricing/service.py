@@ -47,6 +47,7 @@ from .models import (
     ValidationStatus,
     WeightUnit,
     ensure_utc,
+    parse_datetime,
     utc_now,
 )
 from .persistence import PricingPersistence, pricing_persistence
@@ -324,9 +325,20 @@ class InstrumentPricingService:
     def _current_policy(quote: CanonicalQuote, instrument: Any) -> CanonicalQuote | None:
         if not instrument.enabled or not instrument.accepts(quote.price):
             return None
-        quote.expires_at = min(quote.expires_at, quote.observed_at + timedelta(seconds=instrument.expire_after_seconds))
-        quote.stale_at = min(quote.stale_at, quote.observed_at + timedelta(seconds=instrument.stale_after_seconds), quote.expires_at)
-        quote.valid_until = min(quote.valid_until, quote.observed_at + timedelta(seconds=instrument.operational_ttl_seconds), quote.stale_at)
+        anchor = quote.observed_at
+        source_bound = quote.valid_until
+        try:
+            stored_anchor = parse_datetime(quote.source_summary["freshness_anchor"])
+            stored_bound = parse_datetime(quote.source_summary["source_live_eligible_until"])
+            if quote.observed_at <= stored_anchor <= quote.canonical_at and stored_anchor <= stored_bound:
+                anchor = stored_anchor
+                source_bound = min(source_bound, stored_bound)
+        except (KeyError, TypeError, ValueError, OverflowError):
+            # Legacy or malformed metadata keeps the stricter observation anchor.
+            pass
+        quote.expires_at = min(quote.expires_at, anchor + timedelta(seconds=instrument.expire_after_seconds))
+        quote.stale_at = min(quote.stale_at, anchor + timedelta(seconds=instrument.stale_after_seconds), quote.expires_at)
+        quote.valid_until = min(quote.valid_until, source_bound, anchor + timedelta(seconds=instrument.operational_ttl_seconds), quote.stale_at)
         return quote
 
     @staticmethod
@@ -462,6 +474,7 @@ class InstrumentPricingService:
             "coingecko_btc",
             "coingecko_usdt",
             "gold_api_free_xag",
+            "gold_api_free_xau",
             "xaus_xag",
         }:
             raise ValueError("Worker provider is not allowed for this instrument")
@@ -473,7 +486,7 @@ class InstrumentPricingService:
             seconds=_WORKER_MAXIMUM_SOURCE_AGE_SECONDS
         ):
             raise ValueError("Worker quote timestamp is too old")
-        if historical and provider_id in {"gold_api_free_xag", "xaus_xag"}:
+        if historical and provider_id in {"gold_api_free_xag", "gold_api_free_xau", "xaus_xag"}:
             raise ValueError("Worker provider does not support historical quotes")
         instrument = await self.operational.instrument(instrument_id)
         if not instrument.enabled:

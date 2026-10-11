@@ -28,6 +28,9 @@ class NobitexUdfHistoryParser:
         range_end: datetime,
     ) -> list[HistoricalPricePoint]:
         root = require_object(payload, "Nobitex history response")
+        if root.get("s") == "no_data":
+            # TradingView UDF explicitly distinguishes an empty range from an error.
+            return []
         if root.get("s") != "ok":
             raise ParserError("history_status", "Nobitex history status is not ok")
         timestamps = require_list(root.get("t"), "history.t")

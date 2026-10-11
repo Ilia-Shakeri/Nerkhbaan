@@ -304,7 +304,7 @@ _PROVIDERS = (
         selected_price_semantic=PriceSemantic.REFERENCE,
     ),
     _provider(
-        "gold_api_free_xau", "Gold API Free XAU", "XAU_USD_OZ", ProviderRole.VERIFIER, 2,
+        "gold_api_free_xau", "Gold API Free XAU", "XAU_USD_OZ", ProviderRole.FALLBACK, 2,
         "0.80", _setting_url("gold_api_base_url", "/price/XAU"), "gold_api_free_xau_v1",
         "gold-api-free/1.0.0", 3600, rpm=2, rph=30, rpd=300, interval=3600,
         source_semantic=SourceSemantic.REFERENCE_RATE,

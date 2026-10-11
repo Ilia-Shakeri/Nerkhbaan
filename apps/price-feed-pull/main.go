@@ -155,7 +155,7 @@ func runGit(ctx context.Context, args ...string) error {
 }
 
 func validateFeed(value feed, now time.Time) error {
-	if value.Version != 1 || value.Source != "public-market-relay" {
+	if (value.Version != 1 && value.Version != 2) || value.Source != "public-market-relay" {
 		return errors.New("unsupported price feed contract")
 	}
 	updated, err := time.Parse(time.RFC3339Nano, value.UpdatedAt)
@@ -164,12 +164,16 @@ func validateFeed(value feed, now time.Time) error {
 	}
 	allowed := map[string]string{
 		"gold_api_free_xag": "XAG_USD_OZ",
+		"gold_api_free_xau": "XAU_USD_OZ",
 		"xaus_xag":          "XAG_USD_OZ",
 		"coingecko_btc":     "BTC_USD",
 		"coingecko_usdt":    "USDT_USD",
 	}
-	if len(value.Quotes) != 3 {
+	if value.Version == 1 && len(value.Quotes) != 3 {
 		return errors.New("price feed must contain exactly three quotes")
+	}
+	if value.Version == 2 && (len(value.Quotes) < 1 || len(value.Quotes) > 4) {
+		return errors.New("partial price feed must contain one to four quotes")
 	}
 	seenProviders := map[string]bool{}
 	seenInstruments := map[string]bool{}
@@ -191,9 +195,11 @@ func validateFeed(value feed, now time.Time) error {
 			return errors.New("quote price is outside the safe range")
 		}
 	}
-	for _, instrument := range []string{"XAG_USD_OZ", "BTC_USD", "USDT_USD"} {
-		if !seenInstruments[instrument] {
-			return errors.New("price feed omitted a required instrument")
+	if value.Version == 1 {
+		for _, instrument := range []string{"XAG_USD_OZ", "BTC_USD", "USDT_USD"} {
+			if !seenInstruments[instrument] {
+				return errors.New("price feed omitted a required instrument")
+			}
 		}
 	}
 	return nil
@@ -203,6 +209,8 @@ func safePrice(instrument string, price float64) bool {
 	switch instrument {
 	case "XAG_USD_OZ":
 		return price >= 5 && price <= 500
+	case "XAU_USD_OZ":
+		return price >= 500 && price <= 10000
 	case "BTC_USD":
 		return price >= 1000 && price <= 1000000
 	case "USDT_USD":

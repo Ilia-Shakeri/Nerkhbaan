@@ -1,4 +1,4 @@
-# Release Operations — 2.8.0
+# Release Operations — 2.8.1
 
 Updated: 2026-10-11. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).

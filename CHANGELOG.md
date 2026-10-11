@@ -2,6 +2,24 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.8.1] - 2026-10-11
+
+### Fixed
+
+- Added an immutable eighth migration and matching ORM check for the durable notification sending state; the previous seven migration files remain unchanged.
+- Parsed valid empty Nobitex history responses and paginated capped history downloads instead of silently completing a truncated range.
+- Isolated independent public feed sources and added a validated XAU fallback without bypassing source time, unit, anomaly or independence checks.
+- Enabled executable metadata/signing and made the Windows release command fail when a publisher signature is unavailable; the explicit unsigned test package stays separate.
+
+### Added
+
+- Real PostgreSQL delivery-state upgrade regressions, a trusted publisher/timestamp signature verifier and installed Windows runtime/logout checks.
+- Bounded duration/rate load workers with JSON evidence, HTTP status counts, response validation and latency percentiles.
+
+### Acceptance
+
+This patch is under final target acceptance. Completed and blocked external checks are recorded in the delivery matrix; an unsigned installation is never reported as signed.
+
 ## [2.8.0] - 2026-10-11
 
 ### Fixed

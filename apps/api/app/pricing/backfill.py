@@ -48,6 +48,10 @@ class BackfillEnqueueResult:
     stream_event_id: str | None
 
 
+class HistoryBudgetDeferred(RuntimeError):
+    """A subsequent history page needs quota; the original range stays pending."""
+
+
 def _history_request_options(
     provider: ProviderDefinition,
     parser: Any,
@@ -222,6 +226,13 @@ class PricingBackfillQueue:
                     continue
                 try:
                     point_count = await self._execute_history_job(job, provider)
+                except HistoryBudgetDeferred:
+                    await asyncio.to_thread(
+                        self._finish_job, job["id"], "deferred",
+                        "history_page_budget_deferred", job["attempt_count"],
+                    )
+                    counts["deferred"] += 1
+                    continue
                 except Exception as exc:
                     await asyncio.to_thread(
                         self._retry_job,
@@ -292,25 +303,55 @@ class PricingBackfillQueue:
         params, headers = _history_request_options(
             provider, parser, job["range_start"], job["range_end"]
         )
+        instrument = await self.operational.instrument(job["instrument_id"])
+        points = []
+        paginated_udf = parser.parser_version.startswith("nobitex-udf-history/")
+        page = 1
+        seen = {}
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=3.0), follow_redirects=False, trust_env=False
         ) as client:
-            response = await client.get(
-                provider.history_url,
-                params=params,
-                headers=headers,
-            )
-            if response.status_code == 429:
-                await self.budgets.record_rate_limit(provider)
-                raise RuntimeError("history_provider_rate_limited")
-            response.raise_for_status()
-            if len(response.content) > provider.maximum_payload_bytes * 4:
-                raise ValueError("history_payload_too_large")
-            payload = response.json()
-        instrument = await self.operational.instrument(job["instrument_id"])
-        points = parser.parse(
-            payload, instrument, job["range_start"], job["range_end"]
-        )
+            while True:
+                if page > 1:
+                    # Each page is a real request. Preserve the provider reserve,
+                    # live refresh interval and the database claim while waiting.
+                    await asyncio.sleep(max(1, provider.budget.minimum_interval_seconds))
+                    if not await asyncio.to_thread(self._renew_job, job["id"], job.get("attempt_count")):
+                        raise RuntimeError("backfill_job_no_longer_owned")
+                    budget = await self.budgets.consume(provider, RequestPurpose.BACKFILL)
+                    if not budget.allowed:
+                        raise HistoryBudgetDeferred("history_page_budget_deferred")
+                request_params = {**params, "page": page} if paginated_udf else params
+                async with asyncio.timeout(15):
+                    response = await client.get(provider.history_url, params=request_params, headers=headers)
+                if response.status_code == 429:
+                    await self.budgets.record_rate_limit(provider)
+                    raise RuntimeError("history_provider_rate_limited")
+                response.raise_for_status()
+                if len(response.content) > min(provider.maximum_payload_bytes * 4, 4_194_304):
+                    raise ValueError("history_payload_too_large")
+                payload = response.json()
+                page_points = parser.parse(payload, instrument, job["range_start"], job["range_end"])
+                if not paginated_udf:
+                    points = page_points
+                    break
+                added = 0
+                for point in page_points:
+                    previous = seen.get(point.observed_at)
+                    if previous is not None and (previous.price != point.price or previous.volume != point.volume):
+                        raise ValueError("history_conflicting_page_boundary")
+                    if previous is None:
+                        seen[point.observed_at] = point
+                        added += 1
+                raw_count = len(payload.get("t", []))
+                if raw_count < 500:
+                    points = sorted(seen.values(), key=lambda point: point.observed_at)
+                    break
+                if not added:
+                    raise ValueError("history_pagination_did_not_advance")
+                if len(seen) > 20_000 or page >= 41:
+                    raise ValueError("history_pagination_limit_exceeded")
+                page += 1
         # Process the whole requested range; the batch bound controls yielding.
         last_renewed = time.monotonic()
         for index, point in enumerate(points):

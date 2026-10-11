@@ -10,7 +10,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
-DENIED_DIRECTORIES = {".git", "node_modules", "venv", ".venv", "__pycache__", ".pytest_cache", ".local-keys", "_archives", "dist", "build", "release", "coverage", "test-results", "playwright-report", "backups", "data", "delivery"}
+DENIED_DIRECTORIES = {".git", "node_modules", "venv", ".venv", "__pycache__", ".pytest_cache", ".local-keys", "_archives", "dist", "build", "release", "release-unsigned", "coverage", "test-results", "playwright-report", "backups", "data", "delivery"}
 DENIED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".db", ".sqlite", ".sqlite3", ".dump", ".bak", ".backup", ".log", ".zip", ".7z", ".gz", ".bz2", ".xz", ".tar", ".tgz", ".exe", ".dll", ".so", ".dylib", ".msi", ".whl", ".pyc", ".jsonl", ".har", ".session", ".csv", ".tsv", ".xlsx", ".xls"}
 SECRET_PATTERN = re.compile(rb"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}")
 DSN_PATTERN = re.compile(rb"\b(?:postgres(?:ql)?(?:\+[a-z0-9_]+)?|redis)://[^\s/@:]+:([^\s/@]+)@")

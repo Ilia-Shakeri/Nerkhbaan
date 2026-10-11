@@ -5,6 +5,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
@@ -301,6 +302,10 @@ class AlertDeliveryJob(Base):
     __tablename__ = "alert_delivery_jobs"
     __table_args__ = (
         UniqueConstraint("trigger_event_id", "channel", "destination_reference", name="uq_alert_delivery_target"),
+        CheckConstraint(
+            "status IN ('pending','processing','sending','delivered','retrying','failed','dead','cancelled')",
+            name="ck_alert_delivery_status",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

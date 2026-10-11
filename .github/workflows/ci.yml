@@ -82,6 +82,16 @@ jobs:
         run: npm run package:dir --workspace=nerkhbaan-desktop
       - name: Smoke test actual desktop package
         run: npm run test:desktop
+      - name: Prove unsigned desktop fails publisher signature gate
+        shell: pwsh
+        run: |
+          $gateOutput = powershell.exe -NoProfile -File scripts/verify-windows-signature.ps1 -ArtifactPath apps/desktop/release/win-unpacked/Nerkhbaan.exe -ExpectedPublisher 'CN=Unsigned CI fixture'
+          $gateExit = $LASTEXITCODE
+          $receipt = ($gateOutput -join "`n") | ConvertFrom-Json
+          if ($gateExit -ne 1 -or $receipt.accepted -or $receipt.artifacts.Count -ne 1 -or $receipt.artifacts[0].signature_status -ne 'NotSigned') {
+            throw 'Unsigned desktop must be rejected by the signature gate with a complete receipt.'
+          }
+          $global:LASTEXITCODE = 0
 
   go-sidecar:
     name: Feed pull Go checks
@@ -136,6 +146,7 @@ jobs:
         run: |
           python ../../scripts/test_infra_contracts.py
           python ../../scripts/test_browser_fixture.py
+          python ../../scripts/test_load_test.py
 
       - name: Run backend unit tests
         run: python -m unittest discover -s tests -v
@@ -216,6 +227,11 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5432/nerkhbaan_ci
         run: python -m unittest tests.test_auth_refresh_rotation.RefreshRotationPostgresTests -v
+
+      - name: Prove notification sending state on PostgreSQL
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5432/nerkhbaan_ci
+        run: python -m unittest tests.test_alert_delivery_postgres.AlertDeliveryPostgresTests -v
 
       - name: Prove browser fixture isolation and cleanup
         env:

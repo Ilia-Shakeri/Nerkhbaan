@@ -99,3 +99,47 @@ func TestSendUsesTrustedPublicHost(t *testing.T) {
 		t.Fatalf("unexpected trusted host: %q", seenHost)
 	}
 }
+
+func TestVersionTwoPartialFeedKeepsFreshCryptoWithoutMetal(t *testing.T) {
+	now := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	value := feed{Version: 2, Source: "public-market-relay", UpdatedAt: now.Format(time.RFC3339),
+		Quotes: []quote{{InstrumentID: "USDT_USD", ProviderID: "coingecko_usdt", Price: "1", ObservedAt: now.Format(time.RFC3339)}}}
+	if err := validateFeed(value, now); err != nil {
+		t.Fatalf("healthy partial quote rejected: %v", err)
+	}
+	value.Version = 1
+	if err := validateFeed(value, now); err == nil {
+		t.Fatal("legacy incomplete contract accepted")
+	}
+}
+
+func TestVersionTwoAllowsExactGoldSpotPairButNoGoldKarat(t *testing.T) {
+	now := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	value := feed{Version: 2, Source: "public-market-relay", UpdatedAt: now.Format(time.RFC3339),
+		Quotes: []quote{{InstrumentID: "XAU_USD_OZ", ProviderID: "gold_api_free_xau", Price: "4000", ObservedAt: now.Format(time.RFC3339)}}}
+	if err := validateFeed(value, now); err != nil {
+		t.Fatalf("gold spot pair rejected: %v", err)
+	}
+	value.Quotes[0].InstrumentID = "GOLD_24K_TOMAN_GRAM"
+	if err := validateFeed(value, now); err == nil {
+		t.Fatal("gold karat substitution accepted")
+	}
+}
+
+func TestVersionTwoRejectsEmptyStaleAndDuplicate(t *testing.T) {
+	now := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	value := feed{Version: 2, Source: "public-market-relay", UpdatedAt: now.Format(time.RFC3339)}
+	if err := validateFeed(value, now); err == nil {
+		t.Fatal("empty feed accepted")
+	}
+	item := quote{InstrumentID: "XAU_USD_OZ", ProviderID: "gold_api_free_xau", Price: "4000", ObservedAt: now.Add(-11 * time.Minute).Format(time.RFC3339)}
+	value.Quotes = []quote{item}
+	if err := validateFeed(value, now); err == nil {
+		t.Fatal("stale quote accepted")
+	}
+	item.ObservedAt = now.Format(time.RFC3339)
+	value.Quotes = []quote{item, item}
+	if err := validateFeed(value, now); err == nil {
+		t.Fatal("duplicate quote accepted")
+	}
+}

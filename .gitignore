@@ -19,6 +19,7 @@ node_modules/
 # Build outputs
 dist/
 apps/desktop/release/
+apps/desktop/release-unsigned/
 test-results/
 playwright-report/
 build/

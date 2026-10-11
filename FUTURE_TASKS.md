@@ -1,6 +1,6 @@
 # Remaining Acceptance and Optional Work
 
-Code baseline: **2.8.0**. Updated: 2026-10-11.
+Code baseline: **2.8.1**. Updated: 2026-10-11.
 A task here is external acceptance or optional product work; it is not a substitute for fixing a known code defect.
 
 ## Completed target checks — 2026-10-11

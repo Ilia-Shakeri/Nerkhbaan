@@ -50,13 +50,18 @@ class GoldApiFreeParser:
         symbol = root.get("symbol") or root.get("metal")
         if symbol is not None and str(symbol).upper() != self.symbol:
             raise ParserError("instrument_mismatch", "Metal symbol does not match")
+        if root.get("currency") != "USD":
+            raise ParserError("currency_mismatch", "Gold API quote must explicitly identify USD")
+        source_timestamp = root.get("updatedAt") or root.get("timestamp")
+        if source_timestamp is None:
+            raise ParserError("missing_timestamp", "Gold API source timestamp is required")
         parsed = ParsedProviderValue(
             price=strict_decimal(exact_path(root, "price"), "price"),
             currency=context.instrument.quote_currency,
             weight_unit=context.instrument.weight_unit,
             purity=context.instrument.purity,
             observed_at=optional_timestamp(
-                root.get("updatedAt") or root.get("timestamp"), context, "quote timestamp"
+                source_timestamp, context, "quote timestamp"
             ),
             metadata={"metal_symbol": self.symbol},
         )
