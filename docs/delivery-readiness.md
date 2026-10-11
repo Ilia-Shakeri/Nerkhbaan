@@ -38,13 +38,14 @@ the container, Timescale/Redis, staging and production gates below.
 
 | Check | Executed result | Exact scope |
 | --- | --- | --- |
-| Backend suite | 298 passed; none skipped | Unit/SQLite/mocked cases plus six real PostgreSQL concurrency cases on a disposable PostgreSQL 17.11 test database |
+| Backend suite | 312 executed cases passed across local and container runs | 306 local unit/SQLite/mocked cases; six real PostgreSQL 17.11 concurrency cases rerun inside the exact API runtime image. The local runner could not reach its PostgreSQL fixture and skipped that class; it is not reported as one complete local run |
 | Backend static check | pyflakes passed for app, tests and scripts | Python names/imports |
 | Frontend suite | 49 passed | 35 source-contract checks and 14 executed runtime behavior cases |
 | Version/lock/document consistency | passed | Release 2.8.0, manifest-lock dependencies, API version and active document headers |
 | Clean dependency installation | npm ci passed, 835 packages | Locked workspace dependencies |
 | Dependency advisories | npm audit: 0; API Python lock: 0; Telegram Python lock: 0 | Pinned dependencies at scan time; pip-audit 2.10.1 |
 | Client builds | web, admin and desktop renderer passed | Build artifacts; separate from target installation |
+| Final API runtime | 80 targeted cases and native imports passed; no skips | Exact `a538423` image; backfill fairness, delivery/persistence/provider repairs and WebSocket admission; separate from real target database acceptance |
 | Desktop runtime | DESKTOP_SMOKE_OK | Actual unpacked desktop package, builder 26.15.3 / Electron 42.11.9; secure custom origin, assets/path guards and isolated encrypted synthetic credentials |
 | Browser suite | 10 executed cases passed on Edge | Eight admin mocks, one real public HTTP flow on the isolated PostgreSQL ORM fixture, and one assistant mock |
 | Infrastructure fixtures | 18 passed | Telegram parser/preview parity, units/IDs, source time, history acknowledgement/progress, feed age, restore-target preservation and source archive exclusions/completeness |
@@ -58,18 +59,76 @@ The real PostgreSQL fixture does not contain a forged migration ledger. Its succ
 do not prove the release migrations against Timescale hypertables or existing compressed chunks.
 Browser mocks do not prove administrator HTTP/database integration or real assistant-provider service.
 The desktop smoke proves the unpacked local runtime; a signed installer on every supported target remains
-a separate acceptance step. CI definitions were updated but were not reported as completed remote runs.
+a separate acceptance step. Hosted results below are separate executed checks.
 
 ## Container and hosted application evidence — 2026-10-11
 
 - [Hosted run 38130107435](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38130107435), commit `581fe7a`: Node, Python, desktop package, actual Timescale/Redis/migration/restore, browser, Go and repository security jobs passed. The full run failed its nginx fixture and image scans; those failures must not be reported as a successful full CI run.
 - The nginx fixture now creates synthetic certificates on the runner and resolves backend hostnames. Actual edge/web/admin nginx syntax checks pass on disposable local Docker containers.
 - Patched API, web, admin, Telegram, feed-pull, relay and edge images all build. Trivy 0.70.0 reports zero HIGH/CRITICAL findings on all seven, with unfixed findings included and no waiver file. The `/admin/` image also passes the same scan.
-- The final Alpine API imports native drivers and passes 20 auth/JWT/body-limit/connection tests; the Telegram worker imports successfully. Go 1.26.9 tests pass. These checks validate runtime compatibility and do not replace target acceptance.
+- The initial patched Alpine API imported native drivers and passed 20 auth/JWT/body-limit/connection tests; the final API's 80 targeted cases are recorded above. The Telegram worker imports successfully. Go 1.26.9 tests pass. These checks validate runtime compatibility and do not replace target acceptance.
 - The `/admin/` build is checked in an actual Edge browser: JavaScript and CSS load, the login form appears and no page error occurs. API paths remain `/api/admin`.
 
 Source manifest and Python lock scans are separate from OS image scans. Evidence belongs to the
-recorded image/source snapshot; repeat the complete CI run on the commit containing these corrections.
+recorded image/source snapshot. The corrected source completed all 15 jobs in
+[run 38136644783](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38136644783),
+commit `a53842359ff147fe8946131f007dbcade7074adc`.
+Earlier corrected runs `38132278978`, `38132616228` and `38132847881` also completed all 15 jobs.
+Nginx startup correction `1edbe775` completed all 15 jobs in run `38134832791`.
+Saved result receipts name the exact run and source commit. Later delivery-document changes
+need their own CI result; they do not alter the verified application image source contexts.
+
+## Executed production evidence — 2026-10-11
+
+Live URLs: [public site](https://nerkhbaan.ir/) and [admin panel](https://nerkhbaan.ir/admin/).
+Read the [server handoff](production-handoff-fa.md) for the release checkout and safe health commands.
+Target is the existing single-host Compose project. No customer payload or credential is copied into Git.
+
+| Check | Executed result | Exact scope |
+| --- | --- | --- |
+| Full target restore | 47 tables and 1,404,468 rows matched source fingerprints | Exported snapshot from Timescale 2.28.3 / PostgreSQL 16.14; three hypertables, 37 chunks, four aggregates and 12 policies preserved |
+| Restore isolation | All 11 user jobs held idle; fingerprints matched before and after post-restore | Owned separate database; retention/purge jobs could not remove rows during comparison; original database/jobs preserved |
+| Off-host backups | Database, consistent Redis RDB and configuration ciphertext retrieved; decrypt/tag/hash verified | AES-256-GCM with RSA-OAEP wrapping; private key protected by the delivery Windows profile; plaintext secrets/customer data not exported |
+| Target migration staging | Seventh migration passed on the full restored copy | Users and core price fingerprints equal across the intended historical-backfill metadata repair; six applied migration checksums unchanged |
+| Actual history claim SQL | FIFO and separate-backend `SKIP LOCKED` passed on the owned full Timescale copy | Exact `a538423` image selected a supported job past 8,702 older unsupported jobs; all 13,358 job rows had equal count/fingerprint after outer rollback; temporary limited role/container removed |
+| Live migration/readiness | Seven migrations current; HTTPS 200, `release_version=2.8.0`, `ready=true` | PostgreSQL and Redis connected; migration applied with the verified `b9f5538` API image |
+| API failover | Five HTTPS readiness probes returned 200 while one replica was stopped | Second replica served requests; stopped replica restarted healthy; two replicas restored |
+| Final API rolling update | Two `a538423` replicas healthy; all six HTTPS probes returned 200 | New replicas admitted with three-replica healthy overlap before each old replica was removed; every non-API container ID preserved |
+| Client startup | Actual two-client update completed healthy in 7.234 seconds | Exact `1edbe77` images on target resource/capability limits; all nonclient container IDs preserved; isolated late-backend and address-change checks passed |
+| Shared ingress | Syntax check, isolated TLS staging and scoped reload passed | Existing certificate, listeners and other virtual hosts preserved; `/admin/` assets and `/api/admin/` routed separately |
+| Admin HTTP canary | 25 real read routes returned 200 | Actual target TLS/API/database; dashboard, users, roles/permissions, providers/drafts, Telegram, instruments, anomalies, jobs/DLQ, settings, alerts, audit, backups and security |
+| Admin security canary | MFA required, CSRF refusal, reauthentication, TOTP and recovery login passed | Host-only Secure/HttpOnly cookies with `/api/admin` scope; own temporary account/sessions removed; prior users/roles retained |
+| Actual browser/SW route | Edge public page and admin sign-in passed | New public service worker controlled the page before navigation; admin document came from the network; JS/CSS 200 and zero admin page errors; owner account not used |
+| Public layout | Stable desktop and mobile login passed | Settled transform/opacity, visible focusable controls, click hit-test, no horizontal overflow, no page errors or failed assets; no user login submitted |
+| Public live stream | HTTPS WebSocket handshake 101 and reconnect snapshot passed | Nine unique stored instruments in snapshots; separate eight USD/Toman legs in HTTP price response had instrument IDs, weight units and purity; no values/user data saved |
+| Target stream admission fixture | Six cases passed in the final target image | Capacity rejection and Redis-down skip snapshot reads; admitted read and failure cleanup pass. Synthetic mocked callbacks, no real traffic flood or customer changes |
+| Backup panel | Verified restore status visible | Only the status JSON file mounted read-only; dump directory not mounted into API |
+| Data/other-service preservation | Existing data-service image/config/volumes equal to initial inspection | Data and other business services started before the delivery day with zero restarts; current IDs saved for subsequent exact comparisons |
+| Target clock/TLS | Synchronization enabled; HTTPS hostname verification passed | Current target check; a valid certificate does not prove provider usage rights |
+| Final post-update acceptance | Both final API replicas and a fresh actual Edge context passed | Internal/external HTTPS readiness 200; seven migration checksums current on each replica; filtered BTC WebSocket snapshot, ping/pong and reconnect passed twice; public/admin assets 200 with zero page errors and no user login |
+
+Private evidence stays in the separate `Nerkhbaan-Delivery` folder and the target's
+`nerkhbaan-release-safety` folder. Key receipts include `restore-manifest-gate2-27fcb894.json`,
+`offhost-verification-receipt.json`, `migration-stage-receipt.json`, `replica-failover-receipt.json`,
+`production-admin-canary-result.json`, `production-public-surface-result.json`
+`production-public-login-layout-result.json`, `target-public-stream-1edbe77.json`
+`client-rollout-1edbe77-receipt.json`, `api-rollout-a538423-receipt.json` and `target-container-preservation-evidence-79ae69c.json`.
+Final runtime receipts: `api-native-a538423.json`, `api-postgres-a538423.json`,
+`runtime-api-transfer-a538423.verified.json` and `target-websocket-admission-a538423.json`.
+The target also stores `backfill-claim-proof-a538423-fb815544679a4fac.json` under its release-safety folder.
+Final post-update receipts are `production-final-api-stream-result.json` and
+`production-final-public-surface-result.json`, observed at 12:00–12:01 UTC on 2026-10-11.
+The initial container-ID baseline was not saved. Preservation of the earlier data/container creation
+and start times, restart counts, image/config and mounts is proven; an unavailable old-ID comparison is not claimed.
+
+Historical quotes were preserved. Source freshness still differs by instrument. Expired, suspect,
+uncovered or historical-only data stays gated. Availability checks do not certify fresh coverage of every instrument.
+The target queue snapshot found 13,040 older deferred jobs whose last recorded error was
+`no_explicit_history_provider`, 187 older live-priority deferrals, 92 older failed jobs and 39 older retrying jobs. Those jobs predate
+the release and were preserved. New requests with no history provider return `unsupported` instead
+of creating a new job. The panel exposes their state; no queue was wiped or marked complete to pass acceptance.
+The last error is historical; current route policy can differ. Some old BTC/USDT jobs now have a history route.
+Counts change during normal processing. `target-price-queue-diagnosis-79ae69c.json` records this snapshot.
 
 ## Local database browser fixture
 
@@ -97,10 +156,13 @@ The source ZIP builder copies tracked and eligible new source files, not runtime
 `DELIVERY_MANIFEST.json` records version, file bytes and SHA-256 hashes. The archive is read back and tested.
 Review the file list and run a current secret scan before sharing. Dependencies install from their lock/manifests.
 Runtime environments, signing certificates, provider keys, session strings and database backups travel separately.
+The ZIP manifest describes source contents and does not attest all external production gates.
+Target results are recorded above and remain distinct from provider/legal/device acceptance.
 
 ## Remaining environment gates
 
-Until successful final-source evidence exists, Docker/Timescale/Redis integration, Go execution,
-signed installer and target installation, target TLS certificates, provider licensing/canaries,
-staging soak and live production checks remain pending.
-Local green checks must never be reported as those proofs.
+Docker/Timescale/Redis integration, Go, target restore/migration, TLS, clock, API failover and admin HTTP
+checks above have successful evidence. Remaining external gates are provider rights and uncovered-source
+canaries, actual notification receipt, signed installation on supported targets, operator privacy details
+and a load/soak run with agreed limits. See [remaining work](../FUTURE_TASKS.md).
+Keep these gates separate from completed service availability and data-preservation checks.

@@ -9,9 +9,11 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Kept instrument currency, weight, purity and original source time through prices, charts and alerts.
 - Hardened canonical worker selection, independent anomaly verification, stale-primary fallback and Telegram validation.
 - Made history/backfill durable, resumable and gap-aware; accepted valid zero volume.
+- Selected only currently runnable history instruments before claiming database jobs; preserved blocked old rows and resumed them when source policy or live availability recovers.
 - Hardened user/admin session lifecycle, password reset/rotation, CSRF, roles, worker jobs and delivery cancellation.
 - Connected admin policy edits to effective runtime behavior and expanded operational screens and permission checks.
 - Corrected browser push/logout, conversation/ticket races, desktop origin, links, chart CSP and asset paths.
+- Loaded stream snapshots only after connection capacity and Redis availability checks; rejected connections cannot cause eager database/cache reads.
 - Preserved migration TLS options, bounded migration lock waits and rejected unknown newer schema versions.
 - Corrected relay upstream TLS, Docker service DNS, staging subnet isolation, source timestamp feed contracts and Windows install failures.
 - Updated vulnerable HTTP/multipart dependencies and replaced the previous token package with pinned PyJWT and required-claim validation.
@@ -20,7 +22,9 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Generated disposable TLS certificates on the CI runner and resolved backend names in nginx syntax fixtures.
 - Excluded `/admin` and `/admin/` from the public service worker navigation fallback once the updated worker activates.
 - Used IPv4 loopback for the admin container health probe and allowed a ten-second startup period.
-- Allowed the pending history repair to exceed Timescale's compressed-DML tuple limit within its release transaction; kept the migration runner's 300-second timeout and all six previously applied migration checksums.
+- Re-resolved web/admin API upstreams through Docker DNS without waiting for a backend hostname at configuration parsing; late backend start and address replacement pass in isolated runtime checks.
+- Removed the unused default IPv6 configuration helper from all four custom Nginx images; its Alpine package-manifest lookup could delay startup by two minutes on the target network. Explicit listeners and other entrypoint helpers remain intact.
+- Allowed the release history repair to exceed Timescale's compressed-DML tuple limit within its release transaction; kept the migration runner's 300-second timeout and all six previously applied migration checksums.
 
 ### Added
 
@@ -34,18 +38,20 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ### Validation boundary
 
-Hosted [CI run 38132847881](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38132847881)
-passed all 15 jobs for `b9f5538961497cf5ad6a6a37f36e916d0a5071a9`, including seven strict
+Hosted [CI run 38136644783](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38136644783)
+passed all 15 jobs for `a53842359ff147fe8946131f007dbcade7074adc`, including seven strict
 HIGH/CRITICAL image scans and real Timescale/Redis, migration/restore and browser checks.
-The later admin health-probe change needs its own final-commit checks.
 
 The target's verified 47-table restore passed the seventh migration with the `b9f5538` API image
 on Timescale 2.28.3 / PostgreSQL 16.14. Three hypertables, 37 chunks and four users remained.
 User and price fingerprints matched after excluding only the intended historical-backfill flag.
 
-Local results belong to the delivered commit's evidence. Container, PostgreSQL/Redis, packaged-runtime,
-provider rights/canaries and target-host production results require separate successful runs.
-This release entry is not a claim that 2.8.0 is running in production.
+Release 2.8.0 is running on the existing target as of 2026-10-11. HTTPS readiness, two-replica
+failover, real admin security/read routes and the public-worker/admin browser flow passed.
+See [delivery readiness](docs/delivery-readiness.md) for proof scope and the
+[server handoff](docs/production-handoff-fa.md) for live URLs and safe commands.
+Provider rights, uncovered-source canaries, actual notification receipt, signed installation
+and a long load/soak run still require their own external evidence.
 
 ## [2.7.5] - 2026-09-30
 

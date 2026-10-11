@@ -1,7 +1,8 @@
 # Nerkhbaan
 
 Current code release: **2.8.0**. `VERSION` is the source of release truth.
-This is a source delivery. A version in this file is not a claim about the live server.
+Target checked on 2026-10-11: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.0.
+See the [server handoff](docs/production-handoff-fa.md) and [saved proof](docs/delivery-readiness.md).
 
 ## Components
 
@@ -95,7 +96,8 @@ Prometheus scrapes `backend:8000/metrics` privately. Metrics are not exposed thr
 | [Pricing runbook](docs/pricing-operations-runbook.md) | Provider onboarding and failure recovery |
 | [External workers](docs/external-price-worker.md) | Signed ingress and bounded public feed |
 | [Release operations](docs/release-operations.md) | Data-safe staging and production gates |
-| [Delivery readiness](docs/delivery-readiness.md) | Evidence matrix and remaining host checks |
+| [Server handoff](docs/production-handoff-fa.md) | Live URLs, release path, health and backup care |
+| [Delivery readiness](docs/delivery-readiness.md) | Executed checks, target proof and external gates |
 | [Project status](PROJECT_STATUS.md) | Current code and proof boundary |
 | [Changelog](CHANGELOG.md) | Historical changes; not live deployment proof |
 

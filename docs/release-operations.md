@@ -1,7 +1,7 @@
 # Release Operations — 2.8.0
 
 Updated: 2026-10-11. Execute against the intended host only after review of the concrete release.
-The release delivery is source code; this document does not certify a deployment.
+This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
 
 ## 1. Final code gates
 
@@ -10,10 +10,10 @@ Run every CI job on the final commit: clients, desktop package, Python, actual T
 HTTP/browser, migration/restore, Go/sidecars, proxy/monitoring and security scans.
 Keep logs tied to release and commit. Do not replace an executed test with test discovery.
 
-Recorded hosted result: [CI run 38132847881](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38132847881)
-passed all 15 jobs at `b9f5538961497cf5ad6a6a37f36e916d0a5071a9`. All seven image scans kept
-the HIGH/CRITICAL failure gate. Later changes need a new final-commit run. This CI result does
-not prove the pending target migration or a production deployment.
+Recorded application result: [CI run 38136644783](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38136644783)
+passed all 15 jobs at `a53842359ff147fe8946131f007dbcade7074adc`. All seven image scans kept
+the HIGH/CRITICAL failure gate. Later changes need a new final-commit run. Actual target migration,
+rolling deployment and browser evidence are recorded separately in [delivery readiness](delivery-readiness.md).
 
 The HTTP smoke writes a unique test user and alert. Run it only against a disposable database.
 It leaves the test user/security audit rows as evidence. It waits beyond refresh duplicate grace before testing reuse.
@@ -63,7 +63,7 @@ are unscheduled and no job is still running before taking fingerprints or testin
 Keep them paused for the disposable drill. Do this only in the owned restore database; leave
 production jobs alone. A cleanup job can remove data between comparisons and invalidate the drill.
 
-The pending seventh migration, `20261011_001_delivery_hardening.sql`, tags legacy provider backfill
+The seventh migration, `20261011_001_delivery_hardening.sql`, tags legacy provider backfill
 canonical rows as historical and adds a partial live-observation index. Existing compressed history
 can exceed Timescale's default tuple limit. When Timescale is installed, the migration uses
 `set_config('timescaledb.max_tuples_decompressed_per_dml_transaction', '0', true)` within its own
@@ -81,7 +81,8 @@ verified 47-table restore, using Timescale 2.28.3 and PostgreSQL 16.14. It retai
 `provider_quotes` (520,444 rows), `canonical_quotes` (325,486), `market_prices` (26,662) and `users` (4).
 The canonical comparison excluded only the intended `historical_backfill` flag. The tested target
 needed no manual chunk decompression. The ordinary application tuple guard remained 100,000.
-This records the isolated restore stage; production acceptance needs its own successful run.
+This records the isolated restore stage. The same migration subsequently passed on live data;
+see the separate target receipt in the delivery matrix. Applied migration files remain immutable.
 The helper drops only its explicitly separate restore target and cleans it on exit.
 It uses Timescale pre/post restore and compares fingerprints. It is for disposable/frozen test data;
 concurrent source writes invalidate a before/after fingerprint. Production-sized off-host drill needs its own evidence.
@@ -97,7 +98,8 @@ Existing market-price duplicates/compressed chunks need a preservation plan befo
 ## 4. Target deployment
 
 Check clock synchronization and TLS. Fill a fresh private operator evidence file and validate it.
-Only a real owner can provide source rights, secret-store, restore, target health and browser proof.
+The responsible owner supplies source rights and private-store evidence. Record actual restore,
+target health and browser proof separately; do not fill them from a build result or a placeholder.
 
 ```bash
 OPERATOR_EVIDENCE_PATH=/run/nerkhbaan/operator-gates.json \
@@ -125,7 +127,7 @@ shared-ingress configuration and its service aliases separately. Build admin wit
 `/api/` with the reviewed same-host admin origin and cookie settings. The public service worker
 must bypass both `/admin` and every `/admin/` navigation.
 
-After the isolated restore/migration gate passes, run only the release application services:
+After the isolated restore/migration gate passes, validate configuration and run the migration:
 
 ```bash
 : "${RELEASE_DIR:?Set the reviewed absolute release checkout}"
@@ -135,17 +137,49 @@ docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
 docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
   -f "$RELEASE_DIR/docker-compose.prod.yaml" -f "$RELEASE_DIR/runtime.override.json" \
   --profile admin run --rm --no-deps --pull never migrate
+```
+
+For an existing two-replica API, use healthy overlap. Record the exact two old backend container IDs
+and their image IDs before changing the override. Keep both running while adding the first new replica:
+
+```bash
 docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
   -f "$RELEASE_DIR/docker-compose.prod.yaml" -f "$RELEASE_DIR/runtime.override.json" \
-  --profile admin up -d --no-build --no-deps --pull never --wait --wait-timeout 240 \
-  --scale backend=2 backend frontend admin-frontend price-feed-pull
+  --profile admin up -d --no-build --no-deps --pull never --no-recreate \
+  --wait --wait-timeout 120 --scale backend=3 backend
 ```
+
+Require three healthy replicas, a healthy new-image replica and HTTPS readiness before stopping
+and removing only the first recorded old backend ID. Check its Compose project/service labels and
+old image again immediately before removal; never infer its identity from a numeric name suffix.
+Use `docker stop --time 20 <verified-old-id>` and `docker rm <verified-old-id>` without `-v`.
+Recheck HTTPS and repeat the same scale-three command to add the second new replica. Require both
+new-image replicas healthy before removing the second recorded old ID. Finish with:
+
+```bash
+docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
+  -f "$RELEASE_DIR/docker-compose.prod.yaml" -f "$RELEASE_DIR/runtime.override.json" \
+  --profile admin up -d --no-build --no-deps --pull never --no-recreate \
+  --wait --wait-timeout 120 --scale backend=2 backend
+docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
+  -f "$RELEASE_DIR/docker-compose.prod.yaml" -f "$RELEASE_DIR/runtime.override.json" \
+  --profile admin up -d --no-build --no-deps --pull never --wait --wait-timeout 120 \
+  frontend admin-frontend price-feed-pull
+```
+
+Stop the sequence on a failed health or identity check; keep the surviving healthy replicas and
+inspect the scoped private log before continuing. Do not rerun old-ID removal after a partial update.
+The recorded API update passed all six HTTPS probes with healthy overlap and preserved every
+non-API container ID. The separate client update preserved every nonclient container ID.
 
 Keep PostgreSQL, Redis, their containers and their volumes running. Compare their recorded IDs
 and mounts after the application update. The generic full-stack script above recreates services;
-use this scoped sequence for an existing stack with shared ingress. Do not use `down`, volume
+use this scoped rolling sequence for an existing stack with shared ingress. Do not use `down`, volume
 removal or an unscoped forced recreation. The admin health probe uses `http://127.0.0.1/` with a
 ten-second `start_period`; this avoids a loopback IPv6 mismatch and early startup failures.
+The four custom Nginx images remove the default IPv6-rewrite helper at build time. Their listeners
+are already explicit; startup must not fetch Alpine package metadata. Keep image update checks on
+the target network and its actual CPU/capability limits, not only on a local unrestricted container.
 
 ## 5. Acceptance
 
