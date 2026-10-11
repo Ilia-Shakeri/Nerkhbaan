@@ -248,7 +248,11 @@ test("desktop renderer keeps process and network guards", () => {
   assert.match(main, /contextIsolation:\s*true/);
   assert.match(main, /sandbox:\s*true/);
   assert.match(main, /webSecurity:\s*true/);
-  assert.match(main, /setWindowOpenHandler\(\(\) => \(\{ action: 'deny' \}\)\)/);
+  assert.match(main, /return \{ action: 'deny' \}/);
+  assert.match(main, /corsEnabled: true/);
+  assert.match(main, /event.sender !== mainWindow.webContents/);
+  assert.match(main, /protocol.handle\('nerkhbaan'/);
+  assert.match(main, /relative.startsWith\('\.\.'\)/);
 });
 
 test("web image installer falls back only to its locked npm cache", () => {
@@ -307,9 +311,9 @@ test("admin navigation survives history and dangerous dialogs contain focus", ()
   assert.match(app, /hashchange/);
   assert.match(app, /aria-current=/);
   assert.match(app, /allowedNavigation\.some\(\(item\) => item\.id === section\)/);
-  assert.match(ui, /event\.key === 'Escape'/);
+  assert.match(ui, /event\.key === ['"]Escape['"]/);
   assert.match(ui, /busyRef\.current/);
-  assert.match(ui, /event\.key !== 'Tab'/);
+  assert.match(ui, /event\.key !== ['"]Tab['"]/);
   assert.match(ui, /previousFocus\?\.focus\(\)/);
 });
 

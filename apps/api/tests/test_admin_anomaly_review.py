@@ -316,10 +316,19 @@ class AdminAnomalyReviewTests(unittest.TestCase):
             "review_note": "checked source",
             "created_at": FROZEN_CREATED_AT,
         }
-        with patch.object(pricing, "safe_rows", return_value=[row]) as safe_rows:
-            response = pricing.list_anomalies("", 100, self.principal, object())
+        from app.db import Base
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        try:
+            with OrmSession(engine) as db:
+                db.add(PricingAnomalyRecord(**row))
+                db.commit()
+                response = pricing.list_anomalies(anomaly_status="", limit=100, offset=0, principal=self.principal, db=db)
+                self.assertEqual(response["total"], 1)
+                self.assertEqual(response["items"][0]["id"], 73)
+        finally:
+            engine.dispose()
 
-        self.assertEqual(safe_rows.call_args.args[2], pricing._ANOMALY_COLUMNS)
         self.assertNotIn("candidate_price", pricing._ANOMALY_COLUMNS)
         self.assertNotIn("decision_reason", pricing._ANOMALY_COLUMNS)
         self.assertEqual(response["items"][0]["reason"], "candidate outside threshold")
@@ -355,7 +364,7 @@ class AnomalyHealthCountTests(unittest.TestCase):
         self.assertNotIn("resolved", backlog_sql)
         self.assertEqual(payload["backlog"]["anomalies"], 4)
 
-    def test_admin_health_count_uses_only_open_status(self) -> None:
+    def test_admin_health_count_includes_unresolved_reviewed_status(self) -> None:
         count_calls: list[tuple[str, set[str] | None]] = []
 
         def fake_count(_db, table_name: str, statuses: set[str] | None = None) -> int:
@@ -370,11 +379,12 @@ class AnomalyHealthCountTests(unittest.TestCase):
                 return_value=({"status": "disabled", "persistence_backlog": None}, None),
             ),
             patch.object(health_jobs, "safe_rows", return_value=[]),
+            patch.object(pricing, "list_instruments", return_value={"items": []}),
             patch.object(health_jobs, "safe_count", side_effect=fake_count),
         ):
             payload = health_jobs._health_payload(object())
 
-        self.assertIn(("pricing_anomalies", {"open"}), count_calls)
+        self.assertIn(("pricing_anomalies", {"open", "reviewed"}), count_calls)
         self.assertEqual(payload["anomaly_count"], 4)
 
 

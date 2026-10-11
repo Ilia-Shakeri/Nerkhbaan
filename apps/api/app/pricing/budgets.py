@@ -50,6 +50,9 @@ class RedisRequestBudget:
         provider: ProviderDefinition,
         purpose: RequestPurpose,
     ) -> BudgetDecision:
+        if min(provider.budget.requests_per_minute, provider.budget.requests_per_hour,
+               provider.budget.requests_per_day) <= 0:
+            return BudgetDecision(False, "provider_budget_disabled", 0)
         cooldown = await self.cooldown_remaining(provider.provider_id)
         if cooldown > 0:
             return BudgetDecision(False, "provider_cooldown", 0)

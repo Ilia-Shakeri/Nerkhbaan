@@ -20,6 +20,8 @@ export function SupportView() {
   const [isLoadingTickets, setIsLoadingTickets] = useState(true);
 
   const [selectedTicket, setSelectedTicket] = useState<number | null>(null);
+  const selectedTicketRef = useRef<number | null>(null);
+  selectedTicketRef.current = selectedTicket;
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
@@ -78,8 +80,11 @@ export function SupportView() {
   }, []);
 
   useEffect(() => {
+    setMessages([]);
+    setNewMessage('');
+    setReplyConsent(false);
     if (selectedTicket === null) {
-      setMessages([]);
+      setIsLoadingMessages(false);
       return;
     }
     let cancelled = false;
@@ -104,16 +109,19 @@ export function SupportView() {
   }, [selectedTicket]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || selectedTicket === null || isSending || !replyConsent) return;
+    if (!newMessage.trim() || selectedTicket === null || isSending || isLoadingMessages || !replyConsent) return;
+    const ticketId = selectedTicket;
     setIsSending(true);
     try {
       const sent = await api.support.sendMessage(selectedTicket, newMessage.trim(), { support_data_consent: replyConsent, policy_version: POLICY_VERSION });
-      setMessages((prev) => [...prev, sent]);
-      setNewMessage('');
-      setReplyConsent(false);
+      if (selectedTicketRef.current === ticketId) {
+        setMessages((prev) => [...prev, sent]);
+        setNewMessage('');
+        setReplyConsent(false);
+      }
       setTickets((prev) =>
         prev.map((ticket) =>
-          ticket.id === selectedTicket ? { ...ticket, last_message: sent.content } : ticket
+          ticket.id === ticketId ? { ...ticket, last_message: sent.content } : ticket
         )
       );
     } catch {
@@ -255,6 +263,7 @@ export function SupportView() {
                 key={ticket.id}
                 type="button"
                 onClick={() => setSelectedTicket(ticket.id)}
+                disabled={isSending || isCreating}
                 aria-pressed={selectedTicket === ticket.id}
                 className={`w-full rounded-xl p-3 text-start transition-[background-color,border-color,box-shadow] active:scale-[0.99] ${
                   selectedTicket === ticket.id

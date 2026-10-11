@@ -9,12 +9,26 @@ from sqlalchemy.orm import Session
 from ...db import get_db
 from ...models import SupportMessage, SupportTicket, User
 from ..audit import add_audit_event
-from ..deps import AdminPrincipal, require_permission
-from ..models import AdminSupportInternalNote, AdminSupportTicketState
+from ..deps import AdminPrincipal, admin_roles_and_permissions, require_permission
+from ..models import AdminSupportInternalNote, AdminSupportTicketState, UserSecurityProfile
 from ..permissions import AdminPermissionKey
 from ..schemas import SupportTextRequest, SupportTicketUpdate
 
 router = APIRouter(prefix="/support", tags=["admin-support"])
+
+
+@router.get("/assignees")
+def list_assignees(principal: AdminPrincipal = Depends(require_permission(AdminPermissionKey.SUPPORT_READ)), db: Session = Depends(get_db)) -> dict:
+    from ..models import AdminUserRole
+    ids = db.scalars(select(AdminUserRole.user_id).where(AdminUserRole.is_active.is_(True)).distinct()).all()
+    items = []
+    for user_id in ids:
+        user = db.get(User, user_id)
+        profile = db.get(UserSecurityProfile, user_id)
+        _, permissions = admin_roles_and_permissions(db, user_id)
+        if user and user.is_active and profile and profile.is_active and AdminPermissionKey.SUPPORT_REPLY.value in permissions:
+            items.append({"id": user.id, "full_name": user.full_name, "username": user.username})
+    return {"items": items}
 
 
 def _ticket_state(db: Session, ticket: SupportTicket) -> AdminSupportTicketState:
@@ -200,8 +214,10 @@ def update_ticket(
     state_row = _ticket_state(db, ticket)
     if payload.assigned_admin_id is not None:
         assignee = db.get(User, payload.assigned_admin_id)
-        if assignee is None:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Assignee not found")
+        security = db.get(UserSecurityProfile, payload.assigned_admin_id)
+        _, permissions = admin_roles_and_permissions(db, payload.assigned_admin_id)
+        if assignee is None or not assignee.is_active or security is None or not security.is_active or AdminPermissionKey.SUPPORT_REPLY.value not in permissions:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Assignee must be an active support administrator")
     before = {
         "status": state_row.status,
         "priority": state_row.priority,
@@ -211,7 +227,7 @@ def update_ticket(
     if payload.priority is not None:
         state_row.priority = payload.priority
         ticket.priority = payload.priority
-    if payload.assigned_admin_id is not None:
+    if "assigned_admin_id" in payload.model_fields_set:
         state_row.assigned_admin_id = payload.assigned_admin_id
         ticket.assigned_admin_id = payload.assigned_admin_id
     if payload.status is not None:

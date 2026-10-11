@@ -10,7 +10,7 @@ const repoRoot = path.resolve(appDir, '../..')
 export default defineConfig({
   // Force Vite to load environment variables from the monorepo root
   envDir: repoRoot,
-  // Force relative paths to ensure successful asset loading in Electron's file:// protocol
+  // Share assets with the packaged application's secure protocol.
   base: './', 
   plugins: [
     react(),

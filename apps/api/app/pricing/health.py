@@ -95,7 +95,7 @@ class PricingHealthService:
         )
         persistence_backlog = await self.store.persistence_backlog() if redis_ok else None
         payload: dict[str, Any] = {
-            "status": "ok" if database["connected"] or redis_ok else "degraded",
+            "status": "ok" if database["connected"] and redis_ok else "degraded",
             "checked_at": datetime.now(UTC).isoformat(),
             "database": "connected" if database["connected"] else "unavailable",
             "redis": "connected" if redis_ok else "unavailable",

@@ -219,7 +219,7 @@ class DefaultAlertEligibilityTests(unittest.TestCase):
             "refreshed_at": "2026-08-02T12:00:00+00:00",
             "assets": [
                 {
-                    "asset": "btc",
+                    "asset": "BTC_USD",
                     "price_usd": 101,
                     "usd_status": "confirmed",
                     "usd_source_semantic": "reference_rate",

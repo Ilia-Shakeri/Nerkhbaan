@@ -9,6 +9,8 @@ export interface AdminProfile {
   permissions: string[];
   must_change_password: boolean;
   session_expires_at: string;
+  mfa_enabled: boolean;
+  mfa_required: boolean;
 }
 
 export interface SigninResponse {

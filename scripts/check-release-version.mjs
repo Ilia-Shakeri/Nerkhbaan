@@ -33,6 +33,17 @@ for (const workspace of [
     version,
     `${workspace} lockfile version must match VERSION`,
   );
+  const manifest = JSON.parse(read(`${workspace}/package.json`));
+  for (const field of ['dependencies', 'devDependencies']) {
+    assert.deepEqual(lockfile.packages[workspace]?.[field] ?? {}, manifest[field] ?? {}, `${workspace} ${field} must match its lock entry`);
+  }
+}
+
+const rootManifest = JSON.parse(read('package.json'));
+assert.deepEqual(lockfile.packages[''].devDependencies, rootManifest.devDependencies, 'Root development dependencies must match the lock');
+assert.equal(JSON.parse(read('docs/api-contracts.json')).info.version, version, 'Generated API contract must match VERSION');
+for (const document of ['README.md', 'API_DOCUMENTATION.md', 'PROJECT_STATUS.md', 'docs/admin-guide.md', 'docs/delivery-readiness.md']) {
+  assert.ok(read(document).includes(version), `${document} must identify the current release`);
 }
 
 assert.match(

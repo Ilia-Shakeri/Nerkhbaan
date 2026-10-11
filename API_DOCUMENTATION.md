@@ -1,627 +1,126 @@
 # Nerkhbaan API Reference
 
-Base path: `/api`. All responses are JSON. All timestamps are RFC 3339 in UTC.
+Code release: **2.8.0**. Updated: 2026-10-11.
+The complete generated contract is [docs/api-contracts.json](docs/api-contracts.json).
+The [route index](docs/api-route-index.md) lists all HTTP methods, paths and request schemas.
+Regenerate both with `python scripts/export_api_contracts.py` after route or model changes.
 
-## 2.7.0 — explicit permissions
+## General contract
 
-Signup requires JSON booleans `accepted_terms: true` and
-`account_data_consent: true`, plus `policy_version: "2026-09-19.2"`.
-Web and API must deploy together; previous policy receipts are not rewritten.
-`full_name` is optional; omitted/blank falls back to the username.
-Support ticket/message POST requests require `support_data_consent: true` and
-the same version. Chat POST requires `processing_consent: true` and that version.
-Missing/false/coerced permission or a different version is rejected with 422.
-Permission receipts are server-timestamped security events. Existing users are
-not retroactively marked as accepting terms. API and clients must ship together.
+- Base path: `/api`. JSON bodies. UTC timestamps with explicit timezone.
+- Typical errors: 401 auth, 403 permission/CSRF/reauth, 404 missing resource, 409 conflict,
+  422 invalid input, 429 rate limit, 503 dependency unavailable.
+- Error body uses `detail`; it may be a string or field-error list. Do not parse message text as a status code.
+- Use the route's exact pagination parameters and success status from the generated schema.
+- A missing optional property differs from explicit `null`. Updates validate the merged resource.
+- Never send provider credentials in requests to admin setting endpoints or in URLs.
 
-- **Instrument model and price semantics** — [`apps/api/PRICING_SOURCES.md`](apps/api/PRICING_SOURCES.md)
-- **Provider onboarding and operations** — [`docs/pricing-operations-runbook.md`](docs/pricing-operations-runbook.md)
-- **Deployment** — [`README.md`](README.md)
+## User auth and consent
 
-Interactive OpenAPI is served at `/api/docs` **only when `DEBUG=true`**. It is
-disabled in production, so this file is the reference.
+Browser requests include credentials. Unsafe cookie-auth requests must pass the explicit origin guard; admin writes also need CSRF.
+Desktop sends `X-Client-Type: desktop`, uses the controlled desktop origin and bearer access token;
+its refresh credential is held by the secure bridge. Web responses do not expose refresh tokens.
 
----
-
-## Contents
-
-- [Conventions](#conventions)
-- [Authentication](#authentication)
-- [Prices (legacy shape)](#prices-legacy-shape)
-- [Instruments (canonical shape)](#instruments-canonical-shape)
-- [Live price stream](#live-price-stream)
-- [Alerts](#alerts)
-- [Notifications](#notifications)
-- [Web push](#web-push)
-- [Market assistant](#market-assistant)
-- [Support](#support)
-- [Providers](#providers)
-- [System](#system)
-- [Admin](#admin)
-- [Rate limits](#rate-limits)
-
----
-
-## Conventions
-
-### Errors
-
-Every error carries a `request_id` that also appears in the `X-Request-ID`
-response header and in the server log line for the same request.
+`POST /api/auth/signup`:
 
 ```json
-{ "detail": "Invalid credentials", "request_id": "9f2c1ab34e..." }
-```
-
-| Status | Meaning in this API |
-| --- | --- |
-| `400` | Malformed input that schema validation cannot express |
-| `401` | Missing, expired, or revoked credentials |
-| `403` | Authenticated but not permitted, or an origin/CSRF check failed |
-| `404` | Not found, or deliberately hidden (admin routes off the admin host) |
-| `409` | Conflict — duplicate identity, quota reached, or unusable state |
-| `413` | Body exceeded `MAX_REQUEST_BODY_BYTES` (1 MiB by default) |
-| `422` | Schema validation failure; `detail` is a list of field errors |
-| `429` | Rate limited. `Retry-After` is always set |
-| `503` | A dependency is unavailable — distinct from `429` |
-
-### Request identity
-
-Send `X-Request-ID` (`[A-Za-z0-9._-]{1,128}`) to correlate your logs with the
-server's. Anything else is replaced with a generated value.
-
-### CSRF
-
-Cookie-authenticated `POST`/`PUT`/`PATCH`/`DELETE` requests must carry an
-`Origin` header matching a configured origin, otherwise they are rejected with
-`403`. Bearer-token clients are unaffected. Admin routes additionally require
-the `X-CSRF-Token` header (see [Admin](#admin)).
-
----
-
-## Authentication
-
-Two interchangeable mechanisms:
-
-| Client | Mechanism |
-| --- | --- |
-| Web / PWA | `HttpOnly` cookies set by the server. Send `credentials: include`. |
-| Desktop / native | Bearer token. Send `X-Client-Type: desktop` to receive tokens in the response body. |
-
-Access tokens are short-lived (`JWT_EXPIRE_MINUTES`, default 15). Refresh
-tokens rotate on every use and are tracked as a family: presenting a token that
-has already been exchanged revokes the whole family, on the assumption that a
-replayed token means it leaked.
-
-### `POST /api/auth/signup`
-
-```json
-{ "username": "trader", "full_name": "A Trader", "email": "a@example.com", "password": "Str0ngPassphrase" }
-```
-
-`username` is `[a-zA-Z0-9._-]{3,50}`. It may not contain `@`, and it may not
-collide with any existing account's **email** either — sign-in matches an
-identifier against both columns, so an overlap would make the lookup ambiguous.
-
-`password` is 10–128 characters with at least one lower case, one upper case,
-and one digit.
-
-**`201`** → `AuthResponse`. **`409`** if the identity is taken.
-
-### `POST /api/auth/signin`
-
-```json
-{ "username_or_email": "trader", "password": "Str0ngPassphrase" }
-```
-
-**`200`** → `AuthResponse`. **`401`** on bad credentials, **`403`** if the
-account is disabled, **`429`** after 5 failures in 15 minutes per IP+identifier.
-Five consecutive failures also lock the account for 15 minutes.
-
-```jsonc
-// AuthResponse
 {
-  "access_token": null,          // populated only for X-Client-Type: desktop
-  "refresh_token": null,         // ditto
-  "token_type": "bearer",
-  "user": { "id": 1, "username": "trader", "full_name": "A Trader",
-            "email": "a@example.com", "is_active": true,
-            "must_change_password": false, "created_at": "2026-08-20T09:00:00Z" }
+  "username": "sample_user",
+  "full_name": "Sample User",
+  "email": "sample@example.com",
+  "password": "ExampleOnly123!",
+  "accepted_terms": true,
+  "account_data_consent": true,
+  "policy_version": "2026-09-19.2"
 }
 ```
 
-### `POST /api/auth/refresh`
+Both agreements must be explicit `true`. A current policy version is required.
+Old clients missing these fields receive 422; the server never infers agreement.
+Signin uses `username_or_email` and `password`. Session listing and revocation are under `/api/auth/sessions`.
+Changing or resetting a privileged account password uses its stronger password policy and invalidates all auth planes.
 
-Cookie clients send nothing; desktop clients send `{"refresh_token": "..."}`.
-Returns a fresh `AuthResponse` and rotates the refresh token.
+Refresh rotates credentials. A same-device duplicate within five seconds returns 409 without a token;
+reload session state rather than treating it as compromise. Reuse outside that narrow window or from another
+identity revokes the family and returns 401. Clients must share one refresh promise and coordinate tabs.
+Signout must finish independently of service-worker cleanup.
 
-**`401`** if the token is unknown, expired, revoked, or already exchanged.
+## Prices and history
 
-### `GET /api/auth/me`
+Prefer `/api/instruments` and `/api/instruments/{instrument_id}` over asset aliases.
+The canonical result includes instrument identity, source, source observation, receipt time,
+validity, status and persistence metadata. Check all eligibility fields before ordinary use.
 
-Returns the current `UserResponse`.
+| Instrument | Currency and unit |
+| --- | --- |
+| XAU_USD_OZ | USD per troy ounce, gold spot |
+| XAG_USD_OZ | USD per troy ounce, silver spot |
+| GOLD_18K_TOMAN_GRAM | Toman per gram, purity 750 |
+| GOLD_24K_TOMAN_GRAM | Toman per gram, purity 9999 |
+| SILVER_999_TOMAN_GRAM | Toman per gram, purity 999 |
+| SILVER_925_TOMAN_GRAM | Toman per gram, purity 925 |
+| BTC_USD / BTC_TOMAN | USD / Toman per BTC |
+| USDT_USD / USDT_TOMAN | USD / Toman per USDT |
+| USD_TOMAN | Toman per USD |
 
-### `POST /api/auth/change-password`
+Gold has no formula fallback. Missing direct gold is unavailable. Approved non-gold derived prices
+remain theoretical and inherit the weakest input validity. Toman and USD percentages are independent.
+Historical points keep their original instrument and unit. Completeness includes coverage and gaps;
+partial data is returned as partial, not fabricated. Backfill is resumable and requires durable writes.
+
+`WS /api/ws/prices` streams updates. Reconnect or a detected sequence gap requires a fresh HTTP snapshot.
+Periodic HTTP refresh remains a recovery path. WebSocket transport health does not prove source price freshness.
+
+## Alerts and notification channels
+
+`POST /api/alerts` and `PATCH /api/alerts/{id}` use the exact AlertCreate/AlertUpdate schemas.
+`instrument_id` selects the actual price. Keep asset and currency compatible with that instrument.
+Use `ordinary`, `reference` or `derived` source mode deliberately; derived is an explicit theoretical opt-in.
+Price alerts require a valid target and condition. Formula alerts require a valid formula after every update.
+Null cannot clear required fields. Cooldown and per-day limits apply to repeating alerts.
+
+Preferences do not create a browser subscription. Push enablement needs browser permission,
+a service-worker subscription and successful `/api/push/subscribe`. SMS, email and Telegram need their
+channel verification. Silent mode and user channel preferences remain authoritative.
+Delivery retry/cancel uses atomic state transitions. Cancellation cannot undo an already transmitted message.
+
+## Support and Smart Assistant
+
+Support ticket/message requests require the explicit consent fields in their current generated schemas.
+Do not reuse account consent as support-transmission consent. Internal support notes are admin-only.
+
+Create ticket body:
 
 ```json
-{ "current_password": "...", "new_password": "..." }
+{"subject":"Sample issue","message":"Sample details","support_data_consent":true,"policy_version":"2026-09-19.2"}
 ```
 
-Revokes **every** session for the account, including the caller's, and
-increments the account's security version so outstanding access tokens stop
-validating. The client must sign in again.
-
-### `POST /api/auth/forgot-password` · `POST /api/auth/reset-password`
-
-`forgot-password` takes `{"email": "..."}` and always answers `200` with the
-same message, whether or not the address exists. A six-digit code valid for 15
-minutes is emailed when it does.
-
-`reset-password` takes `{"email", "code", "new_password"}`. Success revokes
-every session. **`400`** covers both a wrong code and an expired one — they are
-deliberately indistinguishable.
-
-### `GET /api/auth/sessions` · `DELETE /api/auth/sessions/{session_id}`
-
-Lists live sessions, marking the caller's with `"current": true`. Deleting
-returns **`204`**.
-
-### `POST /api/auth/signout`
-
-Revokes the presented session and clears cookies. **`204`**. Idempotent.
-
----
-
-## Prices (legacy shape)
-
-The compatibility surface consumed by the web and desktop dashboards.
-
-### `GET /api/prices`
-
-Public. Cached server-side for `PRICING_PROVIDER_AGGREGATE_CACHE_SECONDS`.
-
-> **The USD and Toman figures on one row are different instruments.** Gold's USD
-> leg is a troy ounce at 0.9999 fine on the global spot market; its Toman leg is
-> one gram at 0.750 fine in the Iranian physical market. They are not one asset
-> in two currencies. Use `unit_usd` / `unit_toman` to label them, and
-> `change_percent_usd` / `change_percent_toman` rather than the combined
-> `change_percent`, which follows whichever leg is available.
-
-```jsonc
-{
-  "refreshed_at": "2026-08-20T09:14:02Z",
-  "source": { "usd": "canonical", "toman": "canonical" },
-  "assets": [
-    {
-      "asset": "gold",
-      "label_fa": "طلا", "label_en": "Gold",
-
-      "price_usd": 2400.15,
-      "price_toman": 4476000,
-
-      "instrument_id_usd": "XAU_USD_OZ",
-      "instrument_id_toman": "GOLD_18K_TOMAN_GRAM",
-      "unit_usd":   { "instrument_id": "XAU_USD_OZ", "quote_currency": "USD",
-                      "weight_unit": "troy_ounce", "purity": 0.9999,
-                      "market": "global_spot", "display_decimals": 2 },
-      "unit_toman": { "instrument_id": "GOLD_18K_TOMAN_GRAM", "quote_currency": "TOMAN",
-                      "weight_unit": "gram", "purity": 0.75,
-                      "market": "iran_physical", "display_decimals": 0 },
-
-      "change_percent_usd": 0.42,
-      "change_percent_toman": 0.61,
-      "change_percent": 0.61,
-      "trend": "up",
-
-      "usd_status": "live", "toman_status": "derived_fallback",
-      "source_usd": "canonical", "source_toman": "derived",
-      "stale_minutes": 1,
-      "history": [ { "timestamp": "...", "value_usd": 2399.8, "value_toman": 4470000 } ],
-      "chart_error": false,
-      "chart_error_message": { "fa": "...", "en": "..." },
-
-      "usd_is_persisted": true,  "toman_is_persisted": true,
-      "usd_live_eligible": true, "toman_live_eligible": true,
-      "usd_is_suspicious": false, "toman_is_suspicious": false,
-      "usd_source_semantic": "reference_rate", "toman_source_semantic": "derived",
-      "usd_derivation_depth": 0, "toman_derivation_depth": 2,
-      "usd_spread_bps": null, "usd_maximum_spread_bps": 150
-    }
-  ]
-}
-```
-
-Assets: `gold`, `silver`, `usdt`, `btc`.
-
-#### Status values
-
-| Status | Meaning |
-| --- | --- |
-| `live` | Fresh direct quote |
-| `confirmed` | Anomalous but corroborated by an independent source |
-| `fresh_cache` | Past its refresh interval, still inside its validity window |
-| `verifying` | A suspicious candidate is being checked; the previous value is shown |
-| `suspicious` / `suspicious_unconfirmed` | Candidate rejected; previous value retained |
-| `derived_fallback` | Computed from a formula, not observed. See below. |
-| `stale` | Past `stale_after`, still displayable |
-| `expired` | Past `expire_after`. Do not trade on it. |
-| `unpersisted` | Accepted but not yet durably stored |
-| `unavailable` | No value at all |
-
-**Only `live`, `confirmed` and `fresh_cache` are safe to treat as a market
-price.** `derived_fallback` is arithmetic, not an observation.
-
-### `GET /api/prices/{asset}/history`
-
-`?timeframe=1h|24h|7d|30d|1y` (default `30d`). Public, `Cache-Control: public, max-age=60`.
-
-`status` is `complete` or `partial`; `partial` means a backfill was queued for
-the missing range.
-
-### `GET /api/prices/health`
-
-Public. Chain status per asset plus `startup` and `refresh` blocks:
-
-```jsonc
-"startup": {
-  "strict_mode": false,
-  "optional_env_keys": ["goldapi_api_key", "..."],
-  "missing_optional_env_keys": ["tala_api_key"],
-  "instruments_without_direct_source": ["SILVER_999_TOMAN_GRAM"],  // formula only
-  "instruments_unservable": [],                                    // no price at all
-  "ok": true
-}
-```
-
-`instruments_without_direct_source` is the one to watch: those chains publish
-computed values, not observed ones.
-
-`refresh.state` is `healthy`, `degraded`, `failed`, or `not_started`.
-`degraded` means no usable canonical quote was produced in the last completed
-cycle; `failed` means the cycle raised an error. `result_counts` groups the
-last cycle by safe status names and exposes no provider credentials or payloads.
-
----
-
-## Instruments (canonical shape)
-
-The precise surface. Every instrument is a single unambiguous quote.
-
-| Instrument | Unit | Purity | Market |
-| --- | --- | --- | --- |
-| `XAU_USD_OZ` | troy ounce | 0.9999 | global spot |
-| `XAG_USD_OZ` | troy ounce | 0.9999 | global spot |
-| `GOLD_18K_TOMAN_GRAM` | gram | 0.750 | Iran physical |
-| `GOLD_24K_TOMAN_GRAM` | gram | 0.9999 | Iran physical |
-| `SILVER_999_TOMAN_GRAM` | gram | 0.999 | Iran physical |
-| `SILVER_925_TOMAN_GRAM` | gram | 0.925 | Iran physical |
-| `USD_TOMAN` | unit | — | Iran exchange |
-| `USDT_TOMAN` | unit | — | Iran exchange |
-| `USDT_USD` | unit | — | global exchange |
-| `BTC_TOMAN` | unit | — | Iran exchange |
-| `BTC_USD` | unit | — | global exchange |
-
-### `GET /api/instruments` · `GET /api/instruments/{id}`
-
-Authentication is optional and widens the response: anonymous callers get the
-price and status; authenticated callers additionally get `provider_id`,
-`route_id`, `provenance`, decision reasons and the full source summary.
-
-### `GET /api/instruments/{id}/history`
-
-`?timeframe=1h|24h|7d|30d|1y` (default `24h`). OHLC buckets sized to the
-timeframe.
-
-### `GET /api/instruments/{id}/sources`
-
-Per-provider quotes behind the canonical value. Anonymous callers receive counts
-only.
-
-### `GET /api/instruments/{id}/sources/history`
-
-**Requires authentication** (`401` otherwise). Optional `?provider_id=`.
-
-### `GET /api/instruments/{id}/verification` · `GET /api/instruments/{id}/health`
-
-Anomaly review trail, and freshness/circuit state for one instrument.
-
----
-
-## Live price stream
-
-### `WS /api/ws/prices`
-
-Optional `?instruments=BTC_USD,XAU_USD_OZ` (max 100).
-
-A browser client must connect from a configured origin; the handshake is closed
-with `1008` otherwise. Native clients send no `Origin` and are accepted.
-
-On connect the server sends a snapshot, then one event per canonical change:
-
-```jsonc
-{ "event_type": "snapshot", "connection_id": "...", "heartbeat_seconds": 20,
-  "poll_fallback_seconds": 30, "prices": [ /* canonical events */ ] }
-
-{ "event_type": "canonical_update", "instrument_id": "BTC_USD",
-  "compatibility_asset": "btc", "price": 64210.5, "status": "live",
-  "sequence": 88421, "currency": "USD", "unit": "unit", "purity": null,
-  "canonical_at": "...", "age_seconds": 3, "persistence_status": "persisted" }
-
-{ "event_type": "heartbeat", "server_time": 1766221000.5 }
-```
-
-Change your subscription at any time:
-
-```json
-{ "event_type": "subscribe", "instruments": ["XAU_USD_OZ"] }
-```
-
-**Do not stop polling while the socket is open.** Events are published only when
-a canonical value *changes*, so a stalled pricing pipeline produces heartbeats
-and no updates — indistinguishable from a quiet market. The reference client
-keeps a slow poll running as a liveness check.
-
-Limits: `WEBSOCKET_MAX_CONNECTIONS_PER_WORKER` (default 1000); 30 client frames
-per minute; close code `1013` when the worker is at capacity or Redis fan-out is
-unavailable.
-
----
-
-## Alerts
-
-All routes require authentication. Maximum **50 active alerts per account** —
-every one is re-evaluated each cycle.
-
-### `POST /api/alerts`
-
-```jsonc
-{
-  "asset": "gold",
-  "alert_type": "price",              // or "formula"
-  "target_price": 4500000,
-  "condition": "above",               // or "below"
-  "currency_mode": "toman",           // or "usd"
-  "price_source_mode": "ordinary",    // "ordinary" | "reference" | "derived"
-  "mode": "one_time",                 // or "recurring"
-  "cooldown_seconds": 900,            // 60 .. 604800
-  "max_notifications_per_day": 10,    // 1 .. 100
-  "notify_app": true,
-  "notify_email": false,
-  "notify_telegram": false,
-  "notify_webhook": false,
-  "webhook_url": null,
-  "enable_dlq": false
-}
-```
-
-**`price_source_mode` decides which prices may fire the alert:**
-
-| Mode | Fires on |
-| --- | --- |
-| `ordinary` | Direct market observations only — exchange trades, order books, physical market quotes |
-| `reference` | Reference rates (e.g. metal fixings) |
-| `derived` | Formula output. Explicitly opting in to computed values. |
-
-An alert never fires on a `suspicious`, `expired` or unpersisted price, nor when
-the order-book spread exceeds the instrument's `maximum_spread_bps`.
-
-**Formula alerts** set `alert_type: "formula"` and supply an expression such as
-`gold > btc * 0.05`. Names are asset ids, optionally suffixed with a normalised
-source name; `x` binds to `target_price`. The grammar allows `+ - * /`,
-comparison, parentheses and numeric literals — nothing else, evaluated over a
-restricted AST with a node cap.
-
-**Webhooks** must be HTTPS, must not carry credentials, and must resolve to a
-public address. The host is re-validated at delivery and the connection is
-checked against the addresses that were vetted.
-
-**`201`** → `AlertResponse`. **`409`** at the alert cap. **`422`** for an invalid
-formula, an unreachable webhook, or a channel that is not configured.
-
-### `PATCH /api/alerts/{id}`
-
-Partial update. Editing re-arms the alert: `triggered_at`, `last_condition_state`
-and `next_eligible_trigger_at` are cleared, so a moved target takes effect
-immediately without losing the alert's identity.
-
-### `GET /api/alerts`
-
-`?limit=1..200&offset=0`. Active alerts, newest first.
-
-### `DELETE /api/alerts/{id}`
-
-Soft-deletes (`is_active = false`). **`204`**.
-
-### Delivery
-
-A trigger writes one `alert_trigger_events` row and one `alert_delivery_jobs`
-row per channel, each with an idempotency key. A worker claims jobs with
-`SKIP LOCKED`. With `enable_dlq`, failures retry with exponential backoff and
-jitter up to `ALERT_DELIVERY_MAX_ATTEMPTS`, then land in the DLQ. Permanent
-failures — an unsubscribed push endpoint, a disabled channel — never retry.
-
-Webhook payload:
-
-```json
-{ "alert_id": 12, "asset": "gold", "target_price": 4500000,
-  "condition": "above", "currency": "toman",
-  "triggered_at": "2026-08-20T09:14:02Z",
-  "price": 4501200,
-  "price_context": { "status": "live", "source_semantic": "physical_market_quote",
-                     "price_source_mode": "ordinary", "source_summary": {} } }
-```
-
----
-
-## Notifications
-
-All routes require authentication.
-
-| Route | Purpose |
-| --- | --- |
-| `GET /api/notifications` | `?limit=1..200&offset=0&unread_only=false` |
-| `PATCH /api/notifications/{id}/read` | Mark one read |
-| `POST /api/notifications/read-all` | Mark all read — `204` |
-| `GET /api/notifications/preferences` | Current preferences and channel availability |
-| `PATCH /api/notifications/preferences/{key}` | `push_app`, `silent_mode`, `aggressive_alerts` |
-| `POST /api/notifications/otp/start` | Send a code to an email address |
-| `POST /api/notifications/otp/confirm` | Verify it; enables the channel |
-| `POST /api/notifications/telegram/deep-link` | One-time `t.me` link — the recommended flow |
-| `POST /api/notifications/telegram` · `/confirm` | Manual chat-id flow |
-| `DELETE /api/notifications/{channel}` | Disable `sms`, `email` or `telegram` |
-
-A channel only delivers once it is both **enabled and verified**. SMS is not
-implemented and returns `503`.
-
-`POST /api/notifications/telegram/webhook` is for Telegram itself and requires
-the `X-Telegram-Bot-Api-Secret-Token` header.
-
----
-
-## Web push
-
-### `POST /api/push/subscribe`
-
-Body is the browser's `PushSubscription.toJSON()`. The endpoint host must be a
-known push service (`PUSH_ALLOWED_HOSTS`).
-
-Authentication is optional but **matters**: a subscription created while signed
-out is stored with no account and receives nothing. The web client re-sends it
-after sign-in for exactly this reason. Re-subscribing rebinds an existing
-endpoint to the current account.
-
-### `POST /api/push/unsubscribe`
-
-`{"endpoint": "..."}` → **`204`**. Called on sign-out so the next user of a
-shared device does not inherit the previous account's alerts.
-
-> `VAPID_PUBLIC_KEY` is compiled into the web bundle at **image build time**. A
-> frontend image built without it has push permanently disabled until rebuilt.
-
----
-
-## Market assistant
-
-Authenticated. Backed by a chat-completions provider with an ordered fallback
-chain (`AI_PROVIDER_ORDER`).
-
-| Route | Purpose |
-| --- | --- |
-| `POST /api/insights/analyze` | `{"asset", "language"}` → short read on one asset |
-| `POST /api/insights/chat` | `{"messages", "language", "session_id"}` |
-| `GET /api/insights/chat/sessions` | List |
-| `GET`/`PATCH`/`DELETE /api/insights/chat/sessions/{id}` | Fetch, rename, delete |
-
-`analyze` returns **`409`** when no verified market data is available — it will
-not narrate a stale or suspicious price.
-
-Quotas: 15 requests/minute, `AI_USER_DAILY_REQUEST_LIMIT` per day per user, and
-`AI_GLOBAL_DAILY_REQUEST_LIMIT` across the deployment. Exhaustion is **`429`**;
-a provider outage is **`503`**. Identical consecutive requests are deduplicated.
-
-Replies carry a disclaimer. This is general information, not investment advice.
-
----
-
-## Support
-
-| Route | Purpose |
-| --- | --- |
-| `POST /api/support/ticket` | `{"subject", "message"}` |
-| `GET /api/support/tickets` | Caller's tickets |
-| `GET /api/support/ticket/{id}/messages` | Thread |
-| `POST /api/support/ticket/{id}/message` | Reply |
-
-30 writes per minute per user. Internal admin notes are never returned here.
-
----
-
-## Providers
-
-### `GET /api/providers`
-
-Anonymous callers get counts per instrument:
-
-```json
-{ "checked_at": "...", "authentication_required_for_details": true,
-  "instruments": { "BTC_USD": { "provider_count": 4, "healthy_count": 2 } } }
-```
-
-Authenticated callers get the full catalogue with provider ids, roles, circuit
-state and which credentials are configured. That detail names every upstream the
-platform depends on, which is why it is not public.
-
----
-
-## System
-
-| Route | Purpose |
-| --- | --- |
-| `GET /health`, `GET /api/health/live` | Liveness. Always `200` if the process is up; includes `release_version`. |
-| `GET /api/health/ready` | Readiness. `503` unless the database is reachable **and** migrations are current. |
-| `GET /api/health` | Full snapshot: release, database, Redis, migration version, backlogs, refresh state. |
-| `GET /metrics` | Prometheus. Loopback/private networks plus `METRICS_ALLOWED_NETWORKS`; `404` otherwise. |
-
-Readiness deliberately requires the database. Authentication, alerts and admin
-all go through PostgreSQL, so a cache-only instance cannot serve the product and
-must not receive traffic.
-
----
+Reply body uses `content` instead of `subject`/`message`, with the same explicit support consent and policy version.
+Smart Assistant consent is separate. A chat request includes `processing_consent:true`,
+`policy_version:"2026-09-19.2"`, `messages:[{"role":"user","content":"Sample question"}]`,
+`language:"fa"` and an optional existing `session_id`. The final message must be from the user. Session messages are scoped to their session ID; stale replies cannot
+replace the current conversation. Provider identity, quotas and availability are not inferred from a request succeeding.
 
 ## Admin
 
-Served on a separate host and returned as `404` on the public one.
+Admin routes live under `/api/admin` on the separate configured admin origin.
+They require admin session cookies, `X-CSRF-Token` on unsafe writes, current RBAC permissions and
+reauthentication for sensitive work. TOTP and recovery flows are described in [admin guide](docs/admin-guide.md).
+The generated request schemas include confirmation text, review notes, expected versions and filters.
+Use those fields as specified. Never build a sensitive payload by copying an old screenshot.
 
-**Every admin request needs all of:** a session cookie; an `Origin` matching
-`ADMIN_FRONTEND_ORIGIN`; an `X-CSRF-Token` header matching the session (mutating
-methods); a source address inside `ADMIN_IP_ALLOWLIST` when set; and a role
-carrying the required permission. Sessions are bound to the user agent by
-default and optionally to the IP.
+The route index covers auth/MFA, users/security/sessions, roles, support, instruments/canonical history,
+provider drafts and impact, Telegram policies/preview, anomaly reviews, jobs/DLQ/backfill, settings,
+audit, alerts and backup status where provided. See the guide for UI and API capability details.
+Backup status is read-only evidence. It is not an in-panel production restore.
 
-Destructive operations additionally require re-authentication within
-`ADMIN_REAUTH_MINUTES` and a typed confirmation string echoed back exactly.
+## Health and worker ingress
 
-| Area | Routes |
-| --- | --- |
-| Auth | `signin`, `signout`, `me`, `csrf`, `reauthenticate`, `change-password` |
-| Users | list, detail, `state`, `force-password-change`, `sessions/close` |
-| Roles | `roles`, `permissions`, `administrators`, `administrators/{id}/roles` |
-| Support | tickets, reply, internal notes |
-| Pricing | instruments, `refresh`, anomalies, anomaly review |
-| Providers | catalogue, impact, config drafts with apply/reject |
-| Telegram | sources CRUD |
-| Jobs | jobs, DLQ, retry, cancel |
-| Settings | feature flags, operational settings |
-| Audit | `GET /api/admin/audit` |
+`/api/health/live` is liveness. `/api/health/ready` checks required dependencies and schema.
+`/api/prices/health` checks operational pricing and freshness. `/metrics` is private.
 
-The last active super administrator cannot be demoted or disabled.
-
----
-
-## Rate limits
-
-Shared across workers through Redis; per-process when Redis is unavailable.
-Every `429` carries `Retry-After`.
-
-| Bucket | Limit | Window |
-| --- | --- | --- |
-| Sign-in failures | 5 | 15 min per IP + identifier |
-| Sign-up | 8 | 1 hour per IP |
-| Password recovery | 5 | 15 min per IP + email |
-| Password reset attempts | 10 | 15 min |
-| Push subscribe | 20 | 1 min |
-| Notification OTP (per user) | 5 | 10 min |
-| Notification OTP (per destination) | 3 | 1 hour |
-| Support writes | 30 | 1 min |
-| Assistant | 15 | 1 min, plus daily user and global caps |
-
-The edge proxy adds its own limits: 1 r/s to `/api/auth/`, 20 r/s to `/api/`,
-5 r/s to the admin API.
-# Pricing contract change — 2.5.0
-
-`GOLD_18K_TOMAN_GRAM` and `GOLD_24K_TOMAN_GRAM` no longer return formula
-fallbacks. When no independently sourced quote exists, treat the value as
-unavailable. Do not fill the missing value in client code. Old calculated
-gold is excluded from canonical charts and percentage baselines, not deleted.
-Wallgold exposes a direct 18K quote; direct 24K keyless coverage is unresolved.
-Existing Telegram ingestion remains separately attributed for future use.
+`POST /api/internal/pricing-worker/ingest` requires HMAC-SHA256 of `timestamp + '.' + raw body`,
+`X-Pricing-Worker-Timestamp`, `X-Pricing-Worker-Signature` and a Redis replay claim.
+Only approved instrument/provider pairs are accepted. Live quotes retain real upstream timestamps,
+follow the same anomaly and independence rules, and cannot move canonical observations backwards.
+See [external workers](docs/external-price-worker.md).

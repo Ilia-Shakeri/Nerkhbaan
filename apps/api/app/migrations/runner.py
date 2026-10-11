@@ -37,7 +37,8 @@ def _connect() -> psycopg.Connection:
     url = make_url(settings.database_url)
     if not url.database or not url.username:
         raise RuntimeError("DATABASE_URL must include database and user names")
-    return psycopg.connect(
+    options = dict(url.query)
+    options.update(
         host=url.host or "localhost",
         port=url.port or 5432,
         dbname=url.database,
@@ -46,6 +47,19 @@ def _connect() -> psycopg.Connection:
         connect_timeout=settings.migration_connect_timeout_seconds,
         application_name="nerkhbaan-migrate",
     )
+    return psycopg.connect(**options)
+
+
+def _acquire_advisory_lock(connection: psycopg.Connection) -> None:
+    deadline = time.monotonic() + settings.migration_statement_timeout_seconds
+    while True:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pg_try_advisory_lock(%s)", (settings.migration_advisory_lock_id,))
+            if cursor.fetchone()[0]:
+                return
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Migration lock deadline exceeded; another migration may be running")
+        time.sleep(min(0.25, max(0, deadline - time.monotonic())))
 
 
 def _apply_file(connection: psycopg.Connection, path: Path) -> None:
@@ -108,13 +122,15 @@ def run() -> None:
     with _connect() as connection:
         connection.autocommit = True
         with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT pg_advisory_lock(%s)",
-                (settings.migration_advisory_lock_id,),
-            )
+            cursor.execute("SELECT set_config('statement_timeout', %s, false)", (str(settings.migration_statement_timeout_seconds * 1000),))
+        _acquire_advisory_lock(connection)
         try:
             with connection.cursor() as cursor:
                 cursor.execute(MIGRATION_TABLE_SQL)
+                cursor.execute("SELECT version FROM public.schema_migrations")
+                unknown = {row[0] for row in cursor.fetchall()} - {path.name for path in files}
+                if unknown:
+                    raise RuntimeError("Database contains migrations absent from this release; use a compatible release")
             for path in files:
                 _apply_file(connection, path)
         finally:

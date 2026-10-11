@@ -1,10 +1,9 @@
 /* apps/web/src/styles/index.css */
+@import 'tailwindcss';
 @import 'tw-animate-css';
 @import './theme.css';
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config '../../tailwind.config.ts';
+@source '../../../../packages/ui/src';
 
 @layer base {
   /* Suppress browser-native password reveal/clear icons (Edge, IE) */

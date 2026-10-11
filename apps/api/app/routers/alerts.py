@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from pydantic import ValidationError
 
 from ..config import settings
 from ..db import get_db
@@ -12,11 +13,35 @@ from ..deps import get_current_user
 from ..models import Alert, User
 from ..schemas import AlertCreate, AlertResponse, AlertUpdate
 from ..services.alert_engine import FormulaValidationError, validate_formula, validate_webhook_url
+from ..pricing.instruments import get_instrument
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 #: Bound on live alerts per account. Each one is re-evaluated every cycle.
 MAX_ACTIVE_ALERTS_PER_USER = 50
+
+
+def _validate_alert_payload(payload: AlertCreate) -> None:
+    if payload.instrument_id:
+        try:
+            instrument = get_instrument(payload.instrument_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=422, detail="Unknown instrument") from exc
+        if instrument.quote_currency.value.lower() != payload.currency_mode:
+            raise HTTPException(status_code=422, detail="Alert currency must match the instrument")
+        payload.instrument_id = instrument.instrument_id
+    elif payload.alert_type == "price" and payload.asset not in {"gold", "silver", "usdt", "btc"}:
+        raise HTTPException(status_code=422, detail="Price alerts require a supported asset or instrument")
+    if payload.alert_type == "formula" and payload.formula:
+        try:
+            validate_formula(payload.formula)
+        except FormulaValidationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if payload.notify_webhook and payload.webhook_url:
+        try:
+            validate_webhook_url(payload.webhook_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("", response_model=AlertResponse, status_code=status.HTTP_201_CREATED)
@@ -25,6 +50,7 @@ def create_alert(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AlertResponse:
+    _validate_alert_payload(payload)
     if payload.notify_sms:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -35,16 +61,6 @@ def create_alert(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Telegram alert delivery is not configured.",
         )
-    if payload.alert_type == "formula" and payload.formula:
-        try:
-            validate_formula(payload.formula)
-        except FormulaValidationError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    if payload.notify_webhook and payload.webhook_url:
-        try:
-            validate_webhook_url(payload.webhook_url)
-        except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
     # Every active alert is re-evaluated on each cycle, so an unbounded count
     # is a cost the whole platform pays for one account.
     active_alerts = db.scalar(
@@ -86,6 +102,12 @@ def update_alert(
     if not alert:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     changes = payload.model_dump(exclude_unset=True)
+    merged = {name: getattr(alert, name) for name in AlertCreate.model_fields}
+    try:
+        validated = AlertCreate.model_validate({**merged, **changes})
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail="Alert update violates the alert contract") from exc
+    _validate_alert_payload(validated)
     if changes.get("notify_sms"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -96,28 +118,8 @@ def update_alert(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Telegram alert delivery is not configured.",
         )
-    if changes.get("formula"):
-        try:
-            validate_formula(changes["formula"])
-        except FormulaValidationError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    if changes.get("webhook_url"):
-        try:
-            validate_webhook_url(changes["webhook_url"])
-        except ValueError as exc:
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    for field, value in changes.items():
-        setattr(alert, field, value)
-    if alert.alert_type == "price" and alert.target_price is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="target_price is required for price alerts",
-        )
-    if alert.notify_webhook and not alert.webhook_url:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="webhook_url is required when notify_webhook is enabled",
-        )
+    for field in changes:
+        setattr(alert, field, getattr(validated, field))
     # Editing an alert re-arms it: the old trigger no longer describes it.
     alert.triggered_at = None
     alert.last_condition_state = False

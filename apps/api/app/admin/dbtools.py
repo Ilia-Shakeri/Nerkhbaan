@@ -16,22 +16,23 @@ def has_table(db: Session, table_name: str) -> bool:
 
 #: Reflection issues several catalogue queries per call. The schema does not
 #: change while the process runs, so each table is reflected once and reused.
-_reflected: dict[str, Table | None] = {}
+_reflected: dict[tuple[Any, str], Table | None] = {}
 _reflection_lock = threading.Lock()
 
 
 def reflected_table(db: Session, table_name: str) -> Table | None:
-    if table_name in _reflected:
-        return _reflected[table_name]
+    cache_key = (db.get_bind(), table_name)
+    if cache_key in _reflected:
+        return _reflected[cache_key]
     with _reflection_lock:
-        if table_name in _reflected:
-            return _reflected[table_name]
+        if cache_key in _reflected:
+            return _reflected[cache_key]
         table: Table | None = None
         if db.bind is not None and inspect(db.bind).has_table(table_name):
             table = Table(table_name, MetaData(), autoload_with=db.bind)
         # A missing table is cached too: the answer will not change until the
         # next migration, which requires a restart to pick up anyway.
-        _reflected[table_name] = table
+        _reflected[cache_key] = table
         return table
 
 
@@ -42,6 +43,8 @@ def safe_rows(
     *,
     limit: int = 200,
     order_candidates: tuple[str, ...] = ("created_at", "updated_at", "time"),
+    offset: int = 0,
+    filters: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     table = reflected_table(db, table_name)
     if table is None:
@@ -50,11 +53,15 @@ def safe_rows(
     if not columns:
         return []
     statement = select(*columns)
+    for key, value in (filters or {}).items():
+        if key not in table.c:
+            return []
+        statement = statement.where(table.c[key] == value)
     for candidate in order_candidates:
         if candidate in table.c:
             statement = statement.order_by(table.c[candidate].desc())
             break
-    records = db.execute(statement.limit(max(1, min(limit, 1000)))).mappings().all()
+    records = db.execute(statement.offset(max(0, offset)).limit(max(1, min(limit, 1000)))).mappings().all()
     return [redact(dict(record)) for record in records]
 
 

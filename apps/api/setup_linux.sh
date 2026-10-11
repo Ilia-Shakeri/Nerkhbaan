@@ -24,7 +24,8 @@ source venv/bin/activate
 
 echo "Installing dependencies..."
 pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --require-hashes -r requirements.lock
+python -m pip check
 
 echo ""
 echo "Setup complete!"

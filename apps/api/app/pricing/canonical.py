@@ -63,7 +63,7 @@ class CanonicalPricePolicy:
             family, venue = self._independence_values(quote)
             if (
                 quote.price is not None
-                and self._is_market_quote(quote)
+                and self._is_eligible_verifier(quote, instrument, current)
                 and quote.validation_status is ValidationStatus.ACCEPTED
                 and quote.persistence_status is PersistenceStatus.PERSISTED
                 and quote.instrument_id == primary.instrument_id
@@ -539,6 +539,19 @@ class CanonicalPricePolicy:
                 for quote in (primary, *verifiers)
             ],
         }
+
+    @staticmethod
+    def _is_eligible_verifier(quote: ProviderQuote, instrument: InstrumentDefinition, current: datetime) -> bool:
+        if CanonicalPricePolicy._is_market_quote(quote):
+            return True
+        if quote.source_semantic is not SourceSemantic.TELEGRAM_OBSERVATION:
+            return False
+        from .source_policy import SourceEligibilityPolicy
+
+        return bool(SourceEligibilityPolicy()._eligible_for_role(
+            instrument=instrument, quotes=[quote], role="verifier",
+            minimum_trust=SourceEligibilityPolicy.minimum_verifier_trust, now=current,
+        ))
 
     @staticmethod
     def _is_market_quote(quote: ProviderQuote) -> bool:

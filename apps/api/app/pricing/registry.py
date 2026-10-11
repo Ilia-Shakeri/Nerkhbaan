@@ -331,7 +331,7 @@ _PROVIDERS = (
         selected_price_semantic=PriceSemantic.REFERENCE,
     ),
     _provider(
-        "gold_api_free_xag", "Gold API Free XAG", "XAG_USD_OZ", ProviderRole.VERIFIER, 2,
+        "gold_api_free_xag", "Gold API Free XAG", "XAG_USD_OZ", ProviderRole.FALLBACK, 2,
         "0.80", _setting_url("gold_api_base_url", "/price/XAG"), "gold_api_free_xag_v1",
         "gold-api-free/1.0.0", 3600, rpm=2, rph=30, rpd=300, interval=3600,
         source_semantic=SourceSemantic.REFERENCE_RATE,

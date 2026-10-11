@@ -43,13 +43,15 @@ def migration_state(engine: Engine) -> dict:
     applied = {row["version"]: row["checksum"] for row in rows}
     missing = sorted(set(expected) - set(applied))
     changed = sorted(name for name, checksum in expected.items() if applied.get(name) not in (None, checksum))
+    unknown = sorted(set(applied) - set(expected))
     return {
-        "current": not missing and not changed,
+        "current": not missing and not changed and not unknown,
         "version": rows[-1]["version"] if rows else None,
         "applied_count": len(rows),
         "expected_count": len(expected),
         "missing": missing,
         "changed": changed,
+        "unknown": unknown,
     }
 
 

@@ -288,7 +288,7 @@ class ProviderQuote:
         self.bid = decimal_or_none(self.bid)
         self.ask = decimal_or_none(self.ask)
         self.last = decimal_or_none(self.last)
-        self.volume = decimal_or_none(self.volume)
+        self.volume = decimal_value(self.volume, allow_zero=True) if self.volume is not None else None
         self.confidence_score = decimal_value(self.confidence_score, allow_zero=True)
         if self.confidence_score > 1:
             raise ValueError("Confidence score must be between zero and one")
@@ -527,7 +527,7 @@ class ProviderQuote:
             provenance=tuple(
                 payload.get("provenance") or metadata.get("provenance") or ()
             ),
-            volume=decimal_or_none(payload.get("volume")),
+            volume=decimal_value(payload["volume"], allow_zero=True) if payload.get("volume") is not None else None,
             observed_at=parse_datetime(
                 payload.get("source_timestamp")
                 or metadata.get("source_timestamp")

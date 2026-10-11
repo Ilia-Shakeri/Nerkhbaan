@@ -1,6 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Minus, Square, Copy, X } from 'lucide-react';
 
+interface DesktopWindowControls {
+  isWindowMaximized?: () => Promise<boolean>;
+  toggleMaximizeWindow?: () => void;
+  minimizeWindow?: () => void;
+  closeWindow?: () => void;
+}
+const desktopControls = () => (window as unknown as { electronAPI?: DesktopWindowControls }).electronAPI;
+
 interface WindowTitleBarProps {
   theme: 'dark' | 'light';
 }
@@ -12,11 +20,12 @@ export function WindowTitleBar({ theme }: WindowTitleBarProps) {
   useEffect(() => {
     let mounted = true;
 
-    if (!window.electronAPI?.isWindowMaximized) {
+    const controls = desktopControls();
+    if (!controls?.isWindowMaximized) {
       return;
     }
 
-    window.electronAPI.isWindowMaximized().then((value) => {
+    controls.isWindowMaximized().then((value) => {
       if (mounted) {
         setIsMaximized(value);
       }
@@ -28,9 +37,10 @@ export function WindowTitleBar({ theme }: WindowTitleBarProps) {
   }, []);
 
   const toggleMaximize = async () => {
-    window.electronAPI?.toggleMaximizeWindow?.();
-    if (window.electronAPI?.isWindowMaximized) {
-      const value = await window.electronAPI.isWindowMaximized();
+    const controls = desktopControls();
+    controls?.toggleMaximizeWindow?.();
+    if (controls?.isWindowMaximized) {
+      const value = await controls.isWindowMaximized();
       setIsMaximized(value);
     }
   };
@@ -49,7 +59,7 @@ export function WindowTitleBar({ theme }: WindowTitleBarProps) {
       >
         <button
           type="button"
-          onClick={() => window.electronAPI?.minimizeWindow?.()}
+          onClick={() => desktopControls()?.minimizeWindow?.()}
           className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
             isDark ? 'text-[#D4AF37] hover:bg-[#1A1A1A]' : 'text-[#8A6B1E] hover:bg-[#F2E2AF]'
           }`}
@@ -69,7 +79,7 @@ export function WindowTitleBar({ theme }: WindowTitleBarProps) {
         </button>
         <button
           type="button"
-          onClick={() => window.electronAPI?.closeWindow?.()}
+          onClick={() => desktopControls()?.closeWindow?.()}
           className={`flex h-7 w-7 items-center justify-center rounded-md transition ${
             isDark ? 'text-[#D4AF37] hover:bg-[#2A1313]' : 'text-[#8A6B1E] hover:bg-[#F2E2AF]'
           }`}

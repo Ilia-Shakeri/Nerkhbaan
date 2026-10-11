@@ -69,7 +69,10 @@ class Settings(BaseSettings):
 
     allowed_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     public_frontend_origin: str = "http://localhost:5173"
-    admin_frontend_origin: str = "http://localhost:5174"
+    admin_frontend_origin: str = "http://localhost:4174"
+    desktop_frontend_origin: str = "nerkhbaan://app"
+    rate_limit_fail_closed: bool = True
+    admin_mfa_required: bool = False
     trusted_hosts: str = "localhost,127.0.0.1"
     max_request_body_bytes: int = 1_048_576
     request_id_header: str = "X-Request-ID"
@@ -149,6 +152,7 @@ class Settings(BaseSettings):
     pricing_refresh_interval_seconds: int = 20
     pricing_refresh_jitter_seconds: int = 8
     pricing_derived_fallback_enabled: bool = True
+    pricing_comparison_visible: bool = True
     pricing_backfill_enabled: bool = True
     pricing_backfill_batch_size: int = 500
     pricing_backfill_max_jobs_per_cycle: int = 2

@@ -1,7 +1,7 @@
 # Production clock synchronization
 
 Correct UTC time is a hard dependency for login tokens, provider freshness,
-cache expiry, scheduled work, and TLS. The production host was found about 84
+cache expiry, scheduled work, and TLS. In the historical 2026-09-12 incident, the production host was found about 84
 minutes behind while Chrony had no reachable source. Do not weaken timestamp
 validation to hide this failure.
 

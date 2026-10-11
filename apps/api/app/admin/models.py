@@ -4,6 +4,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import JSONB
 
 from ..db import Base
 
@@ -132,7 +134,8 @@ class AdminMfaProfile(Base):
     )
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     encrypted_totp_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
-    backup_code_digests: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    last_totp_step: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    backup_code_digests: Mapped[list[str]] = mapped_column(JSON().with_variant(JSONB, "postgresql"), default=list, nullable=False)
     recovery_locked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -151,8 +154,8 @@ class AdminAuditLog(Base):
     action: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
     resource_type: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
     resource_id: Mapped[str | None] = mapped_column(String(160), index=True, nullable=True)
-    before_data: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
-    after_data: Mapped[dict | list | None] = mapped_column(JSON, nullable=True)
+    before_data: Mapped[dict | list | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
+    after_data: Mapped[dict | list | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=True)
     ip_address: Mapped[str] = mapped_column(String(64), nullable=False)
     user_agent: Mapped[str] = mapped_column(String(512), nullable=False)
     request_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
@@ -224,7 +227,7 @@ class OperationalSetting(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(String(96), index=True, nullable=False)
     scope_id: Mapped[str] = mapped_column(String(160), default="global", index=True, nullable=False)
-    value: Mapped[dict | list | str | int | float | bool | None] = mapped_column(JSON, nullable=False)
+    value: Mapped[dict | list | str | int | float | bool | None] = mapped_column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
     description: Mapped[str] = mapped_column(String(240), default="", nullable=False)
     is_sensitive: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -241,9 +244,9 @@ class AdminProviderConfigDraft(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     provider_id: Mapped[str] = mapped_column(String(160), index=True, nullable=False)
-    before_data: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-    proposed_data: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-    impact_preview: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    before_data: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False)
+    proposed_data: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False)
+    impact_preview: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="draft", index=True, nullable=False)
     created_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -264,7 +267,7 @@ class AdminJob(Base):
     job_type: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
     resource_type: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
     resource_id: Mapped[str | None] = mapped_column(String(160), index=True, nullable=True)
-    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False)
     status: Mapped[str] = mapped_column(String(24), default="pending", index=True, nullable=False)
     requested_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True

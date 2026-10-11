@@ -14,7 +14,9 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import bcrypt
-from jose import JWTError, jwt
+from fastapi import HTTPException
+import jwt
+from jwt import InvalidTokenError
 
 try:
     import redis
@@ -84,17 +86,9 @@ def decode_access_claims(token: str) -> dict[str, Any] | None:
             algorithms=[settings.jwt_algorithm],
             audience=settings.jwt_audience,
             issuer=settings.jwt_issuer,
-            options={
-                "require_aud": True,
-                "require_exp": True,
-                "require_iat": True,
-                "require_iss": True,
-                "require_jti": True,
-                "require_nbf": True,
-                "require_sub": True,
-            },
+            options={"require": ["aud", "exp", "iat", "iss", "jti", "nbf", "sub"]},
         )
-    except JWTError:
+    except InvalidTokenError:
         return None
     subject = payload.get("sub")
     if payload.get("type") != "access" or not isinstance(subject, str):
@@ -144,6 +138,14 @@ _redis_client: Any | None = None
 _redis_retry_at = 0.0
 _rate_lock = threading.Lock()
 _memory_limits: dict[str, tuple[int, float]] = {}
+_MEMORY_RATE_LIMIT_MAX_KEYS = 4096
+_memory_sweep_at = 0.0
+
+
+def _rate_fallback(key: str, limit: int, window_seconds: int, increment: bool) -> RateLimitState:
+    if settings.redis_url and settings.rate_limit_fail_closed and not settings.debug:
+        raise HTTPException(status_code=503, detail="Security rate store unavailable", headers={"Retry-After": "30"})
+    return _memory_rate_status(key, limit, window_seconds, increment)
 
 
 def _rate_key(bucket: str, identity: str) -> str:
@@ -173,14 +175,22 @@ def _shared_rate_store() -> Any | None:
             _redis_client = client
         except Exception:
             _redis_retry_at = now + 30
-            logger.warning("Shared rate-limit store unavailable; using process-local guard")
+            logger.warning("Shared rate-limit store unavailable")
             return None
         return _redis_client
 
 
 def _memory_rate_status(key: str, limit: int, window_seconds: int, increment: bool) -> RateLimitState:
+    global _memory_sweep_at
     now = time.monotonic()
     with _rate_lock:
+        if now >= _memory_sweep_at or len(_memory_limits) >= _MEMORY_RATE_LIMIT_MAX_KEYS:
+            for expired in [entry for entry, (_, expiry) in _memory_limits.items() if expiry <= now]:
+                del _memory_limits[expired]
+            _memory_sweep_at = now + 1
+        if key not in _memory_limits and len(_memory_limits) >= _MEMORY_RATE_LIMIT_MAX_KEYS:
+            # Never discard an active guard to make room for attacker-chosen identities.
+            raise HTTPException(status_code=503, detail="Security rate capacity reached", headers={"Retry-After": "1"})
         count, expires_at = _memory_limits.get(key, (0, now + window_seconds))
         if expires_at <= now:
             count, expires_at = 0, now + window_seconds
@@ -194,7 +204,7 @@ def rate_limit_status(bucket: str, identity: str, limit: int, window_seconds: in
     key = _rate_key(bucket, identity)
     client = _shared_rate_store()
     if client is None:
-        return _memory_rate_status(key, limit, window_seconds, increment=False)
+        return _rate_fallback(key, limit, window_seconds, increment=False)
     try:
         raw_count = client.get(key)
         ttl = client.ttl(key) if raw_count is not None else window_seconds
@@ -204,14 +214,14 @@ def rate_limit_status(bucket: str, identity: str, limit: int, window_seconds: in
             retry_after=max(1, int(ttl if ttl and ttl > 0 else window_seconds)),
         )
     except Exception:
-        return _memory_rate_status(key, limit, window_seconds, increment=False)
+        return _rate_fallback(key, limit, window_seconds, increment=False)
 
 
 def rate_limit_hit(bucket: str, identity: str, limit: int, window_seconds: int) -> RateLimitState:
     key = _rate_key(bucket, identity)
     client = _shared_rate_store()
     if client is None:
-        return _memory_rate_status(key, limit, window_seconds, increment=True)
+        return _rate_fallback(key, limit, window_seconds, increment=True)
     try:
         count, ttl = client.eval(_RATE_LIMIT_SCRIPT, 1, key, window_seconds)
         return RateLimitState(
@@ -220,7 +230,7 @@ def rate_limit_hit(bucket: str, identity: str, limit: int, window_seconds: int) 
             retry_after=max(1, int(ttl if ttl and ttl > 0 else window_seconds)),
         )
     except Exception:
-        return _memory_rate_status(key, limit, window_seconds, increment=True)
+        return _rate_fallback(key, limit, window_seconds, increment=True)
 
 
 def rate_limit_clear(bucket: str, identity: str) -> None:

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import json
 import os
+import time
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
@@ -16,7 +17,6 @@ from ..db import SessionLocal
 from .budgets import RedisRequestBudget, pricing_budget
 from .cache import PricingRedisStore, pricing_redis
 from .db_models import PricingBackfillJobRecord
-from .instruments import get_instrument
 from .locks import DistributedPricingLocks, pricing_locks
 from .models import (
     CanonicalQuote,
@@ -113,14 +113,14 @@ class PricingBackfillQueue:
         range_end: datetime,
         priority: int = 200,
     ) -> BackfillEnqueueResult:
-        instrument = get_instrument(instrument_id)
+        instrument = await self.operational.instrument(instrument_id)
         start = ensure_utc(range_start)
         end = ensure_utc(range_end)
         if start >= end:
             raise ValueError("Backfill range must have a positive duration")
         raw = f"{instrument.instrument_id}|{start.isoformat()}|{end.isoformat()}"
         idempotency_key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-        if not await self.operational.feature_enabled("backfill_enabled"):
+        if not instrument.enabled or not await self.operational.feature_enabled("backfill_enabled", scope_id=instrument.instrument_id):
             return BackfillEnqueueResult("disabled", idempotency_key, None, None)
         if await self._history_provider(instrument.instrument_id) is None:
             return BackfillEnqueueResult("unsupported", idempotency_key, None, None)
@@ -154,8 +154,6 @@ class PricingBackfillQueue:
             )
 
     async def process_jobs(self, maximum_jobs: int = 2) -> dict[str, int]:
-        if not await self.operational.feature_enabled("backfill_enabled"):
-            return {"completed": 0, "deferred": 0, "failed": 0}
         if not await self.store.ping():
             return {"completed": 0, "deferred": 0, "failed": 0}
         await self._drain_redis_jobs(maximum_jobs * 2)
@@ -164,6 +162,15 @@ class PricingBackfillQueue:
             job = await asyncio.to_thread(self._claim_job)
             if job is None:
                 break
+            if not await self.operational.feature_enabled("backfill_enabled", scope_id=job["instrument_id"]):
+                await asyncio.to_thread(self._finish_job, job["id"], "deferred", "instrument_backfill_disabled", job["attempt_count"])
+                counts["deferred"] += 1
+                continue
+            instrument = await self.operational.instrument(job["instrument_id"])
+            if not instrument.enabled:
+                await asyncio.to_thread(self._finish_job, job["id"], "deferred", "instrument_disabled", job["attempt_count"])
+                counts["deferred"] += 1
+                continue
             provider = await self._history_provider(job["instrument_id"])
             if provider is None:
                 await asyncio.to_thread(
@@ -171,6 +178,7 @@ class PricingBackfillQueue:
                     job["id"],
                     "deferred",
                     "no_explicit_history_provider",
+                    job["attempt_count"],
                 )
                 counts["deferred"] += 1
                 continue
@@ -191,6 +199,7 @@ class PricingBackfillQueue:
                     job["id"],
                     "deferred",
                     "live_refresh_has_priority",
+                    job["attempt_count"],
                 )
                 counts["deferred"] += 1
                 continue
@@ -221,11 +230,11 @@ class PricingBackfillQueue:
                     continue
                 if point_count == 0:
                     await asyncio.to_thread(
-                        self._finish_job, job["id"], "deferred", "provider_returned_no_history"
+                        self._finish_job, job["id"], "deferred", "provider_returned_no_history", job["attempt_count"]
                     )
                     counts["deferred"] += 1
                 else:
-                    await asyncio.to_thread(self._finish_job, job["id"], "completed", None)
+                    await asyncio.to_thread(self._finish_job, job["id"], "completed", None, job["attempt_count"])
                     counts["completed"] += 1
         return counts
 
@@ -249,7 +258,7 @@ class PricingBackfillQueue:
             provider, parser, job["range_start"], job["range_end"]
         )
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(10.0, connect=3.0), follow_redirects=False
+            timeout=httpx.Timeout(10.0, connect=3.0), follow_redirects=False, trust_env=False
         ) as client:
             response = await client.get(
                 provider.history_url,
@@ -263,12 +272,18 @@ class PricingBackfillQueue:
             if len(response.content) > provider.maximum_payload_bytes * 4:
                 raise ValueError("history_payload_too_large")
             payload = response.json()
-        instrument = get_instrument(job["instrument_id"])
+        instrument = await self.operational.instrument(job["instrument_id"])
         points = parser.parse(
             payload, instrument, job["range_start"], job["range_end"]
         )
-        points = points[: self.batch_size]
-        for point in points:
+        # Process the whole requested range; the batch bound controls yielding.
+        last_renewed = time.monotonic()
+        for index, point in enumerate(points):
+            if index and (index % max(1, self.batch_size) == 0 or time.monotonic()-last_renewed >= 60):
+                if not await asyncio.to_thread(self._renew_job, job["id"], job.get("attempt_count")):
+                    raise RuntimeError("backfill_job_no_longer_owned")
+                last_renewed = time.monotonic()
+                await asyncio.sleep(0)
             quote = ProviderQuote.create(
                 instrument_id=instrument.instrument_id,
                 provider_id=provider.provider_id,
@@ -305,7 +320,9 @@ class PricingBackfillQueue:
                 },
                 persistence_status=PersistenceStatus.UNPERSISTED,
             )
-            await self.persistence.persist_provider_quote(quote)
+            stored = await self.persistence.persist_provider_quote(quote)
+            if not stored.persisted:
+                raise RuntimeError("backfill_provider_persistence_unavailable")
             canonical = CanonicalQuote.create(
                 instrument_id=instrument.instrument_id,
                 price=point.price,
@@ -332,7 +349,9 @@ class PricingBackfillQueue:
                 decision_reason="historical_primary_provider_backfill",
                 verification_status=VerificationStatus.NOT_REQUIRED,
             )
-            await self.persistence.persist_canonical(canonical)
+            stored = await self.persistence.persist_canonical(canonical)
+            if not stored.persisted:
+                raise RuntimeError("backfill_canonical_persistence_unavailable")
         return len(points)
 
     async def _drain_redis_jobs(self, maximum: int) -> None:
@@ -422,7 +441,7 @@ class PricingBackfillQueue:
                 .where(
                     or_(
                         and_(
-                            PricingBackfillJobRecord.status.in_(("pending", "retrying")),
+                            PricingBackfillJobRecord.status.in_(("pending", "retrying", "deferred")),
                             or_(
                                 PricingBackfillJobRecord.next_attempt_at.is_(None),
                                 PricingBackfillJobRecord.next_attempt_at <= now,
@@ -465,8 +484,8 @@ class PricingBackfillQueue:
         status = "failed" if attempt_count >= self.maximum_attempts else "retrying"
         db = SessionLocal()
         try:
-            record = db.get(PricingBackfillJobRecord, job_id)
-            if record is not None:
+            record = db.scalar(select(PricingBackfillJobRecord).where(PricingBackfillJobRecord.id == job_id).with_for_update())
+            if record is not None and record.status == "processing" and (attempt_count is None or record.attempt_count == attempt_count):
                 record.status = status
                 record.last_error = error[:500]
                 record.next_attempt_at = (
@@ -481,20 +500,38 @@ class PricingBackfillQueue:
             db.close()
 
     @staticmethod
-    def _finish_job(job_id: int, status: str, note: str | None) -> None:
+    def _finish_job(job_id: int, status: str, note: str | None, attempt_count: int | None = None) -> None:
         db = SessionLocal()
         try:
-            record = db.get(PricingBackfillJobRecord, job_id)
-            if record is not None:
+            record = db.scalar(select(PricingBackfillJobRecord).where(PricingBackfillJobRecord.id == job_id).with_for_update())
+            if record is not None and record.status == "processing" and (attempt_count is None or record.attempt_count == attempt_count):
                 record.status = status
                 record.last_error = note
-                record.next_attempt_at = None
+                record.next_attempt_at = utc_now() + timedelta(minutes=5) if status == "deferred" else None
                 record.updated_at = utc_now()
                 record.completed_at = utc_now() if status == "completed" else None
+                if status == "deferred":
+                    record.attempt_count = max(0, record.attempt_count - 1)
                 db.commit()
         except Exception:
             db.rollback()
             raise
+        finally:
+            db.close()
+
+    @staticmethod
+    def _renew_job(job_id: int, attempt_count: int | None = None) -> bool:
+        db = SessionLocal()
+        try:
+            record = db.scalar(select(PricingBackfillJobRecord).where(
+                PricingBackfillJobRecord.id == job_id,
+                PricingBackfillJobRecord.status == "processing",
+            ).with_for_update())
+            if record is None or (attempt_count is not None and record.attempt_count != attempt_count):
+                return False
+            record.updated_at = utc_now()
+            db.commit()
+            return True
         finally:
             db.close()
 
@@ -505,7 +542,7 @@ class PricingBackfillQueue:
             return int(
                 db.scalar(
                     select(func.count()).select_from(PricingBackfillJobRecord).where(
-                        PricingBackfillJobRecord.status.in_(("pending", "retrying", "processing"))
+                        PricingBackfillJobRecord.status.in_(("pending", "retrying", "processing", "deferred"))
                     )
                 )
                 or 0

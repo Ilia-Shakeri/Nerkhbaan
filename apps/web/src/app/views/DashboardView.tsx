@@ -13,6 +13,7 @@ import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { toast } from 'sonner';
+import { canonicalLegDetails, clearSnapshotPrices } from '../services/price-stream';
 import {
   api,
   formatPrice,
@@ -44,6 +45,7 @@ type AssetCard = {
   // Null whenever no 24h baseline exists yet — a new instrument, or a chain
   // that has not produced two comparable points.
   changePercent: number | null;
+  unit: string;
   isUp: boolean;
   history: AssetPoint[];
   sourceUsd: string;
@@ -128,9 +130,9 @@ const getInitialAssetOrder = (): AssetId[] => {
       return DEFAULT_ASSET_ORDER;
     }
     const validIds = new Set(DEFAULT_ASSET_ORDER);
-    const savedIds = parsed.filter(
+    const savedIds = [...new Set(parsed.filter(
       (value): value is AssetId => typeof value === 'string' && validIds.has(value as AssetId)
-    );
+    ))];
     const missingIds = DEFAULT_ASSET_ORDER.filter((id) => !savedIds.includes(id));
     return [...savedIds, ...missingIds];
   } catch {
@@ -168,7 +170,7 @@ const normalizeStatus = (value: unknown): OperationalPriceStatus => {
     : 'unavailable';
 };
 
-const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId): AssetCard => {
+const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, mode: CurrencyMode): AssetCard => {
   if (!asset) {
     const placeholder = buildPlaceholderAsset(id);
     return {
@@ -177,6 +179,7 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId): AssetCard =>
       priceUsd: placeholder.price_usd,
       priceToman: placeholder.price_toman,
       changePercent: placeholder.change_percent,
+      unit: '',
       isUp: placeholder.trend === 'up',
       history: placeholder.history,
       sourceUsd: placeholder.source_usd,
@@ -203,8 +206,12 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId): AssetCard =>
     label: { fa: asset.label_fa, en: asset.label_en },
     priceUsd: asset.price_usd,
     priceToman: asset.price_toman,
-    changePercent: asset.change_percent,
-    isUp: asset.trend === 'up',
+    changePercent: (mode === 'usd' ? asset.change_percent_usd : asset.change_percent_toman) ?? null,
+    unit: (() => {
+      const unit = mode === 'usd' ? asset.unit_usd : asset.unit_toman;
+      return unit ? `${unit.weight_unit}${unit.purity ? ` · ${unit.purity}` : ''}` : '';
+    })(),
+    isUp: ((mode === 'usd' ? asset.change_percent_usd : asset.change_percent_toman) ?? 0) >= 0,
     history: asset.history,
     sourceUsd: asset.source_usd,
     sourceToman: asset.source_toman,
@@ -277,25 +284,21 @@ const formatChartTick = (time: Time, language: 'fa' | 'en'): string => {
   }).format(date);
 };
 
-const toChartValue = (point: AssetPoint, mode: CurrencyMode, usdToTomanRate: number | null) => {
+const toChartValue = (point: AssetPoint, mode: CurrencyMode) => {
   const raw = mode === 'usd' ? point.value_usd : point.value_toman;
   if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) return raw;
 
-  const other = mode === 'usd' ? point.value_toman : point.value_usd;
-  if (typeof other !== 'number' || !Number.isFinite(other) || other <= 0 || !usdToTomanRate) return null;
-  const converted = mode === 'usd' ? other / usdToTomanRate : other * usdToTomanRate;
-  return Number.isFinite(converted) && converted > 0 ? converted : null;
+  return null;
 };
 
 const toChartData = (
   points: AssetPoint[],
   mode: CurrencyMode,
-  usdToTomanRate: number | null,
 ): LineData<UTCTimestamp>[] => {
   const unique = new Map<number, number>();
   for (const point of points) {
     const milliseconds = parseChartTimestamp(point.timestamp);
-    const value = toChartValue(point, mode, usdToTomanRate);
+    const value = toChartValue(point, mode);
     if (!Number.isFinite(milliseconds) || value === null) continue;
     unique.set(Math.floor(milliseconds / 1_000), value);
   }
@@ -358,6 +361,7 @@ function FinancialChart({
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const fittedRef = useRef(false);
   const [crosshairPoint, setCrosshairPoint] = useState<{ value: number; time: Time } | null>(null);
   const descriptionId = useId();
   const tableId = useId();
@@ -431,6 +435,7 @@ function FinancialChart({
     });
     chartRef.current = chart;
     seriesRef.current = series;
+    fittedRef.current = false;
 
     const observer = new ResizeObserver(() => {
       chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
@@ -447,8 +452,11 @@ function FinancialChart({
 
   useEffect(() => {
     seriesRef.current?.setData(data);
-    if (data.length > 0) chartRef.current?.timeScale().fitContent();
-  }, [data]);
+    if (data.length > 0 && !fittedRef.current) {
+      chartRef.current?.timeScale().fitContent();
+      fittedRef.current = true;
+    }
+  }, [data, color, currencyMode, isDark, language]);
 
   return (
     <div className={`relative w-full ${className}`} dir="ltr" data-chart-interactive="true">
@@ -576,6 +584,11 @@ export function DashboardView() {
       const root = message as Record<string, unknown>;
       if (root.type === 'heartbeat' || root.event_type === 'heartbeat') return;
       if (Array.isArray(root.prices)) {
+        if (root.type === 'snapshot' || root.event_type === 'snapshot') {
+          queryClient.setQueryData<PricesResponse>(queryKeys.prices, clearSnapshotPrices);
+          lastWsEventsRef.current.clear();
+          void queryClient.invalidateQueries({ queryKey: queryKeys.prices });
+        }
         root.prices.forEach((price) => mergeMessage(price));
         return;
       }
@@ -628,6 +641,7 @@ export function DashboardView() {
         const status = normalizeStatus(payload.persistence_status === 'unpersisted' ? 'unpersisted' : payload.status);
         incoming = [{
           asset: compatibilityAsset,
+          ...canonicalLegDetails(payload, isToman),
           ...(isToman ? { price_toman: price, toman_status: status, source_toman: sourceText } : { price_usd: price, usd_status: status, source_usd: sourceText }),
           observed_at: typeof payload.observed_at === 'string' ? payload.observed_at : null,
           canonical_at: typeof payload.canonical_at === 'string' ? payload.canonical_at : null,
@@ -752,35 +766,50 @@ export function DashboardView() {
   const orderedAssets = useMemo(() => {
     return assetOrder.map((id) => {
       const live = pricesData.find((a) => a.asset === id);
-      const card = buildLiveCard(live, id);
+      const card = buildLiveCard(live, id, currencyMode);
       return { ...card, history: historyByAsset[id] };
     });
-  }, [assetOrder, historyByAsset, pricesData]);
+  }, [assetOrder, historyByAsset, pricesData, currencyMode]);
+
+  const chartByAsset = useMemo(() => Object.fromEntries(DEFAULT_ASSET_ORDER.map(id => [id, toChartData(historyByAsset[id], currencyMode)])) as Record<AssetId, LineData<UTCTimestamp>[]>, [historyByAsset, currencyMode]);
+  const sourceGeneration = useRef(0);
 
   useEffect(() => {
     setExpandedSources({});
     setSourceDetails({});
     setSourceErrors({});
+    setSourceLoading({});
+    sourceGeneration.current += 1;
   }, [currencyMode]);
 
-  const toggleSourcePanel = async (assetId: AssetId) => {
-    const willOpen = !expandedSources[assetId];
-    setExpandedSources((current) => ({ ...current, [assetId]: willOpen }));
-    if (!willOpen || sourceDetails[assetId] || sourceLoading[assetId]) return;
+  const loadSourcePanel = async (assetId: AssetId) => {
+    const generation = sourceGeneration.current;
     setSourceLoading((current) => ({ ...current, [assetId]: true }));
     setSourceErrors((current) => ({ ...current, [assetId]: '' }));
     try {
       const details = await api.instruments.sources(INSTRUMENT_IDS[assetId][currencyMode]);
+      if (generation !== sourceGeneration.current) return;
       setSourceDetails((current) => ({ ...current, [assetId]: details }));
     } catch (error) {
+      if (generation !== sourceGeneration.current) return;
       setSourceErrors((current) => ({
         ...current,
         [assetId]: error instanceof Error ? error.message : 'Source data is unavailable',
       }));
     } finally {
-      setSourceLoading((current) => ({ ...current, [assetId]: false }));
+      if (generation === sourceGeneration.current) setSourceLoading((current) => ({ ...current, [assetId]: false }));
     }
   };
+
+  const toggleSourcePanel = (assetId: AssetId) => {
+    const willOpen = !expandedSources[assetId];
+    setExpandedSources(current => ({ ...current, [assetId]: willOpen }));
+    if (willOpen && !sourceLoading[assetId]) void loadSourcePanel(assetId);
+  };
+  useEffect(() => {
+    const timer = setInterval(() => { DEFAULT_ASSET_ORDER.forEach(id => { if (expandedSources[id] && !sourceLoading[id]) void loadSourcePanel(id); }); }, 30000);
+    return () => clearInterval(timer);
+  }, [expandedSources, currencyMode, sourceLoading]);
 
   const reorderAssets = (draggedId: AssetId, targetId: AssetId) => {
     setAssetOrder((prev) => {
@@ -810,13 +839,6 @@ export function DashboardView() {
     }, 450);
   };
 
-  const currentUsdt = orderedAssets.find((a) => a.id === 'usdt');
-  // Derive the USD→Toman rate from Tether only when both legs are present and
-  // non-zero. Falling back to 1 would silently render USD figures as Toman.
-  const usdToTomanRate =
-    currentUsdt?.priceToman && currentUsdt?.priceUsd
-      ? currentUsdt.priceToman / currentUsdt.priceUsd
-      : null;
 
   const t = {
     usd: { fa: 'دلار', en: 'USD' },
@@ -881,8 +903,7 @@ export function DashboardView() {
         {orderedAssets.map((asset, idx) => {
         const assetTimeframe = timeframeByAsset[asset.id];
         const fallbackValue = currencyMode === 'usd'
-          ? (asset.priceUsd ?? (asset.priceToman && usdToTomanRate ? asset.priceToman / usdToTomanRate : null))
-          : (asset.priceToman ?? (asset.priceUsd && usdToTomanRate ? asset.priceUsd * usdToTomanRate : null));
+          ? asset.priceUsd : asset.priceToman;
         const activeStatus = currencyMode === 'usd' ? asset.usdStatus : asset.tomanStatus;
         const candidatePrice = currencyMode === 'usd' ? asset.candidatePriceUsd : asset.candidatePriceToman;
         const isAnomaly = activeStatus === 'verifying' || activeStatus === 'suspicious' || activeStatus === 'suspicious_unconfirmed';
@@ -893,10 +914,9 @@ export function DashboardView() {
           return leftStale + (roleRank[left.role ?? ''] ?? 4) - rightStale - (roleRank[right.role ?? ''] ?? 4);
         });
 
-        const safeHistory = Array.isArray(asset.history) ? asset.history : [];
         const historyQuery = historyQueries[DEFAULT_ASSET_ORDER.indexOf(asset.id)];
         const historyError = historyQuery?.error instanceof Error ? historyQuery.error : null;
-        const chartData = toChartData(safeHistory, currencyMode, usdToTomanRate);
+        const chartData = chartByAsset[asset.id];
         const chartColor = isDark ? CHART_COLORS[asset.id].dark : CHART_COLORS[asset.id].light;
         const showChartUnavailable = !historyQuery?.isPending && chartData.length === 0;
         const retryHistory = () => void historyQuery?.refetch();
@@ -980,6 +1000,7 @@ export function DashboardView() {
                         <AssetIcon id={asset.id} className="h-7 w-7 text-xs" />
                       </div>
                       {asset.label[language]}
+                      <span className="ms-2 text-xs font-normal" dir="ltr">{asset.unit}</span>
                     </CardTitle>
 
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -1197,6 +1218,7 @@ export function DashboardView() {
                         <div className={`h-[320px] min-h-[320px] w-full animate-pulse rounded-[1.5rem] sm:h-[400px] sm:min-h-[400px] ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
                       ) : (
                         <FinancialChart
+                          key={`${asset.id}:${currencyMode}:${assetTimeframe}`}
                           data={chartData}
                           color={chartColor}
                           isDark={isDark}
@@ -1398,7 +1420,7 @@ export function DashboardView() {
           const safeHistory = Array.isArray(asset.history) ? asset.history : [];
           const historyQuery = historyQueries[DEFAULT_ASSET_ORDER.indexOf(asset.id)];
           const historyError = historyQuery?.error instanceof Error ? historyQuery.error : null;
-          const chartData = toChartData(safeHistory, currencyMode, usdToTomanRate);
+          const chartData = toChartData(safeHistory, currencyMode);
           
           const chartColor = CHART_COLORS[asset.id][isDark ? 'dark' : 'light'];
           

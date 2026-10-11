@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ...db import get_db
@@ -113,6 +113,7 @@ _ANOMALY_COLUMNS = (
 )
 _ANOMALY_REVIEW_TRANSITIONS = {
     "open": frozenset({"reviewed", "dismissed", "resolved"}),
+    "reviewed": frozenset({"resolved", "dismissed"}),
 }
 _MAX_BIGINT = 9_223_372_036_854_775_807
 _VERIFICATION_COLUMNS = (
@@ -165,7 +166,7 @@ def _anomaly_review_payload(row: dict[str, Any]) -> dict[str, Any] | None:
         "status": row.get("status"),
         "note": row.get("review_note") or "",
         "reviewed_by": row.get("reviewed_by_admin_id"),
-        "reviewed_at": reviewed_at.isoformat() if isinstance(reviewed_at, datetime) else reviewed_at,
+        "reviewed_at": (reviewed_at if reviewed_at.tzinfo else reviewed_at.replace(tzinfo=UTC)).isoformat() if isinstance(reviewed_at, datetime) else reviewed_at,
     }
 
 
@@ -189,12 +190,13 @@ def list_instruments(
             {"instrument_id": instrument_id, "enabled": False, "status": "schema_pending"}
             for instrument_id in _INSTRUMENT_IDS
         ]
-    canonical_rows = safe_rows(db, "canonical_quotes", _CANONICAL_COLUMNS, limit=2000)
     latest: dict[str, dict[str, Any]] = {}
-    for row in canonical_rows:
-        instrument_id = str(row.get("instrument_id") or "")
-        if instrument_id and instrument_id not in latest:
-            latest[instrument_id] = row
+    table = reflected_table(db, "canonical_quotes")
+    if table is not None:
+        columns = [table.c[name] for name in _CANONICAL_COLUMNS if name in table.c]
+        ranked = select(*columns, func.row_number().over(partition_by=table.c.instrument_id, order_by=[table.c.canonical_at.desc(), table.c.id.desc()]).label("rank")).subquery()
+        for row in db.execute(select(ranked).where(ranked.c.rank == 1)).mappings().all():
+            latest[str(row["instrument_id"])] = redact(serialize_mapping({key: value for key, value in row.items() if key != "rank"}))
     return {
         "items": [
             {**instrument, "latest_canonical": latest.get(str(instrument.get("instrument_id") or instrument.get("id")))}
@@ -270,18 +272,21 @@ def instrument_detail(
 def list_anomalies(
     anomaly_status: str = Query(default="", alias="status", max_length=32),
     limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     principal: AdminPrincipal = Depends(require_permission(AdminPermissionKey.PRICING_READ)),
     db: Session = Depends(get_db),
 ) -> dict:
-    rows = safe_rows(db, "pricing_anomalies", _ANOMALY_COLUMNS, limit=limit)
-    if anomaly_status:
-        rows = [row for row in rows if row.get("status") == anomaly_status]
-    return {
-        "items": [
-            {**row, "admin_review": _anomaly_review_payload(row)}
-            for row in rows
-        ]
-    }
+    filters = {"status": anomaly_status} if anomaly_status else {}
+    rows = safe_rows(db, "pricing_anomalies", _ANOMALY_COLUMNS, limit=limit, offset=offset, filters=filters)
+    table = reflected_table(db, "pricing_anomalies")
+    total_query = select(func.count()).select_from(table) if table is not None else None
+    if total_query is not None and anomaly_status:
+        total_query = total_query.where(table.c.status == anomaly_status)
+    for row in rows:
+        candidates = _rows_for(db, "provider_quotes", _PROVIDER_QUOTE_COLUMNS, identity_fields=("id",), identity=row.get("candidate_quote_id"), limit=1) if row.get("candidate_quote_id") else []
+        previous = _rows_for(db, "canonical_quotes", _CANONICAL_COLUMNS, identity_fields=("id",), identity=row.get("previous_canonical_quote_id"), limit=1) if row.get("previous_canonical_quote_id") else []
+        row.update(candidate_quote=candidates[0] if candidates else None, previous_canonical=previous[0] if previous else None, candidate_price=candidates[0].get("price") if candidates else None, previous_price=previous[0].get("price") if previous else None)
+    return {"items": [{**row, "admin_review": _anomaly_review_payload(row)} for row in rows], "total": int(db.scalar(total_query) or 0) if total_query is not None else 0, "limit": limit, "offset": offset}
 
 
 @router.post("/anomalies/{anomaly_id}/review")

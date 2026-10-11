@@ -24,6 +24,7 @@ def validate_admin_password(value: str) -> str:
 class AdminSigninRequest(BaseModel):
     identifier: str = Field(min_length=1, max_length=255)
     password: str = Field(min_length=1, max_length=128)
+    mfa_code: str | None = Field(default=None, min_length=6, max_length=40)
 
     @field_validator("identifier")
     @classmethod
@@ -33,6 +34,7 @@ class AdminSigninRequest(BaseModel):
 
 class AdminReauthenticationRequest(BaseModel):
     password: str = Field(min_length=1, max_length=128)
+    mfa_code: str | None = Field(default=None, min_length=6, max_length=40)
 
 
 class AdminPasswordChangeRequest(BaseModel):
@@ -50,15 +52,13 @@ class DangerousConfirmation(BaseModel):
 
 
 class AdminRoleAssignmentRequest(BaseModel):
-    roles: list[str] = Field(min_length=1, max_length=8)
+    roles: list[str] = Field(max_length=8)
     confirmation: str = Field(min_length=3, max_length=200)
 
     @field_validator("roles")
     @classmethod
     def normalize_roles(cls, values: list[str]) -> list[str]:
         roles = sorted({value.strip().lower() for value in values if value.strip()})
-        if not roles:
-            raise ValueError("At least one role is required")
         return roles
 
 
@@ -75,8 +75,10 @@ class SupportTicketUpdate(BaseModel):
 
     @model_validator(mode="after")
     def at_least_one_change(self) -> "SupportTicketUpdate":
-        if self.priority is None and self.status is None and self.assigned_admin_id is None:
+        if not self.model_fields_set:
             raise ValueError("At least one support field is required")
+        if ("priority" in self.model_fields_set and self.priority is None) or ("status" in self.model_fields_set and self.status is None):
+            raise ValueError("Priority and status cannot be null")
         return self
 
 
@@ -121,7 +123,7 @@ class TelegramSourceUpdate(BaseModel):
     maximum_deviation_percent: float | None = Field(default=None, ge=0.1, le=50)
     requires_multiple_sources: bool | None = None
     allowed_instruments: list[str] | None = Field(default=None, max_length=32)
-    parser_type: str | None = Field(default=None, min_length=1, max_length=80)
+    parser_type: Literal["strict_explicit", "strict_hashtag"] | None = None
     parser_version: str | None = Field(default=None, min_length=1, max_length=32)
     confirmation: str | None = Field(default=None, max_length=200)
 
@@ -148,7 +150,7 @@ class TelegramSourceCreate(BaseModel):
     maximum_message_age_seconds: int = Field(default=300, ge=30, le=86400)
     maximum_deviation_percent: float = Field(default=3, ge=0.1, le=50)
     requires_multiple_sources: bool = False
-    parser_type: str = Field(min_length=1, max_length=80)
+    parser_type: Literal["strict_explicit", "strict_hashtag"] = "strict_explicit"
     parser_version: str = Field(min_length=1, max_length=32)
     enabled: bool = True
     confirmation: str = Field(min_length=3, max_length=200)
@@ -159,6 +161,8 @@ class TelegramSourceCreate(BaseModel):
         clean = value.strip()
         if not re.fullmatch(r"[-A-Za-z0-9_]{2,80}", clean):
             raise ValueError("Telegram channel ID is invalid")
+        if clean.lstrip("-").isdigit():
+            return clean if clean.startswith("-100") else "-100" + clean.lstrip("-")
         return clean
 
     @field_validator("username")
@@ -221,6 +225,7 @@ class OperationalSettingUpdate(BaseModel):
     scope_id: str = Field(default="global", min_length=1, max_length=160)
     value: bool | int | float
     confirmation: str | None = Field(default=None, max_length=200)
+    expected_version: int | None = Field(default=None, ge=0)
 
     @field_validator("scope_id")
     @classmethod
@@ -241,16 +246,34 @@ class OperationalSettingUpdate(BaseModel):
         if self.key in boolean_keys and type(self.value) is not bool:
             raise ValueError("This setting requires a boolean value")
         if self.key == OperationalSettingKey.ANOMALY_THRESHOLD_PERCENT:
+            if type(self.value) is bool:
+                raise ValueError("Anomaly threshold requires a number")
             numeric = float(self.value)
             if not 0.1 <= numeric <= 25:
                 raise ValueError("Anomaly threshold must be between 0.1 and 25")
         if self.key == OperationalSettingKey.CANONICAL_EXPIRY_SECONDS:
-            if type(self.value) is bool or not 30 <= int(self.value) <= 172800:
+            if type(self.value) is bool or float(self.value) != int(self.value) or not 30 <= int(self.value) <= 172800:
                 raise ValueError("Expiry must be between 30 and 172800 seconds")
         if self.key == OperationalSettingKey.PROVIDER_BUDGET_PER_HOUR:
-            if type(self.value) is bool or not 0 <= int(self.value) <= 100000:
+            if type(self.value) is bool or float(self.value) != int(self.value) or not 0 <= int(self.value) <= 100000:
                 raise ValueError("Provider budget must be between 0 and 100000")
         return self
+
+
+class AdminRoleUpdate(BaseModel):
+    name: str = Field(min_length=3, max_length=64, pattern=r"^[a-z][a-z0-9_]+$")
+    description: str = Field(default="", max_length=240)
+    permissions: list[str] = Field(max_length=100)
+    is_active: bool = True
+    confirmation: str = Field(min_length=3, max_length=200)
+
+
+class AdminMfaVerification(BaseModel):
+    code: str = Field(min_length=6, max_length=40)
+
+
+class TelegramParserPreview(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
 
 
 class BootstrapIdentity(BaseModel):

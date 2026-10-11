@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator, Generator
 
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -22,17 +23,25 @@ engine = create_engine(
     max_overflow=settings.database_max_overflow,
     pool_timeout=settings.database_pool_timeout_seconds,
     pool_recycle=1800,
+    connect_args={"connect_timeout": 5} if settings.database_url.startswith("postgresql") else {},
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, class_=Session)
 
 
 def _async_database_url(url: str) -> str:
-    if url.startswith("postgresql+psycopg://"):
-        return url.replace("postgresql+psycopg://", "postgresql+asyncpg://", 1)
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    parsed = make_url(url)
+    if parsed.get_backend_name() == "postgresql":
+        return parsed.set(drivername="postgresql+asyncpg", query={}).render_as_string(hide_password=False)
     return url
+
+
+def _async_connect_args(url: str) -> dict:
+    if make_url(url).get_backend_name() != "postgresql":
+        return {}
+    # Let asyncpg parse PostgreSQL DSN options; they are not connect keywords.
+    dsn = make_url(url).set(drivername="postgresql").render_as_string(hide_password=False)
+    return {"dsn": dsn, "timeout": 5, "command_timeout": 15}
 
 
 async_engine = create_async_engine(
@@ -42,6 +51,7 @@ async_engine = create_async_engine(
     max_overflow=settings.database_max_overflow,
     pool_timeout=settings.database_pool_timeout_seconds,
     pool_recycle=1800,
+    connect_args=_async_connect_args(settings.database_url),
 )
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine,

@@ -8,6 +8,7 @@ from typing import Any, Iterable
 from sqlalchemy import text
 
 from ..db import SessionLocal
+from .operational import operational_pricing_settings
 from .models import (
     Currency,
     InstrumentDefinition,
@@ -31,6 +32,8 @@ class StoredTelegramQuoteRepository:
         roles: Iterable[str],
         now: datetime | None = None,
     ) -> list[ProviderQuote]:
+        if not await operational_pricing_settings.feature_enabled("telegram_source_enabled", scope_id=instrument.instrument_id):
+            return []
         current = ensure_utc(now or utc_now())
         allowed_roles = {role for role in roles if role in {"verifier", "fallback"}}
         if not allowed_roles:

@@ -13,6 +13,10 @@ from .cache import PricingRedisStore, pricing_redis
 
 logger = logging.getLogger(__name__)
 
+
+class PricingLeaseLost(RuntimeError):
+    pass
+
 _RELEASE_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
   return redis.call('del', KEYS[1])
@@ -79,21 +83,36 @@ class DistributedPricingLocks:
             yield
             return
         interval = max(1.0, lease.ttl_ms / 3000)
+        owner = asyncio.current_task()
+        lost = False
 
         async def renew() -> None:
+            nonlocal lost
             while True:
                 await asyncio.sleep(interval)
                 try:
                     if not await self.extend(lease):
                         logger.warning("Lost pricing lease for %s", lease.key)
+                        lost = True
+                        if owner is not None:
+                            owner.cancel()
                         return
                 except Exception:
                     logger.warning("Could not extend pricing lease for %s", lease.key)
+                    lost = True
+                    if owner is not None:
+                        owner.cancel()
                     return
 
         task = asyncio.create_task(renew())
         try:
             yield
+        except asyncio.CancelledError:
+            if lost:
+                if owner is not None:
+                    owner.uncancel()
+                raise PricingLeaseLost("Pricing lease could not be renewed") from None
+            raise
         finally:
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

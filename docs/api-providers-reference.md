@@ -1,6 +1,14 @@
+> Historical report. Reviewed for the 2.8.0 documentation set on 2026-10-11. Dates, facts and past results below remain historical; use [delivery readiness](delivery-readiness.md) and [current status](../PROJECT_STATUS.md) for current acceptance.
+
 # Pricing API Providers — Reference
 
-## Current correction — 2026-09-19 / 2.5.0
+## Current code correction — 2.8.0
+
+`gold_api_free_xag` now has FALLBACK as its registry default. Relay ingress does not promote
+VERIFIER/COMPARE routes into canonical sources. Persisted explicit operator role overrides remain
+authoritative. This states code policy; today’s connectivity, licensing and enablement require fresh evidence.
+
+## Historical correction — 2026-09-19 / 2.5.0
 
 The [live validation report](free-provider-validation-2026-09-19.md) supersedes
 older availability claims below. Wallgold supplies direct 18K/925 quotes;

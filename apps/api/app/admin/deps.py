@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -13,9 +14,11 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import User
+from ..config import settings
 from .config import get_admin_config
 from .models import (
     AdminPermission,
+    AdminMfaProfile,
     AdminRole,
     AdminRolePermission,
     AdminSession,
@@ -86,19 +89,19 @@ def new_admin_session(
 ) -> tuple[AdminSession, str, str]:
     config = get_admin_config()
     raw_token = secrets.token_urlsafe(48)
-    csrf_token = secrets.token_urlsafe(32)
     now = datetime.now(UTC)
     session = AdminSession(
         id=str(uuid.uuid4()),
         user_id=user.id,
         token_hash=token_digest(raw_token),
-        csrf_token_hash=token_digest(csrf_token),
+        csrf_token_hash="",
         ip_address=admin_client_ip(request),
         user_agent_hash=user_agent_digest(request),
         created_at=now,
         last_seen_at=now,
         expires_at=now + timedelta(minutes=config.session_duration_minutes),
     )
+    csrf_token = rotate_csrf_token(session)
     db.add(session)
     return session, raw_token, csrf_token
 
@@ -130,7 +133,8 @@ def delete_admin_session_cookie(response: Response) -> None:
 
 
 def rotate_csrf_token(session: AdminSession) -> str:
-    raw = secrets.token_urlsafe(32)
+    # Derive one token per session. Reopening a tab must not revoke another tab.
+    raw = hmac.new(settings.jwt_secret_key.encode(), f"admin-csrf:{session.id}:{session.token_hash}".encode(), hashlib.sha256).hexdigest()
     session.csrf_token_hash = token_digest(raw)
     return raw
 
@@ -185,6 +189,9 @@ def get_admin_principal(
     security = db.get(UserSecurityProfile, session.user_id)
     if user is None or security is None or not user.is_active or not security.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin account disabled")
+    cutoff = max((value for value in (user.password_changed_at, security.sessions_revoked_before) if value is not None), key=_as_utc, default=None)
+    if cutoff is not None and _as_utc(session.created_at) < _as_utc(cutoff):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin session revoked")
     if security.locked_until and _as_utc(security.locked_until) > now:
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail="Admin account temporarily locked")
     roles, permissions = admin_roles_and_permissions(db, user.id)
@@ -207,12 +214,17 @@ def require_permission(
 ) -> Callable[[AdminPrincipal], AdminPrincipal]:
     def dependency(
         principal: AdminPrincipal = Depends(get_admin_principal),
+        db: Session = Depends(get_db),
     ) -> AdminPrincipal:
         if principal.security.must_change_password:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Admin password change required",
             )
+        if getattr(settings, "admin_mfa_required", False):
+            mfa = db.get(AdminMfaProfile, principal.user.id)
+            if mfa is None or not mfa.totp_enabled:
+                raise HTTPException(status_code=403, detail="MFA enrollment required")
         if permission.value not in principal.permissions:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin permission denied")
         return principal

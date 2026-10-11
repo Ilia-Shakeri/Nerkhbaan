@@ -11,7 +11,10 @@ from typing import Any, Iterable
 import httpx
 
 from ..observability import (
-    canonical_age_seconds,
+    observe_canonical,
+    pricing_refresh_timestamp_seconds,
+    pricing_observed_timestamp_seconds,
+    pricing_expires_timestamp_seconds,
     pricing_snapshot_read_failures_total,
     pricing_refresh_duration_seconds,
     pricing_refresh_total,
@@ -93,6 +96,15 @@ class InstrumentPricingService:
 
     async def initialize(self) -> None:
         await self.persistence.sync_provider_catalog()
+        snapshots = await self.get_all_canonical()
+        for instrument_id in INSTRUMENTS:
+            quote = snapshots.get(instrument_id)
+            if quote is not None:
+                observe_canonical(quote)
+            else:
+                pricing_observed_timestamp_seconds.labels(instrument_id=instrument_id).set(0)
+                pricing_expires_timestamp_seconds.labels(instrument_id=instrument_id).set(0)
+                set_canonical_status(instrument_id, "unavailable")
 
     async def refresh_instrument(self, instrument_id: str) -> CanonicalQuote | None:
         instrument = await self.operational.instrument(instrument_id)
@@ -114,10 +126,10 @@ class InstrumentPricingService:
                 follow_redirects=False,
             ) as client:
                 primary = await self._normal_quote(instrument, client)
-                if primary is None or not primary.usable or primary.quote is None:
+                if primary is None or not primary.usable or primary.quote is None or not self.policy._is_fresh_quote(primary.quote, instrument, utc_now()):
                     primary = await self._fallback_quote(instrument, client)
 
-                if primary is None or not primary.usable or primary.quote is None:
+                if primary is None or not primary.usable or primary.quote is None or not self.policy._is_fresh_quote(primary.quote, instrument, utc_now()):
                     telegram = await self._try_telegram_fallback(instrument, previous)
                     if telegram is not None:
                         await self._attach_changes(telegram)
@@ -237,6 +249,7 @@ class InstrumentPricingService:
                 results[instrument_id] = f"failed:{type(exc).__name__}"
                 self._record_refresh_metrics(instrument_id, "failed", started, current)
             await asyncio.sleep(secrets.randbelow(250) / 1000)
+        pricing_refresh_timestamp_seconds.set(utc_now().timestamp())
         return results
 
     @staticmethod
@@ -252,23 +265,22 @@ class InstrumentPricingService:
             max(0.0, time.monotonic() - started)
         )
         if quote is not None:
-            canonical_age_seconds.labels(instrument=instrument_id).set(
-                max(0.0, (utc_now() - quote.observed_at).total_seconds())
-            )
+            observe_canonical(quote)
 
     async def get_canonical(self, instrument_id: str) -> CanonicalQuote | None:
         normalized = get_instrument(instrument_id).instrument_id
-        try:
-            cached = await self.store.get_canonical(normalized)
-            if cached is not None and self._allowed_current_quote(cached):
-                return cached
-        except Exception:
-            pass
-        try:
-            quote = await self.history.latest_canonical(normalized)
-            return quote if quote is not None and self._allowed_current_quote(quote) else None
-        except Exception:
+        instrument = await self.operational.instrument(normalized)
+        if not instrument.enabled:
             return None
+        results = await asyncio.gather(
+            self.store.get_canonical(normalized), self.history.latest_canonical(normalized),
+            return_exceptions=True,
+        )
+        eligible = [self._current_policy(quote, instrument) for quote in results
+                    if not isinstance(quote, BaseException) and quote is not None
+                    and self._allowed_current_quote(quote)]
+        eligible = [quote for quote in eligible if quote is not None]
+        return max(eligible, key=lambda quote: (quote.observed_at, quote.canonical_at), default=None)
 
     async def get_all_canonical(self) -> dict[str, CanonicalQuote]:
         cached: dict[str, CanonicalQuote] = {}
@@ -289,12 +301,33 @@ class InstrumentPricingService:
                 extra={"error_type": type(exc).__name__},
             )
             database = {}
-        return {
-            key: quote for key, quote in {
-                **database,
-                **{key: value for key, value in cached.items() if self._allowed_current_quote(value)},
-            }.items() if self._allowed_current_quote(quote)
-        }
+        resolved: dict[str, CanonicalQuote] = {}
+        for key, quote in (*database.items(), *cached.items()):
+            if not self._allowed_current_quote(quote):
+                continue
+            previous = resolved.get(key)
+            if previous is None or (quote.observed_at, quote.canonical_at) >= (previous.observed_at, previous.canonical_at):
+                resolved[key] = quote
+        definitions = await asyncio.gather(
+            *(self.operational.instrument(key) for key in resolved), return_exceptions=True,
+        )
+        effective = {}
+        for (key, quote), definition in zip(resolved.items(), definitions):
+            if isinstance(definition, BaseException):
+                continue
+            adjusted = self._current_policy(quote, definition)
+            if adjusted is not None:
+                effective[key] = adjusted
+        return effective
+
+    @staticmethod
+    def _current_policy(quote: CanonicalQuote, instrument: Any) -> CanonicalQuote | None:
+        if not instrument.enabled or not instrument.accepts(quote.price):
+            return None
+        quote.expires_at = min(quote.expires_at, quote.observed_at + timedelta(seconds=instrument.expire_after_seconds))
+        quote.stale_at = min(quote.stale_at, quote.observed_at + timedelta(seconds=instrument.stale_after_seconds), quote.expires_at)
+        quote.valid_until = min(quote.valid_until, quote.observed_at + timedelta(seconds=instrument.operational_ttl_seconds), quote.stale_at)
+        return quote
 
     @staticmethod
     def _allowed_current_quote(quote: CanonicalQuote) -> bool:
@@ -302,22 +335,24 @@ class InstrumentPricingService:
 
     async def list_instruments(self, *, authenticated: bool = False) -> list[dict[str, Any]]:
         snapshots = await self.get_all_canonical()
+        definitions = await asyncio.gather(*(self.operational.instrument(key) for key in INSTRUMENTS))
         return [
             self._instrument_payload(
                 instrument_id,
                 snapshots.get(instrument_id),
                 authenticated=authenticated,
+                definition=definition,
             )
-            for instrument_id in INSTRUMENTS
+            for instrument_id, definition in zip(INSTRUMENTS, definitions)
         ]
 
     async def instrument(
         self, instrument_id: str, *, authenticated: bool = False
     ) -> dict[str, Any]:
-        definition = get_instrument(instrument_id)
+        definition = await self.operational.instrument(instrument_id)
         quote = await self.get_canonical(definition.instrument_id)
         return self._instrument_payload(
-            definition.instrument_id, quote, authenticated=authenticated
+            definition.instrument_id, quote, authenticated=authenticated, definition=definition
         )
 
     async def canonical_history(
@@ -342,7 +377,7 @@ class InstrumentPricingService:
         self, instrument_id: str, *, authenticated: bool
     ) -> dict[str, Any]:
         normalized = get_instrument(instrument_id).instrument_id
-        if not await self.operational.feature_enabled("comparison_visible"):
+        if not await self.operational.feature_enabled("comparison_visible", scope_id=normalized):
             return {
                 "instrument_id": normalized,
                 "visible": False,
@@ -387,7 +422,7 @@ class InstrumentPricingService:
         self, instrument_id: str, timeframe: str, provider_id: str | None
     ) -> dict[str, Any]:
         normalized = get_instrument(instrument_id).instrument_id
-        if not await self.operational.feature_enabled("comparison_visible"):
+        if not await self.operational.feature_enabled("comparison_visible", scope_id=normalized):
             return {
                 "instrument_id": normalized,
                 "timeframe": timeframe,
@@ -420,7 +455,7 @@ class InstrumentPricingService:
         price: Decimal,
         observed_at: Any,
         historical: bool,
-    ) -> None:
+    ) -> str:
         provider = PROVIDERS_BY_INSTRUMENT.get(instrument_id, ())
         definition = next((item for item in provider if item.provider_id == provider_id), None)
         if definition is None or provider_id not in {
@@ -441,7 +476,9 @@ class InstrumentPricingService:
         if historical and provider_id in {"gold_api_free_xag", "xaus_xag"}:
             raise ValueError("Worker provider does not support historical quotes")
         instrument = await self.operational.instrument(instrument_id)
-        if not instrument.enabled or not instrument.accepts(price):
+        if not instrument.enabled:
+            return "ignored_disabled"
+        if not instrument.accepts(price):
             raise ValueError("Worker quote is outside the instrument policy")
         quote = ProviderQuote.create(
             instrument_id=instrument_id,
@@ -469,27 +506,85 @@ class InstrumentPricingService:
                 "anchor_live_window_at_receive_time": not historical,
             },
         )
-        persisted = await self.persistence.persist_provider_quote(quote)
-        if not persisted.persisted:
-            raise PricingRefreshSuspended("Worker quote persistence is unavailable")
-        previous = None if historical else await self.get_canonical(instrument_id)
-        decision = self.policy.select(
-            instrument=instrument,
-            primary=quote,
-            previous=previous,
-            assessment=None,
-            verifier_quotes=[],
-            now=quote.observed_at if historical else now,
-        )
-        canonical = decision.canonical
         if historical:
+            providers = await self.operational.providers_for(instrument_id)
+            definition = next((item for item in providers if item.provider_id == provider_id), definition)
+            if not definition.enabled or not definition.configured(_settings_object()):
+                return "ignored_disabled"
+            if definition.role not in {ProviderRole.PRIMARY, ProviderRole.FALLBACK}:
+                return "ignored_role"
+            quote.confidence_score = definition.trust_score
+            persisted = await self.persistence.persist_provider_quote(quote)
+            if not persisted.persisted:
+                raise PricingRefreshSuspended("Worker quote persistence is unavailable")
+            canonical = self.policy.select(
+                instrument=instrument, primary=quote, previous=None, assessment=None,
+                verifier_quotes=[], now=quote.observed_at,
+            ).canonical
+            canonical.source_summary["historical_backfill"] = True
             stored = await self.persistence.persist_canonical(canonical)
             if not stored.persisted:
                 raise PricingRefreshSuspended("Worker history persistence is unavailable")
-            return
-        await self.store.set_provider_quote(quote, definition.operational_ttl_seconds)
-        await self._attach_changes(canonical)
-        await self._commit(canonical, previous)
+            return "historical_persisted"
+        if not await self.store.ping():
+            raise PricingRefreshSuspended("Worker live refresh requires Redis")
+        async with self.locks.refresh_lock(instrument_id) as lease:
+            if lease is None:
+                raise PricingRefreshSuspended("Instrument refresh is already in progress")
+            previous = await self.get_canonical(instrument_id)
+            if previous is not None and quote.observed_at < previous.observed_at:
+                return "ignored_older"
+            if previous is not None and quote.observed_at == previous.observed_at:
+                if quote.price != previous.price:
+                    return "ignored_conflict"
+                return "unchanged"
+            providers = await self.operational.providers_for(instrument_id)
+            definition = next((item for item in providers if item.provider_id == provider_id), definition)
+            if not definition.enabled or not definition.configured(_settings_object()):
+                return "ignored_disabled"
+            if definition.role not in {ProviderRole.PRIMARY, ProviderRole.FALLBACK}:
+                return "ignored_role"
+            quote.confidence_score = definition.trust_score
+            quote.metadata["provider_role"] = definition.role.value
+            quote.metadata["provider_live_ttl_seconds"] = min(_WORKER_LIVE_TTL_SECONDS, definition.operational_ttl_seconds)
+            previous_provider = next((item for item in providers if previous is not None
+                and item.provider_id == previous.source_summary.get("primary_provider_id")), None)
+            if previous is not None and now <= previous.valid_until and previous_provider is not None:
+                if definition.role is not ProviderRole.PRIMARY and previous_provider.role is ProviderRole.PRIMARY:
+                    return "ignored_priority"
+                if definition.role is previous_provider.role and definition.priority > previous_provider.priority:
+                    return "ignored_priority"
+            assessment = await self._assess_candidate(quote, previous, instrument)
+            if assessment is not None and assessment.is_suspicious:
+                quote.is_suspicious = True
+                quote.validation_status = ValidationStatus.SUSPICIOUS
+            persisted = await self.persistence.persist_provider_quote(quote)
+            if not persisted.persisted:
+                raise PricingRefreshSuspended("Worker quote persistence is unavailable")
+            verifiers = []
+            anomaly_id = None
+            if assessment is not None and assessment.is_suspicious:
+                anomaly_id = await self.persistence.persist_anomaly(
+                    instrument_id=instrument_id, candidate_quote_id=quote.id,
+                    previous_canonical_quote_id=previous.id if previous else None,
+                    deviation_percent=assessment.deviation_percent,
+                    dynamic_threshold_percent=assessment.dynamic_threshold_percent,
+                    severity=assessment.severity, reason=assessment.reason,
+                )
+                async with httpx.AsyncClient(timeout=10.0, follow_redirects=False, trust_env=False) as client:
+                    verifiers = await self._verification_quotes(instrument_id, quote, assessment, client)
+            decision = self.policy.select(
+                instrument=instrument, primary=quote, previous=previous,
+                assessment=assessment, verifier_quotes=verifiers, now=now,
+            )
+            if anomaly_id is not None:
+                await self.persistence.persist_verification(
+                    anomaly_id=anomaly_id, instrument_id=instrument_id, decision=decision.verification,
+                )
+            await self.store.set_provider_quote(quote, definition.operational_ttl_seconds)
+            await self._attach_changes(decision.canonical)
+            await self._commit(decision.canonical, previous)
+            return "accepted"
 
     async def process_backfill_jobs(self, maximum_jobs: int = 2) -> dict[str, int]:
         return await self.backfill.process_jobs(maximum_jobs=maximum_jobs)
@@ -596,7 +691,7 @@ class InstrumentPricingService:
         ranked = await self._rank_verifiers(
             provider
             for provider in await self.operational.providers_for(
-                instrument_id, ProviderRole.VERIFIER, ProviderRole.COMPARE
+                instrument_id, ProviderRole.VERIFIER, ProviderRole.COMPARE, ProviderRole.FALLBACK
             )
             if provider.provider_id != candidate.provider_id
             and self._provider_is_independent(candidate, provider)
@@ -610,6 +705,8 @@ class InstrumentPricingService:
                 instrument=instrument,
             )
             if outcome.usable and outcome.quote is not None:
+                if not self.policy._is_fresh_quote(outcome.quote, instrument, utc_now()):
+                    continue
                 quotes.append(outcome.quote)
                 confirms = (
                     self._difference_percent(candidate.price, outcome.quote.price)
@@ -806,6 +903,9 @@ class InstrumentPricingService:
             outcome = await self.collector.quote(
                 provider, purpose, client=client, instrument=instrument
             )
+            if outcome.usable and (outcome.quote is None or not self.policy._is_fresh_quote(outcome.quote, instrument, utc_now())):
+                outcome.usable = False
+                outcome.failure_reason = "source_not_live"
             last = outcome
             trace.append(
                 {
@@ -923,7 +1023,7 @@ class InstrumentPricingService:
     async def _try_derived(self, instrument: Any) -> ProviderQuote | None:
         if (
             not instrument.allow_derived_fallback
-            or not await self.operational.feature_enabled("derived_fallback_enabled")
+            or not await self.operational.feature_enabled("derived_fallback_enabled", scope_id=instrument.instrument_id)
         ):
             return None
         snapshots = await self.get_all_canonical()
@@ -997,9 +1097,12 @@ class InstrumentPricingService:
         quote: CanonicalQuote,
         previous: CanonicalQuote | None,
     ) -> CanonicalQuote:
+        if previous is not None and quote.observed_at < previous.observed_at:
+            return previous
         quote.sequence_number = await self.store.next_sequence()
         await self.persistence.persist_canonical(quote)
         await self.store.set_canonical(quote)
+        observe_canonical(quote)
         await self.store.append_short_history(quote)
         if self._publication_changed(previous, quote):
             await self.store.publish_canonical(quote)
@@ -1018,6 +1121,9 @@ class InstrumentPricingService:
                 previous.candidate_price != current.candidate_price,
                 previous.verification_status != current.verification_status,
                 previous.is_persisted != current.is_persisted,
+                previous.observed_at != current.observed_at,
+                previous.valid_until != current.valid_until,
+                previous.source_summary != current.source_summary,
             )
         )
 
@@ -1034,8 +1140,9 @@ class InstrumentPricingService:
         quote: CanonicalQuote | None,
         *,
         authenticated: bool,
+        definition: Any = None,
     ) -> dict[str, Any]:
-        definition = get_instrument(instrument_id)
+        definition = definition or get_instrument(instrument_id)
         payload = definition.to_public_dict()
         payload["canonical"] = (
             quote.to_dict(authenticated=authenticated)

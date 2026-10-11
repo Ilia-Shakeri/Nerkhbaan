@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from sqlalchemy import String, cast, or_, select
+from sqlalchemy import String, cast, func, or_, select, text
 from sqlalchemy.orm import Session
 
 from ...db import get_db
@@ -13,7 +12,7 @@ from ...models import TelegramSource
 from ...config import settings
 from ...pricing.registry import PROVIDERS
 from ..audit import add_audit_event
-from ..dbtools import reflected_table, safe_rows
+from ..dbtools import reflected_table, safe_count, safe_rows
 from ..deps import (
     AdminPrincipal,
     require_confirmation,
@@ -28,6 +27,7 @@ from ..schemas import (
     ProviderDraftRequest,
     TelegramSourceCreate,
     TelegramSourceUpdate,
+    TelegramParserPreview,
 )
 
 router = APIRouter(tags=["admin-providers"])
@@ -83,7 +83,7 @@ _TELEGRAM_SAFE_COLUMNS = (
 def _provider_overrides(db: Session) -> dict[str, dict[str, Any]]:
     rows = db.scalars(select(OperationalSetting).where(OperationalSetting.key == "provider.config")).all()
     return {
-        row.scope_id: dict(row.value) if isinstance(row.value, dict) else {}
+        row.scope_id: {**dict(row.value), "config_version": row.version} if isinstance(row.value, dict) else {}
         for row in rows
         if not row.is_sensitive
     }
@@ -165,8 +165,13 @@ def _db_providers(db: Session) -> list[dict[str, Any]]:
         ]
         row["operational_ttl_seconds"] = min(ttl_values) if ttl_values else None
         row["credential_status"] = masked_secret_status(
-            os.getenv(str(env_name)) if env_name else None
+            getattr(settings, str(env_name).lower(), None) if env_name else None
         )
+        if row["provider_id"] in PROVIDERS:
+            registered = PROVIDERS[row["provider_id"]]
+            row["configured"] = registered.configured(settings)
+            row["asset"] = registered.instrument_id
+            row["region"] = "iran" if "TOMAN" in registered.instrument_id else "international"
     return rows
 
 
@@ -175,7 +180,7 @@ def _provider_inventory(db: Session) -> list[dict[str, Any]]:
     source_rows = database_rows if database_rows else _catalogue_providers()
     overrides = _provider_overrides(db)
     return [
-        {**provider, **overrides.get(str(provider.get("provider_id")), {})}
+        {"config_version": 0, **provider, **overrides.get(str(provider.get("provider_id")), {})}
         for provider in source_rows
     ]
 
@@ -255,13 +260,16 @@ def provider_impact(
 @router.get("/providers/drafts")
 def list_provider_drafts(
     draft_status: str = Query(default="draft", alias="status", max_length=24),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     principal: AdminPrincipal = Depends(require_permission(AdminPermissionKey.PROVIDERS_READ)),
     db: Session = Depends(get_db),
 ) -> dict:
     statement = select(AdminProviderConfigDraft)
     if draft_status:
         statement = statement.where(AdminProviderConfigDraft.status == draft_status)
-    drafts = db.scalars(statement.order_by(AdminProviderConfigDraft.created_at.desc()).limit(200)).all()
+    total = db.scalar(select(func.count()).select_from(statement.subquery()))
+    drafts = db.scalars(statement.order_by(AdminProviderConfigDraft.created_at.desc(), AdminProviderConfigDraft.id.desc()).offset(offset).limit(limit)).all()
     return {
         "items": [
             redact(
@@ -279,7 +287,7 @@ def list_provider_drafts(
                 }
             )
             for draft in drafts
-        ]
+        ], "total": int(total or 0), "limit": limit, "offset": offset,
     }
 
 
@@ -327,12 +335,20 @@ def apply_provider_draft(
     db: Session = Depends(get_db),
 ) -> dict:
     require_recent_reauthentication(principal)
-    draft = db.get(AdminProviderConfigDraft, draft_id)
+    draft = db.scalar(select(AdminProviderConfigDraft).where(AdminProviderConfigDraft.id == draft_id).with_for_update())
     if draft is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider draft not found")
     if draft.status != "draft":
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Provider draft is no longer pending")
     require_confirmation(payload.confirmation, f"APPLY PROVIDER {draft.provider_id}")
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        db.execute(text("SELECT set_config('lock_timeout', '5s', true)"))
+        db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:name, 0))"), {"name": f"admin-provider:{draft.provider_id}"})
+    actual_provider = _provider(db, draft.provider_id)
+    editable_fields = set(ProviderDraftRequest.model_fields)
+    if actual_provider.get("config_version", 0) != draft.before_data.get("config_version", 0) or any(actual_provider.get(key) != draft.before_data.get(key) for key in editable_fields):
+        raise HTTPException(status_code=409, detail="Provider changed since this draft; create a new draft")
+    draft.impact_preview = _impact_preview(_provider_inventory(db), actual_provider, draft.proposed_data)
     setting = db.scalar(
         select(OperationalSetting).where(
             OperationalSetting.key == "provider.config",
@@ -419,7 +435,7 @@ def reject_provider_draft(
     principal: AdminPrincipal = Depends(require_permission(AdminPermissionKey.PROVIDERS_MANAGE)),
     db: Session = Depends(get_db),
 ) -> dict:
-    draft = db.get(AdminProviderConfigDraft, draft_id)
+    draft = db.scalar(select(AdminProviderConfigDraft).where(AdminProviderConfigDraft.id == draft_id).with_for_update())
     if draft is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Provider draft not found")
     if draft.status != "draft":
@@ -438,12 +454,26 @@ def reject_provider_draft(
     return {"rejected": True}
 
 
+@router.post("/providers/drafts/{draft_id}/rollback", status_code=201)
+def rollback_provider_draft(draft_id: int, request: Request, principal: AdminPrincipal = Depends(require_permission(AdminPermissionKey.PROVIDERS_MANAGE)), db: Session = Depends(get_db)) -> dict:
+    applied = db.get(AdminProviderConfigDraft, draft_id)
+    if applied is None or applied.status != "applied":
+        raise HTTPException(status_code=409, detail="Only applied drafts have a rollback baseline")
+    values = {key: applied.before_data[key] for key in ProviderDraftRequest.model_fields if applied.before_data.get(key) is not None}
+    if not values:
+        raise HTTPException(status_code=409, detail="No recoverable baseline; create a manual draft")
+    return create_provider_draft(applied.provider_id, ProviderDraftRequest.model_validate(values), request, principal, db)
+
+
 @router.get("/telegram/sources")
 def list_telegram_sources(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     principal: AdminPrincipal = Depends(require_permission(AdminPermissionKey.TELEGRAM_READ)),
     db: Session = Depends(get_db),
 ) -> dict:
-    rows = safe_rows(db, "telegram_sources", _TELEGRAM_SAFE_COLUMNS, limit=500)
+    from ...pricing.instruments import INSTRUMENTS
+    rows = safe_rows(db, "telegram_sources", _TELEGRAM_SAFE_COLUMNS, limit=limit, offset=offset, order_candidates=("id",))
     overrides = {
         item.scope_id: item.value
         for item in db.scalars(
@@ -467,8 +497,21 @@ def list_telegram_sources(
             "created_at",
         ),
         limit=100,
+        filters={"validation_status": "rejected"},
     )
-    return {"items": redact(items), "recent_rejections": redact(rejected)}
+    return {"items": redact(items), "recent_rejections": redact(rejected), "total": safe_count(db, "telegram_sources") or 0, "limit": limit, "offset": offset, "instrument_ids": list(INSTRUMENTS)}
+
+
+@router.post("/telegram/sources/{source_id}/preview")
+def preview_telegram_parser(source_id: int, payload: TelegramParserPreview, principal: AdminPrincipal = Depends(require_permission(AdminPermissionKey.TELEGRAM_READ)), db: Session = Depends(get_db)) -> dict:
+    from dataclasses import asdict
+    from decimal import Decimal
+    from ..telegram_parser import parse_message
+    source = db.get(TelegramSource, source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Telegram source not found")
+    quotes = parse_message(payload.text, allowed_instruments=set(source.allowed_instruments), parser_type=source.parser_type, minimum_confidence=Decimal(source.minimum_confidence))
+    return {"items": [asdict(quote) for quote in quotes], "parser_type": source.parser_type, "preview_only": True}
 
 
 @router.post("/telegram/sources", status_code=status.HTTP_201_CREATED)

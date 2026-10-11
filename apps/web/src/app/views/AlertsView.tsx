@@ -118,13 +118,15 @@ export function AlertsView() {
   };
 
   const handleSave = async () => {
-    if (!formTargetPrice) return;
+    const target = Number(formTargetPrice);
+    if (!Number.isFinite(target) || target <= 0) { toast.error(language === 'fa' ? 'قیمت باید عدد مثبت باشد.' : 'Price must be a positive number.'); return; }
     setIsSaving(true);
     try {
       if (editingId !== null) {
         // Editing in place keeps the alert's cooldown and trigger history,
         // which deleting and recreating threw away.
         const updated = await api.alerts.update(editingId, {
+          asset: formAsset,
           target_price: parseFloat(formTargetPrice),
           currency_mode: formCurrencyMode,
           condition: formCondition,
@@ -311,8 +313,9 @@ export function AlertsView() {
         <div className="space-y-5 pt-2">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.asset[language]}</label>
+              <label htmlFor="alert-asset" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.asset[language]}</label>
               <select
+                id="alert-asset"
                 value={formAsset}
                 onChange={(e) => setFormAsset(e.target.value)}
                 className={`w-full rounded-xl border px-3 py-2.5 text-sm font-medium ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA]' : 'border-black/10 bg-white text-[#3B2E13]'}`}
@@ -323,8 +326,9 @@ export function AlertsView() {
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.condition[language]}</label>
+              <label htmlFor="alert-condition" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.condition[language]}</label>
               <select
+                id="alert-condition"
                 value={formCondition}
                 onChange={(e) => setFormCondition(e.target.value as 'above' | 'below')}
                 className={`w-full rounded-xl border px-3 py-2.5 text-sm font-medium ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA]' : 'border-black/10 bg-white text-[#3B2E13]'}`}
@@ -337,8 +341,11 @@ export function AlertsView() {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
-              <label className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.target[language]}</label>
+              <label htmlFor="alert-target" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.target[language]}</label>
               <Input
+                id="alert-target"
+                min="0.00000001"
+                step="any"
                 type="number"
                 dir="ltr"
                 value={formTargetPrice}
@@ -348,8 +355,9 @@ export function AlertsView() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.currency[language]}</label>
+              <label htmlFor="alert-currency" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.currency[language]}</label>
               <select
+                id="alert-currency"
                 value={formCurrencyMode}
                 onChange={(e) => setFormCurrencyMode(e.target.value as CurrencyMode)}
                 className={`w-full rounded-xl border px-3 py-2.5 text-sm font-medium ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA]' : 'border-black/10 bg-white text-[#3B2E13]'}`}

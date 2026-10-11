@@ -231,5 +231,17 @@ class RequestBodyLimitTests(unittest.TestCase):
         self.assertEqual(received_bodies, [])
 
 
+    def test_unrelated_errors_in_a_body_limit_group_are_not_hidden(self) -> None:
+        async def downstream(_scope, receive, _send):
+            try:
+                await receive()
+            except Exception as body_error:
+                raise ExceptionGroup("mixed downstream failure", [body_error, ValueError("unrelated failure")]) from None
+
+        with self.assertRaises(ExceptionGroup) as caught:
+            asyncio.run(_run_request(self._middleware(downstream), headers=[], chunks=[b"123456789"]))
+        self.assertIsInstance(caught.exception.exceptions[1], ValueError)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -11,9 +11,10 @@ export function pushIsConfigured(): boolean {
   return Boolean(import.meta.env.VITE_VAPID_PUBLIC_KEY);
 }
 
-function pushIsSupported(): boolean {
+export function pushIsSupported(): boolean {
   return (
     typeof window !== "undefined" &&
+    !window.electronAPI &&
     "Notification" in window &&
     "PushManager" in window &&
     "serviceWorker" in navigator
@@ -22,11 +23,25 @@ function pushIsSupported(): boolean {
 
 async function registration(): Promise<ServiceWorkerRegistration | null> {
   if (!pushIsSupported()) return null;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    return await navigator.serviceWorker.ready;
+    const existing = await navigator.serviceWorker.getRegistration();
+    if (!existing) return null;
+    return await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), 3000); }),
+    ]);
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+export async function hasPushSubscription(): Promise<boolean> {
+  if (!pushIsConfigured() || !pushIsSupported() || Notification.permission !== "granted") return false;
+  const worker = await registration();
+  return Boolean(worker && await worker.pushManager.getSubscription());
 }
 
 /**

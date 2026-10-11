@@ -232,7 +232,7 @@ class PricesHealthResponse(BaseModel):
 
 class AlertCreate(BaseModel):
     asset: str = Field(default="formula", min_length=1, max_length=20)
-    target_price: float | None = Field(default=None, gt=0)
+    target_price: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     alert_type: Literal["price", "formula"] = "price"
     formula: str | None = Field(default=None, min_length=3, max_length=200)
     currency_mode: Literal["usd", "toman"] = "usd"
@@ -264,7 +264,10 @@ class AlertCreate(BaseModel):
 class AlertUpdate(BaseModel):
     """Partial update. Only supplied fields change."""
 
-    target_price: float | None = Field(default=None, gt=0)
+    asset: str | None = Field(default=None, min_length=1, max_length=20)
+    instrument_id: str | None = Field(default=None, max_length=64)
+    alert_type: Literal["price", "formula"] | None = None
+    target_price: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     formula: str | None = Field(default=None, min_length=3, max_length=200)
     currency_mode: Literal["usd", "toman"] | None = None
     price_source_mode: Literal["ordinary", "reference", "derived"] | None = None
@@ -279,6 +282,14 @@ class AlertUpdate(BaseModel):
     max_notifications_per_day: int | None = Field(default=None, ge=1, le=100)
     notify_sms: bool | None = None
     notify_telegram: bool | None = None
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self) -> "AlertUpdate":
+        nullable = {"target_price", "formula", "webhook_url", "instrument_id"}
+        for name in self.model_fields_set - nullable:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be null")
+        return self
 
 
 class AlertResponse(BaseModel):

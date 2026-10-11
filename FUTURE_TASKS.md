@@ -1,98 +1,29 @@
-# Future Tasks
+# Remaining Acceptance and Optional Work
 
-> اولویت، ترتیب اجرا، معیار قبولی و بسته تحویل در
-> [`docs/client-delivery-roadmap-fa.md`](docs/client-delivery-roadmap-fa.md)
-> نگه‌داری می‌شود. این فایل backlog جزئی است.
+Code baseline: **2.8.0**. Updated: 2026-10-11.
+A task here is external acceptance or optional product work; it is not a substitute for fixing a known code defect.
 
-## Legal/privacy remaining work (2.7.0 limited release)
+## Required target evidence
 
-Owner/contact/location and current free Iran service are confirmed. Still supply
-public postal address where required, processor register, asset/data licences and
-approved retention/deletion procedure. Future subscriptions and worldwide targeting
-need a separate legal review before launch. Limited deployment is not clearance.
-Complete assistive-technology and authenticated form checks. Full details:
-[legal readiness](docs/legal-readiness-2026-09-19.md).
+- Run all CI jobs on the final commit: unit/static, all client builds, real browser, desktop package,
+  Timescale/Redis integration, migration idempotency, restore, Compose/Nginx/relay and sidecar images.
+- Check existing database duplicates before any new market-price uniqueness constraint.
+  Preserve conflicting rows; resolve with a documented data migration before enforcing uniqueness.
+- Prove off-host backup retrieval and isolated Timescale restore against the target data size.
+- Prove synchronized target clock, TLS, ingress and two-replica failover.
+- Obtain current provider usage/redistribution rights and canary fixtures from the operator.
+- Verify each enabled source, exact units and timestamps, fresh charts, alert delivery and dead-letter recovery.
+- Supply current privacy/retention/operator details and confirm legal text with the responsible owner.
+- Run a load/soak test against staging with agreed users, alert volume, latency and loss limits.
 
-Tracked work that is not yet done. For the full picture — what is complete, what
-is partial, and what production readiness still requires — see
-[`PROJECT_STATUS.md`](PROJECT_STATUS.md).
+Use `docs/operator-gates.evidence.example.json` as the shape; the placeholder file must fail validation.
+No local script can invent provider rights, secret-store activation or live-server proof.
 
-## Engineering
+## Optional product and scale work
 
-- [ ] Obtain a verified direct 24K Iranian gold source. Do not restore karat
-      or international-ounce formulas. Free Servix requires a private account
-      key; sampled public alternatives were unreachable or key-gated.
+- Multiple independent hosts and disaster recovery beyond a single Compose host.
+- Agreed data retention/export controls, localization coverage and accessibility review on target devices.
+- Provider contracts for uncovered instruments; keep unavailable instruments honestly unavailable meanwhile.
+- Performance budgets and an operator-owned alert escalation schedule.
 
-- [ ] Extract the shared web/desktop React layer. `apps/desktop` currently
-      duplicates `apps/web`'s API client and views (~2,500 lines) and the two
-      have already drifted.
-- [ ] Extend route-level API coverage beyond the current 14-stage real-service
-      smoke to notification delivery, support, and admin mutation paths.
-- [ ] Extend browser coverage beyond sign-up and alert CRUD to a seeded alert
-      trigger and verified delivery result.
-- [ ] A real free-market USD/Toman source. Without one, every Toman metal price
-      without a direct provider is bridged through USDT and runs percent-level
-      high.
-- [ ] Direct Iranian 999 silver source. 925 silver has a direct Wallgold route
-      since 2.5.0; 999 silver still has only a key-gated route plus a formula.
-- [ ] Confirm PersianToolbox redistribution terms and whether its USD/IRR
-      reference can legally and semantically be shown to customers.
-- [ ] Create the free Servix account, add visible source attribution, store its
-      key outside Git, and enable only the needed chart routes.
-
-## Operator Proof
-
-Evidence that cannot be produced from source control. Keep it out of the
-repository: start from `docs/operator-gates.evidence.example.json`, fill a
-private copy, then verify it.
-
-- [ ] Provider rights sign-off with contract or approval record.
-- [ ] Scheduled live canary proof from the production network.
-- [ ] Production secret injection proof.
-- [ ] Navasan HTTPS proxy proof, or a signed disabled-route reason.
-- [ ] BRSAPI and TSETMC future-domain ownership record.
-- [ ] Off-host backup and disposable restore-drill proof.
-- [ ] Production deployment and health proof.
-- [ ] Authenticated browser smoke proof.
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -EvidencePath path\to\operator-gates.evidence.json
-```
-
-## Completed
-
-- [x] Database-backup health cadence aligned with the deployment deadline in
-      release 2.4.10.
-
-- [x] Clean production web-image dependency repair in release 2.4.9.
-
-- [x] Interface speed and usability remediation: route-level screen splitting,
-      reliable modal and mobile-drawer focus, larger controls, honest request
-      states, settings rollback, lighter repeated cards, and smoother bounded
-      motion without changing the authentication card rotation in release
-      2.4.8.
-
-- [x] First full interface remediation: honest startup state, short-screen
-      authentication, reduced-motion/transparency/contrast behavior, named
-      controls, chart alternatives, keyboard reordering, and contained admin
-      confirmation dialogs in release 2.4.7.
-
-- [x] Production 2.4.6 deployment with two healthy API replicas, healthy web,
-      current migrations, connected data stores, and zero durable backlogs.
-- [x] Free public XAG/USD, BTC/USD, and USDT/USD relay with strict route, unit,
-      range, timestamp, signature, replay, and pull-timeout controls.
-- [x] Live silver USD/Toman card and non-empty persisted silver chart path.
-- [x] Provider request bounds, retry policy, parser contracts, secret-safe canary.
-- [x] Assistant user quota, shared rate limits, provider fallback, chat transaction order.
-- [x] Production evidence schema and strict verifier.
-- [x] CI parity for Redis and refresh-token concurrency.
-- [x] Route-level HTTP smoke against real PostgreSQL and Redis, including auth,
-      session, alert, pricing, chart, instrument, provider, and error contracts.
-- [x] Browser end-to-end coverage for sign-up and alert create/edit/delete.
-- [x] Deployment health gate and web response guards.
-- [x] Local API, web, admin, desktop, dependency and static checks.
-- [x] Full production audit and remediation — see `PROJECT_STATUS.md`.
-- [x] Reachable no-key Iranian BTC/USD fallback with strict payload validation.
-- [x] Reachable Iranian NTP sources tested without changing production time.
-- [x] Structured JSON request logging and live pricing metrics.
-- [x] Servix free-tier history parser and bounded backfill for BTC, USDT, and USD.
+See [delivery readiness](docs/delivery-readiness.md) for commands and expected markers.

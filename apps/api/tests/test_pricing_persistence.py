@@ -183,7 +183,11 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
 
 
 class _BackfillOperational:
-    async def feature_enabled(self, _key: str) -> bool:
+    async def instrument(self, instrument_id: str):
+        from app.pricing.instruments import get_instrument
+        return get_instrument(instrument_id)
+
+    async def feature_enabled(self, _key: str, **_kwargs) -> bool:
         return True
 
     async def providers_for(self, _instrument_id: str):

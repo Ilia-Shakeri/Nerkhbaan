@@ -13,14 +13,20 @@ cd /d "%~dp0"
 if not exist "venv" (
     echo Creating virtual environment...
     python -m venv venv
+    if errorlevel 1 exit /b 1
 )
 
 echo Activating virtual environment...
 call venv\Scripts\activate.bat
+if errorlevel 1 exit /b 1
 
 echo Installing dependencies...
-pip install --upgrade pip
-pip install -r requirements.txt
+venv\Scripts\python.exe -m pip install --upgrade pip
+if errorlevel 1 exit /b 1
+venv\Scripts\python.exe -m pip install --require-hashes -r requirements.lock
+if errorlevel 1 exit /b 1
+venv\Scripts\python.exe -m pip check
+if errorlevel 1 exit /b 1
 
 echo.
 echo Setup complete!

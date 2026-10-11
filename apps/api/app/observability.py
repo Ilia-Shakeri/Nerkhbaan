@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
+import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -28,6 +29,15 @@ canonical_age_seconds = Gauge(
     "Age of the latest canonical quote.",
     ["instrument"],
 )
+pricing_observed_timestamp_seconds = Gauge(
+    "nerkhbaan_pricing_observed_timestamp_seconds", "Latest source observation epoch.", ["instrument_id"],
+)
+pricing_expires_timestamp_seconds = Gauge(
+    "nerkhbaan_pricing_expires_timestamp_seconds", "Latest canonical expiry epoch.", ["instrument_id"],
+)
+pricing_refresh_timestamp_seconds = Gauge(
+    "nerkhbaan_pricing_refresh_timestamp_seconds", "Last completed pricing refresh cycle epoch.",
+)
 canonical_status = Gauge(
     "nerkhbaan_canonical_status",
     "Current canonical status; one active status per instrument.",
@@ -45,6 +55,18 @@ def set_canonical_status(instrument: str, status: str) -> None:
     for candidate in CANONICAL_STATUSES:
         canonical_status.labels(instrument=instrument, status=candidate).set(
             1 if candidate == normalized else 0
+        )
+
+
+def observe_canonical(quote) -> None:
+    instrument = quote.instrument_id
+    observed = quote.observed_at.timestamp()
+    pricing_observed_timestamp_seconds.labels(instrument_id=instrument).set(observed)
+    pricing_expires_timestamp_seconds.labels(instrument_id=instrument).set(quote.expires_at.timestamp())
+    canonical_age_seconds.labels(instrument=instrument).set_function(lambda: max(0.0, time.time() - observed))
+    for candidate in CANONICAL_STATUSES:
+        canonical_status.labels(instrument=instrument, status=candidate).set_function(
+            lambda status=candidate: int(quote.effective_status().value == status)
         )
 
 

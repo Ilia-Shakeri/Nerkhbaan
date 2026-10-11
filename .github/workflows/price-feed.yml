@@ -34,13 +34,15 @@ jobs:
         run: |
           git config user.name "Nerkhbaan Price Feed"
           git config user.email "price-feed@users.noreply.github.com"
-          git fetch origin price-feed
-          git switch --detach origin/price-feed
-          cp /tmp/prices.json prices.json
-          git add prices.json
-          if git diff --cached --quiet; then
-            echo "Feed has no changes"
-            exit 0
-          fi
-          git commit -m "data: refresh public price feed"
-          git push origin HEAD:price-feed
+          previous="$(git ls-remote origin refs/heads/price-feed | cut -f1)"
+          publish_dir="$(mktemp -d)"
+          trap 'rm -rf -- "$publish_dir"' EXIT
+          cp /tmp/prices.json "$publish_dir/prices.json"
+          git -C "$publish_dir" init --initial-branch=price-feed
+          # Preserve the ephemeral checkout credential without placing it in feed content.
+          cp .git/config "$publish_dir/.git/config"
+          git -C "$publish_dir" config user.name "Nerkhbaan Price Feed"
+          git -C "$publish_dir" config user.email "price-feed@users.noreply.github.com"
+          git -C "$publish_dir" add prices.json
+          git -C "$publish_dir" commit -m "data: publish current validated feed"
+          git -C "$publish_dir" push --force-with-lease="refs/heads/price-feed:$previous" origin HEAD:price-feed

@@ -1,38 +1,78 @@
-# Release operations
+# Release Operations — 2.8.0
 
-## Code gates
+Updated: 2026-10-11. Execute against the intended host only after review of the concrete release.
+The release delivery is source code; this document does not certify a deployment.
 
-Run `npm run verify`. CI then proves PostgreSQL migrations and restore, Redis round trips and replica lease exclusion, live HTTP routes, browser auth/alert flow, Compose/nginx/relay/monitoring syntax, desktop packaging, image builds, and security scans.
+## 1. Final code gates
 
-The live HTTP gate has 14 stages. It creates a unique user and alert, exercises
-auth, session, pricing, chart, instrument, provider, and error contracts, then
-removes the alert. Run it only against a disposable test database; the user and
-security audit rows intentionally remain as transaction evidence.
+Run `npm run verify`, `python scripts/test_infra_contracts.py` and export the final API schema.
+Run every CI job on the final commit: clients, desktop package, Python, actual Timescale/Redis,
+HTTP/browser, migration/restore, Go/sidecars, proxy/monitoring and security scans.
+Keep logs tied to release and commit. Do not replace an executed test with test discovery.
 
-## Staging
+The HTTP smoke writes a unique test user and alert. Run it only against a disposable database.
+It leaves the test user/security audit rows as evidence. It waits beyond refresh duplicate grace before testing reuse.
 
-Use the production Compose file under a separate project name and separate ports. Keep its database, Redis, certificates, webhook file, and provider keys separate from production.
+## 2. Separate staging
+
+Prepare a private `.env` in a separate checkout. Use different credentials, databases, Redis,
+certificates, webhook file, ports and subnet. Do not reuse production volumes or project names.
 
 ```bash
 COMPOSE_PROJECT_NAME=nerkhbaan-staging \
+NERKHBAAN_NETWORK_SUBNET=172.30.0.0/24 \
+FORWARDED_ALLOW_IPS=127.0.0.1,172.30.0.0/24 \
+TRUSTED_PROXY_IPS=127.0.0.1,::1,172.30.0.0/24 \
+ADMIN_TRUSTED_PROXY_IPS=127.0.0.1,::1,172.30.0.0/24 \
 EDGE_HTTP_PORT=8080 EDGE_HTTPS_PORT=8443 \
 PROMETHEUS_PORT=19090 ALERTMANAGER_PORT=19093 GRAFANA_PORT=13002 \
 docker compose --profile edge --profile admin --profile monitoring \
   -f docker-compose.prod.yaml up -d --build --wait --scale backend=2
 ```
 
-Run route smoke, browser smoke, then load smoke against staging. A long soak uses the same load script with a larger request count and an external process supervisor.
+Compose proxy trust defaults follow `NERKHBAAN_NETWORK_SUBNET`. If using shared ingress,
+set FORWARDED_ALLOW_IPS, TRUSTED_PROXY_IPS and ADMIN_TRUSTED_PROXY_IPS consistently
+for the real proxy hops. Do not trust arbitrary client-supplied forwarded headers.
+Nginx resolves service names through Docker DNS and refreshes them after container replacement.
+
+Run isolated HTTP/browser flows, provider canaries, source timestamp/unit checks, queue retry/cancel
+and an agreed staging load/soak test. The staging hostname must be in auth and admin origin settings.
+
+## 3. Backup and migration
+
+Record current code/image tags and configuration backup location without printing credentials.
+Take and fetch an off-host PostgreSQL backup. Verify it through an isolated Timescale restore.
+The CI helper requires a fresh, different target named `*_restore` or `*_restore_*`.
+It refuses an existing target and cleans only the database it created for this run:
 
 ```bash
-python apps/api/scripts/integration_smoke_test.py --base-url https://staging.example.com
-python scripts/load_test.py --base-url https://staging.example.com --requests 10000 --concurrency 100
+SOURCE_DATABASE=nerkhbaan_ci RESTORE_DATABASE=nerkhbaan_restore_ci \
+bash scripts/ci-restore-drill.sh
 ```
 
-## Production
+Provide PGHOST, PGPORT, PGUSER and PGPASSWORD through a private environment.
+Expected: `RESTORE_DRILL_OK` with equal data, hypertables, chunks and policies.
+The 2.8.0 forward migration tags legacy provider backfill canonical rows as historical and adds
+a partial live-observation index. Check those UPDATE/index operations against existing compressed
+chunks in the isolated restored database first. If the target version requires decompression,
+pause the relevant policy and decompress only reviewed affected chunks before retrying the unchanged
+migration. Keep the old history rows; never delete them to make migration or live-price checks pass.
+The helper drops only its explicitly separate restore target and cleans it on exit.
+It uses Timescale pre/post restore and compares fingerprints. It is for disposable/frozen test data;
+concurrent source writes invalidate a before/after fingerprint. Production-sized off-host drill needs its own evidence.
+A `.gz` integrity check alone is not restore proof.
 
-Create an evidence file from `docs/operator-gates.evidence.example.json`. Evidence links hold reports only; never put secrets in the file. Validate it with `python scripts/verify_operator_gates.py <path>`.
+Run the dedicated migrate service before backend. Applied files are immutable.
+The new forward migration adds MFA replay state, widens pricing metadata and repairs known legacy Telegram defaults.
+An unknown newer migration stops an older release. Lock acquisition has a deadline.
+DATABASE_URL TLS query settings remain intact, including verify-full and CA/client certificate settings.
+Do not automatically roll an older API onto a newer schema. Review compatibility first.
+Existing market-price duplicates/compressed chunks need a preservation plan before a new uniqueness constraint.
 
-The deploy refuses to run without all eight current gates. External owners must supply provider rights, live canaries, secret-store proof, relay/transport decisions, off-host restore proof, target health, and browser proof. Code cannot truthfully create those facts.
+## 4. Target deployment
+
+Check clock synchronization and TLS. Fill a fresh private operator evidence file and validate it.
+Only a real owner can provide source rights, secret-store, restore, target health and browser proof.
 
 ```bash
 OPERATOR_EVIDENCE_PATH=/run/nerkhbaan/operator-gates.json \
@@ -40,112 +80,40 @@ BACKEND_REPLICAS=2 \
 sh scripts/deploy-nerkhbaan-prod.sh
 ```
 
-Before deploy, record the current commit and database backup. After deploy, check readiness, Prometheus targets, active alerts, queue depth, provider failure rate, and price age. If health fails, keep data volumes, return to the recorded commit with a new reviewed deploy, and rerun the same gates.
+The script is configured for `/opt/Nerkhbaan`; review the path on the actual target.
+It refuses missing/invalid evidence and a dirty tracked worktree. Preserve all volumes.
+Use reviewed immutable image/version tags and retain previous images.
 
-Before provider or login verification, require a synchronized host clock. Follow
-[`time-sync-runbook.md`](time-sync-runbook.md); a large correction needs a short
-maintenance window because old sessions and timers can expire.
+## 5. Acceptance
 
-## Relay
+Probe `/api/health/ready` through HTTPS ingress or inside the backend container; host port 8000 is not published.
+Inspect the JSON, migration version, release, Redis/DB, live source times, persisted units and worker health.
+Prometheus scrapes `backend:8000/metrics` privately; neither public nor admin ingress exposes metrics.
+Recreate one backend and prove DNS/replica recovery. Verify admin permissions, MFA/recovery, support,
+setting effects, draft conflicts, audit and backups status. Verify actual notification receipt.
+Install the desktop package on the intended OS and verify controlled-origin login, secure refresh,
+external links, chart consent, assets and logout. Run the public browser flow on supported devices.
 
-`infra/relay` is a separate stateless stack. It accepts TLS from only the core IP range and requires `X-Relay-Token`. The core adds that header only when `PRICING_RELAY_BASE_URL` matches a configured provider URL host. Point only affected provider base URLs at the matching relay path, add the relay host to the provider allowlist, and set a secret-store token of at least 32 characters.
+## Rollback
 
-This relay solves reachability only. It does not grant redistribution rights or override vendor terms. Those remain hard launch gates.
-# Offline package build fallback
+Keep previous configuration, code and images. Do not remove data volumes, AOF or backups.
+If a forward migration makes the older image incompatible, prefer a reviewed forward fix.
+Otherwise redeploy the recorded compatible images and rerun readiness, pricing and delivery checks.
+Never edit migration checksums or mark failed work completed to make the gate green.
 
-The frontend image installer tries configured npm registries first. If every
-registry is unavailable, it retries with the BuildKit npm cache and the locked
-dependency set. A cache miss remains a hard failure; never replace the lockfile
-or install unpinned packages during a production deploy.
-# Limited 2.5.1 release
-Historical release; see the current 2.6.1 record below.
+## Relay and feed
 
-The user explicitly approved a limited provider-fix deployment on 2026-09-19,
-with database backup and live readiness checks despite missing formal gate
-evidence. This exception does not satisfy or remove any normal release gate.
-Retain previous images and commit for rollback; preserve all volumes. Use
-the new version as the image tag so rollback does not depend on mutable tags.
-See [provider validation](free-provider-validation-2026-09-19.md) for the known
-24K gap and source timestamp/redistribution limitations.
+The relay is stateless, core-IP restricted and token-gated. Upstream TLS verifies against CA roots.
+It solves reachability only; provider rights still need proof.
+The public `price-feed` branch is bot-owned output with one orphan commit. It requires permission for
+lease-protected replacement of that branch only. Never allow force updates on the source release branch.
+See [external workers](external-price-worker.md) and [delivery readiness](delivery-readiness.md).
 
-Final code: `2a26ca5d`, images tagged `2.5.1`. Previous code: `2b2972d8`;
-previous images tagged `c580745` are retained. Prior configuration is protected
-at `/home/deploy/nerkhbaan-release-backups/pre-2.5.0.env` (mode 600). Do not
-commit or print that file. An operator-approved rollback should restore the
-prior configuration and image selection, then check readiness; never remove
-data volumes. No schema migration was added by this release.
+## Read-only panel backup status
 
-## Limited 2.6.1 release
-
-On 2026-09-19 the owner explicitly approved deploying the privacy/accessibility
-changes plus supplied identity and free-service facts with a database backup and
-live health checks, despite the listed missing address, data-rights, retention and
-restore evidence. Normal gate scripts remain unchanged; no evidence is fabricated.
-Scope includes 2.6.0 and 2.6.1 together. Existing auth flip stays unchanged.
-Old clients lacking the new consent fields need an update; never infer acceptance.
-Use versioned images, preserve prior 2.5.1 images and all PostgreSQL/Redis volumes.
-Do not touch untracked server .gitea, gitea_data or gitea_runner_data directories.
-Deployment verified on 2026-09-19 at approximately 11:56 UTC:
-
-- Code `2cf2c17`, tag `v2.6.1`; API, web and price-feed-pull images `2.6.1`.
-- Pre-release database dump `/backups/last/nerkhbaan-20260919-115138.sql.gz`,
-  45.3 MiB, passed `gzip -t`. Dump warned about Timescale circular foreign-key
-  constraints; successful dump/compression checks are not restore-drill evidence.
-- Protected config backup `/home/deploy/nerkhbaan-release-backups/pre-2.6.1.env`
-  mode 600. Do not print or commit it. Previous images `2.5.1` retained.
-- Version persisted in `.env`; built migrate/frontend/price-feed-pull images,
-  then recreated only backend (two replicas), frontend and price-feed-pull with
-  `--no-deps --wait`. No new schema changes; database/Redis/backup containers
-  remained running. Price-feed-pull runs but has no configured healthcheck.
-- Public liveness and readiness returned 200, `release_version=2.6.1`, database
-  and Redis connected, current migration and operational websocket fanout.
-- Five legal routes returned 200. Empty signup returned 422 without creating
-  an account. Runtime `AUTH_REFRESH_DAYS=30` confirmed.
-- Live browser verified all five public pages, public email links, owner details
-  in both languages, and the existing update prompt from 2.5.1 to the new bundle.
-  Returning installed clients must select the update/reload prompt.
-- Local validation: 207 backend tests passed, one PostgreSQL concurrency test
-  skipped; 34 frontend contracts passed; web/admin/desktop builds passed.
-  Browser-test discovery is not a full end-to-end account test. No consent accepted
-  on behalf of the owner and no support/chat message submitted during smoke tests.
-- Disk after deployment: 3.7 GiB available, 87% used. No data or image pruning.
-- Existing price gaps remain: readiness snapshot included expired/unavailable
-  sources and 94 anomaly records. This legal release does not claim to fix them.
-
-Rollback, if approved: restore the protected configuration or select retained
-`2.5.1` images for these same services, then repeat health checks. Preserve all
-data and consent receipts. Do not roll back schema or remove volumes.
-
-## Limited 2.7.4 release
-
-On 2026-09-19 the owner-approved interface, chart and silver-feed scope was
-deployed as code `7d8ee8aa`, tag and images `2.7.4`. The release includes the
-2.7.0 through 2.7.4 changes. No schema migration was added.
-
-- Pre-release dump `/backups/last/nerkhbaan-20260919-122825.sql.gz` is 45.4 MiB
-  and passed `gzip -t` inside the backup container. This is not restore proof.
-- Protected configuration backup is
-  `/home/deploy/nerkhbaan-release-backups/pre-2.7.4.env`. Never print or commit it.
-- Only API, web and price-feed-pull were recreated. PostgreSQL, Redis and the
-  backup service kept running. Two healthy API replicas were restored explicitly.
-- Public readiness returned 200 with `release_version=2.7.4`, connected database
-  and Redis, current migration, empty persistence backlog and operational fanout.
-- Silver returned a live USD quote, derived Toman quote, `chart_error=false`,
-  and two persisted points from the public 30-day history route.
-- Hosted feed run `35443623670` passed. Price-feed-pull accepted its fresh feed.
-- Local checks: 209 API tests passed and one PostgreSQL concurrency test skipped
-  because `TEST_DATABASE_URL` was absent; 35 frontend tests and all three builds
-  passed. The Go service test passed in the Linux container on production.
-- Existing untracked `.gitea`, `gitea_data` and `gitea_runner_data` were not
-  touched. Previous images and all data volumes remain available.
-
-The shared edge has the required external-chart script and frame origins plus
-Docker DNS re-resolution for replaced API and web containers. After a real web
-and API replacement, 12 consecutive public privacy requests returned 200 with
-no manual edge reload. The live header and host config are current. The unrelated
-shared-edge Compose project still needs a separate persistence review before an
-edge-container recreation because its bind mount is not yet recorded there.
-
-Rollback, if approved: restore the protected pre-2.7.4 configuration or select
-retained 2.7.1 images for API, web and price-feed-pull, keep two API replicas,
-then repeat public readiness and silver-history checks. Preserve all volumes.
+The panel may read ADMIN_BACKUP_STATUS_FILE, a JSON manifest. It does not infer restore success from a backup file.
+When an isolated restore drill completes, set BACKUP_STATUS_FILE to an operator-owned manifest path to write
+last backup/restore times, size and verified fingerprint result atomically. Mount that single file read-only
+into backend and set ADMIN_BACKUP_STATUS_FILE to the in-container path. Keep the runtime manifest out of Git.
+Do not mount the whole backup directory just to show status. Without a configured/fresh manifest the panel
+reports not-configured or stale. Evidence belongs to the source database and environment named in the manifest.

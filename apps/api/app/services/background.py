@@ -11,7 +11,8 @@ from sqlalchemy import delete, select
 from ..db import SessionLocal
 from ..config import settings
 from ..models import AssistantChatMessage, AssistantChatSession
-from ..pricing.compatibility import legacy_pricing_adapter
+from ..pricing.compatibility import legacy_pricing_adapter, LegacyPricingAdapter
+from ..pricing.instruments import get_instrument
 from ..pricing.service import instrument_pricing_service
 from ..observability import background_failures_total
 from .alert_engine import AlertEngine
@@ -51,9 +52,21 @@ class BackgroundRunner:
 
     def refresh_health(self) -> dict[str, object]:
         """Small safe state snapshot for health routes and deployment checks."""
+        state = dict(self._refresh_state)
+        if self._running and (self._refresh_task is None or self._refresh_task.done()):
+            state["state"] = "failed"
+            state["last_error_type"] = "refresh_task_stopped"
+        timestamp = state.get("last_completed_at") or state.get("last_started_at")
+        if self._running and timestamp:
+            try:
+                age = (datetime.now(UTC) - datetime.fromisoformat(str(timestamp))).total_seconds()
+                if age > max(120, self.interval * 3):
+                    state["state"] = "stalled"
+            except ValueError:
+                state["state"] = "failed"
         return {
             "enabled": settings.background_tasks_enabled,
-            **self._refresh_state,
+            **state,
         }
 
     async def start(self) -> None:
@@ -101,7 +114,7 @@ class BackgroundRunner:
                 usable = sum(
                     count
                     for status, count in counts.items()
-                    if status in {"live", "confirmed", "fresh_cache", "derived_fallback"}
+                    if status in {"live", "confirmed", "fresh_cache", "fresh", "derived_fallback"}
                 )
                 self._refresh_state.update(
                     {
@@ -127,6 +140,19 @@ class BackgroundRunner:
             try:
                 if self._pricing_available:
                     prices = await legacy_pricing_adapter.get_prices()
+                    # Explicit instruments share the same eligibility fields as
+                    # legacy assets, without converting currency, weight or purity.
+                    snapshots = await instrument_pricing_service.get_all_canonical()
+                    assets = list(prices.get("assets", []))
+                    for instrument_id, quote in snapshots.items():
+                        currency = get_instrument(instrument_id).quote_currency.value.lower()
+                        assets.append({
+                            "asset": instrument_id,
+                            f"price_{currency}": float(quote.price),
+                            f"{currency}_status": quote.effective_status().value,
+                            **LegacyPricingAdapter._quote_policy_fields(currency, quote),
+                        })
+                    prices = {**prices, "assets": assets}
                     await self.alert_engine.evaluate_alerts(prices)
             except Exception as exc:
                 background_failures_total.labels(loop="alert_evaluation").inc()
@@ -142,10 +168,9 @@ class BackgroundRunner:
                     await instrument_pricing_service.flush_persistence_backlog(
                         settings.pricing_persistence_flush_batch_size
                     )
-                    if settings.pricing_backfill_enabled:
-                        await instrument_pricing_service.process_backfill_jobs(
-                            settings.pricing_backfill_max_jobs_per_cycle
-                        )
+                    await instrument_pricing_service.process_backfill_jobs(
+                        settings.pricing_backfill_max_jobs_per_cycle
+                    )
             except Exception as exc:
                 background_failures_total.labels(loop="pricing_maintenance").inc()
                 logger.error(

@@ -566,8 +566,10 @@ class PricingPersistence:
                         )
                     )
                 else:
-                    for field, value in values.items():
-                        setattr(instrument_record, field, value)
+                    # Operator policy survives restart. Only immutable descriptors
+                    # follow the release catalogue; policy changes use migrations.
+                    for field in ("base_asset", "quote_currency", "market", "region", "weight_unit", "purity", "display_decimals"):
+                        setattr(instrument_record, field, values[field])
 
             for provider in PROVIDERS.values():
                 budget = provider.budget
@@ -597,21 +599,9 @@ class PricingPersistence:
                 else:
                     provider_record.display_name = provider.display_name
                     provider_record.source_type = "http"
-                    provider_record.role = provider.role.value
-                    provider_record.priority = provider.priority
-                    provider_record.trust_score = provider.trust_score
-                    provider_record.enabled = provider.enabled
                     provider_record.required_key_name = provider.api_key_setting
                     provider_record.parser_name = provider.parser_id
                     provider_record.parser_version = provider.parser_version
-                    provider_record.requests_per_minute = budget.requests_per_minute
-                    provider_record.requests_per_hour = budget.requests_per_hour
-                    provider_record.requests_per_day = budget.requests_per_day
-                    provider_record.reserved_anomaly_requests = budget.reserved_anomaly_requests
-                    provider_record.reserved_fallback_requests = budget.reserved_fallback_requests
-                    provider_record.minimum_interval_seconds = budget.minimum_interval_seconds
-                    provider_record.cooldown_after_429_seconds = budget.cooldown_after_429_seconds
-                    provider_record.estimated_request_cost = budget.estimated_request_cost
 
             # Provider configs reference both parent catalogs. Flush every new
             # parent row before adding configs so PostgreSQL can enforce both keys.
@@ -635,26 +625,6 @@ class PricingPersistence:
                             parser_config={"parser_id": provider.parser_id},
                         )
                     )
-                else:
-                    config_record = db.get(InstrumentProviderConfigRecord, config_key)
-                    if config_record is not None:
-                        config_record.enabled = provider.enabled
-                        config_record.role = provider.role.value
-                        config_record.priority = provider.priority
-                        config_record.trust_score = provider.trust_score
-                        config_record.operational_ttl_seconds = provider.operational_ttl_seconds
-                        config_record.parser_config = {
-                            "parser_id": provider.parser_id,
-                            "parser_version": provider.parser_version,
-                            "route_id": provider.route_id,
-                            "source_family": provider.source_family,
-                            "venue": provider.venue,
-                            "source_semantic": provider.source_semantic.value,
-                            "selected_price_semantic": provider.selected_price_semantic.value,
-                            "unit_source": provider.unit_source,
-                            "symbol_or_pair": provider.symbol_or_pair,
-                            "credential_placement": provider.credential_placement,
-                        }
             db.commit()
         except Exception:
             db.rollback()

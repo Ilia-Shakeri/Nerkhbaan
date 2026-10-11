@@ -116,7 +116,15 @@ class InternalPriceHistory:
                 policy.bucket,
             )
         first = parse_datetime(points[0]["timestamp"]) if points else None
-        is_partial = first is None or first > range_start + timedelta(seconds=policy.bucket_seconds * 2)
+        timestamps = sorted({parse_datetime(point["timestamp"]) for point in points})
+        tolerance = timedelta(seconds=policy.bucket_seconds * 2)
+        is_partial = (
+            first is None
+            or first > range_start + tolerance
+            or timestamps[-1] < range_end - tolerance
+            or any(right - left > tolerance for left, right in zip(timestamps, timestamps[1:]))
+            or len(timestamps) < max(1, int(policy.duration.total_seconds() / policy.bucket_seconds) - 2)
+        )
         return HistoryResult(
             instrument_id=instrument_id,
             timeframe=timeframe,
@@ -124,7 +132,7 @@ class InternalPriceHistory:
             range_start=range_start,
             range_end=range_end,
             points=points,
-            missing_before=first if is_partial else None,
+            missing_before=first if is_partial and first and first > range_start + tolerance else None,
         )
 
     async def provider_history(
@@ -450,12 +458,13 @@ class InternalPriceHistory:
                 change_30d, idempotency_key, sequence_number
             FROM canonical_quotes
             WHERE {_DIRECT_GOLD_SQL}
+              AND COALESCE(source_summary->>'historical_backfill', 'false') <> 'true'
         """
         parameters: dict[str, str] = {}
         if instrument_id is not None:
             query_sql += " AND instrument_id = :instrument_id"
             parameters["instrument_id"] = instrument_id
-        query_sql += " ORDER BY instrument_id, canonical_at DESC"
+        query_sql += " ORDER BY instrument_id, observed_at DESC, canonical_at DESC, id DESC"
 
         db = SessionLocal()
         try:

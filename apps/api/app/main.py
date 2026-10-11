@@ -60,6 +60,8 @@ def _csv(value: str) -> list[str]:
 
 
 def _origin(value: str) -> str | None:
+    if value == "nerkhbaan://app":
+        return value
     try:
         parsed = urlsplit(value)
     except ValueError:
@@ -76,6 +78,7 @@ def _allowed_origins() -> list[str]:
             *(_origin(value) for value in _csv(settings.allowed_origins)),
             _origin(settings.public_frontend_origin),
             _origin(settings.admin_frontend_origin),
+            _origin(settings.desktop_frontend_origin),
         )
         if origin
     }

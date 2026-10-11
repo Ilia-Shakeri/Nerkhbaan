@@ -1,194 +1,94 @@
-# Pricing Operations Runbook
+# Pricing Operations Runbook — 2.8.0
 
-## Provider Onboarding Gate
+Updated: 2026-10-11. No live host was inspected merely by updating this document.
 
-Before enabling a new provider route, the operator must have all of this evidence:
+## Provider onboarding
 
-- official endpoint documentation and endpoint version;
-- representative response fixtures for success, missing field, invalid unit, stale timestamp, and rate limit;
-- explicit unit, currency, purity, source timestamp, and selected price semantic;
-- credential placement that never puts a secret in the path or an unapproved plain HTTP request;
-- commercial and redistribution authorization for this product;
-- owner, rate limit, attribution requirement, and incident contact;
-- parser tests and route-specific enable flag.
+Before enabling a source, capture official route documentation, permitted product usage,
+representative fixtures, exact currency/weight/purity/semantic, source timestamp, rate limits,
+attribution, incident owner and secret-store placement. Canary success is not licensing evidence.
+Unknown or sample-only vendor routes stay disabled. Do not weaken HTTPS or timestamp checks to
+make a canary pass. Use the actual configured Settings object for endpoint and parser configuration.
 
-Tier B routes remain disabled until this gate is complete. Pending vendors such as BRSAPI, TSETMC, SourceArena, api.ir, IranMarketData.ir, Oanor, legacy nerkh-api.ir, TGJU paid API, NovinAPI, and TabanGohar must not be added to active pricing until the gate is satisfied.
+Run a provider canary from `apps/api` with private runtime settings already injected:
 
-PersianToolbox is a no-key public reference route with a five-minute upstream
-cache and no guaranteed public quota. Keep its five-minute local request floor.
-Its BTC/USD route may serve as a low-trust fallback. Its USD/IRR route remains
-disabled because the provider does not promise a free-market or tradable rate.
-BRSAPI's public sample is fixture data and must never be used as a live route.
-
-## Canary Command
-
-Run from `apps/api`:
-
-```powershell
-$env:JWT_SECRET_KEY='operator-owned-non-production-value'
+```bash
 python scripts/provider_canary.py
-```
-
-Run one route:
-
-```powershell
-$env:JWT_SECRET_KEY='operator-owned-non-production-value'
 python scripts/provider_canary.py coinbase_btc_usd
 ```
 
-The command uses the live request guard, credentials, response-size cap, retry rule, and parser. It emits sanitized JSON. It does not print headers, query strings, keys, prices, or payload bodies. A non-2xx response, bad payload, or unknown provider fails the command.
+A sanitized successful result proves that exact route at that time. It does not prove every route,
+long-term uptime, redistribution rights or production alert delivery. Keep credential values out of reports.
 
-## Operator Gate Evidence
+## Instrument and canonical rules
 
-Keep production proof outside source control. Use `docs/operator-gates.evidence.example.json` as the shape for internal evidence, then validate a local copy:
+- Read instrument identity, currency, unit, purity, source observation, validity and persistence.
+- Gold gram and spot-ounce legs are independent. Gold formulas are forbidden.
+- Missing direct gold remains unavailable. Do not synthesize it in the client or startup report.
+- Approved non-gold formulas remain theoretical and inherit input validity; USD/Toman is not USDT/Toman.
+- Source timestamps remain source timestamps. Receipt may start a provider-specific short window only
+  within the vetted maximum source-age boundary; validity never extends past that boundary.
+- A rejected stale primary does not block a valid fresh fallback.
+- Worker live ingestion follows canonical anomaly, priority and independence rules under an instrument lock.
+  Older observations cannot replace newer ones; fresh primary data is not replaced by a lower-ranked worker.
+- Independent fallback sources may participate in anomaly verification within its budget.
+  Same-family sources cannot prove independence.
+- Telegram can verify only when explicitly approved, whitelisted, fresh, persisted and above policy
+  trust/confidence. Telegram observation alone does not become a market quote.
+- Suspicious, expired and unpersisted results are ineligible for ordinary alerts.
 
-For the external BTC/USD and USDT/USD worker, follow `docs/external-price-worker.md`. The worker is a narrow signed ingress path, not database access or a general proxy.
+Admin settings show scope, stored override and effective value. Changing the database value alone
+is not success: refresh the runtime and inspect its effective policy. Startup inserts catalogue defaults;
+it must not overwrite operator decisions. Reconcile system-role permissions through the release migration/bootstrap.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/verify-operator-gates.ps1 -EvidencePath path\to\operator-gates.evidence.json
-```
+## Telegram
 
-The example is a shape only and must fail validation. The private file must name the production environment, a real owner, a fresh UTC timestamp, and one typed proof URI for each gate. Core production gates must pass. Only the disabled Navasan route and future market domain may use `not_applicable`, and both need a reason. The verifier rejects stale proof, future dates, placeholders, and secret-like values.
+Channel identity uses marked `-100...`, consistently in UI, API, database and worker.
+Parser names: `strict_explicit` and `strict_hashtag`. Default: `strict_explicit`.
+Use the panel preview before enabling a source. Explicit Toman/Rial is required; Rial converts to Toman
+once. Decimal separators remain decimals. Mixed units and ambiguous prices are rejected.
+`strict_hashtag` requires an actual matching hashtag. Unlisted channels and non-channel events are ignored.
+Legacy unsupported parsers are disabled by the forward migration; known `strict_generic` becomes `strict_explicit`.
+A raw/marked duplicate identity needs operator review; the migration does not silently merge its records.
 
-## Secret And Egress Rules
+## History and backfill
 
-- Keep all provider keys in the runtime secret store or the deployment's `.env`,
-  never in source files. There is no in-application secret-manager integration;
-  injection is the deployment's responsibility.
-- Rotate every provider key after staff changes, suspected leak, vendor incident, or public artifact exposure.
-- Keep `PRICING_PROVIDER_ALLOWED_HOSTS` tight. Add hosts only after provider onboarding.
-  The allowlist is extended automatically with the hostname of every configured
-  provider base URL, so a proxy set through configuration stays reachable
-  without widening the list by hand.
-- `NAVASAN_ALLOW_INSECURE_HTTP=true` is rejected at startup. Use `NAVASAN_HTTPS_PROXY_BASE_URL` or leave Navasan disabled.
+History is stored data with coverage and gap checks. Do not fill gaps using the current exchange rate.
+Backfill uses bounded batches and resumes pending points. It completes only after required durable writes.
+A temporary live-priority deferral is retryable. Missing enabled history routes remain unavailable.
+Zero trade volume is valid; nonfinite or negative volume is not. Price remains strictly positive.
+CoinGecko history is USD history, never a direct Iranian Toman source.
 
-## Source Coverage Gate
+## Health and monitoring
 
-An instrument with no configured provider still publishes a price — a formula
-result marked `derived_fallback`. That is legitimate, but it must be a known
-state, not a surprise. Before declaring a chain live:
+`/api/health/live`: process only. `/api/health/ready`: required storage/schema readiness.
+`/api/prices/health`: coverage and completed refresh health. `fresh` cache results count as usable.
 
-- check `startup.instruments_without_direct_source` in `GET /api/prices/health`;
-- confirm each entry there is intentional;
-- for Toman metals, check `fx_bridge_is_proxy` on the derived quote. A `true`
-  means the USD→Toman rate came from USDT, which carries a market premium; the
-  published value will run percent-level high.
+Check the private Prometheus targets and these signals:
 
-`instruments_unservable` must always be empty. CI fails if it is not.
+- `nerkhbaan_pricing_observed_timestamp_seconds{instrument_id}`;
+- `nerkhbaan_pricing_expires_timestamp_seconds{instrument_id}` against `time()`;
+- `nerkhbaan_pricing_refresh_timestamp_seconds` against `time()`;
+- canonical status, provider failure rate, persistence backlog and dead-letter queue;
+- DB/Redis readiness, worker heartbeat and oldest pending work.
 
-## Readiness Rules
+Age/status are evaluated against scrape time. Frozen refreshes must age into failure.
+An absent scrape target is a failure, not a green zero. Dashboards must show data age.
 
-- `/api/health/live` is process liveness.
-- `/api/health/ready` is readiness and may fail when dependencies fail.
-- `/api/prices/health` includes refresh-loop state. `degraded` means no usable
-  canonical result in the last completed cycle. `failed` means the cycle itself
-  raised an error. Check this before changing a provider.
-- An expired canonical quote is not an anomaly baseline. A new valid provider
-  quote must be assessed like an initial quote, not held against an old market
-  level that can no longer be displayed or used by alerts.
-- A reachable fallback route consumes the same bounded per-provider budget as
-  normal refresh work. Do not use a tiny reserved fallback allowance as a hard
-  daily ceiling when it is the only reachable route.
-- `tetherland_btc`, `wallex_usdt_toman`, and `wallex_btc_toman` are quarantined
-  by default after live canaries found a missing contract field or an oversized
-  response. A database enable flag cannot override this safety default. Re-enable
-  only with the route-specific environment flag after a new canary and parser
-  fixture prove the exact endpoint contract.
-- Backfill is not queued for an instrument with no enabled history route. This
-  avoids a permanent deferred-job backlog when a chart asks for unavailable data.
-- By default, a history job also defers when live refresh is unavailable.
-  Restore live data first, then request history again; this avoids retrying work
-  that cannot run. Servix is the documented exception because its history route
-  is independent from the live-price route.
-- CoinGecko backfill covers BTC/USD and USDT/USD. It is not a Toman source.
-- Servix history covers BTC/USD, USDT/USD, and USD/Toman and may run without a
-  live canonical quote. Its documented history endpoint is independent of the
-  live-price gate. The key is sent only in `X-API-Key`.
-- Provider canary output is operational evidence, not licensing evidence.
-- A local unit-test pass is not a production deploy proof.
-- Provider timestamps are meaningful only when the host clock is synchronized.
-  Use [`time-sync-runbook.md`](time-sync-runbook.md); never widen future-clock
-  tolerance to mask an operating-system clock fault.
-- PersianToolbox documents a cache of up to five minutes. Its original source
-  timestamp is always stored. A payload inside that explicit limit may start a
-  normal short BTC live window when received; it does not become a new source
-  observation, and a payload beyond five minutes is rejected.
+## Recovery
 
-## Servix free-tier chart setup
+1. Check clock with [time-sync-runbook](time-sync-runbook.md); never widen timestamp tolerance to mask drift.
+2. Check DB, Redis and schema. Redis holds leases, budgets and outbox; preserve AOF.
+3. Inspect failed provider IDs and sanitized reasons; run only the needed canary.
+4. Retry history/queue work idempotently after dependencies recover. Do not reset state to fake completion.
+5. For alert cancellation, inspect the current worker lease. Already transmitted messages cannot be recalled.
+6. Restore only to a separate database first; compare data, hypertables, chunks and policies.
+7. Recheck source units, timestamps, persisted prices, history and actual channel receipt.
 
-Create a Servix account and key. Do not paste the key into chat, Git, a URL, or
-shell history. Store it in the production secret file, add visible Servix
-attribution required by the free plan, then enable only needed routes:
+## Production evidence
 
-```dotenv
-SERVIX_API_KEY=<stored-outside-source-control>
-PRICING_PROVIDER_SERVIX_BTC_USD_ENABLED=true
-PRICING_PROVIDER_SERVIX_USDT_USD_ENABLED=true
-```
-
-Enable `PRICING_PROVIDER_SERVIX_USD_TOMAN_ENABLED=true` only if USD/Toman
-history is exposed by the product. The registry budgets each of the three
-routes to 16 requests/day, so enabling all three stays below 50. After restart,
-request each chart once, watch the backfill queue, and verify the provider id in
-stored history. Keep PersianToolbox USD/IRR disabled; it is not a free-market
-contract.
-
-## Backup And Restore Gate
-
-Before production enablement:
-
-- verify off-host PostgreSQL backups;
-- run a restore drill into a disposable database;
-- verify Redis AOF compatibility after image upgrades;
-- keep production volumes intact during recovery;
-- deploy through `cd /opt/Nerkhbaan && COMPOSE_FILE=docker-compose.prod.yaml sh scripts/deploy-nerkhbaan-prod.sh`.
-
-## Release Check Commands
-
-One command from the repository root runs every gate — backend static checks,
-the backend suite, the frontend contract tests, and all three builds:
-
-```bash
-npm run verify
-```
-
-Individually, if you need to isolate a failure:
-
-```bash
-cd apps/api
-python -m compileall -q app tests scripts
-python -m pyflakes app tests scripts
-JWT_SECRET_KEY='test-only-secret-key-that-is-long-enough' \
-DATABASE_URL='postgresql+psycopg://test:test@127.0.0.1:5432/test' \
-REDIS_URL='' python -m unittest discover -s tests -v
-```
-
-```bash
-npm run test:frontend
-npm run build:web && npm run build:admin && npm run build:desktop
-```
-
-The web build needs `VITE_VAPID_PUBLIC_KEY` set to produce an image with working
-web push. A build without it succeeds but ships push disabled.
-
-## Capacity Watchpoints
-
-| Signal | Threshold | Consequence of ignoring it |
-| --- | --- | --- |
-| Redis `used_memory` vs `REDIS_MAXMEMORY` | 80% | Policy is `noeviction`: a full Redis stops every price refresh |
-| PostgreSQL connections | `max_connections` | Peak per API process is `(pool + overflow) x 2`; migrate, backup and worker add more |
-| `dead_letter_backlog` | any sustained growth | Alerts are being generated and not delivered |
-| `anomaly_count` | any sustained growth | Anomalies are opening faster than they are reviewed |
-# Release 2.5.0 source policy
-
-18K/24K gold cannot use formulas. Do not re-enable PersianToolbox gold: its
-karat is unspecified. Wallgold supplies direct 18K and 925 silver; Bitpin
-supplies BTC/Toman and USDT/Toman. Nobitex uses `https://apiv2.nobitex.ir`.
-Set `PRICING_PROVIDER_MAX_RESPONSE_BYTES=1048576` for Bitpin's aggregate body;
-other providers keep their own smaller per-provider bounds. Both new base
-URLs are folded into the allowlist through normal settings validation.
-
-Run the read-only canary in `apps/api/scripts/probe_public_pricing.py` after
-host/DNS changes. See [the validation report](free-provider-validation-2026-09-19.md).
-24K coverage and formal launch evidence remain open. Never delete stored
-prices or Redis data to hide that gap.
+Use the private copy of `docs/operator-gates.evidence.example.json` and run
+`python scripts/verify_operator_gates.py /private/path/operator-gates.json`.
+All applicable gates need fresh owner-backed proof. Example placeholders must fail.
+See [release operations](release-operations.md), [delivery readiness](delivery-readiness.md)
+and [external workers](external-price-worker.md).

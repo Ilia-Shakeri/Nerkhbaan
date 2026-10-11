@@ -43,14 +43,22 @@ def claim_admin_job(
     return job
 
 
-def complete_admin_job(db: Session, job: AdminJob) -> None:
+def complete_admin_job(db: Session, job: AdminJob, *, expected_attempt: int | None = None) -> None:
+    db.refresh(job, with_for_update=True)
+    if job.status != "processing" or (expected_attempt is not None and job.attempt_count != expected_attempt):
+        db.rollback()
+        return
     job.status = "completed"
     job.completed_at = datetime.now(UTC)
     job.last_error = None
     db.commit()
 
 
-def fail_admin_job(db: Session, job: AdminJob, error: str, *, retryable: bool = True) -> None:
+def fail_admin_job(db: Session, job: AdminJob, error: str, *, retryable: bool = True, expected_attempt: int | None = None) -> None:
+    db.refresh(job, with_for_update=True)
+    if job.status != "processing" or (expected_attempt is not None and job.attempt_count != expected_attempt):
+        db.rollback()
+        return
     job.last_error = sanitize_error(error)
     if retryable and job.attempt_count < 5:
         job.status = "retrying"

@@ -80,6 +80,18 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Build unpacked desktop package
         run: npm run package:dir --workspace=nerkhbaan-desktop
+      - name: Smoke test actual desktop package
+        run: npm run test:desktop
+
+  go-sidecar:
+    name: Feed pull Go checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test and build feed pull
+        run: |
+          docker run --rm -v "$PWD/apps/price-feed-pull:/src" -w /src golang:1.25.1-alpine3.22 sh -c 'go test ./... && CGO_ENABLED=0 go build -trimpath -o /tmp/price-feed-pull .'
 
   python-unit:
     name: Python static and unit checks
@@ -105,9 +117,11 @@ jobs:
           cache-dependency-path: |
             apps/api/requirements.txt
             apps/api/requirements-dev.txt
+            apps/api/requirements.lock
+            apps/api/requirements-dev.lock
 
       - name: Install Python dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements-dev.txt
+        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-dev.lock
 
       - name: Check installed dependency set
         run: python -m pip check
@@ -118,8 +132,18 @@ jobs:
       - name: Check Python names and imports
         run: python -m pyflakes app tests scripts
 
+      - name: Test portable infrastructure contracts
+        run: |
+          python ../../scripts/test_infra_contracts.py
+          python ../../scripts/test_browser_fixture.py
+
       - name: Run backend unit tests
         run: python -m unittest discover -s tests -v
+
+      - name: Check generated API documentation
+        run: |
+          python ../../scripts/export_api_contracts.py
+          git -C ../.. diff --exit-code -- docs/api-contracts.json docs/api-route-index.md
 
   integration:
     name: Timescale, Redis, and migrations
@@ -168,10 +192,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: apps/api/requirements.txt
+          cache-dependency-path: apps/api/requirements.lock
 
       - name: Install backend dependencies
-        run: python -m pip install --disable-pip-version-check -r requirements.txt
+        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements.lock
 
       - name: Apply migrations
         run: python -m app.migrations.runner
@@ -192,6 +216,11 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5432/nerkhbaan_ci
         run: python -m unittest tests.test_auth_refresh_rotation.RefreshRotationPostgresTests -v
+
+      - name: Prove browser fixture isolation and cleanup
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5432/nerkhbaan_ci
+        run: python ../../scripts/test_browser_fixture.py
 
       - name: Run route-level integration smoke
         env:
@@ -241,7 +270,7 @@ jobs:
         run: |
           # The edge config is mounted at runtime, so a syntax error would only
           # surface on deploy. Check every proxy config against real nginx.
-          docker run --rm             -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro"             -v "$PWD/nginx/security-headers.inc:/etc/nginx/security-headers.inc:ro"             -v "$PWD/nginx/security-headers-admin.inc:/etc/nginx/security-headers-admin.inc:ro"             --entrypoint sh nginx:1.30.4-alpine3.24 -c             'mkdir -p /etc/nginx/ssl/live/nerkhbaan.ir /etc/nginx/ssl/live/admin.nerkhbaan.ir              && for host in nerkhbaan.ir admin.nerkhbaan.ir; do                   openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=$host"                     -keyout "/etc/nginx/ssl/live/$host/privkey.pem"                     -out "/etc/nginx/ssl/live/$host/fullchain.pem" >/dev/null 2>&1;                 done              && nginx -t'
+          docker run --rm --add-host backend:127.0.0.1 --add-host frontend:127.0.0.1 --add-host admin-frontend:127.0.0.1             -v "$PWD/nginx/nginx.conf:/etc/nginx/nginx.conf:ro"             -v "$PWD/nginx/security-headers.inc:/etc/nginx/security-headers.inc:ro"             -v "$PWD/nginx/security-headers-admin.inc:/etc/nginx/security-headers-admin.inc:ro"             --entrypoint sh nginx:1.30.4-alpine3.24 -c             'mkdir -p /etc/nginx/ssl/live/nerkhbaan.ir /etc/nginx/ssl/live/admin.nerkhbaan.ir              && for host in nerkhbaan.ir admin.nerkhbaan.ir; do                   openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj "/CN=$host"                     -keyout "/etc/nginx/ssl/live/$host/privkey.pem"                     -out "/etc/nginx/ssl/live/$host/fullchain.pem" >/dev/null 2>&1;                 done              && nginx -t'
           for app in web admin-web; do
             docker run --rm               -v "$PWD/apps/$app/nginx.conf:/etc/nginx/conf.d/default.conf:ro"               -v "$PWD/apps/$app/security-headers.conf:/etc/nginx/security-headers.inc:ro"               nginx:1.30.4-alpine3.24 nginx -t
           done
@@ -316,7 +345,7 @@ jobs:
       - name: Install locked dependencies
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
-          python -m pip install --disable-pip-version-check -r apps/api/requirements.txt
+          python -m pip install --disable-pip-version-check --require-hashes -r apps/api/requirements.lock
           npx playwright install --with-deps chromium
       - name: Apply migrations
         working-directory: apps/api
@@ -331,6 +360,18 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python audit runtime
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Audit exact Python locks
+        run: |
+          python -m venv /tmp/nerkhbaan-audit-tools
+          /tmp/nerkhbaan-audit-tools/bin/python -m pip install --disable-pip-version-check pip-audit==2.10.1
+          /tmp/nerkhbaan-audit-tools/bin/python -m pip_audit --strict --disable-pip --require-hashes -r apps/api/requirements.lock
+          /tmp/nerkhbaan-audit-tools/bin/python -m pip_audit --strict --disable-pip --require-hashes -r apps/telegram_worker/requirements.lock
 
       - name: Test operator evidence verifier
         shell: pwsh
@@ -398,6 +439,12 @@ jobs:
           - component: telegram
             context: ./apps/telegram_worker
             dockerfile: ./apps/telegram_worker/Dockerfile
+          - component: feed-pull
+            context: ./apps/price-feed-pull
+            dockerfile: ./apps/price-feed-pull/Dockerfile
+          - component: relay
+            context: ./infra/relay
+            dockerfile: ./infra/relay/Dockerfile
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

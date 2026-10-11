@@ -1,125 +1,49 @@
-# External price feeds
+# External Pricing Transports — 2.8.0
 
-## Preferred Git pull route
+Updated: 2026-10-11. Choose a transport based on a fresh test from the intended host.
+Neither a relay nor a worker grants provider usage or redistribution rights.
 
-Use this route when the Iran host cannot open public market APIs and a foreign
-host cannot reach `nerkhbaan.ir`. It needs no permanent foreign VPS.
+## Public Git feed
 
-1. `.github/workflows/price-feed.yml` runs immediately when its workflow or
-   builder changes on the default branch, then every five minutes. It reads
-   XAG/USD from Gold API Free and BTC/USD plus USDT/USD from CoinGecko.
-2. `scripts/build-price-feed.py` rejects changed units, missing routes, stale
-   timestamps, non-numeric values, and values outside instrument safety ranges.
-3. The workflow force-replaces the orphan `price-feed` branch. The branch always
-   has one small commit, so feed history cannot grow without bound.
-4. `price-feed-pull` uses Git smart HTTP over `github.com`, the GitHub route
-   verified reachable from the Iran host. It repeats route, timestamp, and price
-   checks, signs the exact ingest body with HMAC-SHA256, presents the trusted
-   public Host, and posts inside the Compose network. Every Git pull has a hard
-   60-second deadline; a failed pull is retried on the next interval.
-5. The core accepts only `gold_api_free_xag -> XAG_USD_OZ`,
-   `coingecko_btc -> BTC_USD`, and `coingecko_usdt -> USDT_USD`.
-   Relay records use a bounded parser version; upstream parser identity is kept
-   in record metadata.
+`.github/workflows/price-feed.yml` builds a normalized public feed every five minutes.
+It validates source currency, ranges and original observation timestamps. The maximum accepted
+observation age is 600 seconds in the producer and Go consumer. Publication time is not source time.
+Silver routes remain separate from Iranian physical silver. Crypto routes are BTC/USD and USDT/USD.
 
-The live contract is deliberately narrow. Feed and quote timestamps must be at
-most ten minutes old when the Iran pull service and API receive them. Accepted
-current quotes preserve the vendor observation timestamp, but start a bounded
-receive-time window: up to five minutes for XAG/USD and six minutes for BTC/USD
-and USDT/USD. Direct providers keep their own shorter provider windows.
+The bot publishes only `prices.json` in a one-commit orphan `price-feed` branch using force-with-lease.
+Enable lease-protected replacement for this bot/output branch only. A branch protection rule that rejects
+replacement must be adjusted by the repository owner or publication will fail. Source branches remain protected.
+Previous output commits are not a history store; canonical history is persisted by the core.
 
-The sidecar receives only `PRICING_WORKER_SHARED_SECRET`. It receives no
-database URL, Redis URL, user data, or admin credential. Its filesystem is
-read-only except for a 32 MB temporary directory, all Linux capabilities are
-dropped, and it runs as uid/gid 1000. The production service uses the verified
-Shecan resolvers `178.22.122.100` and `185.51.200.2`; replace both addresses in
-`docker-compose.prod.yaml` and retest HTTPS from the container if that DNS
-service changes.
-
-### Enable and verify
-
-The scheduled workflow must exist on the repository default branch. Run it once
-manually after first merge, then verify the `price-feed` branch contains only
-`prices.json`.
-
-Production proof on 2026-09-19: release 2.7.3 accepted a fresh three-route feed,
-reported live silver USD/Toman values, and returned two persisted 30-day silver
-chart points. Hosted run `35443623670` completed successfully after publication
-changed from a rejected force update to a normal fast-forward update. Continue
-to monitor later scheduled runs; one success is not long-term availability proof.
-
-Build and start through the production stack:
+`apps/price-feed-pull` fetches the feed and signs approved records for the core. The sidecar has no
+DB, Redis, user or admin credentials. Its only application credential is PRICING_WORKER_SHARED_SECRET.
+Inspect scheduled workflow success and consumer acceptance, not just the process being up.
 
 ```bash
-APP_IMAGE_TAG=release-tag docker compose -f docker-compose.prod.yaml build price-feed-pull
-APP_IMAGE_TAG=release-tag docker compose -f docker-compose.prod.yaml up -d --no-deps price-feed-pull
 docker compose -f docker-compose.prod.yaml logs --tail 40 price-feed-pull
-```
-
-Expected log: `price feed accepted at ...`. Then verify:
-
-```bash
 curl -fsS https://nerkhbaan.ir/api/instruments/XAG_USD_OZ
-curl -fsS https://nerkhbaan.ir/api/instruments/SILVER_999_TOMAN_GRAM
 curl -fsS 'https://nerkhbaan.ir/api/prices/silver/history?timeframe=30d'
 ```
 
-From 2.7.0 the public relay first requests Gold API Free XAG and falls back to
-`https://xaus.com/api/v1/spot?compact=1`. XAUS is accepted only when its
-`data_state.status` is `fresh`, the observation is no older than 15 minutes,
-and `silver_usd_oz` passes the bounded XAG range. The emitted provider identity
-is `xaus_xag`; it is never mislabeled as the original source.
+Expected consumer log: `price feed accepted at ...`. Then check source observation, unit,
+persistence and current validity. An accepted feed does not guarantee every instrument is available.
+To stop the transport, stop only price-feed-pull; preserve stored prices and let them age normally.
 
-Disable only the relay if it fails. Stored prices remain and age normally:
+## Signed push worker
 
-```bash
-docker compose -f docker-compose.prod.yaml stop price-feed-pull
-```
+`infra/price-worker/worker.py` is a restricted worker for a managed external host.
+Use the tracked systemd service/timer and a root-owned private environment file, mode 600.
+Set endpoint to the HTTPS `/api/internal/pricing-worker` URL; store a shared random secret of at least 32 characters.
+Worker state is per-asset JSON under NERKHBAAN_WORKER_STATE_FILE and records acknowledged progress.
+Never share the secret, session credentials, environment file or state through the public feed.
 
-If the API vendor changes, edit only `scripts/build-price-feed.py`, retain the
-same normalized feed contract, add a parser test, and run the workflow manually.
-If GitHub connectivity changes, replace the repository URL or the pull transport
-in `apps/price-feed-pull`; do not weaken the core HMAC or route allowlist.
-
-## Purpose
-
-The Iran application stays the public site and source of truth. A small worker outside Iran reads the permitted free CoinGecko BTC/USD and USDT/USD routes, then sends signed price records to the application. The worker never gets database, Redis, user, or admin access.
-
-This older push design remains a fallback for a managed foreign VPS. It was
-blocked in the current hosting path because neither VPS could open the needed
-direction. Prefer the Git pull route above while that network policy remains.
-
-## Trust boundary
-
-The application accepts only `coingecko_btc` for `BTC_USD` and `coingecko_usdt` for `USDT_USD`. Every request needs:
-
-- `X-Pricing-Worker-Timestamp`, within five minutes of server time.
-- `X-Pricing-Worker-Signature`, HMAC-SHA256 of `timestamp + "." + raw JSON body`.
-- a Redis replay claim. A repeated signature is rejected.
-
-Use one new random secret of at least 32 characters. Put the same value only in the core production environment and the worker environment. Never commit it, paste it in tickets, or add it to this document.
-
-## Install or replace the worker
-
-On the replacement foreign VPS, create the restricted service account and install the tracked worker files:
-
-```bash
-sudo adduser --system --group --home /var/lib/nerkhbaan-sync nerkhbaan-sync
-sudo install -d -m 750 -o nerkhbaan-sync -g nerkhbaan-sync /opt/nerkhbaan-price-worker /var/lib/nerkhbaan-price-worker
-sudo install -m 755 -o root -g root infra/price-worker/worker.py /opt/nerkhbaan-price-worker/worker.py
-sudo install -m 644 -o root -g root infra/price-worker/nerkhbaan-price-worker.service /etc/systemd/system/nerkhbaan-price-worker.service
-sudo install -m 644 -o root -g root infra/price-worker/nerkhbaan-price-worker.timer /etc/systemd/system/nerkhbaan-price-worker.timer
-```
-
-Create `/etc/nerkhbaan-price-worker.env` with mode `600`, owner `root:root`:
-
-```ini
-NERKHBAAN_WORKER_ENDPOINT=https://nerkhbaan.ir/api/internal/pricing-worker
-NERKHBAAN_WORKER_SECRET=the-shared-secret
-NERKHBAAN_WORKER_STATE_FILE=/var/lib/nerkhbaan-price-worker/history-complete
-```
-
-Enable and verify:
+Each timer run sends live data first. It requests CoinGecko `include_last_updated_at=true`, preserves
+that timestamp and rejects missing/stale observations. Missing one asset does not prevent valid others being sent.
+History runs independently, one bounded chunk per asset per run. A failed asset retains progress while other
+assets may advance. The full year may need several runs. No empty/failed history is marked complete.
+Repeated points remain idempotent in the core. The worker advances a history watermark only when
+`history_persisted` equals the historical batch size; an ignored/disabled route keeps that batch pending.
+Do not delete state during an outage.
 
 ```bash
 sudo systemctl daemon-reload
@@ -129,39 +53,30 @@ sudo systemctl status nerkhbaan-price-worker.timer --no-pager
 sudo journalctl -u nerkhbaan-price-worker.service -n 80 --no-pager
 ```
 
-The first successful run imports up to one year of daily BTC/USD and USDT/USD history. Later runs submit live records each minute. To intentionally import again after changing source policy, stop the timer, remove only `/var/lib/nerkhbaan-price-worker/history-complete`, run the service once, then re-enable the timer.
+## Core trust boundary
 
-## Core configuration
+The server uses a route-specific provider/instrument allowlist. A request needs:
 
-Add this setting to the production environment on the Iran host, using the same secret as the worker:
+- timestamp within the allowed server-clock window;
+- HMAC-SHA256 of timestamp, a dot and the exact raw JSON body;
+- X-Pricing-Worker-Timestamp and X-Pricing-Worker-Signature;
+- a Redis replay claim; repeated signed requests are rejected.
 
-```ini
-PRICING_WORKER_SHARED_SECRET=the-shared-secret
-```
+Live ingestion uses the same canonical lock, freshness, anomaly and independence rules as direct providers.
+It cannot move canonical observation backwards or replace a fresh primary with a lower-ranked worker.
+A successful ingest status proves acknowledgement, not final alert delivery.
+The Gold API XAG relay is a FALLBACK route. VERIFIER/COMPARE roles cannot publish a worker canonical.
+Live relay TTL is at most 360 seconds and is further limited by the runtime provider TTL;
+maximum original source age is 600 seconds.
+The source time and canonical expiry remain bounded; receipt time cannot fabricate freshness.
 
-Deploy the reviewed release. Verify only from trusted operator access:
+## Cutover and incident recovery
 
-```bash
-curl -fsS https://nerkhbaan.ir/api/prices/health
-curl -fsS https://nerkhbaan.ir/api/prices/btc/history?timeframe=1y
-curl -fsS https://nerkhbaan.ir/api/prices/usdt/history?timeframe=1y
-```
+1. Verify the new transport and actual fresh persisted instrument before stopping the old one.
+2. Stop the old timer/sidecar only; preserve DB, Redis and worker progress.
+3. Rotate the shared key across both ends in a controlled window using the secret store.
+4. Check timestamp/clock, 401 auth, 409 replay/conflict and 503 storage failures separately.
+5. After recovery, inspect history coverage, queue state and actual notification receipt.
 
-The history responses must contain points and report `complete` or `partial`; they must never be replaced by invented chart points.
-
-## Cutover and rollback
-
-1. Keep the old worker running until the new worker posts a successful live update and both chart endpoints have points.
-2. Disable the old timer: `sudo systemctl disable --now nerkhbaan-price-worker.timer`.
-3. Rotate the shared secret on both hosts in one short change window, then restart the worker and core services.
-4. If the new worker fails, disable its timer. Existing stored prices remain visible and age normally. Do not delete PostgreSQL, Redis, or worker state while investigating.
-
-## Routine checks
-
-```bash
-sudo systemctl list-timers nerkhbaan-price-worker.timer
-sudo journalctl -u nerkhbaan-price-worker.service --since "24 hours ago" --no-pager
-curl -fsS https://nerkhbaan.ir/api/prices/health
-```
-
-Investigate a failed timer, `401`, `409`, or `503` response before resetting state. A `401` usually means the two secrets differ; a `409` is a safe replay rejection; a `503` means the core storage or Redis needs attention.
+Historical September hosting/network observations are not claims about today's server.
+Use fresh canaries and the [release runbook](release-operations.md) for production acceptance.

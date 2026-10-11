@@ -4,7 +4,12 @@ const envApiUrl = import.meta.env.VITE_API_URL;
 const isDesktop = Boolean(window.electronAPI?.auth);
 let baseURL: string;
 if (envApiUrl || isDesktop) {
-  const clean = (envApiUrl || 'https://nerkhbaan.ir').replace(/\/api\/?$/, '');
+  const configured = isDesktop && !/^https?:\/\//.test(envApiUrl || '') ? 'https://nerkhbaan.ir' : envApiUrl;
+  const clean = (configured || 'https://nerkhbaan.ir').replace(/\/api\/?$/, '');
+  if (isDesktop) {
+    const parsed = new URL(clean);
+    if (parsed.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(parsed.hostname)) throw new Error('Desktop API requires HTTPS');
+  }
   baseURL = `${clean}/api/`;
 } else {
   baseURL = '/api/';
@@ -12,28 +17,41 @@ if (envApiUrl || isDesktop) {
 
 type SessionCredentials = { access_token: string; refresh_token: string | null };
 let desktopCredentials: SessionCredentials | null | undefined;
+let desktopCredentialRead: Promise<SessionCredentials | null> | null = null;
+let desktopCredentialGeneration = 0;
 
 async function getDesktopCredentials(): Promise<SessionCredentials | null> {
   if (!isDesktop) return null;
   if (desktopCredentials === undefined) {
-    desktopCredentials = await window.electronAPI?.auth?.getCredentials().catch(() => null) ?? null;
+    if (!desktopCredentialRead) {
+      const generation = desktopCredentialGeneration;
+      desktopCredentialRead = (async () => {
+        const stored = await window.electronAPI?.auth?.getCredentials().catch(() => null) ?? null;
+        if (generation === desktopCredentialGeneration && desktopCredentials === undefined) desktopCredentials = stored;
+        return desktopCredentials ?? null;
+      })().finally(() => { desktopCredentialRead = null; });
+    }
+    return desktopCredentialRead;
   }
   return desktopCredentials ?? null;
 }
 
 async function storeDesktopCredentials(value: SessionCredentials): Promise<void> {
   if (!isDesktop || !window.electronAPI?.auth) return;
+  const generation = ++desktopCredentialGeneration;
   await window.electronAPI.auth.setCredentials(value);
-  desktopCredentials = value;
+  if (generation === desktopCredentialGeneration) desktopCredentials = value;
 }
 
 async function clearDesktopCredentials(): Promise<void> {
+  desktopCredentialGeneration++;
   desktopCredentials = null;
   await window.electronAPI?.auth?.clearCredentials().catch(() => undefined);
 }
 
 export const apiInstance = axios.create({
   baseURL,
+  timeout: 15000,
   withCredentials: !isDesktop,
   headers: {
     'Content-Type': 'application/json',
@@ -47,18 +65,26 @@ apiInstance.interceptors.request.use(async (config) => {
 });
 
 let refreshRequest: Promise<boolean> | null = null;
+let signoutRequest: Promise<void> | null = null;
 
 async function refreshSession(): Promise<boolean> {
+  if (signoutRequest) return false;
   if (refreshRequest) return refreshRequest;
-  const credentials = await getDesktopCredentials();
-  if (isDesktop && !credentials?.refresh_token) return false;
-  refreshRequest = axios
-    .post(
+  const rotate = async (): Promise<boolean> => {
+    if (isDesktop) desktopCredentials = undefined;
+    const credentials = await getDesktopCredentials();
+    if (isDesktop && !credentials?.refresh_token) return false;
+    const options = { withCredentials: !isDesktop, timeout: 10000, headers: isDesktop ? { 'X-Client-Type': 'desktop', Authorization: `Bearer ${credentials?.access_token}` } : {} };
+    const currentSession = async () => {
+      try { await axios.get(`${baseURL}auth/me`, options); return true; } catch { return false; }
+    };
+    if (await currentSession()) return true;
+    try {
+      const { data } = await axios.post(
       `${baseURL}auth/refresh`,
       isDesktop ? { refresh_token: credentials?.refresh_token } : {},
-      { withCredentials: !isDesktop, headers: isDesktop ? { 'X-Client-Type': 'desktop' } : {} },
-    )
-    .then(async ({ data }) => {
+      options,
+      );
       if (isDesktop && data.access_token) {
         await storeDesktopCredentials({
           access_token: data.access_token,
@@ -66,8 +92,23 @@ async function refreshSession(): Promise<boolean> {
         });
       }
       return true;
-    })
-    .catch(() => false)
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 409) {
+        for (const delay of [100, 200, 400]) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+          if (isDesktop) desktopCredentials = undefined;
+          const latest = await getDesktopCredentials();
+          if (latest) options.headers = { 'X-Client-Type': 'desktop', Authorization: `Bearer ${latest.access_token}` };
+          if (await currentSession()) return true;
+        }
+      }
+      return false;
+    }
+  };
+  // Claim the promise before any credential I/O; tabs share a lock, never tokens.
+  refreshRequest = (async () => navigator.locks
+    ? navigator.locks.request('nerkhbaan-session-refresh', rotate)
+    : rotate())()
     .finally(() => {
       refreshRequest = null;
     });
@@ -84,14 +125,14 @@ apiInstance.interceptors.response.use(
   async (error) => {
     const requestConfig = error.config as (typeof error.config & { _sessionRetry?: boolean }) | undefined;
     const requestUrl = String(requestConfig?.url || '');
-    const publicAuthRequest = /auth\/(signin|signup|refresh|forgot-password|reset-password)/.test(requestUrl);
+    const publicAuthRequest = /auth\/(signin|signup|refresh|forgot-password|reset-password|signout)/.test(requestUrl);
     if (error.response?.status === 401 && requestConfig && !requestConfig._sessionRetry && !publicAuthRequest) {
       requestConfig._sessionRetry = true;
       if (await refreshSession()) return apiInstance.request(requestConfig);
     }
     let message = error.message || 'An unexpected error occurred.';
     if (error.response) {
-      if (error.response.status === 401) {
+      if (error.response.status === 401 && !publicAuthRequest) {
         window.dispatchEvent(new Event('auth-expired'));
       }
       try {
@@ -134,11 +175,13 @@ export type AuthResponse = {
 export const api = {
   auth: {
     async signin(credentials: { username_or_email: string; password: string }): Promise<AuthResponse> {
+      await signoutRequest?.catch(() => undefined);
       const { data } = await apiInstance.post<AuthResponse>('auth/signin', credentials, { headers: isDesktop ? { 'X-Client-Type': 'desktop' } : {} });
       if (isDesktop && data.access_token) await storeDesktopCredentials({ access_token: data.access_token, refresh_token: data.refresh_token ?? null });
       return data;
     },
     async signup(userData: { username: string; full_name?: string; email: string; password: string; accepted_terms: boolean; account_data_consent: boolean; policy_version: string }): Promise<AuthResponse> {
+      await signoutRequest?.catch(() => undefined);
       const { data } = await apiInstance.post<AuthResponse>('auth/signup', userData, { headers: isDesktop ? { 'X-Client-Type': 'desktop' } : {} });
       if (isDesktop && data.access_token) await storeDesktopCredentials({ access_token: data.access_token, refresh_token: data.refresh_token ?? null });
       return data;
@@ -156,12 +199,26 @@ export const api = {
     async changePassword(payload: { current_password: string; new_password: string }): Promise<void> {
       await apiInstance.post('auth/change-password', payload);
     },
-    async signout(): Promise<void> {
-      try {
-        await apiInstance.post('auth/signout');
-      } finally {
-        await clearDesktopCredentials();
-      }
+    async sessions(): Promise<UserSession[]> {
+      const { data } = await apiInstance.get<UserSession[]>('auth/sessions');
+      return data;
+    },
+    async revokeSession(id: string): Promise<void> {
+      await apiInstance.delete(`auth/sessions/${encodeURIComponent(id)}`);
+    },
+    signout(beforeSignout?: () => Promise<void>): Promise<void> {
+      if (signoutRequest) return signoutRequest;
+      signoutRequest = (async () => {
+        try {
+          try { await beforeSignout?.(); } catch { /* Session revocation must still run if push teardown fails. */ }
+          await refreshRequest?.catch(() => false);
+          const credentials = await getDesktopCredentials();
+          await apiInstance.post('auth/signout', isDesktop ? { refresh_token: credentials?.refresh_token } : {});
+        } finally {
+          await clearDesktopCredentials();
+        }
+      })().finally(() => { signoutRequest = null; });
+      return signoutRequest;
     },
   },
   support: {
@@ -484,7 +541,9 @@ export type AlertCreate = {
   notify_telegram?: boolean;
 };
 
-export type AlertUpdate = Partial<Omit<AlertCreate, 'asset' | 'alert_type'>>;
+export type AlertUpdate = Partial<Omit<AlertCreate, 'alert_type'>> & { instrument_id?: string | null };
+
+export type UserSession = { id: string; created_at: string; last_used_at: string; expires_at: string; current: boolean };
 
 export type AlertResponse = {
   id: number;

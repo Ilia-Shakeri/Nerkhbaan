@@ -176,7 +176,7 @@ export function AuthView() {
             <div className={`auth-brand-wrap flex flex-col items-center justify-center text-center transition-all duration-300 ${isLogin ? 'mb-4' : 'mb-2'}`}>
               <div className="auth-brand-logo-wrap relative z-10 mb-0 flex items-center justify-center">
                 <img 
-                  src="/icons/logo.png" 
+                  src={`${import.meta.env.BASE_URL}icons/logo.png`}
                   alt="Nerkhbaan Logo" 
                   className={`auth-brand-logo object-contain drop-shadow-2xl transition-all duration-300 ${isLogin ? 'h-28 w-28' : 'h-16 w-16'}`} 
                 />
@@ -243,11 +243,12 @@ export function AuthView() {
                 </label>
               )}
 
-              <label className={`block ${isLogin ? 'space-y-2' : 'space-y-1'}`}>
-                <span className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.password[language]}</span>
+              <div className={`block ${isLogin ? 'space-y-2' : 'space-y-1'}`}>
+                <label htmlFor="auth-password" className={`text-sm font-bold ms-4 ${isDark ? 'text-[#E9D49A]' : 'text-[#6A4E11]'}`}>{t.password[language]}</label>
                 <div className="relative">
                   <Lock size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                   <Input
+                    id="auth-password"
                     name="password"
                     autoComplete={isLogin ? 'current-password' : 'new-password'}
                     type="password" value={password} onChange={(e) => setPassword(e.target.value)}
@@ -260,7 +261,7 @@ export function AuthView() {
                     className={`${isLogin ? 'h-12' : 'h-11'} rounded-2xl pl-11 pr-14 text-left text-sm shadow-inner tracking-widest transition-all focus:ring-2 focus:ring-[#D4AF37]/50 [&::-ms-reveal]:hidden [&::-ms-clear]:hidden ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-500' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                   />
                 </div>
-              </label>
+              </div>
 
               {isLogin && (
                 <div className="flex w-full mt-2 justify-start">

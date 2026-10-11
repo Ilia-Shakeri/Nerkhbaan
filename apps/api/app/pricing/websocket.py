@@ -14,6 +14,7 @@ from ..config import settings
 from .cache import PricingRedisStore, pricing_redis
 from .instruments import INSTRUMENTS, get_instrument, legacy_asset_for_instrument
 from .models import CanonicalQuote
+from .service import instrument_pricing_service
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,9 @@ class PriceWebSocketHub:
     itself is saturated.
     """
 
-    def __init__(self, store: PricingRedisStore = pricing_redis) -> None:
+    def __init__(self, store: PricingRedisStore = pricing_redis, *, snapshot_reader=None) -> None:
         self.store = store
+        self.snapshot_reader = snapshot_reader or store.get_all_canonical
         self.heartbeat_seconds = settings.websocket_heartbeat_seconds
         self.maximum_connections = settings.websocket_max_connections_per_worker
         # A client that has sent nothing and acknowledged nothing for this long
@@ -75,6 +77,7 @@ class PriceWebSocketHub:
             pubsub = None
             try:
                 pubsub = await self.store.subscribe()
+                await self._request_resync("subscription_connected")
                 while True:
                     message = await pubsub.get_message(
                         ignore_subscribe_messages=True, timeout=5.0
@@ -93,8 +96,11 @@ class PriceWebSocketHub:
                         try:
                             queue.put_nowait(event)
                         except asyncio.QueueFull:
-                            # A stalled reader must not slow the whole fan-out.
-                            continue
+                            # Replace stale queued events with a snapshot request.
+                            # A gap must never silently leave the client behind.
+                            while not queue.empty():
+                                queue.get_nowait()
+                            queue.put_nowait({"event_type": "resync", "reason": "queue_overflow"})
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -153,6 +159,13 @@ class PriceWebSocketHub:
         finally:
             await self._unregister(connection_id)
 
+    async def _request_resync(self, reason: str) -> None:
+        async with self._guard:
+            for queue in self._clients.values():
+                while not queue.empty():
+                    queue.get_nowait()
+                queue.put_nowait({"event_type": "resync", "reason": reason})
+
     async def _event_loop(
         self,
         websocket: WebSocket,
@@ -197,6 +210,13 @@ class PriceWebSocketHub:
                 if queue_task in done:
                     event = queue_task.result()
                     queue_task = None
+                    if event.get("event_type") == "resync":
+                        snapshots = await self.snapshot_reader()
+                        await websocket.send_json({
+                            "event_type": "snapshot", "type": "snapshot", "reason": event["reason"],
+                            "prices": [self._public_event(quote) for key, quote in snapshots.items() if key in subscriptions],
+                        })
+                        continue
                     if event.get("instrument_id") in subscriptions:
                         await websocket.send_json(event)
         finally:
@@ -250,12 +270,14 @@ class PriceWebSocketHub:
                 "compatibility_asset": legacy_asset_for_instrument(quote.instrument_id),
                 "sequence": quote.sequence_number,
                 "currency": instrument.quote_currency.value,
+                "market": instrument.market.value,
                 "unit": instrument.weight_unit.value,
                 "purity": float(instrument.purity) if instrument.purity is not None else None,
+                "display_decimals": instrument.display_decimals,
                 "persistence_status": "persisted" if quote.is_persisted else "unpersisted",
             }
         )
         return payload
 
 
-price_websocket_hub = PriceWebSocketHub()
+price_websocket_hub = PriceWebSocketHub(snapshot_reader=instrument_pricing_service.get_all_canonical)

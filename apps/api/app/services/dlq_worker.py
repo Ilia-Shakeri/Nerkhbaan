@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-import re
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, or_, select, update
@@ -15,12 +14,9 @@ from ..observability import alert_delivery_total, background_failures_total
 from .alert_engine import PermanentDeliveryError
 
 logger = logging.getLogger(__name__)
-_SECRET_PATTERN = re.compile(r"(?i)(token|secret|password|authorization|cookie)=?[^\s,;]*")
-
-
 def _safe_error(exc: Exception) -> str:
-    message = _SECRET_PATTERN.sub(r"\1=[redacted]", str(exc).replace("\r", " ").replace("\n", " "))
-    return f"{type(exc).__name__}: {message}"[:500]
+    # Provider exceptions can contain URLs, credentials, or response bodies.
+    return f"{type(exc).__name__}: delivery attempt failed"
 
 
 class DLQWorker:
@@ -37,8 +33,8 @@ class DLQWorker:
                 if not job_ids:
                     await asyncio.sleep(settings.alert_worker_poll_seconds)
                     continue
-                for job_id in job_ids:
-                    await self._process_job(job_id)
+                for job_id, attempt in job_ids:
+                    await self._process_job(job_id, attempt)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -49,14 +45,14 @@ class DLQWorker:
     async def stop(self) -> None:
         self._running = False
 
-    def _claim_jobs(self, limit: int) -> list[int]:
+    def _claim_jobs(self, limit: int) -> list[tuple[int, int]]:
         db = SessionLocal()
         now = datetime.now(UTC)
         try:
             db.execute(
                 update(AlertDeliveryJob)
                 .where(
-                    AlertDeliveryJob.status == "processing",
+                    AlertDeliveryJob.status.in_(("processing", "sending")),
                     AlertDeliveryJob.updated_at < now - timedelta(minutes=5),
                 )
                 .values(status="retrying", next_retry_at=now, updated_at=now)
@@ -79,25 +75,27 @@ class DLQWorker:
                 job.attempt_count += 1
                 job.updated_at = now
             db.commit()
-            return [job.id for job in jobs]
+            return [(job.id, job.attempt_count) for job in jobs]
         except Exception:
             db.rollback()
             raise
         finally:
             db.close()
 
-    async def _process_job(self, job_id: int) -> None:
+    async def _process_job(self, job_id: int, attempt: int | None = None) -> None:
         try:
-            summary = await self.alert_engine.deliver_job(job_id)
+            summary = await self.alert_engine.deliver_job(job_id, expected_attempt=attempt)
         except Exception as exc:
             channel = await asyncio.to_thread(self._job_channel, job_id)
             alert_delivery_total.labels(channel=channel, status="failed").inc()
-            await asyncio.to_thread(self._mark_failed, job_id, exc)
+            await asyncio.to_thread(self._mark_failed, job_id, exc, attempt)
+            return
+        if summary.get("skipped"):
             return
         alert_delivery_total.labels(
             channel=str(summary.get("channel", "unknown")), status="delivered"
         ).inc()
-        await asyncio.to_thread(self._mark_delivered, job_id, summary)
+        await asyncio.to_thread(self._mark_delivered, job_id, summary, attempt)
 
     @staticmethod
     def _job_channel(job_id: int) -> str:
@@ -108,12 +106,12 @@ class DLQWorker:
         finally:
             db.close()
 
-    def _mark_delivered(self, job_id: int, summary: dict) -> None:
+    def _mark_delivered(self, job_id: int, summary: dict, attempt: int | None = None) -> None:
         db = SessionLocal()
         now = datetime.now(UTC)
         try:
-            job = db.get(AlertDeliveryJob, job_id)
-            if not job:
+            job = db.scalar(select(AlertDeliveryJob).where(AlertDeliveryJob.id == job_id).with_for_update())
+            if not job or job.status != "sending" or (attempt is not None and job.attempt_count != attempt):
                 return
             job.status = "delivered"
             job.provider_response_summary = summary
@@ -135,12 +133,12 @@ class DLQWorker:
         finally:
             db.close()
 
-    def _mark_failed(self, job_id: int, exc: Exception) -> None:
+    def _mark_failed(self, job_id: int, exc: Exception, attempt: int | None = None) -> None:
         db = SessionLocal()
         now = datetime.now(UTC)
         try:
-            job = db.get(AlertDeliveryJob, job_id)
-            if not job:
+            job = db.scalar(select(AlertDeliveryJob).where(AlertDeliveryJob.id == job_id).with_for_update())
+            if not job or job.status not in {"processing", "sending"} or (attempt is not None and job.attempt_count != attempt):
                 return
             alert = db.get(Alert, job.alert_id)
             retry_enabled = bool(alert and alert.enable_dlq)

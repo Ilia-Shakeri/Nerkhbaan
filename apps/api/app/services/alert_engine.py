@@ -30,6 +30,7 @@ from ..models import (
     UserNotification,
 )
 from ..db import SessionLocal
+from .webhook_transport import PinnedWebhookTransport
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,12 @@ def validate_webhook_url(url: str, *, resolve_dns: bool = False) -> set[str]:
         raise ValueError("Webhook URL must use HTTPS and include a host")
     if parsed.username or parsed.password:
         raise ValueError("Webhook URL credentials are not allowed")
+    try:
+        port = parsed.port if parsed.port is not None else 443
+    except ValueError as exc:
+        raise ValueError("Webhook URL port is invalid") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError("Webhook URL port is invalid")
 
     hosts: set[str] = {parsed.hostname}
     if resolve_dns:
@@ -88,7 +95,7 @@ def validate_webhook_url(url: str, *, resolve_dns: bool = False) -> set[str]:
                 item[4][0]
                 for item in socket.getaddrinfo(
                     parsed.hostname,
-                    parsed.port or 443,
+                    port,
                     type=socket.SOCK_STREAM,
                 )
             }
@@ -331,7 +338,7 @@ class AlertEngine:
         current_prices: dict[str, Any],
     ) -> list[dict[str, Any]]:
         """Trim the snapshot to the assets the alert refers to, without history."""
-        wanted: set[str] = {str(alert.asset).lower()}
+        wanted: set[str] = {str(alert.instrument_id or alert.asset).lower()}
         if alert.alert_type == "formula" and alert.formula:
             try:
                 wanted |= {
@@ -359,7 +366,7 @@ class AlertEngine:
         return Alert(
             id=row.id,
             user_id=row.user_id,
-            asset_id=row.asset,
+            asset_id=row.instrument_id.strip().upper() if row.instrument_id else row.asset,
             target_price=row.target_price,
             condition=row.condition,
             currency=row.currency_mode,
@@ -490,7 +497,8 @@ class AlertEngine:
                 return False
 
         assets = current_prices.get("assets", [])
-        asset_data = next((a for a in assets if a["asset"] == alert.asset), None)
+        asset_id = alert.instrument_id.strip().upper() if alert.instrument_id else alert.asset
+        asset_data = next((a for a in assets if a["asset"] == asset_id), None)
         if not asset_data:
             return False
 
@@ -664,19 +672,27 @@ class AlertEngine:
             values["x"] = float(alert.target_price)
         return values
 
-    async def deliver_job(self, job_id: int) -> dict[str, Any]:
+    async def deliver_job(self, job_id: int, *, expected_attempt: int | None = None) -> dict[str, Any]:
         db = SessionLocal()
         try:
-            job = db.get(AlertDeliveryJob, job_id)
+            job = db.scalar(select(AlertDeliveryJob).where(AlertDeliveryJob.id == job_id).with_for_update())
             if not job:
                 raise PermanentDeliveryError("Delivery job no longer exists")
+            if job.status != "processing" or (expected_attempt is not None and job.attempt_count != expected_attempt):
+                return {"skipped": True, "status": job.status, "channel": job.channel}
             event = db.get(AlertTriggerEvent, job.trigger_event_id)
             row = db.get(AlertModel, job.alert_id)
             if not event or not row:
                 raise PermanentDeliveryError("Alert trigger context no longer exists")
             alert = self._delivery_alert(row)
+            alert.delivery_key = job.idempotency_key
             snapshot = event.condition_snapshot
             channel = job.channel
+            # Sending is the irreversible boundary. Admin cancellation takes
+            # the same row lock and can only win before this transition.
+            job.status = "sending"
+            job.updated_at = datetime.now(UTC)
+            db.commit()
         finally:
             db.close()
 
@@ -983,12 +999,16 @@ class AlertEngine:
             return
 
         try:
-            vetted = await asyncio.to_thread(
-                validate_webhook_url, alert.webhook_url, resolve_dns=True
+            vetted = await asyncio.wait_for(
+                asyncio.to_thread(validate_webhook_url, alert.webhook_url, resolve_dns=True),
+                timeout=5.0,
             )
-            async with httpx.AsyncClient(
+            destination = urlsplit(alert.webhook_url.strip())
+            async with asyncio.timeout(10), httpx.AsyncClient(
                 timeout=5.0,
                 follow_redirects=False,
+                trust_env=False,
+                transport=PinnedWebhookTransport(destination.hostname or "", vetted, destination.port or 443),
             ) as client:
                 payload = {
                     "alert_id": alert.id,
@@ -1003,16 +1023,17 @@ class AlertEngine:
                     "price": self._current_price(alert, current_prices),
                     "price_context": self._selected_price_context(alert, current_prices),
                 }
-                response = await client.post(alert.webhook_url, json=payload)
-                self._assert_peer_was_vetted(response, vetted)
-                if 400 <= response.status_code < 500 and response.status_code != 429:
-                    raise PermanentDeliveryError(f"Webhook rejected request with status {response.status_code}")
-                response.raise_for_status()
+                headers = {"Idempotency-Key": alert.delivery_key} if getattr(alert, "delivery_key", None) else {}
+                async with client.stream("POST", alert.webhook_url, json=payload, headers=headers) as response:
+                    self._assert_peer_was_vetted(response, vetted)
+                    if 400 <= response.status_code < 500 and response.status_code != 429:
+                        raise PermanentDeliveryError(f"Webhook rejected request with status {response.status_code}")
+                    response.raise_for_status()
                 logger.info("Webhook delivered for alert_id=%s", alert.id)
         except PermanentDeliveryError:
             raise
         except Exception as e:
-            logger.error("Webhook failed for alert_id=%s: %s", alert.id, e)
+            logger.error("Webhook failed for alert_id=%s: %s", alert.id, type(e).__name__)
             raise
 
     @staticmethod
@@ -1023,16 +1044,16 @@ class AlertEngine:
         resolving it again for the actual connection.
         """
         if not vetted:
-            return
+            raise PermanentDeliveryError("Webhook destination was not vetted")
         network_stream = response.extensions.get("network_stream")
         if network_stream is None:
-            return
+            raise PermanentDeliveryError("Webhook peer is unavailable")
         try:
             peer_address = network_stream.get_extra_info("server_addr")
         except Exception:
-            return
+            raise PermanentDeliveryError("Webhook peer is unavailable")
         if not peer_address:
-            return
+            raise PermanentDeliveryError("Webhook peer is unavailable")
         if str(peer_address[0]) not in vetted:
             raise PermanentDeliveryError("Webhook host changed address mid-request")
 

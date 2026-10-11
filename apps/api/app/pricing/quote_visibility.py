@@ -2,6 +2,8 @@ from .models import CanonicalQuote, CanonicalStatus
 
 
 def allowed_current_quote(quote: CanonicalQuote) -> bool:
+    if quote.source_summary.get("historical_backfill"):
+        return False
     if quote.instrument_id not in {"GOLD_18K_TOMAN_GRAM", "GOLD_24K_TOMAN_GRAM"}:
         return True
     summary = quote.source_summary

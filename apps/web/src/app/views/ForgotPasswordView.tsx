@@ -121,7 +121,7 @@ export function ForgotPasswordView() {
             <div className="mb-8 flex flex-col items-center justify-center text-center">
               {/* Increased size to h-28 w-28 and added z-10 to stay above the title */}
               <div className="relative z-10 mb-0 flex items-center justify-center">
-                <img src="/icons/logo.png" alt="Nerkhbaan Logo" className="h-28 w-28 object-contain drop-shadow-2xl" />
+                <img src={`${import.meta.env.BASE_URL}icons/logo.png`} alt="Nerkhbaan Logo" className="h-28 w-28 object-contain drop-shadow-2xl" />
               </div>
               
               {/* Replaced IranNastaliq with the unified Noto Nastaliq font, negative top margin (-mt-3) brings it close */}

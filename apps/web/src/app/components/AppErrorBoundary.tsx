@@ -1,4 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { api } from '../services/api';
+import { readPreference } from '../legal/storage';
 
 type Props = {
   children: ReactNode;
@@ -24,8 +26,10 @@ export class AppErrorBoundary extends Component<Props, State> {
   };
 
   private signOut = () => {
-    void fetch('/api/auth/signout', { method: 'POST', credentials: 'include' })
-      .finally(() => window.location.assign('/auth'));
+    void api.auth.signout().catch(() => undefined).finally(() => {
+      if (window.electronAPI) { window.location.hash = '/auth'; window.location.reload(); }
+      else window.location.assign('/auth');
+    });
   };
 
   render() {
@@ -33,7 +37,7 @@ export class AppErrorBoundary extends Component<Props, State> {
       return this.props.children;
     }
 
-    const isPersian = document.documentElement.lang === 'fa' || localStorage.getItem('language') === 'fa';
+    const isPersian = document.documentElement.lang === 'fa' || readPreference('language') === 'fa';
 
     return (
       <main className="flex min-h-dvh items-center justify-center bg-[#050505] p-6 text-[#F2E8CC]" role="alert">

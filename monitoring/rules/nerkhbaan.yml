@@ -2,7 +2,7 @@ groups:
   - name: nerkhbaan
     rules:
       - alert: NerkhbaanApiDown
-        expr: up{job="nerkhbaan-api"} == 0
+        expr: up{job="nerkhbaan-api"} == 0 or absent(up{job="nerkhbaan-api"})
         for: 2m
         labels: {severity: critical}
         annotations:
@@ -13,6 +13,18 @@ groups:
         labels: {severity: critical}
         annotations:
           summary: Price is not usable for {{ $labels.instrument }}
+      - alert: NerkhbaanPriceExpiredByClock
+        expr: nerkhbaan_pricing_expires_timestamp_seconds < time()
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Price validity deadline passed for {{ $labels.instrument_id }}
+      - alert: NerkhbaanPricingRefreshStalled
+        expr: time() - nerkhbaan_pricing_refresh_timestamp_seconds > 180 or absent(nerkhbaan_pricing_refresh_timestamp_seconds)
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: Pricing refresh heartbeat is absent or stalled
       - alert: NerkhbaanProviderFailureRate
         expr: sum by (provider) (rate(nerkhbaan_provider_request_total{status!="success"}[10m])) / clamp_min(sum by (provider) (rate(nerkhbaan_provider_request_total[10m])), 0.001) > 0.25
         for: 10m

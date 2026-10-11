@@ -115,7 +115,7 @@ def main() -> int:
     signup = request_json(
         "POST",
         f"{base_url}/api/auth/signup",
-        payload={"username": username, "full_name": full_name, "email": email, "password": password},
+        payload={"username": username, "full_name": full_name, "email": email, "password": password, "accepted_terms": True, "account_data_consent": True, "policy_version": "2026-09-19.2"},
     )
     signup_token = signup.get("access_token")
     if not signup_token:
@@ -128,7 +128,7 @@ def main() -> int:
     duplicate = request_json(
         "POST",
         f"{base_url}/api/auth/signup",
-        payload={"username": username, "full_name": full_name, "email": email, "password": password},
+        payload={"username": username, "full_name": full_name, "email": email, "password": password, "accepted_terms": True, "account_data_consent": True, "policy_version": "2026-09-19.2"},
         expected_status=409,
     )
     require_error_detail(duplicate, "duplicate signup")
@@ -137,7 +137,7 @@ def main() -> int:
     signin = request_json(
         "POST",
         f"{base_url}/api/auth/signin",
-        payload={"username_or_email": email, "password": password},
+        payload={"username_or_email": email, "password": password, "accepted_terms": True, "account_data_consent": True, "policy_version": "2026-09-19.2"},
     )
     signin_token = signin.get("access_token")
     if not signin_token:
@@ -265,6 +265,8 @@ def main() -> int:
         raise RuntimeError("Deleted alert remained active")
 
     print("[14/14] Proving refresh-token reuse revokes the family")
+    # Same-device duplicate refreshes have a short conflict grace window.
+    time.sleep(5.1)
     reuse = request_json(
         "POST",
         f"{base_url}/api/auth/refresh",

@@ -5,7 +5,7 @@ import os
 from datetime import UTC, datetime
 
 from pydantic import ValidationError
-from sqlalchemy import func, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from ..db import SessionLocal
@@ -20,6 +20,7 @@ from .models import (
 )
 from .permissions import PERMISSION_DESCRIPTIONS, ROLE_DESCRIPTIONS, ROLE_PERMISSIONS
 from .schemas import BootstrapIdentity
+from .session_security import revoke_admin_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,14 @@ def ensure_admin_catalog(db: Session) -> None:
                 )
             ).all()
         )
+        required_ids = {permissions[key.value].id for key in required_permissions}
+        obsolete = existing_permission_ids - required_ids
+        if obsolete:
+            db.execute(delete(AdminRolePermission).where(AdminRolePermission.role_id == role.id, AdminRolePermission.permission_id.in_(obsolete)))
+        if required_ids != existing_permission_ids:
+            affected = db.scalars(select(AdminUserRole.user_id).where(AdminUserRole.role_id == role.id, AdminUserRole.is_active.is_(True))).all()
+            for user_id in affected:
+                revoke_admin_sessions(db, user_id, "role_catalog_changed")
         for permission_key in required_permissions:
             permission = permissions[permission_key.value]
             if permission.id not in existing_permission_ids:

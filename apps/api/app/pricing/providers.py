@@ -325,29 +325,27 @@ class ProviderQuoteCollector:
                 persistence_status=PersistenceStatus.UNPERSISTED,
             )
             self._apply_current_live_boundary(quote, provider, instrument)
+            freshness = self._cache_status(quote, provider, instrument)
             persistence_result = await self.persistence.persist_provider_quote(quote)
             await self.store.set_provider_quote(
                 quote, provider.operational_ttl_seconds
             )
             await self._record_success(provider, runtime, latency_ms, http_status)
             sanitized = sanitize_raw_payload(payload, _raw_payload_bound(provider))
+            failure_reason = None
+            if freshness is not FreshnessStatus.LIVE:
+                failure_reason = "source_not_live"
+            elif not persistence_result.persisted:
+                failure_reason = "source_persistence_queued" if persistence_result.queued else "source_persistence_failed"
             return QuoteFetchOutcome(
                 quote,
-                persistence_result.persisted,
+                persistence_result.persisted and freshness is FreshnessStatus.LIVE,
                 False,
                 True,
-                (
-                    None
-                    if persistence_result.persisted
-                    else (
-                        "source_persistence_queued"
-                        if persistence_result.queued
-                        else "source_persistence_failed"
-                    )
-                ),
+                failure_reason,
                 sanitized_payload=sanitized,
                 content_type=content_type,
-                cache_status=FreshnessStatus.LIVE,
+                cache_status=freshness,
             )
         except ProviderCallFailure as exc:
             if exc.http_status == 429:

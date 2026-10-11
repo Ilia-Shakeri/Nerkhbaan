@@ -1,4 +1,6 @@
-# Backend tests
+# Backend tests — 2.8.0
+
+Updated: 2026-10-11.
 
 ```bash
 cd apps/api
@@ -8,9 +10,11 @@ REDIS_URL='' \
 python -m unittest discover -s tests -v
 ```
 
-The unit suite needs no live database or Redis — `DATABASE_URL` only has to
+The ordinary unit suite needs no live database or Redis — `DATABASE_URL` only has to
 parse, and an empty `REDIS_URL` puts rate limiting into its process-local mode.
 `JWT_SECRET_KEY` must be ≥32 characters or `Settings` refuses to construct.
+An explicit loopback `TEST_DATABASE_URL` enables the separate real PostgreSQL concurrency cases.
+Their database name must identify a disposable test/CI database; they clean only their run-owned schema.
 
 Or through the repository root, alongside the frontend and build checks:
 
@@ -47,8 +51,7 @@ provider redaction, error contracts, and refresh-token family reuse.
 
 **Assert the invariant, not the snapshot.** `assertEqual(len(INSTRUMENTS), 10)`
 only proves a number did not change, and it broke the moment a legitimate
-instrument was added. `"no instrument may lack both a configured source and a
-formula"` catches the class of bug that let silver publish theoretical values
+instrument was added. `"every enabled instrument has honest coverage or an explicit unavailable state"` catches the class of bug that let silver publish theoretical values
 while every dashboard reported it healthy.
 
 **A security fix needs a test that fails without it.** `test_security_regressions.py`
@@ -58,3 +61,12 @@ the corrected one, so a future refactor cannot quietly restore it.
 **Prefer pure units.** The pricing core — instruments, canonical policy, derived
 formulas, freshness, anomaly detection — is deliberately free of I/O so it can
 be tested with plain values. Keep it that way.
+
+## Delivery regression checks (2.8.0)
+
+`test_migration_delivery.py` checks preserved TLS options, bounded advisory lock acquisition and refusal
+to call an unknown newer database schema current. Run `python ../../scripts/test_infra_contracts.py` for
+Telegram Rial/decimal/unit/hashtag/channel identity, source timestamps, independent live/history work and feed expiry.
+CI additionally tests the Go feed sidecar and builds/scans relay and feed images.
+`ci-restore-drill.sh` uses Timescale pre/post restore and compares data, chunks, hypertables and policies.
+That real service check is not replaced by local mocks.

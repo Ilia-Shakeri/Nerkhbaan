@@ -2,6 +2,36 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.8.0] - 2026-10-11
+
+### Fixed
+
+- Kept instrument currency, weight, purity and original source time through prices, charts and alerts.
+- Hardened canonical worker selection, independent anomaly verification, stale-primary fallback and Telegram validation.
+- Made history/backfill durable, resumable and gap-aware; accepted valid zero volume.
+- Hardened user/admin session lifecycle, password reset/rotation, CSRF, roles, worker jobs and delivery cancellation.
+- Connected admin policy edits to effective runtime behavior and expanded operational screens and permission checks.
+- Corrected browser push/logout, conversation/ticket races, desktop origin, links, chart CSP and asset paths.
+- Preserved migration TLS options, bounded migration lock waits and rejected unknown newer schema versions.
+- Corrected relay upstream TLS, Docker service DNS, staging subnet isolation, source timestamp feed contracts and Windows install failures.
+- Updated vulnerable HTTP/multipart dependencies and replaced the previous token package with pinned PyJWT and required-claim validation.
+- Isolated historical backfills from current snapshots, repaired legacy XAG fallback defaults and preserved explicit operator overrides.
+
+### Added
+
+- Admin TOTP/recovery flow, provider/Telegram policy controls and read-only backup status.
+- Portable infrastructure behavior tests and migration safety regression tests.
+- Go/sidecar CI gates, Timescale restore flow with data/chunk/policy comparisons and timestamp-based freshness alerts.
+- Generated complete API schema/route index, delivery acceptance matrix and verified source archive with file hashes.
+- Hashed Python runtime/development locks, exact-package vulnerability gates and guarded PostgreSQL browser fixtures.
+- Restore target ownership checks and streaming fingerprints that preserve existing databases and large histories.
+
+### Validation boundary
+
+Local results belong to the delivered commit's evidence. Container, PostgreSQL/Redis, packaged-runtime,
+provider rights/canaries and target-host production results require separate successful runs.
+This release entry is not a claim that 2.8.0 is running in production.
+
 ## [2.7.5] - 2026-09-30
 
 ### Fixed

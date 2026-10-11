@@ -7,7 +7,8 @@ import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { useAppContext } from '../context/AppContext';
-import { api, type NotificationPreferences, type TelegramDeepLink } from '../services/api';
+import { api, type NotificationPreferences, type TelegramDeepLink, type UserSession } from '../services/api';
+import { disablePushNotifications, enablePushNotifications, hasPushSubscription, pushIsConfigured, pushIsSupported } from '@/pwa/push';
 import { toast } from 'sonner';
 
 type OtpPanel = 'sms' | 'email' | null;
@@ -47,6 +48,8 @@ export function SettingsView() {
   const [telegramCodeSent, setTelegramCodeSent] = useState(false);
   const [telegramLink, setTelegramLink] = useState<TelegramDeepLink | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [pushActive, setPushActive] = useState(false);
+  const [sessions, setSessions] = useState<UserSession[]>([]);
 
   const t = {
     title: { fa: 'تنظیمات', en: 'Settings' },
@@ -85,10 +88,15 @@ export function SettingsView() {
   };
 
   useEffect(() => {
+    let active = true;
+    api.auth.sessions().then(value => { if (active) setSessions(value); }).catch(() => undefined);
+    hasPushSubscription().then(value => { if (active) setPushActive(value); }).catch(() => undefined);
     api.notifications.preferences().then((value) => {
+      if (!active) return;
       setPrefs(value);
       setTelegramId(value.telegram_id ?? '');
     }).catch((error) => toast.error(error instanceof Error ? error.message : 'Failed to load settings'));
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
@@ -128,7 +136,12 @@ export function SettingsView() {
     setPrefs((prev) => ({ ...prev, [key]: enabled }));
     setIsSaving(true);
     try {
+      if (key === 'push_app' && enabled && !await enablePushNotifications()) throw new Error(language === 'fa' ? 'اجازه اعلان داده نشد یا این مرورگر آماده نیست.' : 'Notifications are not permitted or this browser is not ready.');
       setPrefs(await api.notifications.setBasic(key, enabled));
+      if (key === 'push_app') {
+        if (!enabled) await disablePushNotifications();
+        setPushActive(enabled);
+      }
     } catch (error) {
       setPrefs(previous);
       toast.error(error instanceof Error ? error.message : 'Failed to save');
@@ -225,10 +238,13 @@ export function SettingsView() {
     }
   };
 
-  const openTelegramLink = () => {
+  const openTelegramLink = async () => {
     if (!telegramLink) return;
-    const opened = window.open(telegramLink.url, '_blank', 'noopener,noreferrer');
-    if (!opened) toast.error(t.telegramOpenFailed[language]);
+    if (window.electronAPI?.openTelegramLink) {
+      if (!await window.electronAPI.openTelegramLink(telegramLink.url)) toast.error(t.telegramOpenFailed[language]);
+      return;
+    }
+    window.open(telegramLink.url, '_blank', 'noopener,noreferrer');
   };
 
   const confirmTelegram = async () => {
@@ -292,7 +308,7 @@ export function SettingsView() {
         <Card className={cardCls}>
           <div className={rowCls}>
             <div className="flex items-center gap-4"><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><Bell size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.pushApp[language]}</span></div>
-            <Switch disabled={!prefs.push_available || isSaving} checked={prefs.push_available && prefs.push_app} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} aria-label={t.pushApp[language]} />
+            <Switch disabled={!prefs.push_available || !pushIsConfigured() || !pushIsSupported() || isSaving} checked={prefs.push_available && prefs.push_app && pushActive} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} aria-label={t.pushApp[language]} />
           </div>
           <div>
             <div className={rowCls}>
@@ -362,6 +378,20 @@ export function SettingsView() {
           <button type="button" onClick={() => navigate('/privacy')} className={`flex min-h-14 w-full items-center gap-4 p-5 text-start transition-colors active:scale-[0.995] ${isDark ? 'hover:bg-white/3' : 'hover:bg-[#D4AF37]/5'}`}><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><ShieldCheck size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.privacy[language]}</span></button>
         </Card>
       </motion.div>
+      <section aria-labelledby="sessions-heading">
+        <h2 id="sessions-heading" className={headingCls}><ShieldCheck size={22} />{language === 'fa' ? 'نشست‌های فعال' : 'Active sessions'}</h2>
+        <Card className={cardCls}>
+          {sessions.map(session => <div key={session.id} className={rowCls}>
+            <div><p>{session.current ? (language === 'fa' ? 'این دستگاه' : 'This device') : (language === 'fa' ? 'دستگاه دیگر' : 'Other device')}</p><time dateTime={session.last_used_at}>{new Date(session.last_used_at).toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}</time></div>
+            <Button disabled={session.current || isSaving} onClick={async () => {
+              setIsSaving(true);
+              try { await api.auth.revokeSession(session.id); setSessions(await api.auth.sessions()); }
+              catch (error) { toast.error(error instanceof Error ? error.message : t.saveFail[language]); }
+              finally { setIsSaving(false); }
+            }}>{language === 'fa' ? 'بستن نشست' : 'Revoke session'}</Button>
+          </div>)}
+        </Card>
+      </section>
     </div>
   );
 }

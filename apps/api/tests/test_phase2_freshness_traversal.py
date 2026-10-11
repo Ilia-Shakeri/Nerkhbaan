@@ -226,7 +226,7 @@ class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
             external_called=True,
             failure_reason="transport_error",
         )
-        accepted_quote = SimpleNamespace(provider_id=second.provider_id)
+        accepted_quote = _provider_quote(observed_at=datetime.now(UTC), instrument_id="BTC_USD", provider_id=second.provider_id)
         accepted = QuoteFetchOutcome(
             quote=accepted_quote,
             usable=True,
@@ -270,7 +270,7 @@ class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
             failure_reason="transport_error",
         )
         accepted = QuoteFetchOutcome(
-            quote=SimpleNamespace(provider_id=second.provider_id),
+            quote=_provider_quote(observed_at=datetime.now(UTC), instrument_id="BTC_USD", provider_id=second.provider_id),
             usable=True,
             from_fresh_cache=False,
             external_called=True,
@@ -528,10 +528,8 @@ class ProviderTraversalTests(unittest.IsolatedAsyncioTestCase):
             priority=2,
         )
         same_quote = SimpleNamespace(provider_id=same_family.provider_id, price=candidate.price)
-        independent_quote = SimpleNamespace(
-            provider_id=independent.provider_id,
-            price=candidate.price,
-        )
+        independent_quote = _provider_quote(observed_at=datetime.now(UTC), instrument_id="BTC_TOMAN", provider_id=independent.provider_id)
+        independent_quote.price = candidate.price
         collector = _OutcomeCollector(
             {
                 same_family.provider_id: QuoteFetchOutcome(

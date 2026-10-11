@@ -1,19 +1,42 @@
-const { app, BrowserWindow, ipcMain, safeStorage, session, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, session, shell, protocol, net } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { pathToFileURL } = require('url');
 
 const isDev = !app.isPackaged;
 
 let mainWindow = null;
 
 app.setName('Nerkhbaan');
+const profileDirectory = app.commandLine.getSwitchValue('user-data-dir');
+if (profileDirectory) {
+  const isolatedProfile = path.resolve(profileDirectory);
+  fs.mkdirSync(isolatedProfile, { recursive: true });
+  app.setPath('userData', isolatedProfile);
+}
+const ownsInstance = app.requestSingleInstanceLock();
+if (!ownsInstance) app.quit();
+app.on('second-instance', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+});
+protocol.registerSchemesAsPrivileged([{ scheme: 'nerkhbaan', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }]);
+
+const isAppUrl = (value) => {
+  try {
+    const parsed = new URL(value);
+    return isDev ? parsed.origin === 'http://localhost:5173'
+      : parsed.protocol === 'nerkhbaan:' && parsed.hostname === 'app' && !parsed.port && !parsed.username && !parsed.password && parsed.pathname === '/index.html';
+  } catch { return false; }
+};
 
 const isTrustedRenderer = (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) return false;
   const rendererUrl = event.senderFrame?.url || event.sender.getURL();
   try {
     const parsed = new URL(rendererUrl);
-    if (isDev) return parsed.origin === 'http://localhost:5173';
-    return parsed.protocol === 'file:' && path.normalize(decodeURIComponent(parsed.pathname)).endsWith(path.normalize('dist/index.html'));
+    return isAppUrl(parsed.href);
   } catch {
     return false;
   }
@@ -71,7 +94,9 @@ ipcMain.handle('auth-set-credentials', async (event, value) => {
   if (!safeStorage.isEncryptionAvailable()) throw new Error('Secure credential storage is unavailable');
   const encrypted = safeStorage.encryptString(JSON.stringify(credentials));
   await fs.promises.mkdir(path.dirname(credentialsPath()), { recursive: true });
-  await fs.promises.writeFile(credentialsPath(), encrypted, { mode: 0o600 });
+  const temporary = `${credentialsPath()}.tmp`;
+  await fs.promises.writeFile(temporary, encrypted, { mode: 0o600 });
+  await fs.promises.rename(temporary, credentialsPath());
 });
 
 ipcMain.handle('auth-clear-credentials', async (event) => {
@@ -117,20 +142,27 @@ function createWindow() {
       console.log('Make sure the Vite dev server is running on port 5173');
     });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '../dist/index.html')).catch(err => {
+    mainWindow.loadURL('nerkhbaan://app/index.html').catch(err => {
       console.error('Failed to load production build:', err);
     });
   }
 
   mainWindow.maximize();
 
-  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAppUrl(url)) void mainWindow.loadURL(url);
+    else {
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol === 'https:' && !parsed.username && !parsed.password && !parsed.port && ['t.me', 'www.tradingview.com', 'tradingview.com'].includes(parsed.hostname)) void shell.openExternal(parsed.href).catch(() => undefined);
+      } catch { /* Ignore malformed external links. */ }
+    }
+    return { action: 'deny' };
+  });
   mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
     try {
       const parsed = new URL(targetUrl);
-      const allowed = isDev
-        ? parsed.origin === 'http://localhost:5173'
-        : parsed.protocol === 'file:' && path.normalize(decodeURIComponent(parsed.pathname)).endsWith(path.normalize('dist/index.html'));
+      const allowed = isAppUrl(parsed.href);
       if (!allowed) event.preventDefault();
     } catch {
       event.preventDefault();
@@ -152,6 +184,19 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  if (!ownsInstance) return;
+  const dist = path.resolve(__dirname, '../dist');
+  protocol.handle('nerkhbaan', async request => {
+    try {
+      const url = new URL(request.url);
+      if (url.hostname !== 'app' || url.port || url.username || url.password || !['GET', 'HEAD'].includes(request.method)) return new Response(null, { status: 403 });
+      const file = path.resolve(dist, `.${decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname)}`);
+      const relative = path.relative(dist, file);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) return new Response(null, { status: 403 });
+      if (!(await fs.promises.stat(file)).isFile()) return new Response(null, { status: 404 });
+      return net.fetch(pathToFileURL(file).href);
+    } catch { return new Response(null, { status: 404 }); }
+  });
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
   createWindow();

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
+import re
 from typing import Any
 
 
@@ -47,11 +48,15 @@ def redact(value: Any, *, mask_personal: bool = False) -> Any:
         return clean
     if isinstance(value, (list, tuple, set)):
         return [redact(item, mask_personal=mask_personal) for item in value]
-    if isinstance(value, (datetime, date)):
+    if isinstance(value, datetime):
+        return (value if value.tzinfo else value.replace(tzinfo=UTC)).isoformat()
+    if isinstance(value, date):
         return value.isoformat()
     if isinstance(value, bytes):
         return "[BINARY REDACTED]"
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str):
+        return sanitize_error(value, limit=None)
+    if isinstance(value, (int, float, bool)) or value is None:
         return value
     return str(value)
 
@@ -66,8 +71,12 @@ def masked_secret_status(value: str | None) -> dict[str, bool | str | None]:
     }
 
 
-def sanitize_error(value: str | None) -> str | None:
+def sanitize_error(value: str | None, *, limit: int | None = 500) -> str | None:
     if not value:
         return None
     clean = value.replace("\r", " ").replace("\n", " ").strip()
-    return clean[:500]
+    clean = re.sub(r"(?i)(bearer\s+)[^\s,;]+", r"\1[REDACTED]", clean)
+    clean = re.sub(r"(?i)((?:password|secret|token|api[_-]?key|authorization|cookie|otp|totp|session_string)\s*[=:]\s*)[^\s,;&]+", r"\1[REDACTED]", clean)
+    clean = re.sub(r"([a-zA-Z][a-zA-Z0-9+.-]*://)[^/@\s]+:[^/@\s]+@", r"\1[REDACTED]@", clean)
+    clean = re.sub(r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "[REDACTED]", clean)
+    return clean[:limit] if limit is not None else clean

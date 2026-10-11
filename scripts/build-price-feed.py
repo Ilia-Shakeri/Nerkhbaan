@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 TIMEOUT_SECONDS = 20
 MAX_RESPONSE_BYTES = 1_000_000
 USER_AGENT = "Nerkhbaan-Public-Price-Feed/1"
+MAX_QUOTE_AGE_SECONDS = 600
 
 
 def _get_json(url: str) -> object:
@@ -42,7 +43,10 @@ def _decimal(value: object, label: str, minimum: str, maximum: str) -> Decimal:
 def _time(value: object, label: str, now: datetime, maximum_age: timedelta) -> datetime:
     if not isinstance(value, str):
         raise ValueError(f"{label} is missing")
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if parsed.tzinfo is None:
+        raise ValueError(f"{label} must include a timezone")
+    parsed = parsed.astimezone(UTC)
     if parsed > now + timedelta(minutes=5) or now - parsed > maximum_age:
         raise ValueError(f"{label} is outside the safe time window")
     return parsed
@@ -63,7 +67,7 @@ def build_feed(
         if metals.get("currency") != "USD":
             raise ValueError("Silver source currency changed")
         silver_time = _time(
-            metals.get("updatedAt"), "Silver timestamp", current, timedelta(minutes=15)
+            metals.get("updatedAt"), "Silver timestamp", current, timedelta(seconds=MAX_QUOTE_AGE_SECONDS)
         )
         silver = _decimal(metals.get("price"), "Silver price", "5", "500")
     elif silver_provider == "xaus_xag":
@@ -74,7 +78,7 @@ def build_feed(
             state.get("as_of") or metals.get("price_as_of"),
             "Silver timestamp",
             current,
-            timedelta(minutes=15),
+            timedelta(seconds=MAX_QUOTE_AGE_SECONDS),
         )
         silver = _decimal(metals.get("silver_usd_oz"), "Silver price", "5", "500")
     else:
@@ -99,7 +103,7 @@ def build_feed(
         if not isinstance(row, dict):
             raise ValueError(f"Crypto source omitted {asset}")
         observed = datetime.fromtimestamp(int(row.get("last_updated_at", 0)), UTC)
-        if observed > current + timedelta(minutes=5) or current - observed > timedelta(minutes=15):
+        if observed > current + timedelta(minutes=5) or current - observed > timedelta(seconds=MAX_QUOTE_AGE_SECONDS):
             raise ValueError(f"Crypto timestamp for {asset} is stale")
         price = _decimal(row.get("usd"), f"{asset} price", low, high)
         quotes.append(

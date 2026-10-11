@@ -6,6 +6,7 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState
 } from 'react';
 import { api, type UserProfile } from '../services/api';
@@ -42,6 +43,8 @@ export function AppProvider({
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const logoutRequest = useRef<Promise<void> | null>(null);
+  const authGeneration = useRef(0);
 
   const [language, setLanguage] = useState<Language>(() => {
     const savedLanguage = readPreference('language');
@@ -60,9 +63,11 @@ export function AppProvider({
 
   useEffect(() => {
     let active = true;
+    const generation = ++authGeneration.current;
+    const current = () => active && authGeneration.current === generation;
     api.auth.me()
       .then((user) => {
-        if (active) {
+        if (current()) {
           setIsAuthenticated(true);
           setMustChangePassword(user.must_change_password);
           // A subscription created before sign-in is stored with no account
@@ -71,13 +76,13 @@ export function AppProvider({
         }
       })
       .catch(() => {
-        if (active) {
+        if (current()) {
           setIsAuthenticated(false);
           setMustChangePassword(false);
         }
       })
       .finally(() => {
-        if (active) setAuthReady(true);
+        if (current()) setAuthReady(true);
       });
     return () => {
       active = false;
@@ -104,24 +109,30 @@ export function AppProvider({
   };
 
   const login = useCallback((user: UserProfile) => {
+    authGeneration.current++;
     setIsAuthenticated(true);
     setMustChangePassword(user.must_change_password);
     setAuthReady(true);
     void syncPushSubscription();
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(() => {
+    authGeneration.current++;
+    if (logoutRequest.current) return logoutRequest.current;
     setIsAuthenticated(false);
     setMustChangePassword(false);
     setAuthReady(true);
     // Release the browser endpoint before the session goes away, so the next
     // person to use this device does not inherit the previous user's alerts.
-    await disablePushNotifications();
-    try {
-      await api.auth.signout();
-    } catch {
-      // Local state still closes the browser session view when the server is unreachable.
-    }
+    logoutRequest.current = api.auth.signout(async () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([disablePushNotifications(), new Promise<void>(resolve => { timer = setTimeout(resolve, 4000); })]);
+      } finally { clearTimeout(timer); }
+    }).catch(() => {
+        window.dispatchEvent(new CustomEvent('api-error', { detail: { key: 'signout', message: 'Server sign-out failed. Reconnect and retry before sharing this device.' } }));
+    }).finally(() => { logoutRequest.current = null; });
+    return logoutRequest.current;
   }, []);
 
   const toggleTheme = () => {

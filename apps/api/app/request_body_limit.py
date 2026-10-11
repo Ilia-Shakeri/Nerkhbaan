@@ -13,6 +13,12 @@ class _RequestBodyTooLarge(Exception):
     pass
 
 
+def _only_body_limit_errors(error: BaseException) -> bool:
+    if isinstance(error, _RequestBodyTooLarge):
+        return True
+    return isinstance(error, BaseExceptionGroup) and all(_only_body_limit_errors(item) for item in error.exceptions)
+
+
 class RequestBodyLimitMiddleware:
     def __init__(
         self,
@@ -128,8 +134,9 @@ class RequestBodyLimitMiddleware:
 
         try:
             await self.app(scope, limited_receive, tracked_send)
-        except _RequestBodyTooLarge:
-            if response_started:
+        except BaseException as error:
+            # Task groups may wrap the receive error; unrelated failures still propagate.
+            if response_started or not _only_body_limit_errors(error):
                 raise
             await self._send_error(
                 scope,

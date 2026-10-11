@@ -19,6 +19,9 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import JSONB
+
+JSON_DOCUMENT = JSON().with_variant(JSONB, "postgresql")
 
 from ..db import Base
 
@@ -30,7 +33,7 @@ class InstrumentRecord(Base):
     base_asset: Mapped[str] = mapped_column(String(32), nullable=False)
     quote_currency: Mapped[str] = mapped_column(String(16), nullable=False)
     market: Mapped[str] = mapped_column(String(32), nullable=False)
-    region: Mapped[str] = mapped_column(String(24), nullable=False)
+    region: Mapped[str] = mapped_column(String(32), nullable=False)
     weight_unit: Mapped[str | None] = mapped_column(String(24), nullable=True)
     purity: Mapped[str | None] = mapped_column(String(16), nullable=True)
     display_decimals: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -105,7 +108,7 @@ class InstrumentProviderConfigRecord(Base):
     minimum_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
     maximum_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
     maximum_verification_depth: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
-    parser_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    parser_config: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -145,7 +148,7 @@ class ProviderQuoteRecord(Base):
     is_derived: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_suspicious: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     rejection_reason: Mapped[str | None] = mapped_column(String(240), nullable=True)
-    extra: Mapped[dict] = mapped_column("metadata", JSON, nullable=False, default=dict)
+    extra: Mapped[dict] = mapped_column("metadata", JSON_DOCUMENT, nullable=False, default=dict)
     raw_payload_reference: Mapped[str | None] = mapped_column(String(160), nullable=True)
     persistence_status: Mapped[str] = mapped_column(String(24), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -166,8 +169,8 @@ class CanonicalQuoteRecord(Base):
     price: Mapped[Decimal] = mapped_column(Numeric(24, 8), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     primary_quote_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    verification_quote_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    source_summary: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    verification_quote_ids: Mapped[list] = mapped_column(JSON_DOCUMENT, nullable=False, default=list)
+    source_summary: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, default=dict)
     candidate_price: Mapped[Decimal | None] = mapped_column(Numeric(24, 8), nullable=True)
     candidate_provider_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -221,7 +224,7 @@ class PricingVerificationRecord(Base):
         ForeignKey("instruments.instrument_id"), nullable=False, index=True
     )
     candidate_quote_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    verifier_quote_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    verifier_quote_ids: Mapped[list] = mapped_column(JSON_DOCUMENT, nullable=False, default=list)
     decision: Mapped[str] = mapped_column(String(32), nullable=False)
     tolerance_percent: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False)
     decision_reason: Mapped[str] = mapped_column(String(240), nullable=False)
@@ -239,7 +242,7 @@ class RawProviderPayloadRecord(Base):
     instrument_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     reason: Mapped[str] = mapped_column(String(32), nullable=False)
     content_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    sanitized_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    sanitized_payload: Mapped[dict | None] = mapped_column(JSON_DOCUMENT, nullable=True)
     sanitized_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     payload_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     checksum: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -263,7 +266,7 @@ class ProviderRuntimeEventRecord(Base):
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     sanitized_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    detail: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    detail: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -305,7 +308,7 @@ class PricingPersistenceEventRecord(Base):
     stream_event_id: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
     event_type: Mapped[str] = mapped_column(String(40), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
-    payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="pending")
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)

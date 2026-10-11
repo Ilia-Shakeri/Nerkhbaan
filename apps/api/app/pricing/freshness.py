@@ -78,7 +78,10 @@ def live_eligible_until(
         policy.instrument_operational_ttl_seconds,
         policy.instrument_expire_after_seconds,
     )
-    return anchor + timedelta(seconds=live_seconds)
+    return min(
+        anchor + timedelta(seconds=live_seconds),
+        _ensure_utc(source_timestamp) + timedelta(seconds=policy.maximum_source_age_seconds),
+    )
 
 
 def stale_display_until(

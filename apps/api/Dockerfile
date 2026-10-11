@@ -5,9 +5,9 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir --no-compile --index-url https://package-mirror.liara.ir/repository/pypi/simple --trusted-host package-mirror.liara.ir -r requirements.txt \
-    || pip install --no-cache-dir --no-compile -r requirements.txt
+COPY requirements.lock ./requirements.lock
+RUN pip install --no-cache-dir --no-compile --require-hashes --index-url https://package-mirror.liara.ir/repository/pypi/simple -r requirements.lock \
+    || pip install --no-cache-dir --no-compile --require-hashes -r requirements.lock
 
 COPY app ./app
 COPY db ./db

@@ -1,7 +1,9 @@
 import type { AdminProfile, JsonRecord, SigninResponse } from "./types";
 
 const configuredBase =
-  import.meta.env.VITE_ADMIN_API_URL || import.meta.env.VITE_ADMIN_API_BASE || "/api/admin";
+  import.meta.env.VITE_ADMIN_API_URL ||
+  import.meta.env.VITE_ADMIN_API_BASE ||
+  "/api/admin";
 const API_BASE = configuredBase.replace(/\/$/, "");
 const CSRF_STORAGE_KEY = "nerkhbaan_admin_csrf";
 
@@ -30,12 +32,22 @@ function saveCsrf(value: string | null): void {
   }
 }
 
+function sessionExpired(): void {
+  saveCsrf(null);
+  window.dispatchEvent(new Event("admin-session-expired"));
+}
+
 async function parseResponse(response: Response): Promise<any> {
   if (response.status === 204) return null;
   const contentType = response.headers.get("content-type") || "";
-  const payload = contentType.includes("application/json") ? await response.json() : await response.text();
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : await response.text();
   if (!response.ok) {
-    const detail = typeof payload === "object" && payload && "detail" in payload ? payload.detail : payload;
+    const detail =
+      typeof payload === "object" && payload && "detail" in payload
+        ? payload.detail
+        : payload;
     throw new ApiError(response.status, detail);
   }
   return payload;
@@ -46,6 +58,7 @@ async function refreshCsrf(): Promise<string> {
     credentials: "include",
     headers: { Accept: "application/json" },
   });
+  if (response.status === 401) sessionExpired();
   const payload = await parseResponse(response);
   saveCsrf(payload.csrf_token);
   return payload.csrf_token;
@@ -57,7 +70,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   headers.set("Accept", "application/json");
   if (init.body) headers.set("Content-Type", "application/json");
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
-    const csrf = sessionStorage.getItem(CSRF_STORAGE_KEY) || (await refreshCsrf());
+    const csrf =
+      sessionStorage.getItem(CSRF_STORAGE_KEY) || (await refreshCsrf());
     headers.set("X-CSRF-Token", csrf);
   }
   const response = await fetch(`${API_BASE}${path}`, {
@@ -66,16 +80,39 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     credentials: "include",
     headers,
   });
+  if (response.status === 401) {
+    const payload = await response
+      .clone()
+      .json()
+      .catch(() => null);
+    const message = typeof payload?.detail === "string" ? payload.detail : "";
+    const codeFailure =
+      (path.startsWith("/auth/reauthenticate") ||
+        path.startsWith("/auth/mfa")) &&
+      (message.startsWith("MFA code") || message === "Password is incorrect");
+    if (!codeFailure) sessionExpired();
+  }
   return parseResponse(response) as Promise<T>;
 }
 
 export const adminApi = {
-  async signin(identifier: string, password: string): Promise<SigninResponse> {
+  async signin(
+    identifier: string,
+    password: string,
+    mfaCode = "",
+  ): Promise<SigninResponse> {
     const response = await fetch(`${API_BASE}/auth/signin`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ identifier, password }),
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        identifier,
+        password,
+        ...(mfaCode ? { mfa_code: mfaCode } : {}),
+      }),
     });
     const payload = (await parseResponse(response)) as SigninResponse;
     saveCsrf(payload.csrf_token);
@@ -86,16 +123,25 @@ export const adminApi = {
     await refreshCsrf();
     return payload.admin;
   },
-  async reauthenticate(password: string): Promise<void> {
+  async reauthenticate(password: string, mfaCode = ""): Promise<void> {
     await request("/auth/reauthenticate", {
       method: "POST",
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({
+        password,
+        ...(mfaCode ? { mfa_code: mfaCode } : {}),
+      }),
     });
   },
-  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+  ): Promise<void> {
     await request("/auth/change-password", {
       method: "POST",
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
     });
   },
   async signout(): Promise<void> {
@@ -116,5 +162,15 @@ export const adminApi = {
   },
   patch<T = JsonRecord>(path: string, body: unknown): Promise<T> {
     return request<T>(path, { method: "PATCH", body: JSON.stringify(body) });
+  },
+  async download(path: string): Promise<Blob> {
+    const response = await fetch(`${API_BASE}${path}`, {
+      credentials: "include",
+    });
+    if (response.status === 401) sessionExpired();
+    if (!response.ok) {
+      await parseResponse(response);
+    }
+    return response.blob();
   },
 };

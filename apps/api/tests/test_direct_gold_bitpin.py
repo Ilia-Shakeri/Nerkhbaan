@@ -111,7 +111,9 @@ class DirectGoldTests(unittest.IsolatedAsyncioTestCase):
             history.latest_canonical.return_value = old
             store.get_all_canonical.return_value = {instrument: old}
             history.latest_all.return_value = {instrument: old}
-            service = InstrumentPricingService(store=store, history=history)
+            operational = AsyncMock()
+            operational.instrument.return_value = get_instrument(instrument)
+            service = InstrumentPricingService(store=store, history=history, operational=operational)
             self.assertIsNone(await service.get_canonical(instrument))
             self.assertNotIn(instrument, await service.get_all_canonical())
             direct = snapshot(instrument, {"primary_provider_id": "tala_gold24_toman"})

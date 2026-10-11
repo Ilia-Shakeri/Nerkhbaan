@@ -5,12 +5,12 @@ test('user signs up and manages an alert', async ({ page }) => {
   const email = `browser.${nonce}@example.com`;
 
   await page.addInitScript(() => localStorage.setItem('language', 'en'));
-  await page.goto('/auth');
+  await page.goto('/auth', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Sign up' }).click();
   await page.getByLabel('Display name', { exact: false }).fill('Browser Test User');
   await page.getByLabel('Username').fill(`browser_${nonce}`);
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill('BrowserPass123!');
+  await page.getByLabel('Password', { exact: true }).fill('BrowserPass123!');
   await page.getByLabel('I have read and accept the terms.').check();
   await page.getByLabel('I agree to account and security data processing', { exact: false }).check();
   await page.getByRole('button', { name: 'Create Account' }).click();
@@ -27,6 +27,7 @@ test('user signs up and manages an alert', async ({ page }) => {
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   await expect(page.getByText('$1,350')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Alert removed' }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Delete alert' }).click();
   await expect(page.getByText('No alerts yet')).toBeVisible();
 });

@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -13,7 +13,7 @@ from psycopg.rows import dict_row
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-from .parser import ParsedTelegramQuote, message_hash, normalize_text, parse_message
+from .parser import ParsedTelegramQuote, message_hash, normalize_channel_id, normalize_text, parse_message
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("telegram_worker")
@@ -137,6 +137,7 @@ def store_message(
     edited_at: datetime | None,
     text: str,
 ) -> str:
+    channel_id = normalize_channel_id(channel_id)
     digest = message_hash(text)
     with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
@@ -198,7 +199,9 @@ def store_message(
             row_id = stored["id"]
 
             allowed = set(source["allowed_instruments"] or [])
-            if age_seconds > maximum_age:
+            if message_date > now + timedelta(minutes=5):
+                results = [ParsedTelegramQuote(None, None, None, None, None, Decimal("0"), "rejected", "message_in_future")]
+            elif age_seconds > maximum_age:
                 results = [
                     ParsedTelegramQuote(
                         None, None, None, None, None, Decimal("0"), "rejected", "message_too_old"
@@ -225,9 +228,12 @@ async def main() -> None:
     client = TelegramClient(StringSession(session_string), api_id, api_hash)
 
     async def handle(event: Any) -> None:
+        if not event.is_channel:
+            return
         chat = await event.get_chat()
         username = getattr(chat, "username", None)
-        channel_id = str(getattr(chat, "id", event.chat_id))
+        # event.chat_id already uses Telegram's marked channel identity.
+        channel_id = normalize_channel_id(event.chat_id)
         outcome = await asyncio.to_thread(
             store_message,
             channel_id=channel_id,

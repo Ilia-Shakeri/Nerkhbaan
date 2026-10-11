@@ -22,6 +22,9 @@ export function AssistantView() {
   const [processingConsent, setProcessingConsent] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+  const [messageLoadError, setMessageLoadError] = useState(false);
+  const [reloadMessages, setReloadMessages] = useState(0);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -53,24 +56,36 @@ export function AssistantView() {
   };
 
   useEffect(() => {
-    refreshSessions()
+    let active = true;
+    api.insights.listSessions()
       .then((data) => {
+        if (!active) return;
+        setSessions(data);
         if (data[0]) setActiveSessionId(data[0].id);
       })
-      .catch((error) => toast.error(error instanceof Error ? error.message : t.sendFail[language]))
-      .finally(() => setIsLoading(false));
+      .catch((error) => { if (active) toast.error(error instanceof Error ? error.message : t.sendFail[language]); })
+      .finally(() => { if (active) setIsLoading(false); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
+    let active = true;
+    setMessages([]);
+    setDraft('');
+    setProcessingConsent(false);
+    setMessageLoadError(false);
     if (!activeSessionId) {
-      setMessages([]);
+      setIsLoadingMessages(false);
       return;
     }
+    setIsLoadingMessages(true);
     api.insights
       .getSession(activeSessionId)
-      .then((session) => setMessages(session.messages))
-      .catch((error) => toast.error(error instanceof Error ? error.message : t.sendFail[language]));
-  }, [activeSessionId]);
+      .then((session) => { if (active) setMessages(session.messages); })
+      .catch((error) => { if (active) { setMessageLoadError(true); toast.error(error instanceof Error ? error.message : t.sendFail[language]); } })
+      .finally(() => { if (active) setIsLoadingMessages(false); });
+    return () => { active = false; };
+  }, [activeSessionId, reloadMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -87,7 +102,7 @@ export function AssistantView() {
 
   const handleSend = async () => {
     const text = draft.trim();
-    if (!text || isSending || !processingConsent) return;
+    if (!text || isLoading || isSending || isLoadingMessages || messageLoadError || !processingConsent) return;
 
     const nextMessages: ChatMessage[] = [...messages, { role: 'user', content: text }];
     setMessages(nextMessages);
@@ -97,9 +112,10 @@ export function AssistantView() {
       const result = await api.insights.chat(nextMessages, language, activeSessionId, { processing_consent: processingConsent, policy_version: POLICY_VERSION });
       setActiveSessionId(result.session_id);
       setMessages((prev) => [...prev, { role: 'assistant', content: result.reply }]);
-      await refreshSessions();
+      await refreshSessions().catch(() => toast.error(language === 'fa' ? 'فهرست گفتگو نو نشد؛ پاسخ ذخیره شد.' : 'Chat list could not refresh; your reply was saved.'));
     } catch (error) {
       setMessages(messages);
+      setDraft(text);
       toast.error(error instanceof Error ? error.message : t.sendFail[language]);
     } finally {
       setIsSending(false);
@@ -143,7 +159,7 @@ export function AssistantView() {
           <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>{t.title[language]}</h1>
           <p className={`mt-1 text-xs ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{t.ttl[language]}</p>
         </div>
-        <Button onClick={startNewChat} className="gap-2 rounded-xl bg-[#D4AF37] text-black hover:bg-[#E8C45A]">
+        <Button disabled={isLoading || isSending} onClick={startNewChat} className="gap-2 rounded-xl bg-[#D4AF37] text-black hover:bg-[#E8C45A]">
           <MessageSquarePlus size={18} />
           {t.newChat[language]}
         </Button>
@@ -177,11 +193,11 @@ export function AssistantView() {
                       </form>
                     ) : (
                       <>
-                        <button type="button" onClick={() => setActiveSessionId(session.id)} aria-current={activeSessionId === session.id ? 'true' : undefined} className="min-h-11 min-w-0 flex-1 rounded-lg px-2 text-start">
+                        <button type="button" disabled={isSending} onClick={() => setActiveSessionId(session.id)} aria-current={activeSessionId === session.id ? 'true' : undefined} className="min-h-11 min-w-0 flex-1 rounded-lg px-2 text-start">
                           <span className={`block truncate text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{session.title}</span>
                         </button>
                         <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[#D4AF37] transition-colors hover:bg-[#D4AF37]/10 active:scale-95" onClick={() => { setRenamingId(session.id); setRenameDraft(session.title); }} aria-label={`${t.rename[language]}: ${session.title}`}><Pencil size={16} /></button>
-                        <button type="button" className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-500/10 active:scale-95" onClick={() => void deleteSession(session.id)} aria-label={`${t.delete[language]}: ${session.title}`}><Trash2 size={16} /></button>
+                        <button type="button" disabled={isSending} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-red-400 transition-colors hover:bg-red-500/10 active:scale-95" onClick={() => void deleteSession(session.id)} aria-label={`${t.delete[language]}: ${session.title}`}><Trash2 size={16} /></button>
                       </>
                     )}
                   </div>
@@ -222,6 +238,7 @@ export function AssistantView() {
 
           <div className={`border-t p-4 ${isDark ? 'border-white/10' : 'border-black/10'}`}>
             <label className={`mb-3 flex min-h-11 items-start gap-3 text-sm leading-6 ${isDark ? 'text-[#E8D9AE]' : 'text-[#3B2E13]'}`}><input type="checkbox" className="mt-1 h-5 w-5 shrink-0" checked={processingConsent} onChange={(e) => setProcessingConsent(e.target.checked)} />{language === 'fa' ? 'با ذخیره گفتگو و ارسال متن و تاریخچه به سرویس پردازش بیرونی برای پاسخ موافقم. داده شخصی یا محرمانه نمی‌فرستم. با برداشتن تیک، ارسال بعدی متوقف می‌شود.' : 'I agree to chat storage and sending text and history to external processing services for replies. I will not send personal or confidential data. Uncheck to stop further sends.'}</label>
+            {messageLoadError && <Button variant="outline" onClick={() => setReloadMessages(value => value + 1)}>{language === 'fa' ? 'بارگذاری دوباره گفتگو' : 'Reload chat'}</Button>}
             <p className="mb-3 text-sm"><Link className="underline" to="/privacy" target="_blank" rel="noopener">{language === 'fa' ? 'حریم خصوصی (برگه جدید)' : 'Privacy (new tab)'}</Link></p>
             <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); void handleSend(); }}>
               <Input
@@ -238,7 +255,7 @@ export function AssistantView() {
                 placeholder={t.placeholder[language]}
                 className={`flex-1 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414]' : 'border-[#D4AF37]/30 bg-white'}`}
               />
-              <Button type="submit" disabled={isSending || !processingConsent || !draft.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={t.send[language]}>
+              <Button type="submit" disabled={isLoading || isLoadingMessages || messageLoadError || isSending || !processingConsent || !draft.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={t.send[language]}>
                 {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
               </Button>
             </form>

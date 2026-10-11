@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
+import json
 from dataclasses import replace
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
+from collections.abc import Mapping
 
 from sqlalchemy import text
 
@@ -14,8 +15,26 @@ from .registry import PROVIDERS_BY_INSTRUMENT, ProviderDefinition
 
 
 class OperationalPricingSettings:
-    async def feature_enabled(self, key: str, default: bool | None = None) -> bool:
+    async def value(self, key: str, scope_id: str = "global", default=None):
+        try:
+            row = await asyncio.to_thread(self._setting_row, key, scope_id)
+        except Exception:
+            return default
+        if not isinstance(row, Mapping) or "value" not in row:
+            return default
+        value = row["value"]
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except ValueError:
+                return default
+        return value
+
+    async def feature_enabled(self, key: str, default: bool | None = None, *, scope_id: str = "global") -> bool:
         fallback = self._feature_default(key) if default is None else bool(default)
+        override = await self.value(key, scope_id)
+        if type(override) is bool:
+            return override
         try:
             row = await asyncio.to_thread(self._feature_flag_row, key)
         except Exception:
@@ -31,9 +50,19 @@ class OperationalPricingSettings:
         except Exception:
             return fallback
         if row is None:
-            return fallback
+            row = {
+                "operational_ttl_seconds": fallback.operational_ttl_seconds,
+                "stale_after_seconds": fallback.stale_after_seconds,
+                "expire_after_seconds": fallback.expire_after_seconds,
+                "base_anomaly_threshold_percent": fallback.base_anomaly_threshold_percent,
+                "maximum_dynamic_threshold_percent": fallback.maximum_dynamic_threshold_percent,
+                "minimum_sanity_price": fallback.minimum_price,
+                "maximum_sanity_price": fallback.maximum_price,
+                "importance": fallback.importance, "enabled": fallback.enabled,
+                "allow_derived_fallback": fallback.allow_derived_fallback,
+            }
         try:
-            return replace(
+            resolved = replace(
                 fallback,
                 operational_ttl_seconds=int(row["operational_ttl_seconds"]),
                 stale_after_seconds=int(row["stale_after_seconds"]),
@@ -52,8 +81,26 @@ class OperationalPricingSettings:
                     fallback.allow_derived_fallback and bool(row["allow_derived_fallback"])
                 ),
             )
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, InvalidOperation):
             return fallback
+        expiry = await self.value("canonical_expiry_seconds", fallback.instrument_id)
+        threshold = await self.value("anomaly_threshold_percent", fallback.instrument_id)
+        try:
+            overrides = {}
+            if expiry is not None:
+                expire = int(expiry)
+                overrides.update(
+                    expire_after_seconds=expire,
+                    stale_after_seconds=min(resolved.stale_after_seconds, expire),
+                    operational_ttl_seconds=min(resolved.operational_ttl_seconds, expire),
+                )
+            if threshold is not None:
+                base = Decimal(str(threshold))
+                overrides.update(base_anomaly_threshold_percent=base,
+                                 maximum_dynamic_threshold_percent=max(base, resolved.maximum_dynamic_threshold_percent))
+            return replace(resolved, **overrides)
+        except (TypeError, ValueError, InvalidOperation):
+            return resolved
 
     async def providers_for(
         self,
@@ -110,13 +157,61 @@ class OperationalPricingSettings:
                             budget=budget,
                         )
                     )
-                except (TypeError, ValueError):
-                    resolved.append(provider)
+                except (TypeError, ValueError, InvalidOperation):
+                    resolved.append(replace(provider, enabled=False))
             providers = tuple(sorted(resolved, key=lambda item: (item.priority, item.provider_id)))
+        effective = []
+        for provider in providers:
+            override = await self.value("provider.config", provider.provider_id, {})
+            override = override if isinstance(override, dict) else {}
+            try:
+                budget_fields = {name: int(override[name]) for name in (
+                    "requests_per_minute", "requests_per_hour", "requests_per_day",
+                    "reserved_anomaly_requests", "reserved_fallback_requests", "minimum_interval_seconds",
+                ) if name in override}
+                hourly = await self.value("provider_budget_requests_per_hour", provider.provider_id)
+                if hourly is not None:
+                    budget_fields["requests_per_hour"] = int(hourly)
+                enabled = override.get("enabled", True)
+                if type(enabled) is not bool:
+                    raise ValueError("Provider enabled setting must be boolean")
+                candidate = replace(provider,
+                    enabled=provider.enabled and enabled,
+                    role=ProviderRole(override.get("role", provider.role)),
+                    priority=int(override.get("priority", provider.priority)),
+                    trust_score=Decimal(str(override.get("trust_score", provider.trust_score))),
+                    operational_ttl_seconds=int(override.get("operational_ttl_seconds", provider.operational_ttl_seconds)),
+                    budget=replace(provider.budget, **budget_fields),
+                )
+                if (candidate.priority < 0 or candidate.operational_ttl_seconds <= 0
+                    or not candidate.trust_score.is_finite() or not 0 <= candidate.trust_score <= 1
+                    or any(getattr(candidate.budget, name) < 0 for name in (
+                        "requests_per_minute", "requests_per_hour", "requests_per_day",
+                        "reserved_anomaly_requests", "reserved_fallback_requests", "minimum_interval_seconds",
+                    ))):
+                    raise ValueError("Provider runtime settings are invalid")
+                effective.append(candidate)
+            except (TypeError, ValueError, InvalidOperation):
+                # Corrupt policy must not revive a disabled source or break other sources.
+                effective.append(replace(provider, enabled=False))
+        providers = tuple(sorted(effective, key=lambda item: (item.priority, item.provider_id)))
         if not roles:
             return providers
         allowed = set(roles)
         return tuple(provider for provider in providers if provider.role in allowed)
+
+    @staticmethod
+    def _setting_row(key: str, scope_id: str):
+        db = SessionLocal()
+        try:
+            row = db.execute(text("SELECT value FROM operational_settings WHERE key = :key AND scope_id = :scope"),
+                             {"key": key, "scope": scope_id}).mappings().first()
+            if row is None and scope_id != "global":
+                row = db.execute(text("SELECT value FROM operational_settings WHERE key = :key AND scope_id = 'global'"),
+                                 {"key": key}).mappings().first()
+            return row
+        finally:
+            db.close()
 
     @staticmethod
     def _instrument_row(instrument_id: str):
@@ -196,10 +291,9 @@ class OperationalPricingSettings:
         if key == "derived_fallback_enabled":
             return bool(settings.pricing_derived_fallback_enabled)
         if key == "comparison_visible":
-            value = os.getenv("PRICING_COMPARISON_VISIBLE")
-            if value is None:
-                return True
-            return value.strip().lower() in {"1", "true", "yes", "on"}
+            return bool(getattr(settings, "pricing_comparison_visible", True))
+        if key == "telegram_source_enabled":
+            return True
         return False
 
 

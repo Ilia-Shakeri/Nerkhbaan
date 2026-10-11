@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from ..config import settings
 from ..pricing.cache import PricingRedisUnavailable, pricing_redis
+from ..pricing.locks import PricingLeaseLost
 from ..pricing.service import PricingRefreshSuspended, instrument_pricing_service
 from ..schemas import PricingWorkerIngestRequest
 
@@ -54,9 +55,13 @@ async def ingest(request: Request) -> dict[str, int]:
             expected = _WORKER_ROUTES.get(quote.provider_id)
             if quote.instrument_id != expected:
                 raise ValueError("Worker provider does not match instrument")
-            await instrument_pricing_service.ingest_worker_quote(**quote.model_dump())
+        outcomes = []
+        for quote in payload.quotes:
+            outcomes.append(await instrument_pricing_service.ingest_worker_quote(**quote.model_dump()))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
-    except (PricingRedisUnavailable, PricingRefreshSuspended) as exc:
+    except (PricingRedisUnavailable, PricingRefreshSuspended, PricingLeaseLost) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Pricing storage unavailable") from exc
-    return {"accepted": len(payload.quotes)}
+    return {"accepted": len(payload.quotes), "published": outcomes.count("accepted"),
+            "history_persisted": outcomes.count("historical_persisted"),
+            "ignored": sum(item not in {"accepted", "historical_persisted"} for item in outcomes)}

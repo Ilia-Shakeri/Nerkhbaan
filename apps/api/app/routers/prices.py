@@ -46,6 +46,6 @@ async def get_prices(response: Response) -> PricesResponse:
 async def get_prices_health() -> PricesHealthResponse:
     payload = await legacy_pricing_adapter.health()
     detail = await pricing_health_service.detailed(authenticated=False)
-    payload["startup"]["ok"] = detail["database"] == "connected" or detail["redis"] == "connected"
+    payload["startup"]["ok"] = bool(payload["startup"]["ok"] and detail["database"] == "connected" and detail["redis"] == "connected")
     payload["refresh"] = detail["refresh"]
     return PricesHealthResponse.model_validate(payload)

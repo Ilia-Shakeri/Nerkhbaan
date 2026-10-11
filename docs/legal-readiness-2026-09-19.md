@@ -1,3 +1,5 @@
+> Historical report. Reviewed for the 2.8.0 documentation set on 2026-10-11. Dates, facts and past results below remain historical; use [delivery readiness](delivery-readiness.md) and [current status](../PROJECT_STATUS.md) for current acceptance.
+
 # Legal, privacy and accessibility readiness — 2026-09-19
 
 Current release: 2.6.1. **Limited deployment completed. Not legal clearance.**

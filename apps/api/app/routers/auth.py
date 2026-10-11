@@ -10,6 +10,8 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..admin.schemas import validate_admin_password
+from ..admin.session_security import revoke_admin_sessions, user_has_admin_role
 from ..config import settings
 from ..db import get_db
 from ..deps import get_current_user
@@ -48,6 +50,25 @@ LOGIN_FAILURE_LIMIT = 5
 LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
 ACCOUNT_LOCK_MINUTES = 15
 _DUMMY_PASSWORD_HASH = "$2a$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW"
+REFRESH_DUPLICATE_GRACE_SECONDS = 5
+
+
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
+
+
+def _account_limit(bucket: str, identity: str, limit: int, seconds: int) -> None:
+    state = rate_limit_hit(bucket, identity, limit, seconds)
+    if state.blocked:
+        _raise_rate_limit(state.retry_after)
+
+
+def _password_policy(db: Session, user: User, password: str) -> None:
+    if user_has_admin_role(db, user.id):
+        try:
+            validate_admin_password(password)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 def _raise_rate_limit(retry_after: int) -> None:
@@ -166,6 +187,7 @@ def _issue_session(
 
 
 def _revoke_user_sessions(db: Session, user_id: int, reason: str) -> None:
+    # Callers hold the user row lock before mutating credentials or sessions.
     now = datetime.now(UTC)
     db.execute(
         update(UserSession)
@@ -175,12 +197,55 @@ def _revoke_user_sessions(db: Session, user_id: int, reason: str) -> None:
     user = db.get(User, user_id)
     if user:
         user.security_version += 1
+    revoke_admin_sessions(db, user_id, "password_changed" if reason == "password_change" else reason, now=now)
 
 
 def _refresh_value(request: Request, payload: RefreshRequest | None) -> str | None:
     if payload and payload.refresh_token:
         return payload.refresh_token
     return request.cookies.get(settings.auth_refresh_cookie_name)
+
+
+def _lock_user(db: Session, user_id: int) -> User | None:
+    return db.scalar(
+        select(User).where(User.id == user_id).with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+def _lock_refresh_session(db: Session, token_hash: str) -> tuple[User | None, UserSession | None]:
+    # Every rotation and revocation locks the user first. A session-only lock
+    # cannot stop a concurrent rotation from inserting another family member.
+    owner_id = select(UserSession.user_id).where(
+        UserSession.refresh_token_hash == token_hash
+    ).scalar_subquery()
+    user = db.scalar(
+        select(User).where(User.id == owner_id).with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if user is None:
+        return None, None
+    session = db.scalar(
+        select(UserSession).where(
+            UserSession.refresh_token_hash == token_hash,
+            UserSession.user_id == user.id,
+        ).with_for_update().execution_options(populate_existing=True)
+    )
+    return user, session
+
+
+def _revoke_session_family(db: Session, session: UserSession, *, compromised: bool = False) -> None:
+    now = datetime.now(UTC)
+    values = {"revoked_at": now}
+    if compromised:
+        values["compromised_at"] = now
+    db.execute(
+        update(UserSession).where(
+            UserSession.user_id == session.user_id,
+            UserSession.token_family == session.token_family,
+            UserSession.revoked_at.is_(None),
+        ).values(**values)
+    )
 
 
 def _desktop_refresh_token(request: Request, refresh_token: str) -> str | None:
@@ -260,6 +325,7 @@ def signin(
     db: Session = Depends(get_db),
 ) -> AuthResponse:
     identifier = payload.username_or_email.strip().lower()
+    _enforce_request_limit(request, "signin-requests", "account", 30, 60)
     login_identity = f"{get_client_ip(request)}:{identifier}"
     failure_state = rate_limit_status(
         "signin-failure", login_identity, LOGIN_FAILURE_LIMIT, LOGIN_FAILURE_WINDOW_SECONDS
@@ -267,15 +333,17 @@ def signin(
     if failure_state.count >= LOGIN_FAILURE_LIMIT:
         _raise_rate_limit(failure_state.retry_after)
 
-    user = db.scalar(select(User).where((User.email == identifier) | (User.username == identifier)))
+    user = db.scalar(select(User).where((User.email == identifier) | (User.username == identifier))
+                     .with_for_update().execution_options(populate_existing=True))
     now = datetime.now(UTC)
-    if user and user.locked_until and user.locked_until > now:
+    if user and user.locked_until and _utc(user.locked_until) > now:
         _record_security_event(db, request, "signin", "locked", user.id)
         db.commit()
-        _raise_rate_limit(max(1, int((user.locked_until - now).total_seconds())))
+        _raise_rate_limit(max(1, int((_utc(user.locked_until) - now).total_seconds())))
 
     password_hash = user.password_hash if user else _DUMMY_PASSWORD_HASH
-    if not user or not verify_password(payload.password, password_hash):
+    password_valid = verify_password(payload.password, password_hash)
+    if not user or not password_valid:
         attempt = rate_limit_hit(
             "signin-failure", login_identity, LOGIN_FAILURE_LIMIT, LOGIN_FAILURE_WINDOW_SECONDS
         )
@@ -324,30 +392,32 @@ def refresh_session(
     if not raw_token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
     token_hash = hash_refresh_token(raw_token)
-    session = db.scalar(
-        select(UserSession)
-        .where(UserSession.refresh_token_hash == token_hash)
-        .with_for_update()
-    )
+    user, session = _lock_refresh_session(db, token_hash)
     now = datetime.now(UTC)
     if not session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
     if session.revoked_at is not None:
         if session.replaced_by_session_id:
-            db.execute(
-                update(UserSession)
-                .where(UserSession.token_family == session.token_family, UserSession.revoked_at.is_(None))
-                .values(revoked_at=now, compromised_at=now)
-            )
+            age = (now - _utc(session.revoked_at)).total_seconds()
+            if (
+                0 <= age <= REFRESH_DUPLICATE_GRACE_SECONDS
+                and session.ip_hash is not None
+                and session.ip_hash == hash_client_value(get_client_ip(request))
+                and session.user_agent_hash is not None
+                and session.user_agent_hash == hash_client_value(request.headers.get("user-agent"))
+            ):
+                _record_security_event(db, request, "refresh_duplicate", "ignored", session.user_id)
+                db.commit()
+                raise HTTPException(status_code=409, detail="Refresh already rotated")
+            _revoke_session_family(db, session, compromised=True)
             _record_security_event(db, request, "refresh_reuse", "blocked", session.user_id)
             db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token was revoked")
-    if session.expires_at <= now:
+    if _utc(session.expires_at) <= now:
         session.revoked_at = now
         db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token expired")
 
-    user = db.get(User, session.user_id)
     if not user or not user.is_active:
         session.revoked_at = now
         db.commit()
@@ -376,8 +446,11 @@ def forgot_password(
     db: Session = Depends(get_db),
 ):
     _enforce_request_limit(request, "password-recovery", payload.email.lower(), 5, 15 * 60)
-    user = db.scalar(select(User).where(User.email == payload.email.lower()))
+    _account_limit("password-recovery-account", payload.email.lower(), 5, 15 * 60)
+    user = db.scalar(select(User).where(User.email == payload.email.lower()).with_for_update()
+                     .execution_options(populate_existing=True))
     if user and user.is_active:
+        db.execute(update(PasswordReset).where(PasswordReset.user_id == user.id, PasswordReset.used.is_(False)).values(used=True))
         code = f"{secrets.randbelow(1_000_000):06d}"
         reset = PasswordReset(
             user_id=user.id,
@@ -410,17 +483,23 @@ def reset_password(
     attempt = rate_limit_hit("password-reset", recovery_identity, 10, 15 * 60)
     if attempt.blocked:
         _raise_rate_limit(attempt.retry_after)
-    user = db.scalar(select(User).where(User.email == payload.email.lower()))
-    if user:
+    _account_limit("password-reset-account", payload.email.lower(), 10, 15 * 60)
+    user = db.scalar(select(User).where(User.email == payload.email.lower()).with_for_update()
+                     .execution_options(populate_existing=True))
+    if user and user.is_active:
         reset = db.scalar(
             select(PasswordReset)
             .where(PasswordReset.user_id == user.id, PasswordReset.used.is_(False))
             .order_by(PasswordReset.created_at.desc())
+            .limit(1)
+            .with_for_update()
         )
-        if reset and reset.expires_at > datetime.now(UTC) and verify_password(payload.code, reset.code_hash):
+        if reset and _utc(reset.expires_at) > datetime.now(UTC) and verify_password(payload.code, reset.code_hash):
+            _password_policy(db, user, payload.new_password)
             user.password_hash = hash_password(payload.new_password)
             user.password_changed_at = datetime.now(UTC)
-            reset.used = True
+            user.must_change_password = False
+            db.execute(update(PasswordReset).where(PasswordReset.user_id == user.id, PasswordReset.used.is_(False)).values(used=True))
             _revoke_user_sessions(db, user.id, "password_reset")
             _record_security_event(db, request, "password_reset", "success", user.id)
             db.commit()
@@ -442,10 +521,16 @@ def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    _enforce_request_limit(request, "password-change", str(current_user.id), 5, 15 * 60)
+    _account_limit("password-change-account", str(current_user.id), 5, 15 * 60)
+    current_user = _lock_user(db, current_user.id)
+    if current_user is None or not current_user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is unavailable")
     if not verify_password(payload.current_password, current_user.password_hash):
         _record_security_event(db, request, "password_change", "failed", current_user.id)
         db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
+    _password_policy(db, current_user, payload.new_password)
     current_user.password_hash = hash_password(payload.new_password)
     current_user.password_changed_at = datetime.now(UTC)
     current_user.must_change_password = False
@@ -495,16 +580,18 @@ def terminate_session(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> Response:
+    user = _lock_user(db, current_user.id)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     session = db.scalar(
         select(UserSession).where(
             UserSession.id == session_id,
-            UserSession.user_id == current_user.id,
-            UserSession.revoked_at.is_(None),
-        )
+            UserSession.user_id == user.id,
+        ).with_for_update().execution_options(populate_existing=True)
     )
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    session.revoked_at = datetime.now(UTC)
+    _revoke_session_family(db, session)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -519,24 +606,28 @@ def signout(
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
+    payload: RefreshRequest | None = None,
 ) -> Response:
-    raw_refresh = request.cookies.get(settings.auth_refresh_cookie_name)
+    raw_refresh = _refresh_value(request, payload)
     session: UserSession | None = None
     if raw_refresh:
-        session = db.scalar(
-            select(UserSession).where(UserSession.refresh_token_hash == hash_refresh_token(raw_refresh))
-        )
+        _, session = _lock_refresh_session(db, hash_refresh_token(raw_refresh))
     if session is None:
         authorization = request.headers.get("authorization", "")
         raw_access = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
         claims = decode_access_claims(raw_access) if raw_access else None
         session_id = claims.get("sid") if claims else None
-        if session_id:
-            candidate = db.get(UserSession, str(session_id))
-            if candidate and str(candidate.user_id) == str(claims.get("sub")):
-                session = candidate
-    if session and session.revoked_at is None:
-        session.revoked_at = datetime.now(UTC)
+        subject = str(claims.get("sub", "")) if claims else ""
+        if session_id and subject.isascii() and subject.isdigit() and 0 < len(subject) <= 20:
+            user = _lock_user(db, int(subject))
+            if user:
+                session = db.scalar(
+                    select(UserSession).where(
+                        UserSession.id == str(session_id), UserSession.user_id == user.id,
+                    ).with_for_update().execution_options(populate_existing=True)
+                )
+    if session:
+        _revoke_session_family(db, session)
         _record_security_event(db, request, "signout", "success", session.user_id)
         db.commit()
     _clear_auth_cookies(response)

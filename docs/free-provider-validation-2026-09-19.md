@@ -1,3 +1,5 @@
+> Historical report. Reviewed for the 2.8.0 documentation set on 2026-10-11. Dates, facts and past results below remain historical; use [delivery readiness](delivery-readiness.md) and [current status](../PROJECT_STATUS.md) for current acceptance.
+
 # Public pricing validation — 2.5.1
 
 Checked from the Iranian production host on 2026-09-19. Successful keyless

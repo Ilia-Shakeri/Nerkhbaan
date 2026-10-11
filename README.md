@@ -1,418 +1,122 @@
 # Nerkhbaan
 
-2.7.4 adds a consent-gated TradingView chart, a second validated silver source,
-cleaner dashboard controls, a themed footer and refreshed legal pages.
-Limited deployment completed with owner approval; this is not legal compliance clearance.
-See [legal readiness and release blockers](docs/legal-readiness-2026-09-19.md).
-For the current Persian employer handoff plan, see
-[client delivery roadmap](docs/client-delivery-roadmap-fa.md).
+Current code release: **2.8.0**. `VERSION` is the source of release truth.
+This is a source delivery. A version in this file is not a claim about the live server.
 
-Live gold, silver, currency and crypto prices for the Iranian and international
-markets, with verified pricing, price alerts and a market assistant.
+## Components
 
-[![CI](https://github.com/your-org/nerkhbaan/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+- FastAPI API; PostgreSQL 16 with TimescaleDB; Redis with AOF.
+- React web and admin panel; Electron desktop renderer shares the web UI.
+- Instrument-based pricing, independent verification, durable history and backfill.
+- Alerts, delivery queue, dead letters, verified notification channels and support.
+- Telegram whitelist worker; signed external pricing worker; Git feed pull sidecar.
+- Nginx ingress and relay; Prometheus, Alertmanager and Grafana.
 
----
+## Start locally
 
-## What it does
+Use a supported Node/npm pair from `.github/workflows/ci.yml` and Python 3.12.
+Use a clean virtual environment. Windows uses `npm.cmd` when PowerShell blocks `npm.ps1`.
 
-Nerkhbaan publishes a **canonical price** per instrument: one value, with a
-recorded reason for why it was chosen, where it came from, and how much to trust
-it right now.
-
-That last part is the point. A price platform that shows a number without
-saying whether it is a live trade, a cached value, a disputed candidate or
-arithmetic is worse than useless to someone about to trade on it. Every price
-this API returns carries its status, its age, its source semantics and whether
-it was observed or computed.
-
-- **Multi-source verification.** Providers are ranked per refresh. A candidate
-  that deviates beyond a volatility-adaptive threshold is not published — it is
-  checked against independent sources first, and the previous value is held
-  while that happens.
-- **Explicit units.** Gold in USD is a troy ounce at 0.9999 fine on the global
-  spot market. Gold in Toman is one gram at 0.750 fine in the Iranian physical
-  market. These are different instruments and the API says so.
-- **Honest degradation.** Only eligible non-gold instruments may use labelled
-  formulas. Iranian 18K and 24K gold require separate direct quotes; missing
-  gold is unavailable, never reconstructed from another karat or an ounce.
-- **Durable alerts.** Triggers are idempotent, delivery is a work queue with
-  backoff, retry and a dead-letter path, and an alert never fires on a
-  suspicious, expired or unpersisted price.
-
----
-
-## Contents
-
-- [Architecture](#architecture)
-- [Quick start](#quick-start)
-- [Production deployment](#production-deployment)
-- [Configuration](#configuration)
-- [Operating it](#operating-it)
-- [Reading a price correctly](#reading-a-price-correctly)
-- [Documentation](#documentation)
-- [Releases](#releases)
-
----
-
-## Architecture
-
-```
-                    ┌──────────────────────────────────────┐
-   browser  ───────▶│  edge (nginx)                        │
-   admin    ───────▶│  TLS · HSTS · CSP · rate limits      │
-                    └───┬──────────────┬───────────────┬───┘
-                        │              │               │
-                 ┌──────▼─────┐  ┌─────▼──────┐  ┌─────▼────────┐
-                 │  web PWA   │  │ admin SPA  │  │  backend     │
-                 │  (nginx)   │  │  (nginx)   │  │  (FastAPI)   │
-                 └────────────┘  └────────────┘  └───┬──────┬───┘
-                                                     │      │
-                                      ┌──────────────▼──┐ ┌─▼──────────┐
-                                      │ PostgreSQL 16   │ │  Redis 7   │
-                                      │ + TimescaleDB   │ │            │
-                                      │ prices, alerts, │ │ cache      │
-                                      │ audit, history  │ │ locks      │
-                                      └─────────────────┘ │ budgets    │
-                                                          │ fan-out    │
-                                                          │ outbox     │
-                                                          └────────────┘
-```
-
-**PostgreSQL** is the system of record — canonical quotes, provider quotes,
-alerts, deliveries, audit. TimescaleDB hypertables carry the time series.
-
-**Redis is required, not a cache layer you can drop.** It holds the distributed
-refresh leases, the per-provider request budgets, the WebSocket fan-out and the
-persistence outbox. Its eviction policy is `noeviction`: if it fills, refreshes
-stop rather than silently losing writes.
-
-Background work runs as three independent loops — price refresh, alert
-evaluation, and maintenance — so a slow upstream provider cannot stall alert
-delivery.
-
----
-
-## Quick start
-
-Local development, five minutes:
-
-```bash
-git clone <repository-url> Nerkhbaan && cd Nerkhbaan
-cp .env.example .env
-```
-
-Set `POSTGRES_PASSWORD`, a matching `DATABASE_URL`, and a `JWT_SECRET_KEY` of at
-least 32 random characters. Then:
-
-```bash
-docker compose up -d postgres redis
-npm ci
-
+```powershell
+Copy-Item .env.example .env
+npm.cmd ci
 cd apps/api
-python -m venv venv && source venv/bin/activate
-pip install -r requirements-dev.txt
-MIGRATIONS_DIR="$PWD/db/migrations" python -m app.migrations.runner
-cd ../..
-
-npm run dev:api    # http://127.0.0.1:8000
-npm run dev:web    # http://127.0.0.1:5173
+python -m venv venv
+.\venv\Scripts\python.exe -m pip install --require-hashes -r requirements-dev.lock
+.\venv\Scripts\python.exe -m pip check
 ```
 
-Full setup, conventions and troubleshooting: [`README.developer.md`](README.developer.md).
-
----
-
-## Releases
-
-Current release: **2.5.1**. The authoritative value is [`VERSION`](VERSION).
-
-Public Iranian providers and the remaining direct 24K gap are recorded in
-[`docs/free-provider-validation-2026-09-19.md`](docs/free-provider-validation-2026-09-19.md).
-Every release updates [`CHANGELOG.md`](CHANGELOG.md), package manifests and API
-health metadata together. Run this check before a release:
+Fill runtime credentials in the private `.env`. Never commit it. Do not print it.
+For Docker, review the environment first, then run from the repository root:
 
 ```bash
-npm run check:release
+docker compose -f docker-compose.yaml config --quiet
+docker compose --profile admin -f docker-compose.yaml up -d --build --wait
 ```
 
----
+Database startup uses tracked forward migrations. Do not call `create_all` on production.
+Do not edit an applied SQL migration. Do not use `down -v` during an upgrade.
 
-## Production deployment
+## Checks
 
-Ubuntu 22.04 or 24.04, non-root sudo user.
+```powershell
+npm.cmd run verify
+python scripts/test_infra_contracts.py
+```
 
-### 1. System packages and Docker
+Local checks and CI check different environments. Read [delivery readiness](docs/delivery-readiness.md)
+for the exact commands, output markers and required target-host proof. Browser discovery is not execution.
+
+## Read prices correctly
+
+A price belongs to one instrument, currency, weight unit, purity, market and source time.
+`XAU_USD_OZ` is USD per troy ounce. `GOLD_18K_TOMAN_GRAM` is Toman per gram of 18K gold.
+They are not converted by multiplying the price by an exchange rate.
+Iranian gold formulas are prohibited. Missing direct gold stays unavailable.
+Other approved derived instruments remain explicitly labelled and bounded by input validity.
+A USD/Toman leg has its own status, change percent, source, observation and expiry.
+Never treat stale, suspicious, expired, unpersisted or theoretical values as an ordinary market quote.
+History is persisted history; it is not reconstructed with today's exchange rate.
+
+## Authentication and panel
+
+Web auth uses cookies. Desktop uses a controlled `nerkhbaan://app` origin and secure credential bridge.
+Keep web, admin and desktop origins explicit; never add `null` or wildcard CORS credentials.
+The admin host uses separate session cookies, CSRF, permissions, reauthentication and TOTP MFA.
+Production Compose requires MFA enrollment by default; local settings allow an optional test setup.
+Sensitive writes require the current permission and any confirmation required by the endpoint.
+See [admin guide](docs/admin-guide.md) and the generated [route index](docs/api-route-index.md).
+
+## Production
+
+[Release operations](docs/release-operations.md) covers staging, migration, backup, restore, TLS,
+clock synchronization, rollback and final acceptance. Preserve all database and Redis volumes.
+Production API port 8000 is internal. Probe it with container `exec`, or use the HTTPS ingress.
+A separate staging project also needs a separate subnet, port set, credentials and storage.
 
 ```bash
-sudo apt update && sudo apt install -y ca-certificates curl git ufw
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker "$USER" && newgrp docker
-docker compose version
+docker compose -f docker-compose.prod.yaml exec -T backend \
+  python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready').status)"
 ```
 
-### 2. Clone and configure
-
-```bash
-git clone <repository-url> Nerkhbaan && cd Nerkhbaan
-cp .env.example .env && nano .env
-```
-
-**Required before first start:**
-
-| Variable | Notes |
-| --- | --- |
-| `COMPOSE_FILE=docker-compose.prod.yaml` | Keeps Compose on the production stack |
-| `POSTGRES_PASSWORD` | Long and random |
-| `DATABASE_URL` | Must carry the same password |
-| `JWT_SECRET_KEY` | ≥32 random characters. Startup fails otherwise. |
-| `ALLOWED_ORIGINS` | Exact public origins |
-| `ADMIN_FRONTEND_ORIGIN` | The admin host. A mismatch 403s every admin write. |
-| `TRUSTED_PROXY_IPS` | **Must match `FORWARDED_ALLOW_IPS`** — see below |
-| `ADMIN_BOOTSTRAP_*` | All four, or none |
-
-> ### Set `VAPID_PUBLIC_KEY` before you build
->
-> It is compiled into the web bundle at **image build time**, not read at
-> runtime. A frontend image built without it has web push permanently disabled
-> until the image is rebuilt.
->
-> ```bash
-> docker run --rm python:3.12-slim sh -c \
->   "pip install -q py-vapid && vapid --gen --applicationServerKey" 
-> ```
-
-> ### `TRUSTED_PROXY_IPS` must match `FORWARDED_ALLOW_IPS`
->
-> Both decide which hop may set `X-Forwarded-For`, and that value drives rate
-> limiting, the admin IP allowlist, and the hashed IP in the audit trail. If
-> they disagree, either every client shares one bucket or a caller can choose
-> their own address. The Compose network is `172.28.0.0/24`.
->
-> If you terminate TLS yourself instead of using the `edge` service, your proxy
-> must set `X-Forwarded-For` **by replacement**. `$proxy_add_x_forwarded_for`
-> appends to whatever the caller sent, leaving the head of the chain under their
-> control.
-
-### 3. Start
-
-```bash
-docker compose up -d --build
-```
-
-Brings up `postgres`, `redis`, `migrate` (runs once), `backend`, `frontend` and
-`db-backup`. `backend` waits for migrations to complete successfully.
-
-### 4. TLS and the admin host
-
-`frontend` and `backend` publish on loopback only and speak plain HTTP. The
-`edge` service terminates TLS, sets HSTS and the browser security headers,
-applies rate limits and serves the admin vhost. It is profile-gated because it
-needs certificates:
-
-```bash
-docker compose --profile edge up -d
-```
-
-It expects Let's Encrypt material at `/etc/letsencrypt` (`LETSENCRYPT_DIR`) and
-an ACME webroot at `./certbot-webroot` (`CERTBOT_WEBROOT`). Enabling the profile
-also starts `admin-frontend`.
-
-### 5. Verify
-
-```bash
-docker compose ps
-curl -fsS http://127.0.0.1:8000/api/health/ready | jq
-curl -fsS http://127.0.0.1:8000/api/prices/health | jq '{startup, refresh}'
-```
-
-`ready` is `503` unless the database is reachable **and** migrations are
-current. Check `startup.instruments_without_direct_source` — anything listed
-there is publishing formula output rather than an observed market price.
-`refresh.state` must be `healthy` before a public price release. `degraded`
-means the last cycle had no usable canonical quote; `failed` means the cycle
-raised an error.
-
-### 6. First administrator
-
-Created by the migration job from `ADMIN_BOOTSTRAP_*` when no super
-administrator exists. It is created with `must_change_password` set; sign in at
-the admin host and change it immediately.
-
-### 7. Optional: Telegram ingestion
-
-```bash
-docker compose --profile telegram up -d --build telegram-worker
-```
-
-Requires MTProto credentials. See
-[`apps/telegram_worker/telegram_setup_guide.txt`](apps/telegram_worker/telegram_setup_guide.txt).
-
----
-
-## Configuration
-
-Every setting is declared in [`apps/api/app/config.py`](apps/api/app/config.py)
-and documented in [`.env.example`](.env.example). The ones most likely to matter:
-
-### Security
-
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `JWT_SECRET_KEY` | — | ≥32 chars. Rotating invalidates all sessions. |
-| `JWT_EXPIRE_MINUTES` | `15` | Access token lifetime |
-| `AUTH_REFRESH_DAYS` | `30` | Refresh token lifetime |
-| `AUTH_COOKIE_SECURE` | `true` | Never `false` in production |
-| `AUTH_COOKIE_SAMESITE` | `strict` | |
-| `TRUSTED_PROXY_IPS` | loopback | Which hops may set `X-Forwarded-For` |
-| `METRICS_ALLOWED_NETWORKS` | loopback | `/metrics` is `404` elsewhere |
-| `ADMIN_IP_ALLOWLIST` | empty | CIDR list; empty means no IP restriction |
-| `ADMIN_SESSION_MINUTES` | `30` | 5–240 |
-| `ADMIN_REAUTH_MINUTES` | `10` | Window for destructive operations |
-
-### Pricing
-
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `PRICING_REFRESH_INTERVAL_SECONDS` | `20` | Refresh cadence |
-| `PRICING_LOCK_TTL_SECONDS` | `45` | Lease, renewed while held |
-| `PRICING_SHORT_HISTORY_RETENTION_HOURS` | `6` | Redis volatility window |
-| `PRICING_PROVIDER_ALLOWED_HOSTS` | see config | Egress allowlist |
-| `PRICING_REQUIRE_PROVIDER_KEYS` | `false` | `true` fails startup on missing keys |
-| `REDIS_MAXMEMORY` | `384mb` | Policy is `noeviction` |
-
-### Capacity
-
-| Variable | Default | Notes |
-| --- | --- | --- |
-| `DATABASE_POOL_SIZE` | `5` | Sync pool |
-| `DATABASE_ASYNC_POOL_SIZE` | `5` | Async pool |
-| `DATABASE_MAX_OVERFLOW` | `3` | Applies to both |
-
-Peak connections per API process ≈ `(pool + overflow) × 2`. Keep the total
-across all services under the server's `max_connections` (60 in the shipped
-Compose file).
-
-### Optional providers
-
-Without these, Iranian metal chains fall back to formula values:
-
-```env
-GOLDAPI_API_KEY=            # XAU/XAG spot
-METALS_DEV_API_KEY=         # spot fallback
-ALANCHAND_API_TOKEN=        # 18K gold, Toman
-TALA_API_KEY=               # Toman metals
-TALA_SILVER999_TOMAN_KEY=   # required for a real silver price
-NAVASAN_API_KEY=            # free-market USD/Toman
-NAVASAN_HTTPS_PROXY_BASE_URL=
-```
-
----
-
-## Operating it
-
-### Health
-
-| Endpoint | Use |
-| --- | --- |
-| `/api/health/live` | Liveness. Process is up. |
-| `/api/health/ready` | Readiness. Gates traffic. |
-| `/api/health` | Release, database, Redis, migration version, backlogs, refresh state |
-| `/api/prices/health` | Per-chain status, source coverage, refresh state |
-| `/metrics` | Prometheus, private networks only |
-
-### Watch these
-
-| Signal | Why |
-| --- | --- |
-| Redis `used_memory` vs `REDIS_MAXMEMORY` | `noeviction` means a full Redis stops refreshes |
-| `startup.instruments_without_direct_source` | Those chains are publishing arithmetic |
-| `dead_letter_backlog` | Alerts that exhausted retries |
-| `anomaly_count` | Open, unreviewed pricing anomalies |
-| `migration_current` | `false` means the backend will not restart cleanly |
-
-### Backups
-
-`db-backup` writes nightly to the `db_backups` volume with 7-day, 2-week and
-2-month retention. **Copy them off the host** — a volume on the same machine is
-not a backup. Restore drills are in the operator gate list.
-
-### Redis recovery
-
-[`docs/redis-recovery.md`](docs/redis-recovery.md). Redis refuses to start
-rather than silently discard an unreadable AOF file — that is deliberate.
-
-### Routine notes
-
-- Keep `.env` out of version control.
-- Rotate `JWT_SECRET_KEY` only during a planned session-invalidation window.
-- Migrations run as a separate job; the backend verifies and refuses to start if
-  they are not current. Never apply them from the running API.
-
----
-
-## Reading a price correctly
-
-If you are integrating against this API, three things matter.
-
-**1. Check the status.** Only `live`, `confirmed` and `fresh_cache` are safe to
-treat as a market price. `derived_fallback` is arithmetic. `suspicious`,
-`verifying`, `stale` and `expired` are not tradeable.
-
-**2. Check the unit.** `price_usd` and `price_toman` on the same row are
-different instruments. Use `unit_usd` and `unit_toman`.
-
-**3. Check the FX bridge on derived values.** Toman metal prices with no direct
-source are reconstructed from the international reference through a USD/Toman
-rate. When no free-market USD source is configured, USDT stands in — and USDT
-trades at a persistent premium in Iran. Those values carry:
-
-```json
-{ "fx_bridge": "usdt_proxy", "fx_bridge_is_proxy": true }
-```
-
-In a representative case that is a **3.4%** difference. Treat proxy-bridged
-values as indicative, and configure a real USD/Toman source for anything else.
-
-Full detail: [`apps/api/PRICING_SOURCES.md`](apps/api/PRICING_SOURCES.md).
-
----
+Expected marker: `200`. Also inspect the JSON readiness and pricing health; process liveness is insufficient.
+Prometheus scrapes `backend:8000/metrics` privately. Metrics are not exposed through public ingress.
 
 ## Documentation
 
-| Document | Covers |
+| Document | Use |
 | --- | --- |
-| [`PROJECT_STATUS.md`](PROJECT_STATUS.md) | What is done, what is not, what production readiness still needs |
-| [`README.developer.md`](README.developer.md) | Local setup, layout, conventions, verification |
-| [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md) | Every endpoint, auth, errors, rate limits |
-| [`apps/api/PRICING_SOURCES.md`](apps/api/PRICING_SOURCES.md) | Instruments, providers, verification, derived pricing |
-| [`docs/pricing-operations-runbook.md`](docs/pricing-operations-runbook.md) | Provider onboarding gate, canary, operator evidence |
-| [`docs/external-price-worker.md`](docs/external-price-worker.md) | Git-based public price relay, deployment, replacement and rollback |
-| [`docs/redis-recovery.md`](docs/redis-recovery.md) | Redis data safety and recovery |
-| [`docs/production-hardening-report.md`](docs/production-hardening-report.md) | Historical hardening record |
-| [`.github/security-exceptions/POLICY.md`](.github/security-exceptions/POLICY.md) | CI scan exception policy |
+| [API reference](API_DOCUMENTATION.md) | Auth, consent, prices, errors and contracts |
+| [API route index](docs/api-route-index.md) | Every generated HTTP route |
+| [API schemas](docs/api-contracts.json) | Request/response models and constraints |
+| [Admin guide](docs/admin-guide.md) | Panel options and permission workflow |
+| [Delivery fixes](docs/delivery-fixes-fa.md) | Audit findings, changes and proof boundaries |
+| [Pricing semantics](apps/api/PRICING_SOURCES.md) | Instruments, source roles and validation |
+| [Pricing runbook](docs/pricing-operations-runbook.md) | Provider onboarding and failure recovery |
+| [External workers](docs/external-price-worker.md) | Signed ingress and bounded public feed |
+| [Release operations](docs/release-operations.md) | Data-safe staging and production gates |
+| [Delivery readiness](docs/delivery-readiness.md) | Evidence matrix and remaining host checks |
+| [Project status](PROJECT_STATUS.md) | Current code and proof boundary |
+| [Changelog](CHANGELOG.md) | Historical changes; not live deployment proof |
 
-### API surface
+Dated vendor/legal reports and historical audits remain dated records. They do not replace a fresh operator check.
 
-```
-GET    /api/prices                       aggregate snapshot
-GET    /api/prices/{asset}/history       ?timeframe=1h|24h|7d|30d|1y
-GET    /api/prices/health                chain status and source coverage
-GET    /api/instruments[/{id}]           canonical instrument data
-WS     /api/ws/prices                    live canonical updates
-POST   /api/auth/signup|signin|refresh   authentication
-GET    /api/alerts                       price alerts (CRUD)
-GET    /api/providers                    provider catalogue
-GET    /api/health[/live|/ready]         health
-GET    /metrics                          Prometheus (private networks)
+## Source delivery
+
+```powershell
+python scripts/build_delivery_archive.py C:/path/outside/repository/nerkhbaan-2.8.0-source.zip
 ```
 
----
+The builder excludes private environments, keys, databases, logs, dependencies and generated artifacts.
+The ZIP contains a file hash manifest and is verified after creation. Review it before sharing.
+Runtime credentials and production data must be supplied separately through the deployment secret store.
 
-## Licence and disclaimer
+## Dependency maintenance
 
-Nerkhbaan reports market data from third-party sources. Prices may be delayed,
-incorrect or unavailable, and derived values are explicitly theoretical. Nothing
-this platform produces is investment advice. Provider redistribution rights are
-the operator's responsibility — see the onboarding gate in the operations
-runbook.
+Install Python from the hash locks, not an unbounded transitive solve. API and development locks
+are universal with Python 3.12 as the resolver baseline; Telegram has its own lock. Regenerate with
+`uv pip compile --python-version 3.12 --universal --generate-hashes` after changing a manifest, then
+run `pip check`, regressions and image scans. Lock generation is not a container-runtime test.
+CI audits the exact API and Telegram locks with pip-audit 2.10.1 before delivery.
+The frontend uses Tailwind 4. Browser baseline: Safari 16.4+, Chrome 111+, Firefox 128+.
+Test the actual supported browser/device list before expanding it.

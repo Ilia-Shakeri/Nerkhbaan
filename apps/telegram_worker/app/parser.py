@@ -34,7 +34,7 @@ class ParsedTelegramQuote:
     confidence_score: Decimal
     validation_status: str
     rejection_reason: str | None
-    parser_version: str = "strict-explicit-2"
+    parser_version: str = "strict-explicit-3"
 
 
 RULES = (
@@ -74,7 +74,7 @@ RULES = (
         None,
         None,
         ("#تتر", "تتر", "USDT"),
-        ("تومان",),
+        (),
         Decimal("1000"),
         Decimal("10000000"),
     ),
@@ -84,13 +84,28 @@ RULES = (
         None,
         None,
         ("#بیتکوین", "#بیت_کوین", "بیت کوین", "BTC"),
-        ("تومان",),
+        (),
         Decimal("1000000"),
         Decimal("100000000000"),
     ),
 )
 
-NUMBER_PATTERN = re.compile(r"(?<![\d])([\d][\d,._\s]{1,28}[\d]|[\d]{2,30})(?![\d])")
+NUMBER_PATTERN = re.compile(r"(?<![\d.])([\d]+(?:[,٬_][\d]{3})*(?:[.٫][\d]+)?)(?![\d.])")
+PARSER_TYPES = frozenset({"strict_explicit", "strict_hashtag"})
+
+
+def normalize_channel_id(value: str | int) -> str:
+    """Store Telegram channel IDs in the marked -100 form."""
+    raw = str(value).strip()
+    if not raw.lstrip("-").isdigit():
+        raise ValueError("Channel ID must be numeric")
+    if raw.startswith("-100") and len(raw) > 4:
+        return raw
+    if raw.startswith("-"):
+        raise ValueError("Expected a channel ID, not a group ID")
+    if int(raw) <= 0:
+        raise ValueError("Channel ID must be positive or marked -100")
+    return f"-100{int(raw)}"
 
 
 def normalize_text(text: str) -> str:
@@ -103,7 +118,7 @@ def message_hash(text: str) -> str:
 
 
 def _number(raw: str) -> Decimal | None:
-    compact = re.sub(r"[^\d]", "", raw)
+    compact = raw.replace(",", "").replace("٬", "").replace("_", "").replace("٫", ".")
     if not compact:
         return None
     try:
@@ -112,17 +127,24 @@ def _number(raw: str) -> Decimal | None:
         return None
 
 
-def _rule_matches(text: str, rule: InstrumentRule) -> list[Decimal]:
-    label_positions = [text.find(label) for label in rule.labels if text.find(label) >= 0]
-    if not label_positions or any(term not in text for term in rule.required_terms):
-        return []
+def _rule_matches(text: str, rule: InstrumentRule, *, hashtag: bool = False) -> list[Decimal]:
     values: list[Decimal] = []
-    for position in label_positions:
-        window = text[max(0, position - 20) : position + 180]
+    for line in text.splitlines():
+        labels = [label for label in rule.labels if label in line and (not hashtag or label.startswith("#") or f"#{label}" in line)]
+        if not labels or any(term not in line for term in rule.required_terms):
+            continue
+        has_toman = bool(re.search(r"تومان|\bTOMAN\b", line, re.IGNORECASE))
+        has_rial = bool(re.search(r"ریال|\bRIAL\b|\bIRR\b", line, re.IGNORECASE))
+        if has_toman == has_rial:
+            continue
+        position = min(line.find(label) for label in labels)
+        window = line[max(0, position - 20) : position + 180]
         for match in NUMBER_PATTERN.finditer(window):
             value = _number(match.group(1))
-            if value is not None and rule.minimum <= value <= rule.maximum:
-                values.append(value)
+            if value is not None:
+                value = value / 10 if has_rial else value
+                if rule.minimum <= value <= rule.maximum:
+                    values.append(value)
     return sorted(set(values))
 
 
@@ -134,7 +156,7 @@ def parse_message(
     minimum_confidence: Decimal,
 ) -> list[ParsedTelegramQuote]:
     normalized = normalize_text(text)
-    if parser_type not in {"strict_explicit", "strict_hashtag"}:
+    if parser_type not in PARSER_TYPES:
         return [
             ParsedTelegramQuote(
                 None, None, None, None, None, Decimal("0"), "rejected", "unsupported_parser"
@@ -145,7 +167,7 @@ def parse_message(
     for rule in RULES:
         if rule.instrument_id not in allowed_instruments:
             continue
-        values = _rule_matches(normalized, rule)
+        values = _rule_matches(normalized, rule, hashtag=parser_type == "strict_hashtag")
         if len(values) > 1:
             output.append(
                 ParsedTelegramQuote(
