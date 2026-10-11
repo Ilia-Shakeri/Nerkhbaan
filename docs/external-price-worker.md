@@ -1,14 +1,20 @@
-# External Pricing Transports — 2.8.0
+# External Pricing Transports — 2.8.1
 
 Updated: 2026-10-11. Choose a transport based on a fresh test from the intended host.
 Neither a relay nor a worker grants provider usage or redistribution rights.
 
 ## Public Git feed
 
-`.github/workflows/price-feed.yml` builds a normalized public feed every five minutes.
+`.github/workflows/price-feed.yml` requests a normalized public feed on a five-minute cron.
+That schedule is not an execution guarantee. The 2026-10-11 workflow receipts include gaps of several
+hours; a manual successful run proves one publication, not continuous price coverage.
 It validates source currency, ranges and original observation timestamps. The maximum accepted
 observation age is 600 seconds in the producer and Go consumer. Publication time is not source time.
-Silver routes remain separate from Iranian physical silver. Crypto routes are BTC/USD and USDT/USD.
+Version 1 requires its original three routes. Version 2 publishes one to four independently valid
+routes: XAG/USD per troy ounce, XAU/USD per troy ounce, BTC/USD and USDT/USD. An invalid source is
+omitted while healthy sources may still publish. No valid route means the previous feed remains;
+its original timestamps continue aging. Gold and silver spot routes remain separate from Iranian
+physical gram quotes. The XAU route cannot substitute for domestic 24-karat gold.
 
 The bot publishes only `prices.json` in a one-commit orphan `price-feed` branch using force-with-lease.
 Enable lease-protected replacement for this bot/output branch only. A branch protection rule that rejects
@@ -39,6 +45,9 @@ Never share the secret, session credentials, environment file or state through t
 
 Each timer run sends live data first. It requests CoinGecko `include_last_updated_at=true`, preserves
 that timestamp and rejects missing/stale observations. Missing one asset does not prevent valid others being sent.
+This tracked signed push worker currently supports the two crypto routes only. It does not fetch
+XAU or XAG, and no managed external host was verified during this delivery. The timer configuration
+alone does not prove scheduled execution or source coverage.
 History runs independently, one bounded chunk per asset per run. A failed asset retains progress while other
 assets may advance. The full year may need several runs. No empty/failed history is marked complete.
 Repeated points remain idempotent in the core. The worker advances a history watermark only when
@@ -65,10 +74,17 @@ The server uses a route-specific provider/instrument allowlist. A request needs:
 Live ingestion uses the same canonical lock, freshness, anomaly and independence rules as direct providers.
 It cannot move canonical observation backwards or replace a fresh primary with a lower-ranked worker.
 A successful ingest status proves acknowledgement, not final alert delivery.
-The Gold API XAG relay is a FALLBACK route. VERIFIER/COMPARE roles cannot publish a worker canonical.
+The Gold API XAG and verified XAU relay routes are FALLBACK routes. Stored runtime roles remain
+authoritative; the 2026-10-11 XAU role change was applied separately and audited. VERIFIER/COMPARE
+roles cannot publish a worker canonical. Both schema allowlists and the provider/instrument pair
+check must accept the route; a valid four-quote feed formerly failed with HTTP 422 until the XAU
+schema entries were added. Signed HTTP tests cover acceptance and rejection of an incorrect pair.
 Live relay TTL is at most 360 seconds and is further limited by the runtime provider TTL;
 maximum original source age is 600 seconds.
 The source time and canonical expiry remain bounded; receipt time cannot fabricate freshness.
+Persisted relay freshness anchors retain that vetted receive window on later reads. Current admin
+policy may shorten the stored bounds; reads cannot extend them. A cache status is not proof that
+`valid_until` is still open, and HTTP 202 is not proof that a particular quote became canonical.
 
 ## Cutover and incident recovery
 
@@ -80,3 +96,5 @@ The source time and canonical expiry remain bounded; receipt time cannot fabrica
 
 Historical September hosting/network observations are not claims about today's server.
 Use fresh canaries and the [release runbook](release-operations.md) for production acceptance.
+The [current provider coverage report](provider-coverage-2026-10-11.md) records direct-route failures,
+the uncovered 24-karat quote, original source timestamps, history pagination and acceptance receipts.

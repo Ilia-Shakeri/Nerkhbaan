@@ -5,8 +5,13 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import os
+import hashlib
+import hmac
+import json
+import time
 import unittest
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enough")
 
@@ -17,6 +22,9 @@ from app.pricing.persistence import PersistenceResult
 from app.pricing.registry import PROVIDERS
 from app.pricing.service import InstrumentPricingService
 from app.routers.pricing_worker import _WORKER_ROUTES
+from app.routers import pricing_worker
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
 
@@ -45,6 +53,61 @@ class GoldSourceContractTests(unittest.TestCase):
             with self.assertRaises(ParserError):
                 parser.parse({"symbol": "XAU", "currency": "USD", "price": 4000,
                               "updatedAt": NOW.isoformat(), **wrong}, context)
+
+
+class GoldFeedHttpContractTests(unittest.TestCase):
+    def setUp(self):
+        self.app = FastAPI()
+        self.app.include_router(pricing_worker.router)
+        self.secret = "test-worker-contract-secret-at-least-32-characters"
+        self.store = Mock()
+        self.store.client.return_value = AsyncMock()
+        self.store.client.return_value.set.return_value = True
+        self.service = AsyncMock()
+        self.service.ingest_worker_quote.return_value = "accepted"
+        self.quotes = [
+            {"instrument_id": iid, "provider_id": provider, "price": price,
+             "observed_at": NOW.isoformat(), "historical": False}
+            for iid, provider, price in (
+                ("XAG_USD_OZ", "gold_api_free_xag", "50"),
+                ("BTC_USD", "coingecko_btc", "90000"),
+                ("USDT_USD", "coingecko_usdt", "1"),
+                ("XAU_USD_OZ", "gold_api_free_xau", "4000"),
+            )
+        ]
+
+    def post(self, quotes):
+        body = json.dumps({"quotes": quotes}, separators=(",", ":")).encode()
+        timestamp = str(int(time.time()))
+        signature = hmac.new(self.secret.encode(), timestamp.encode()+b"."+body, hashlib.sha256).hexdigest()
+        with patch.object(pricing_worker, "settings", SimpleNamespace(pricing_worker_shared_secret=self.secret)), \
+             patch.object(pricing_worker, "pricing_redis", self.store), \
+             patch.object(pricing_worker, "instrument_pricing_service", self.service), \
+             TestClient(self.app) as client:
+            return client.post("/api/internal/pricing-worker/ingest", content=body,
+                               headers={"Content-Type": "application/json",
+                                        "X-Pricing-Worker-Timestamp": timestamp,
+                                        "X-Pricing-Worker-Signature": signature})
+
+    def test_signed_four_quote_feed_passes_http_schema_and_exact_route_validation(self):
+        response = self.post(self.quotes)
+        self.assertEqual(response.status_code, 202, response.text)
+        self.assertEqual(response.json()["published"], 4)
+        self.assertEqual(self.service.ingest_worker_quote.await_count, 4)
+        xau = self.service.ingest_worker_quote.call_args.kwargs
+        self.assertEqual(xau["provider_id"], "gold_api_free_xau")
+        self.assertEqual(xau["instrument_id"], "XAU_USD_OZ")
+        self.assertEqual(xau["observed_at"], NOW)
+
+    def test_mixed_feed_with_wrong_gold_pair_rejects_before_any_quote_ingest(self):
+        self.quotes[-1]["instrument_id"] = "GOLD_24K_TOMAN_GRAM"
+        self.assertEqual(self.post(self.quotes).status_code, 422)
+        self.service.ingest_worker_quote.assert_not_called()
+
+    def test_unapproved_provider_rejects_before_any_quote_ingest(self):
+        self.quotes[-1]["provider_id"] = "unapproved_gold_provider"
+        self.assertEqual(self.post(self.quotes).status_code, 422)
+        self.service.ingest_worker_quote.assert_not_called()
 
 
 class GoldFallbackIngestTests(unittest.IsolatedAsyncioTestCase):

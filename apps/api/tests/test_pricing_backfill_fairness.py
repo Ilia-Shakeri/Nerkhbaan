@@ -1,18 +1,20 @@
 from __future__ import annotations
 
 import os
+import tempfile
 import unittest
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enough")
 
 from sqlalchemy import MetaData, create_engine, func, select
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.pool import QueuePool
 
 from app.admin.models import OperationalSetting
 from app.models import User
@@ -34,7 +36,12 @@ class _Locks:
 
 class BackfillFairnessTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.engine = create_engine("sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False})
+        self.directory = tempfile.TemporaryDirectory(prefix="nerkhbaan-fairness-test-")
+        self.addCleanup(self.directory.cleanup)
+        database = Path(self.directory.name) / "fairness.sqlite"
+        # Worker threads need separate connections, as they have in production.
+        self.engine = create_engine(f"sqlite:///{database.as_posix()}", poolclass=QueuePool,
+                                    connect_args={"check_same_thread": False})
         self.addCleanup(self.engine.dispose)
         metadata = MetaData()
         for table in (User.__table__, OperationalSetting.__table__, InstrumentRecord.__table__, PricingBackfillJobRecord.__table__):

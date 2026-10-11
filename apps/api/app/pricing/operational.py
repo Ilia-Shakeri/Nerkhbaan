@@ -4,9 +4,9 @@ import asyncio
 import json
 from dataclasses import replace
 from decimal import Decimal, InvalidOperation
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 
 from ..db import SessionLocal
 from .instruments import get_instrument
@@ -20,6 +20,10 @@ class OperationalPricingSettings:
             row = await asyncio.to_thread(self._setting_row, key, scope_id)
         except Exception:
             return default
+        return self._setting_value(row, default)
+
+    @staticmethod
+    def _setting_value(row, default=None):
         if not isinstance(row, Mapping) or "value" not in row:
             return default
         value = row["value"]
@@ -49,20 +53,53 @@ class OperationalPricingSettings:
             row = await asyncio.to_thread(self._instrument_row, fallback.instrument_id)
         except Exception:
             return fallback
+        resolved = self._instrument_from_row(fallback, row)
+        if resolved is None:
+            return fallback
+        expiry = await self.value("canonical_expiry_seconds", fallback.instrument_id)
+        threshold = await self.value("anomaly_threshold_percent", fallback.instrument_id)
+        return self._instrument_overrides(resolved, expiry, threshold)
+
+    async def instruments(self, instrument_ids: Iterable[str]) -> dict[str, InstrumentDefinition]:
+        fallbacks = {}
+        for instrument_id in instrument_ids:
+            fallback = get_instrument(instrument_id)
+            fallbacks[fallback.instrument_id] = fallback
+        if not fallbacks:
+            return {}
+        ids = tuple(fallbacks)
+        rows, settings = await asyncio.gather(
+            asyncio.to_thread(self._instrument_rows, ids),
+            asyncio.to_thread(self._instrument_override_rows, ids),
+            return_exceptions=True,
+        )
+        # An instrument read failure uses the same defaults as an individual read.
+        if isinstance(rows, BaseException):
+            return fallbacks
+        by_id = {row["instrument_id"]: row for row in rows}
+        overrides = {} if isinstance(settings, BaseException) else {
+            (row["key"], row["scope_id"]): row for row in settings
+        }
+        resolved = {}
+        for instrument_id, fallback in fallbacks.items():
+            definition = self._instrument_from_row(fallback, by_id.get(instrument_id))
+            if definition is None:
+                resolved[instrument_id] = fallback
+                continue
+            values = []
+            for key in ("canonical_expiry_seconds", "anomaly_threshold_percent"):
+                # A present scoped null or malformed value still shadows the global row.
+                row = overrides.get((key, instrument_id), overrides.get((key, "global")))
+                values.append(self._setting_value(row))
+            resolved[instrument_id] = self._instrument_overrides(definition, *values)
+        return resolved
+
+    @staticmethod
+    def _instrument_from_row(fallback: InstrumentDefinition, row) -> InstrumentDefinition | None:
         if row is None:
-            row = {
-                "operational_ttl_seconds": fallback.operational_ttl_seconds,
-                "stale_after_seconds": fallback.stale_after_seconds,
-                "expire_after_seconds": fallback.expire_after_seconds,
-                "base_anomaly_threshold_percent": fallback.base_anomaly_threshold_percent,
-                "maximum_dynamic_threshold_percent": fallback.maximum_dynamic_threshold_percent,
-                "minimum_sanity_price": fallback.minimum_price,
-                "maximum_sanity_price": fallback.maximum_price,
-                "importance": fallback.importance, "enabled": fallback.enabled,
-                "allow_derived_fallback": fallback.allow_derived_fallback,
-            }
+            return fallback
         try:
-            resolved = replace(
+            return replace(
                 fallback,
                 operational_ttl_seconds=int(row["operational_ttl_seconds"]),
                 stale_after_seconds=int(row["stale_after_seconds"]),
@@ -82,9 +119,10 @@ class OperationalPricingSettings:
                 ),
             )
         except (TypeError, ValueError, InvalidOperation):
-            return fallback
-        expiry = await self.value("canonical_expiry_seconds", fallback.instrument_id)
-        threshold = await self.value("anomaly_threshold_percent", fallback.instrument_id)
+            return None
+
+    @staticmethod
+    def _instrument_overrides(resolved: InstrumentDefinition, expiry, threshold) -> InstrumentDefinition:
         try:
             overrides = {}
             if expiry is not None:
@@ -231,6 +269,38 @@ class OperationalPricingSettings:
                 ),
                 {"instrument_id": instrument_id},
             ).mappings().first()
+        finally:
+            db.close()
+
+    @staticmethod
+    def _instrument_rows(instrument_ids: tuple[str, ...]):
+        db = SessionLocal()
+        try:
+            return db.execute(
+                text("""
+                    SELECT instrument_id, operational_ttl_seconds, stale_after_seconds,
+                           expire_after_seconds, base_anomaly_threshold_percent,
+                           maximum_dynamic_threshold_percent, minimum_sanity_price,
+                           maximum_sanity_price, importance, enabled, allow_derived_fallback
+                    FROM instruments WHERE instrument_id IN :instrument_ids
+                """).bindparams(bindparam("instrument_ids", expanding=True)),
+                {"instrument_ids": instrument_ids},
+            ).mappings().all()
+        finally:
+            db.close()
+
+    @staticmethod
+    def _instrument_override_rows(instrument_ids: tuple[str, ...]):
+        db = SessionLocal()
+        try:
+            return db.execute(
+                text("""
+                    SELECT key, scope_id, value FROM operational_settings
+                    WHERE key IN ('canonical_expiry_seconds', 'anomaly_threshold_percent')
+                      AND scope_id IN :scope_ids
+                """).bindparams(bindparam("scope_ids", expanding=True)),
+                {"scope_ids": (*instrument_ids, "global")},
+            ).mappings().all()
         finally:
             db.close()
 

@@ -9,6 +9,8 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Added an immutable eighth migration and matching ORM check for the durable notification sending state; the previous seven migration files remain unchanged.
 - Parsed valid empty Nobitex history responses and paginated capped history downloads instead of silently completing a truncated range.
 - Isolated independent public feed sources and added a validated XAU fallback without bypassing source time, unit, anomaly or independence checks.
+- Preserved the vetted relay freshness anchor across stored quote reads without extending source eligibility or operator policy windows.
+- Coalesced unfinished WebSocket snapshot reads and batched instrument policies per response, removing the repeated database work exposed by actual cold connection and sustained-load checks.
 - Enabled executable metadata/signing and made the Windows release command fail when a publisher signature is unavailable; the explicit unsigned test package stays separate.
 
 ### Added

@@ -121,8 +121,8 @@ class PricePoint(BaseModel):
 
 
 class PricingWorkerQuote(BaseModel):
-    instrument_id: str = Field(pattern=r"^(BTC_USD|USDT_USD|XAG_USD_OZ)$")
-    provider_id: str = Field(pattern=r"^(coingecko_(btc|usdt)|gold_api_free_xag|xaus_xag)$")
+    instrument_id: str = Field(pattern=r"^(BTC_USD|USDT_USD|XAG_USD_OZ|XAU_USD_OZ)$")
+    provider_id: str = Field(pattern=r"^(coingecko_(btc|usdt)|gold_api_free_xag|gold_api_free_xau|xaus_xag)$")
     price: Decimal = Field(gt=0)
     observed_at: datetime
     historical: bool = False

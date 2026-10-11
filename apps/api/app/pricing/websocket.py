@@ -40,13 +40,34 @@ class PriceWebSocketHub:
         self.snapshot_reader = snapshot_reader or store.get_all_canonical
         self.heartbeat_seconds = settings.websocket_heartbeat_seconds
         self.maximum_connections = settings.websocket_max_connections_per_worker
-        # A client that has sent nothing and acknowledged nothing for this long
-        # is treated as gone, so dead sockets do not hold a slot forever.
-        self.client_timeout_seconds = settings.websocket_client_timeout_seconds
         self.poll_fallback_seconds = settings.websocket_poll_fallback_seconds
         self._clients: dict[str, asyncio.Queue[dict[str, Any]]] = {}
         self._guard = asyncio.Lock()
         self._dispatcher: asyncio.Task | None = None
+        self._snapshot_guard = asyncio.Lock()
+        self._snapshot_task: asyncio.Task[dict[str, CanonicalQuote]] | None = None
+
+    async def _read_snapshot(self) -> dict[str, CanonicalQuote]:
+        # Share only an unfinished read. A later request must read current policy
+        # again; no completed snapshot or freshness window is retained here.
+        async with self._snapshot_guard:
+            task = self._snapshot_task
+            if task is None or task.done():
+                task = asyncio.create_task(self.snapshot_reader())
+                self._snapshot_task = task
+                task.add_done_callback(self._snapshot_read_finished)
+        # Waiting on a task set shields the shared read from waiter cancellation.
+        # Its failure is consumed by the completion callback even if all clients
+        # leave; a remaining client still receives the original failure.
+        await asyncio.wait({task})
+        return task.result()
+
+    def _snapshot_read_finished(self, task: asyncio.Task) -> None:
+        if not task.cancelled():
+            # Retrieve an orphaned failure even when every waiter disconnected.
+            task.exception()
+        if self._snapshot_task is task:
+            self._snapshot_task = None
 
     @property
     def connection_count(self) -> int:
@@ -140,7 +161,7 @@ class PriceWebSocketHub:
                 return
             # Capacity and Redis availability must pass before snapshot reads.
             if initial_quotes is None:
-                initial_quotes = await self.snapshot_reader()
+                initial_quotes = await self._read_snapshot()
             await websocket.send_json(
                 {
                     "event_type": "snapshot",
@@ -214,7 +235,7 @@ class PriceWebSocketHub:
                     event = queue_task.result()
                     queue_task = None
                     if event.get("event_type") == "resync":
-                        snapshots = await self.snapshot_reader()
+                        snapshots = await self._read_snapshot()
                         await websocket.send_json({
                             "event_type": "snapshot", "type": "snapshot", "reason": event["reason"],
                             "prices": [self._public_event(quote) for key, quote in snapshots.items() if key in subscriptions],

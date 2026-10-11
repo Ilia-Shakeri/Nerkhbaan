@@ -4,6 +4,7 @@ import asyncio
 import logging
 import secrets
 import time
+from collections.abc import Mapping
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any, Iterable
@@ -39,6 +40,7 @@ from .locks import DistributedPricingLocks, pricing_locks
 from .models import (
     CanonicalQuote,
     CanonicalStatus,
+    InstrumentDefinition,
     Currency,
     PersistenceStatus,
     ProviderQuote,
@@ -284,6 +286,11 @@ class InstrumentPricingService:
         return max(eligible, key=lambda quote: (quote.observed_at, quote.canonical_at), default=None)
 
     async def get_all_canonical(self) -> dict[str, CanonicalQuote]:
+        return await self._read_canonical_snapshot()
+
+    async def _read_canonical_snapshot(
+        self, definitions: Mapping[str, InstrumentDefinition] | None = None,
+    ) -> dict[str, CanonicalQuote]:
         cached: dict[str, CanonicalQuote] = {}
         try:
             cached = await self.store.get_all_canonical()
@@ -309,17 +316,41 @@ class InstrumentPricingService:
             previous = resolved.get(key)
             if previous is None or (quote.observed_at, quote.canonical_at) >= (previous.observed_at, previous.canonical_at):
                 resolved[key] = quote
-        definitions = await asyncio.gather(
-            *(self.operational.instrument(key) for key in resolved), return_exceptions=True,
-        )
+        if definitions is None:
+            definitions = await self._instrument_definitions(resolved)
         effective = {}
-        for (key, quote), definition in zip(resolved.items(), definitions):
-            if isinstance(definition, BaseException):
+        for key, quote in resolved.items():
+            definition = definitions.get(key)
+            if definition is None:
                 continue
             adjusted = self._current_policy(quote, definition)
             if adjusted is not None:
                 effective[key] = adjusted
         return effective
+
+    async def _instrument_definitions(
+        self, instrument_ids: Iterable[str], *, strict: bool = False,
+    ) -> dict[str, InstrumentDefinition]:
+        ids = tuple(instrument_ids)
+        # Older adapters implement only the individual instrument reader.
+        if callable(getattr(type(self.operational), "instruments", None)):
+            known_ids = {}
+            for instrument_id in ids:
+                try:
+                    known_ids[instrument_id] = get_instrument(instrument_id).instrument_id
+                except KeyError:
+                    if strict:
+                        raise
+            definitions = await self.operational.instruments(known_ids.values())
+            if not isinstance(definitions, Mapping):
+                raise TypeError("Bulk instrument reader must return a mapping")
+            return {key: definitions[normalized] for key, normalized in known_ids.items()
+                    if normalized in definitions}
+        values = await asyncio.gather(
+            *(self.operational.instrument(key) for key in ids), return_exceptions=not strict,
+        )
+        return {key: value for key, value in zip(ids, values)
+                if not isinstance(value, BaseException)}
 
     @staticmethod
     def _current_policy(quote: CanonicalQuote, instrument: Any) -> CanonicalQuote | None:
@@ -346,16 +377,16 @@ class InstrumentPricingService:
         return allowed_current_quote(quote)
 
     async def list_instruments(self, *, authenticated: bool = False) -> list[dict[str, Any]]:
-        snapshots = await self.get_all_canonical()
-        definitions = await asyncio.gather(*(self.operational.instrument(key) for key in INSTRUMENTS))
+        definitions = await self._instrument_definitions(INSTRUMENTS, strict=True)
+        snapshots = await self._read_canonical_snapshot(definitions)
         return [
             self._instrument_payload(
                 instrument_id,
                 snapshots.get(instrument_id),
                 authenticated=authenticated,
-                definition=definition,
+                definition=definitions[instrument_id],
             )
-            for instrument_id, definition in zip(INSTRUMENTS, definitions)
+            for instrument_id in INSTRUMENTS
         ]
 
     async def instrument(
