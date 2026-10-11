@@ -6,7 +6,6 @@ from fastapi import APIRouter, WebSocket, status
 
 from ..config import settings
 from ..pricing.instruments import get_instrument
-from ..pricing.service import instrument_pricing_service
 from ..pricing.websocket import price_websocket_hub
 
 router = APIRouter(tags=["prices-websocket"])
@@ -57,7 +56,4 @@ async def price_updates(websocket: WebSocket) -> None:
         if not requested:
             requested = None
 
-    # Loading the snapshot only after the hub accepts the connection keeps an
-    # unauthenticated connect storm from driving Redis and database reads.
-    initial = await instrument_pricing_service.get_all_canonical()
-    await price_websocket_hub.serve(websocket, initial, requested)
+    await price_websocket_hub.serve(websocket, requested_instruments=requested)

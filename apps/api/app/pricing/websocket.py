@@ -115,7 +115,7 @@ class PriceWebSocketHub:
     async def serve(
         self,
         websocket: WebSocket,
-        initial_quotes: dict[str, CanonicalQuote],
+        initial_quotes: dict[str, CanonicalQuote] | None = None,
         requested_instruments: set[str] | None = None,
     ) -> None:
         connection_id = uuid.uuid4().hex
@@ -138,6 +138,9 @@ class PriceWebSocketHub:
                 )
                 await websocket.close(code=1013, reason="Price fan-out is unavailable")
                 return
+            # Capacity and Redis availability must pass before snapshot reads.
+            if initial_quotes is None:
+                initial_quotes = await self.snapshot_reader()
             await websocket.send_json(
                 {
                     "event_type": "snapshot",

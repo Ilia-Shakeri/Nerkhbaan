@@ -158,10 +158,13 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
         queue._claim_job = Mock(return_value={"id":1,"instrument_id":"BTC_USD","attempt_count":1})
         queue._history_provider = AsyncMock(return_value=None)
         queue._finish_job = Mock()
-        counts = await queue.process_jobs(maximum_jobs=1)
-        self.assertEqual(counts["deferred"],1)
+        with patch("app.pricing.backfill.PROVIDERS_BY_INSTRUMENT", {"BTC_USD":(PROVIDERS["coingecko_btc"],)}):
+            counts = await queue.process_jobs(maximum_jobs=1)
+        self.assertEqual(counts,{"completed":0,"deferred":0,"failed":0})
         self.assertEqual(operational.feature_enabled.call_args.kwargs["scope_id"],"BTC_USD")
         queue._history_provider.assert_awaited_once()
+        queue._claim_job.assert_not_called()
+        queue._finish_job.assert_not_called()
 
     async def test_disabled_instrument_backfill_does_not_fetch_history(self):
         store, operational = AsyncMock(), AsyncMock()
@@ -173,8 +176,9 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
         queue._claim_job = Mock(return_value={"id":1,"instrument_id":"BTC_USD","attempt_count":1})
         queue._history_provider = AsyncMock()
         queue._finish_job = Mock()
-        self.assertEqual((await queue.process_jobs(maximum_jobs=1))["deferred"],1)
+        self.assertEqual(await queue.process_jobs(maximum_jobs=1),{"completed":0,"deferred":0,"failed":0})
         queue._history_provider.assert_not_called()
+        queue._claim_job.assert_not_called()
 
     async def test_zero_hourly_budget_blocks_all_external_calls(self):
         store = Mock()
@@ -549,7 +553,7 @@ class DatabaseRepairTests(unittest.IsolatedAsyncioTestCase):
             db.add(PricingBackfillJobRecord(id=1,instrument_id="BTC_USD",range_start=NOW-timedelta(hours=1),range_end=NOW,status="deferred",priority=100,attempt_count=0,idempotency_key="test",next_attempt_at=NOW-timedelta(seconds=1)))
             db.commit()
         with patch("app.pricing.backfill.SessionLocal",self.session), patch("app.pricing.backfill.utc_now",return_value=NOW):
-            job = PricingBackfillQueue._claim_job()
+            job = PricingBackfillQueue._claim_job(("BTC_USD",))
         self.assertEqual(job["id"],1)
 
     async def test_cancelled_delivery_never_sends_and_completion_cannot_overwrite(self):

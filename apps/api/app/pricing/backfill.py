@@ -37,7 +37,7 @@ from .operational import OperationalPricingSettings, operational_pricing_setting
 from .parsers.history import build_history_parser
 from .persistence import PricingPersistence, pricing_persistence
 from .providers import ProviderQuoteCollector
-from .registry import ProviderDefinition
+from .registry import PROVIDERS_BY_INSTRUMENT, ProviderDefinition
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,8 +158,11 @@ class PricingBackfillQueue:
             return {"completed": 0, "deferred": 0, "failed": 0}
         await self._drain_redis_jobs(maximum_jobs * 2)
         counts = {"completed": 0, "deferred": 0, "failed": 0}
+        eligible_instruments = await self._eligible_instruments()
+        if not eligible_instruments:
+            return counts
         for _ in range(max(1, min(maximum_jobs, 20))):
-            job = await asyncio.to_thread(self._claim_job)
+            job = await asyncio.to_thread(self._claim_job, eligible_instruments)
             if job is None:
                 break
             if not await self.operational.feature_enabled("backfill_enabled", scope_id=job["instrument_id"]):
@@ -237,6 +240,38 @@ class PricingBackfillQueue:
                     await asyncio.to_thread(self._finish_job, job["id"], "completed", None, job["attempt_count"])
                     counts["completed"] += 1
         return counts
+
+    async def _eligible_instruments(self) -> tuple[str, ...]:
+        # Resolve the finite catalogue once per pass, before touching job rows.
+        # Unsupported old jobs retain their state and become eligible again
+        # when scoped policy or live availability changes on a later pass.
+        candidates = tuple(
+            instrument_id for instrument_id, providers in PROVIDERS_BY_INSTRUMENT.items()
+            if any(provider.history_url and provider.history_parser_id for provider in providers)
+        )
+
+        async def eligible(instrument_id: str) -> str | None:
+            instrument = await self.operational.instrument(instrument_id)
+            if not instrument.enabled or not await self.operational.feature_enabled(
+                "backfill_enabled", scope_id=instrument_id
+            ):
+                return None
+            provider = await self._history_provider(instrument_id)
+            if provider is None:
+                return None
+            if not provider.history_requires_live_quote:
+                return instrument_id
+            try:
+                current = await self.store.get_canonical(instrument_id)
+            except Exception:
+                current = None
+            if current is not None and utc_now() <= current.valid_until:
+                return instrument_id
+            independent = await self._history_provider(instrument_id, independent_of_live=True)
+            return instrument_id if independent is not None else None
+
+        resolved = await asyncio.gather(*(eligible(instrument_id) for instrument_id in candidates))
+        return tuple(instrument_id for instrument_id in resolved if instrument_id is not None)
 
     async def backlog(self) -> dict[str, int | None]:
         database_count = await asyncio.to_thread(self._database_backlog)
@@ -431,7 +466,9 @@ class PricingBackfillQueue:
             db.close()
 
     @staticmethod
-    def _claim_job() -> dict[str, Any] | None:
+    def _claim_job(eligible_instrument_ids: tuple[str, ...]) -> dict[str, Any] | None:
+        if not eligible_instrument_ids:
+            return None
         db = SessionLocal()
         try:
             now = utc_now()
@@ -439,6 +476,7 @@ class PricingBackfillQueue:
             record = db.scalar(
                 select(PricingBackfillJobRecord)
                 .where(
+                    PricingBackfillJobRecord.instrument_id.in_(eligible_instrument_ids),
                     or_(
                         and_(
                             PricingBackfillJobRecord.status.in_(("pending", "retrying", "deferred")),
@@ -456,6 +494,7 @@ class PricingBackfillQueue:
                 .order_by(
                     PricingBackfillJobRecord.priority.asc(),
                     PricingBackfillJobRecord.created_at.asc(),
+                    PricingBackfillJobRecord.id.asc(),
                 )
                 .with_for_update(skip_locked=True)
                 .limit(1)
