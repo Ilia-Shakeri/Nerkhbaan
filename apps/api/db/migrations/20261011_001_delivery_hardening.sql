@@ -13,6 +13,16 @@ WHERE config.provider_id = 'gold_api_free_xag' AND config.role = 'verifier'
                     AND setting.value::jsonb ? 'role');
 -- Old worker backfills used only the provider quote role. Preserve history,
 -- but prevent their primary canonical rows from becoming live snapshots.
+-- Existing compressed history can exceed Timescale's default DML guard.
+-- Scope the override to this bounded release transaction; the runner retains
+-- its statement timeout and ordinary application transactions keep the guard.
+DO $delivery$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+        PERFORM set_config('timescaledb.max_tuples_decompressed_per_dml_transaction', '0', true);
+    END IF;
+END
+$delivery$;
 UPDATE public.canonical_quotes canonical
 SET source_summary = canonical.source_summary::jsonb || '{"historical_backfill": true}'::jsonb
 WHERE COALESCE(canonical.source_summary->>'historical_backfill', 'false') <> 'true'
