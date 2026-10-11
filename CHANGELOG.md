@@ -18,6 +18,9 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Isolated historical backfills from current snapshots, repaired legacy XAG fallback defaults and preserved explicit operator overrides.
 - Updated container OS packages and Go to remove image scan findings; kept strict HIGH/CRITICAL gates for API, clients, Telegram, feed, relay and edge.
 - Generated disposable TLS certificates on the CI runner and resolved backend names in nginx syntax fixtures.
+- Excluded `/admin` and `/admin/` from the public service worker navigation fallback once the updated worker activates.
+- Used IPv4 loopback for the admin container health probe and allowed a ten-second startup period.
+- Allowed the pending history repair to exceed Timescale's compressed-DML tuple limit within its release transaction; kept the migration runner's 300-second timeout and all six previously applied migration checksums.
 
 ### Added
 
@@ -30,6 +33,15 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Configurable admin asset base for a secure path deployment when a separate admin hostname is unavailable.
 
 ### Validation boundary
+
+Hosted [CI run 38132847881](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38132847881)
+passed all 15 jobs for `b9f5538961497cf5ad6a6a37f36e916d0a5071a9`, including seven strict
+HIGH/CRITICAL image scans and real Timescale/Redis, migration/restore and browser checks.
+The later admin health-probe change needs its own final-commit checks.
+
+The target's verified 47-table restore passed the seventh migration with the `b9f5538` API image
+on Timescale 2.28.3 / PostgreSQL 16.14. Three hypertables, 37 chunks and four users remained.
+User and price fingerprints matched after excluding only the intended historical-backfill flag.
 
 Local results belong to the delivered commit's evidence. Container, PostgreSQL/Redis, packaged-runtime,
 provider rights/canaries and target-host production results require separate successful runs.

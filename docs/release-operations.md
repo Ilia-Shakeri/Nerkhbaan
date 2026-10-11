@@ -10,6 +10,11 @@ Run every CI job on the final commit: clients, desktop package, Python, actual T
 HTTP/browser, migration/restore, Go/sidecars, proxy/monitoring and security scans.
 Keep logs tied to release and commit. Do not replace an executed test with test discovery.
 
+Recorded hosted result: [CI run 38132847881](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38132847881)
+passed all 15 jobs at `b9f5538961497cf5ad6a6a37f36e916d0a5071a9`. All seven image scans kept
+the HIGH/CRITICAL failure gate. Later changes need a new final-commit run. This CI result does
+not prove the pending target migration or a production deployment.
+
 The HTTP smoke writes a unique test user and alert. Run it only against a disposable database.
 It leaves the test user/security audit rows as evidence. It waits beyond refresh duplicate grace before testing reuse.
 
@@ -52,11 +57,31 @@ bash scripts/ci-restore-drill.sh
 
 Provide PGHOST, PGPORT, PGUSER and PGPASSWORD through a private environment.
 Expected: `RESTORE_DRILL_OK` with equal data, hypertables, chunks and policies.
-The 2.8.0 forward migration tags legacy provider backfill canonical rows as historical and adds
-a partial live-observation index. Check those UPDATE/index operations against existing compressed
-chunks in the isolated restored database first. If the target version requires decompression,
-pause the relevant policy and decompress only reviewed affected chunks before retrying the unchanged
-migration. Keep the old history rows; never delete them to make migration or live-price checks pass.
+Before `timescaledb_post_restore()`, disable the restored policy and application cleanup jobs.
+Inspect all restored jobs, including user jobs that do not have a `policy_` name. Confirm they
+are unscheduled and no job is still running before taking fingerprints or testing the migration.
+Keep them paused for the disposable drill. Do this only in the owned restore database; leave
+production jobs alone. A cleanup job can remove data between comparisons and invalidate the drill.
+
+The pending seventh migration, `20261011_001_delivery_hardening.sql`, tags legacy provider backfill
+canonical rows as historical and adds a partial live-observation index. Existing compressed history
+can exceed Timescale's default tuple limit. When Timescale is installed, the migration uses
+`set_config('timescaledb.max_tuples_decompressed_per_dml_transaction', '0', true)` within its own
+transaction. The runner still bounds statements to 300 seconds by default. The override ends with
+that transaction; ordinary application transactions retain their normal limit. Test the UPDATE/index
+operations against the isolated restored database before production. Record user and price row
+counts and fingerprints before and after; account only for the intended `historical_backfill` flag.
+Keep all six old migration files and their applied checksums unchanged. Keep the old history rows;
+never delete them to make migration or live-price checks pass. A timeout or failed comparison stops
+the release; review the plan before a retry.
+
+Recorded target stage: `TARGET_MIGRATION_STAGE_OK` passed with the `b9f5538` API image on the
+verified 47-table restore, using Timescale 2.28.3 and PostgreSQL 16.14. It retained three hypertables,
+37 chunks and four users, with seven migrations applied. Before/after fingerprints matched for
+`provider_quotes` (520,444 rows), `canonical_quotes` (325,486), `market_prices` (26,662) and `users` (4).
+The canonical comparison excluded only the intended `historical_backfill` flag. The tested target
+needed no manual chunk decompression. The ordinary application tuple guard remained 100,000.
+This records the isolated restore stage; production acceptance needs its own successful run.
 The helper drops only its explicitly separate restore target and cleans it on exit.
 It uses Timescale pre/post restore and compares fingerprints. It is for disposable/frozen test data;
 concurrent source writes invalidate a before/after fingerprint. Production-sized off-host drill needs its own evidence.
@@ -83,6 +108,44 @@ sh scripts/deploy-nerkhbaan-prod.sh
 The script is configured for `/opt/Nerkhbaan`; review the path on the actual target.
 It refuses missing/invalid evidence and a dirty tracked worktree. Preserve all volumes.
 Use reviewed immutable image/version tags and retain previous images.
+
+### Existing stack with shared ingress
+
+Use a reviewed release checkout at `/opt/Nerkhbaan/.releases/<commit>` and a private
+`runtime.override.json` for the existing target. Keep `/opt/Nerkhbaan/.env` private. The override
+must preserve the existing project name, database/Redis volumes, data-service configuration and
+network. Record those names and mounts before any change. Use exact loaded image tags in the
+override when components come from different verified commits. `APP_IMAGE_TAG` alone does not
+describe such a release.
+
+For this host, the shared ingress runs from `/opt/edge/compose.json`. Use the `admin` profile
+without the `edge` profile. Do not start a second listener on ports 80/443. Validate the reviewed
+shared-ingress configuration and its service aliases separately. Build admin with
+`VITE_ADMIN_BASE_PATH=/admin/`; serve its assets under `/admin/assets/`. Keep API requests under
+`/api/` with the reviewed same-host admin origin and cookie settings. The public service worker
+must bypass both `/admin` and every `/admin/` navigation.
+
+After the isolated restore/migration gate passes, run only the release application services:
+
+```bash
+: "${RELEASE_DIR:?Set the reviewed absolute release checkout}"
+docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
+  -f "$RELEASE_DIR/docker-compose.prod.yaml" -f "$RELEASE_DIR/runtime.override.json" \
+  --profile admin config --quiet
+docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
+  -f "$RELEASE_DIR/docker-compose.prod.yaml" -f "$RELEASE_DIR/runtime.override.json" \
+  --profile admin run --rm --no-deps --pull never migrate
+docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
+  -f "$RELEASE_DIR/docker-compose.prod.yaml" -f "$RELEASE_DIR/runtime.override.json" \
+  --profile admin up -d --no-build --no-deps --pull never --wait --wait-timeout 240 \
+  --scale backend=2 backend frontend admin-frontend price-feed-pull
+```
+
+Keep PostgreSQL, Redis, their containers and their volumes running. Compare their recorded IDs
+and mounts after the application update. The generic full-stack script above recreates services;
+use this scoped sequence for an existing stack with shared ingress. Do not use `down`, volume
+removal or an unscoped forced recreation. The admin health probe uses `http://127.0.0.1/` with a
+ten-second `start_period`; this avoids a loopback IPv6 mismatch and early startup failures.
 
 ## 5. Acceptance
 
