@@ -17,6 +17,7 @@ from ..db import SessionLocal
 from .budgets import RedisRequestBudget, pricing_budget
 from .cache import PricingRedisStore, pricing_redis
 from .db_models import PricingBackfillJobRecord
+from .instruments import get_instrument
 from .locks import DistributedPricingLocks, pricing_locks
 from .models import (
     CanonicalQuote,
@@ -108,6 +109,51 @@ class PricingBackfillQueue:
         self.batch_size = settings.pricing_backfill_batch_size
         self.maximum_length = _positive_int_env("PRICING_BACKFILL_STREAM_MAXLEN", 10_000)
         self.maximum_attempts = _positive_int_env("PRICING_BACKFILL_MAX_ATTEMPTS", 5)
+        self.automatic_locks = DistributedPricingLocks(store)
+
+    async def enqueue_automatic(
+        self,
+        *,
+        instrument_id: str,
+        range_start: datetime,
+        range_end: datetime,
+        bucket_seconds: int,
+        priority: int = 250,
+    ) -> BackfillEnqueueResult:
+        """Coalesce chart requests without changing a stored job's actual range."""
+        if callable(getattr(type(self.operational), "instruments", None)):
+            normalized = get_instrument(instrument_id).instrument_id
+            instrument = (await self.operational.instruments((normalized,)))[normalized]
+        else:
+            instrument = await self.operational.instrument(instrument_id)
+        start, end = ensure_utc(range_start), ensure_utc(range_end)
+        if start >= end or bucket_seconds <= 0:
+            raise ValueError("Automatic backfill range and bucket must be positive")
+        raw = f"{instrument.instrument_id}|{int(start.timestamp()) // bucket_seconds}|{int(end.timestamp()) // bucket_seconds}|{bucket_seconds}"
+        key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        if not instrument.enabled or not await self.operational.feature_enabled(
+            "backfill_enabled", scope_id=instrument.instrument_id
+        ):
+            return BackfillEnqueueResult("disabled", key, None, None)
+        try:
+            lease = await self.automatic_locks.acquire(f"pricing:backfill-auto:{key}", 60_000)
+        except Exception:
+            # No unguarded fallback: a Redis outage must not create a queue storm.
+            return BackfillEnqueueResult("deferred", key, None, None)
+        if lease is None:
+            return BackfillEnqueueResult("coalesced", key, None, None)
+        try:
+            # The manual path keeps its exact range, policy reads and retry behavior.
+            result = await self.enqueue(
+                instrument_id=instrument.instrument_id, range_start=start,
+                range_end=end, priority=priority,
+            )
+        except BaseException:
+            await self.automatic_locks.release(lease)
+            raise
+        if result.status not in {"queued", "queued_redis"}:
+            await self.automatic_locks.release(lease)
+        return result
 
     async def enqueue(
         self,

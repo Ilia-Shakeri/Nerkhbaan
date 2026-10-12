@@ -40,6 +40,34 @@ def current_quotes():
 
 
 class BulkOperationalReadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_automatic_coalesced_request_keeps_fresh_policy_with_five_actual_queries(self):
+        from types import SimpleNamespace
+        from app.pricing.backfill import BackfillEnqueueResult, PricingBackfillQueue
+        from tests.test_automatic_backfill_guard import _Redis, NOW
+
+        with self.engine.begin() as connection:
+            connection.execute(text("CREATE TABLE feature_flags (key TEXT PRIMARY KEY, enabled BOOLEAN)"))
+        redis = _Redis()
+        operational = OperationalPricingSettings()
+        queue = PricingBackfillQueue(store=SimpleNamespace(client=lambda: redis), operational=operational)
+        options = {"instrument_id": "BTC_USD", "range_start": NOW-timedelta(days=1),
+                   "range_end": NOW, "bucket_seconds": 900}
+        with patch("app.pricing.operational.SessionLocal", self.session), \
+             patch.object(queue, "enqueue", new=AsyncMock(return_value=BackfillEnqueueResult("queued", "test", 1, None))) as enqueue, \
+             patch.object(operational, "_provider_rows", side_effect=AssertionError("coalesced request must not load providers")):
+            await queue.enqueue_automatic(**options)
+            self.calls.clear()
+            result = await queue.enqueue_automatic(**options)
+            self.assertEqual(result.status, "coalesced")
+            # One instrument, one batched instrument override, two feature overrides and one flag.
+            self.assertEqual(self.calls, Counter(instruments=1, operational_settings=4))
+            self.assertEqual(enqueue.await_count, 1)
+            self.setting("backfill_enabled", "BTC_USD", False)
+            self.calls.clear()
+            self.assertEqual((await queue.enqueue_automatic(**options)).status, "disabled")
+            self.assertEqual(self.calls, Counter(instruments=1, operational_settings=2))
+            self.assertEqual(enqueue.await_count, 1)
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="nerkhbaan-bulk-test-")
         database = Path(self.directory.name) / "bulk.sqlite"

@@ -33,6 +33,29 @@ Do not change a pending marker to passed without a saved successful run for the 
 
 ## Executed local evidence — 2026-10-11
 
+Current 2.8.1 acceptance is in [the remaining report](remaining-acceptance-2026-10-11.md).
+The full local backend suite ran 363 cases: 353 passed and ten PostgreSQL cases were skipped.
+The exact final API image `sha256:a081a7239bedd090d8cecae085476b8164522ec446c814ae116191d39719fb32`
+passed 152 native cases and four real PostgreSQL delivery-state cases without skips.
+Twenty repeated SQLite tests passed after separate connection fixtures replaced unsafe StaticPool sharing.
+Strict HIGH/CRITICAL image findings are zero, including unfixed findings, without exceptions.
+Hosted [run 38145319047](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38145319047)
+passed all 15 jobs for `2c8c45b615ec3927be681e19f751a5377930fc33`.
+
+Actual target 2.8.1 checks passed eight migrations, 25 real admin routes, security gates,
+filtered WebSocket snapshots/ping/reconnect and encrypted pre-migration backup verification.
+Four original users and all 13 protected container IDs/start times were preserved.
+Migration readiness had bounded 503 responses; later API cutover had one observed 502, followed
+by six final 200 probes. Exact outage duration was not measured; zero downtime is not claimed.
+Actual in-app notification receipt/read passed. Native Windows push failed with ConnectTimeout.
+Actual unsigned NSIS installation/runtime/removal passed; trusted publisher signing is blocked.
+Real provider pagination stored 720 provider and 720 canonical history rows on the owned copy,
+then cleaned only its fixtures. The initial load attempts and final-image short gate failed;
+200 simultaneous cold snapshots passed, but 15 rps throughput and 1-second p95 did not.
+The clean 1800-second soak and separate faults are not yet accepted.
+
+### Historical 2.8.0 results
+
 These results apply to the 2.8.0 source delivery on this Windows host. They are separate from
 the container, Timescale/Redis, staging and production gates below.
 

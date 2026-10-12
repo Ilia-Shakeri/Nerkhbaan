@@ -86,6 +86,16 @@ Persisted relay freshness anchors retain that vetted receive window on later rea
 policy may shorten the stored bounds; reads cannot extend them. A cache status is not proof that
 `valid_until` is still open, and HTTP 202 is not proof that a particular quote became canonical.
 
+The 2026-10-11 production acceptance did verify all four version-two routes: the
+ordinary consumer retry received HTTP 202 at 14:05:47 UTC after an earlier 503,
+and four accepted provider records joined to four persisted canonicals with equal
+original observation times and prices. The XAU source time was 14:04:07 UTC;
+its USD/troy-ounce reference quote matched the real public instrument response.
+That observation became `fresh_cache` after its 14:10:47 UTC live deadline.
+`provider-live-persistence-proof.json` and `provider-final-relay-metadata.json`
+record the actual producer, acknowledgement and database joins. This is proof of
+one delivered feed; continuous scheduled delivery still needs separate evidence.
+
 ## Cutover and incident recovery
 
 1. Verify the new transport and actual fresh persisted instrument before stopping the old one.

@@ -4,57 +4,58 @@ Code release: **2.8.1**. Record updated: 2026-10-11.
 
 ## Current code
 
-The October audit drove fixes to price units, source freshness, canonical verification,
-resumable history, alert validation, session lifecycle, admin operations, Telegram parsing,
-desktop integration, migration safety, CI coverage and operational documentation.
-The exact delivered change set is in `CHANGELOG.md`; every HTTP contract is generated in `docs/api-contracts.json`.
+The October fixes cover units, source freshness, persisted history, notification delivery,
+sessions, admin operations, desktop installation, migrations and operational documents.
+Release 2.8.1 adds independent version-two feed quotes, real month pagination, bounded relay
+freshness, XAU HTTP validation, shared unfinished WebSocket reads and batched runtime policy reads.
+The changelog lists changes. Generated API contracts cover 117 paths.
 
 ## Executed checks
 
-Backend: 306 local cases plus six real PostgreSQL concurrency cases inside the final API image passed.
-The local PostgreSQL class was skipped after a loopback-fixture connection failure; those six cases
-were executed separately with direct Docker DNS. All 312 cases thus have execution evidence.
-Also passed: 49 frontend cases, 10 Edge browser cases, three builds and an unpacked desktop smoke.
-Package advisories: zero. Hosted
-[run 38136644783](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38136644783)
-passed all 15 jobs for `a53842359ff147fe8946131f007dbcade7074adc`.
-This includes real Timescale/Redis, migrations, restore, browser, desktop packaging, Go,
-Compose/monitoring and seven strict HIGH/CRITICAL image scans.
+The backend suite ran 363 cases: 353 passed and ten PostgreSQL cases skipped locally.
+The final API runtime passed 152 targeted cases without skips and four real PostgreSQL
+notification-state cases. The repaired SQLite fixtures passed 20 repeated runs without
+shared connection overlap. Earlier failed runs remain in the proof bundle.
+The final API image has zero HIGH/CRITICAL findings, including unfixed findings, without waivers.
+Web, admin and feed images passed the same gate. The 2.8.1 hosted run
+[38145319047](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38145319047)
+passed all 15 jobs for `2c8c45b615ec3927be681e19f751a5377930fc33`.
+Earlier frontend, Edge, restore and admin results remain dated evidence in the delivery matrix.
 
-## Live target — 2026-10-11
+## Live target
 
-[Site](https://nerkhbaan.ir/) and [panel](https://nerkhbaan.ir/admin/) run 2.8.0.
-HTTPS readiness reports `ready=true`; PostgreSQL and Redis connect; seven migrations are current.
-Two API replicas run. Five HTTPS probes passed while one replica was stopped; it returned healthy.
-The final `a538423` API rollout added healthy replacements before removing old replicas;
-all six HTTPS probes returned 200 and every non-API container ID was preserved.
-Web/admin `1edbe77` startup passed on the actual target in 7.234 seconds.
-Existing data services, Redis AOF and other business services remain in place.
-The shared ingress serves the panel under `/admin/`; a second listener was not added.
+[Site](https://nerkhbaan.ir/) and [panel](https://nerkhbaan.ir/admin/) run 2.8.1.
+HTTPS readiness reports `ready=true`; PostgreSQL and Redis connect; eight migrations are current.
+Two API replicas run. Migration eight passed on the isolated full copy and live database;
+four existing users and delivery rows were preserved. Applied SQL files stayed unchanged.
+The migration transition included bounded HTTP 503 readiness responses; zero downtime is not claimed.
+Web/admin/feed `7402757` startup passed on the target in 7.154 seconds.
+Existing database, Redis AOF, volumes, shared ingress and other business services remain in place.
 
-An isolated restore matched all 47 tables and 1,404,468 rows before and after enabling normal restore mode.
-User jobs stayed idle during comparison. The seventh migration passed on that full copy and then on live data.
-Price/user fingerprints matched across the intended historical metadata repair.
-Encrypted database, Redis and configuration backups were retrieved and verified off-host.
-The admin canary passed 25 real read routes, CSRF, reauthentication, MFA/recovery and verified backup status.
-Only its temporary account was removed; existing users and roles stayed intact.
-Final post-update checks passed on both API replicas, including all seven migration checksums.
-An actual filtered WebSocket reconnect and a fresh Edge public/admin service-worker flow also passed.
+An earlier full restore matched 47 tables and 1,404,468 rows. Encrypted database, Redis and
+configuration backups were retrieved and verified off-host. The newer pre-migration-eight dump
+was separately captured, encrypted and verified; it was not independently restored again.
+The earlier admin canary passed 25 real routes, CSRF, reauthentication, MFA and recovery.
+Only the temporary account was removed. New release and load proofs have separate receipts.
 
 ## Proof limits
 
-Freshness differs by source. Expired or uncovered instruments stay labelled unavailable.
-Provider rights, actual device notification receipt, a signed installer and long load/soak acceptance
-remain external gates. A green process or build does not prove them.
-Read the delivery matrix for exact checks and private receipt names.
+All 39 provider routes and 11 instruments were inspected. A real 720-point month was paginated,
+durably stored and precisely cleaned on the isolated database. Continuous external collection,
+missing approved GOLD_24K and cash USD inputs, and provider rights remain external gates.
+Actual in-app receipt and read passed. Native Windows push failed with ConnectTimeout on both
+the container and host; the user has no external relay. The unsigned 2.8.1 NSIS installer passed
+actual install/runtime/removal checks. No publisher certificate exists; signed release correctly fails.
+The final image passed 200 simultaneous cold connections with zero errors and 1.347-second p95
+first snapshots. Its short HTTP gate failed: 7.963 rps and 6.200-second p95 against 15 rps
+and a 1-second limit. Repeated history eligibility reads and duplicate automatic queue jobs remain
+under repair; no clean 1800-second soak or fault-window acceptance is claimed.
+Expired, uncovered, suspicious and unpersisted quotes stay unavailable.
 
-[Delivery readiness](docs/delivery-readiness.md) is the acceptance matrix.
-[Release operations](docs/release-operations.md) is the data-safe deployment sequence.
-[Server handoff](docs/production-handoff-fa.md) gives live paths and health commands.
+[Delivery readiness](docs/delivery-readiness.md) holds the acceptance matrix.
+[Remaining acceptance](docs/remaining-acceptance-2026-10-11.md) records current proof and limits.
+[Server handoff](docs/production-handoff-fa.md) gives live paths and commands.
 [Future work](FUTURE_TASKS.md) lists external evidence and optional scale work.
 
-## Historical records
-
-Earlier deployment records remain in the changelog and dated provider/legal reports.
-Their dates and versions remain historical. No past version is called the current live version here.
-Refresh live release, schema, readiness, source time, price unit, delivery and backup evidence on the target host.
+Older dated records remain historical. Refresh target health, source time, unit, delivery,
+backup and release evidence when deploying a later change.

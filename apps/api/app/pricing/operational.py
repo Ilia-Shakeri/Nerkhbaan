@@ -198,16 +198,28 @@ class OperationalPricingSettings:
                 except (TypeError, ValueError, InvalidOperation):
                     resolved.append(replace(provider, enabled=False))
             providers = tuple(sorted(resolved, key=lambda item: (item.priority, item.provider_id)))
+        try:
+            setting_rows = await asyncio.to_thread(
+                self._provider_override_rows, tuple(provider.provider_id for provider in providers)
+            )
+        except Exception:
+            setting_rows = []
+        overrides = {(row["key"], row["scope_id"]): row for row in setting_rows}
+
+        def setting(key, provider_id, default=None):
+            row = overrides.get((key, provider_id), overrides.get((key, "global")))
+            return self._setting_value(row, default)
+
         effective = []
         for provider in providers:
-            override = await self.value("provider.config", provider.provider_id, {})
+            override = setting("provider.config", provider.provider_id, {})
             override = override if isinstance(override, dict) else {}
             try:
                 budget_fields = {name: int(override[name]) for name in (
                     "requests_per_minute", "requests_per_hour", "requests_per_day",
                     "reserved_anomaly_requests", "reserved_fallback_requests", "minimum_interval_seconds",
                 ) if name in override}
-                hourly = await self.value("provider_budget_requests_per_hour", provider.provider_id)
+                hourly = setting("provider_budget_requests_per_hour", provider.provider_id)
                 if hourly is not None:
                     budget_fields["requests_per_hour"] = int(hourly)
                 enabled = override.get("enabled", True)
@@ -237,6 +249,23 @@ class OperationalPricingSettings:
             return providers
         allowed = set(roles)
         return tuple(provider for provider in providers if provider.role in allowed)
+
+    @staticmethod
+    def _provider_override_rows(provider_ids: tuple[str, ...]):
+        if not provider_ids:
+            return []
+        db = SessionLocal()
+        try:
+            return db.execute(
+                text("""
+                    SELECT key, scope_id, value FROM operational_settings
+                    WHERE key IN ('provider.config', 'provider_budget_requests_per_hour')
+                      AND scope_id IN :scope_ids
+                """).bindparams(bindparam("scope_ids", expanding=True)),
+                {"scope_ids": (*provider_ids, "global")},
+            ).mappings().all()
+        finally:
+            db.close()
 
     @staticmethod
     def _setting_row(key: str, scope_id: str):

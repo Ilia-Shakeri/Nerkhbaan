@@ -34,7 +34,7 @@ from .cache import PricingRedisStore, PricingRedisUnavailable, pricing_redis
 from .canonical import CanonicalPricePolicy, canonical_policy
 from .derived import DerivedPriceEngine, DerivedPriceUnavailable, derived_price_engine
 from .freshness import FreshnessStatus
-from .history import HistoryResult, InternalPriceHistory, internal_history
+from .history import TIMEFRAMES, HistoryResult, InternalPriceHistory, internal_history
 from .instruments import INSTRUMENTS, get_instrument
 from .locks import DistributedPricingLocks, pricing_locks
 from .models import (
@@ -404,12 +404,17 @@ class InstrumentPricingService:
         result = await self.history.canonical_history(
             get_instrument(instrument_id).instrument_id, timeframe
         )
-        if result.status == "partial":
+        has_history_route = any(
+            provider.history_url and provider.history_parser_id
+            for provider in PROVIDERS_BY_INSTRUMENT.get(result.instrument_id, ())
+        )
+        if result.status == "partial" and has_history_route:
             try:
-                await self.backfill.enqueue(
+                await self.backfill.enqueue_automatic(
                     instrument_id=result.instrument_id,
                     range_start=result.range_start,
                     range_end=(result.missing_before or result.range_end),
+                    bucket_seconds=TIMEFRAMES[timeframe].bucket_seconds,
                     priority=250,
                 )
             except Exception:

@@ -1,8 +1,10 @@
 # Nerkhbaan
 
 Current code release: **2.8.1**. `VERSION` is the source of release truth.
-Target checked on 2026-10-11: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.0.
+Target checked on 2026-10-11: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.1.
 See the [server handoff](docs/production-handoff-fa.md) and [saved proof](docs/delivery-readiness.md).
+The [remaining acceptance report](docs/remaining-acceptance-2026-10-11.md) separates real
+in-app receipt and unsigned installation from blocked native push, publisher signing and source coverage.
 
 ## Components
 

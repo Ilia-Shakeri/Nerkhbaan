@@ -38,7 +38,7 @@ async def get_prices(response: Response) -> PricesResponse:
         payload = await legacy_pricing_adapter.get_prices()
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Pricing data is unavailable") from exc
-    response.headers["Cache-Control"] = "public, max-age=10"
+    response.headers["Cache-Control"] = "no-store"
     return PricesResponse.model_validate(payload)
 
 

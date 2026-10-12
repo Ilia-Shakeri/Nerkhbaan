@@ -11,6 +11,8 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Isolated independent public feed sources and added a validated XAU fallback without bypassing source time, unit, anomaly or independence checks.
 - Preserved the vetted relay freshness anchor across stored quote reads without extending source eligibility or operator policy windows.
 - Coalesced unfinished WebSocket snapshot reads and batched instrument policies per response, removing the repeated database work exposed by actual cold connection and sustained-load checks.
+- Bounded automatic chart backfill with an owner-checked Redis guard and batched provider settings; repeated GETs no longer create an unrestricted queue of nearly identical ranges. Manual enqueue and fresh policy checks stay intact.
+- Removed completed public price-payload caching, read current quotes after chart inputs, reevaluated expiry when serving each caller and sent `Cache-Control: no-store` for current prices.
 - Enabled executable metadata/signing and made the Windows release command fail when a publisher signature is unavailable; the explicit unsigned test package stays separate.
 
 ### Added

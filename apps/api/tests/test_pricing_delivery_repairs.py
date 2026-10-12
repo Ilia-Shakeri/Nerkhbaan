@@ -141,9 +141,9 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_corrupt_provider_override_only_disables_affected_source(self):
         operational = OperationalPricingSettings()
-        async def value(key, scope_id="global", default=None):
-            return {"trust_score":"NaN"} if key=="provider.config" and scope_id=="coingecko_btc" else default
-        with patch.object(operational,"_provider_rows",return_value=[]), patch.object(operational,"value",side_effect=value):
+        overrides = [{"key": "provider.config", "scope_id": "coingecko_btc",
+                      "value": {"trust_score": "NaN"}}]
+        with patch.object(operational,"_provider_rows",return_value=[]), patch.object(operational,"_provider_override_rows",return_value=overrides):
             providers = await operational.providers_for("BTC_USD")
         self.assertFalse(next(item for item in providers if item.provider_id=="coingecko_btc").enabled)
         self.assertTrue(any(item.enabled for item in providers if item.provider_id!="coingecko_btc"))

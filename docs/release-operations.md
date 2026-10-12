@@ -10,8 +10,8 @@ Run every CI job on the final commit: clients, desktop package, Python, actual T
 HTTP/browser, migration/restore, Go/sidecars, proxy/monitoring and security scans.
 Keep logs tied to release and commit. Do not replace an executed test with test discovery.
 
-Recorded application result: [CI run 38136644783](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38136644783)
-passed all 15 jobs at `a53842359ff147fe8946131f007dbcade7074adc`. All seven image scans kept
+Recorded application result: [CI run 38145319047](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38145319047)
+passed all 15 jobs at `2c8c45b615ec3927be681e19f751a5377930fc33`. All seven image scans kept
 the HIGH/CRITICAL failure gate. Later changes need a new final-commit run. Actual target migration,
 rolling deployment and browser evidence are recorded separately in [delivery readiness](delivery-readiness.md).
 
@@ -89,6 +89,11 @@ concurrent source writes invalidate a before/after fingerprint. Production-sized
 A `.gz` integrity check alone is not restore proof.
 
 Run the dedicated migrate service before backend. Applied files are immutable.
+The eighth migration, `20261011_002_notification_sending_state.sql`, adds `sending` to the
+delivery-state CHECK constraint. Test it on the owned restored copy before live execution.
+Record original user/delivery fingerprints. Preserve all seven previously applied migration files.
+Strict readiness can return 503 while the migration ledger is ahead of the old API image;
+capture that transition separately from business-route health and final readiness.
 The new forward migration adds MFA replay state, widens pricing metadata and repairs known legacy Telegram defaults.
 An unknown newer migration stops an older release. Lock acquisition has a deadline.
 DATABASE_URL TLS query settings remain intact, including verify-full and CA/client certificate settings.
@@ -169,8 +174,12 @@ docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
 
 Stop the sequence on a failed health or identity check; keep the surviving healthy replicas and
 inspect the scoped private log before continuing. Do not rerun old-ID removal after a partial update.
-The recorded API update passed all six HTTPS probes with healthy overlap and preserved every
-non-API container ID. The separate client update preserved every nonclient container ID.
+The earlier 2.8.0 API update passed six HTTPS probes. The 2.8.1 migration transition recorded
+503 readiness responses; the later API cutover recorded one 502 before recovery. Six final
+HTTPS probes passed and all 13 protected container IDs/start times were preserved. Exact outage
+duration was not measured; zero downtime is not claimed. Keep the failed check receipt and reconcile
+the actual running replicas before resuming after a partial update. The separate client update
+preserved every nonclient container ID.
 
 Keep PostgreSQL, Redis, their containers and their volumes running. Compare their recorded IDs
 and mounts after the application update. The generic full-stack script above recreates services;

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from datetime import UTC, datetime
 from typing import Any
 
@@ -28,36 +27,42 @@ _CHART_ERROR = {
 class LegacyPricingAdapter:
     def __init__(self, service: InstrumentPricingService = instrument_pricing_service) -> None:
         self.service = service
-        self._cache: tuple[float, dict[str, Any]] | None = None
-        self._cache_lock = asyncio.Lock()
+        self._prices_task: asyncio.Task | None = None
+        self._prices_lock = asyncio.Lock()
 
     async def get_prices(self) -> dict[str, Any]:
-        """Aggregate snapshot for the public price endpoint.
+        """Share only unfinished reads; evaluate deadlines when serving each caller."""
+        async with self._prices_lock:
+            task = self._prices_task
+            if task is None or task.done():
+                task = asyncio.create_task(self._load_price_inputs())
+                self._prices_task = task
+                task.add_done_callback(self._price_inputs_done)
+        # Cancelling one caller must not cancel the shared database/Redis read.
+        await asyncio.wait({task})
+        snapshots, histories = task.result()
+        return await self._build_prices(snapshots, histories)
 
-        Built from ten canonical reads plus eight short-history reads, so it is
-        cached for a couple of seconds. Recomputing it per request made an
-        unauthenticated endpoint the heaviest Redis consumer in the system, and
-        the underlying data cannot change faster than the refresh interval.
-        """
-        ttl = max(1, settings.pricing_provider_aggregate_cache_seconds)
-        now = time.monotonic()
-        cached = self._cache
-        if cached is not None and now - cached[0] < ttl:
-            return cached[1]
-        async with self._cache_lock:
-            # Re-check: concurrent callers should share one rebuild.
-            cached = self._cache
-            now = time.monotonic()
-            if cached is not None and now - cached[0] < ttl:
-                return cached[1]
-            payload = await self._build_prices()
-            self._cache = (time.monotonic(), payload)
-            return payload
+    def _price_inputs_done(self, task: asyncio.Task) -> None:
+        if not task.cancelled():
+            task.exception()
+        if self._prices_task is task:
+            self._prices_task = None
 
-    async def _build_prices(self) -> dict[str, Any]:
+    async def _load_price_inputs(self):
+        assets = ("gold", "silver", "usdt", "btc")
+        series = await asyncio.gather(*(
+            self._short_history(LEGACY_ASSET_MAPPING[(asset, "usd")],
+                                LEGACY_ASSET_MAPPING[(asset, "toman")])
+            for asset in assets
+        ))
+        # Read current quotes and admin policy after potentially slow history reads.
         snapshots = await self.service.get_all_canonical()
+        return snapshots, dict(zip(assets, series))
+
+    async def _build_prices(self, snapshots, histories) -> dict[str, Any]:
         assets = [
-            await self._asset_payload(asset, snapshots)
+            await self._asset_payload(asset, snapshots, history=histories[asset])
             for asset in ("gold", "silver", "usdt", "btc")
         ]
         refresh_times = [
@@ -153,6 +158,8 @@ class LegacyPricingAdapter:
         self,
         asset: str,
         snapshots: dict[str, CanonicalQuote],
+        *,
+        history: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         usd_id = LEGACY_ASSET_MAPPING[(asset, "usd")]
         toman_id = LEGACY_ASSET_MAPPING[(asset, "toman")]
@@ -164,7 +171,8 @@ class LegacyPricingAdapter:
             for quote in (usd, toman)
             if quote is not None
         ]
-        history = await self._short_history(usd_id, toman_id)
+        if history is None:
+            history = await self._short_history(usd_id, toman_id)
         payload = {
             "asset": asset,
             "label_fa": _LABELS[asset]["fa"],

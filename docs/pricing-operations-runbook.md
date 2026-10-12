@@ -1,4 +1,4 @@
-# Pricing Operations Runbook — 2.8.0
+# Pricing Operations Runbook — 2.8.1
 
 Updated: 2026-10-11. No live host was inspected merely by updating this document.
 
@@ -58,6 +58,10 @@ Backfill uses bounded batches and resumes pending points. It completes only afte
 A temporary live-priority deferral is retryable. Missing enabled history routes remain unavailable.
 Zero trade volume is valid; nonfinite or negative volume is not. Price remains strictly positive.
 CoinGecko history is USD history, never a direct Iranian Toman source.
+Nobitex history uses bounded 500-point pages and resumes only after durable writes.
+The version-two feed carries each fresh quote independently, including XAU USD per troy ounce.
+See the dated [39-route coverage and durable month proof](provider-coverage-2026-10-11.md).
+Scheduled workflows do not prove continuous collection; inspect actual source times and gaps.
 
 ## Health and monitoring
 

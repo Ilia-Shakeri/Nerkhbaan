@@ -392,10 +392,8 @@ class PricingProviderRepairTests(unittest.TestCase):
             "cooldown_after_429_seconds": 300,
             "estimated_request_cost": "1",
         }
-        with patch(
-            "app.pricing.operational.asyncio.to_thread",
-            new=AsyncMock(return_value=[row]),
-        ):
+        with patch("app.pricing.operational.OperationalPricingSettings._provider_rows", return_value=[row]), \
+             patch("app.pricing.operational.OperationalPricingSettings._provider_override_rows", return_value=[]):
             providers = asyncio.run(
                 OperationalPricingSettings().providers_for("BTC_TOMAN")
             )
