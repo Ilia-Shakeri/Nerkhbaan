@@ -1,6 +1,6 @@
 # Nerkhbaan API Reference
 
-Code release: **2.8.1**. Updated: 2026-10-11.
+Code release: **2.8.1**. Updated: 2026-10-12.
 The complete generated contract is [docs/api-contracts.json](docs/api-contracts.json).
 The [route index](docs/api-route-index.md) lists all HTTP methods, paths and request schemas.
 Regenerate both with `python scripts/export_api_contracts.py` after route or model changes.
@@ -67,6 +67,14 @@ Gold has no formula fallback. Missing direct gold is unavailable. Approved non-g
 remain theoretical and inherit the weakest input validity. Toman and USD percentages are independent.
 Historical points keep their original instrument and unit. Completeness includes coverage and gaps;
 partial data is returned as partial, not fabricated. Backfill is resumable and requires durable writes.
+`GET /api/prices` sends `Cache-Control: no-store`. Current quotes and runtime policy are read after
+chart inputs, and expiry is evaluated when each caller receives its payload. Only unfinished input
+reads are shared; completed current-price payloads are not retained. The old aggregate-cache environment
+setting is accepted for compatibility and does not permit stale current-price responses.
+Partial history may request automatic backfill only for instruments with an explicit history route.
+An owner-checked 60-second Redis guard bounds repeated automatic requests for the same instrument
+and bucket range. Redis failure returns deferred without an unguarded enqueue. Manual requests keep
+their exact ranges and retry behavior; a queued job is not evidence of durable history completion.
 
 `WS /api/ws/prices` streams updates. Reconnect or a detected sequence gap requires a fresh HTTP snapshot.
 Periodic HTTP refresh remains a recovery path. WebSocket transport health does not prove source price freshness.

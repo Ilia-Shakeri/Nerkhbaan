@@ -5,9 +5,12 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
+from threading import Lock
 from typing import Any
+from weakref import WeakKeyDictionary
 
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 
 from ..db import SessionLocal
 from .instruments import get_instrument
@@ -32,6 +35,35 @@ _ACCEPTED_STATUSES = (
 )
 
 logger = logging.getLogger(__name__)
+
+_BOOKEND_CAPABILITIES: WeakKeyDictionary[Engine, bool] = WeakKeyDictionary()
+_BOOKEND_CAPABILITY_LOCK = Lock()
+_BOOKEND_CAPABILITY_SQL = """
+    SELECT COUNT(DISTINCT p.proname) = 2
+    FROM pg_extension e
+    JOIN pg_depend d ON d.refobjid = e.oid
+    JOIN pg_proc p ON p.oid = d.objid
+    WHERE e.extname = 'timescaledb'
+      AND d.refclassid = 'pg_extension'::regclass
+      AND d.classid = 'pg_proc'::regclass AND d.deptype = 'e'
+      AND p.proname IN ('first', 'last') AND p.pronargs = 2
+      AND p.prokind = 'a' AND pg_function_is_visible(p.oid)
+"""
+
+
+def _history_supports_bookends(db) -> bool:
+    bind = db.get_bind()
+    engine = bind if isinstance(bind, Engine) else getattr(bind, "engine", None)
+    if not isinstance(engine, Engine) or engine.dialect.name != "postgresql":
+        return False
+    # Metadata is tied to this actual database engine, never to a URL or quote TTL.
+    with _BOOKEND_CAPABILITY_LOCK:
+        if engine in _BOOKEND_CAPABILITIES:
+            return _BOOKEND_CAPABILITIES[engine]
+        supported = bool(db.execute(text(_BOOKEND_CAPABILITY_SQL)).scalar_one())
+        # A failed read raises and leaves the capability unknown for the next retry.
+        _BOOKEND_CAPABILITIES[engine] = supported
+        return supported
 
 # Preserve historical evidence, but never blend old calculated gold into
 # current prices, chart buckets, anomaly baselines, or percentage changes.
@@ -85,8 +117,66 @@ class HistoryResult:
         }
 
 
+def _canonical_history_sql(use_bookends: bool):
+    opening = "first(price, canonical_at)" if use_bookends else "(array_agg(price ORDER BY canonical_at ASC))[1]"
+    closing = "last(price, canonical_at)" if use_bookends else "(array_agg(price ORDER BY canonical_at DESC))[1]"
+    return text(
+        f"""
+        WITH bucketed AS (
+            SELECT
+                date_bin(CAST(:bucket AS interval), canonical_at, TIMESTAMPTZ '2000-01-01') AS bucket,
+                canonical_at,
+                price
+            FROM canonical_quotes
+            WHERE instrument_id = :instrument_id
+              AND canonical_at >= :start
+              AND canonical_at <= :end
+              AND status = ANY(:statuses)
+              AND {_DIRECT_GOLD_SQL}
+        )
+        SELECT
+            bucket,
+            {opening} AS open,
+            {closing} AS close,
+            MAX(price) AS high,
+            MIN(price) AS low,
+            COUNT(*) AS sample_count
+        FROM bucketed
+        GROUP BY bucket
+        ORDER BY bucket ASC
+        """
+    )
+
+
 class InternalPriceHistory:
+    def __init__(self) -> None:
+        self._canonical_reads: dict[tuple[str, str, datetime | None], asyncio.Task] = {}
+        self._canonical_guard = asyncio.Lock()
+
     async def canonical_history(
+        self, instrument_id: str, timeframe: str, *, end: datetime | None = None,
+    ) -> HistoryResult:
+        normalized = get_instrument(instrument_id).instrument_id
+        if timeframe not in TIMEFRAMES:
+            raise ValueError("Unsupported timeframe")
+        requested_end = ensure_utc(end) if end is not None else None
+        key = (normalized, timeframe, requested_end)
+        async with self._canonical_guard:
+            task = self._canonical_reads.get(key)
+            if task is None or task.done():
+                task = asyncio.create_task(self._read_canonical_history(normalized, timeframe, end=requested_end))
+                self._canonical_reads[key] = task
+                task.add_done_callback(lambda done: self._canonical_read_done(key, done))
+        await asyncio.wait({task})
+        return task.result()
+
+    def _canonical_read_done(self, key, task: asyncio.Task) -> None:
+        if not task.cancelled():
+            task.exception()
+        if self._canonical_reads.get(key) is task:
+            del self._canonical_reads[key]
+
+    async def _read_canonical_history(
         self,
         instrument_id: str,
         timeframe: str,
@@ -213,34 +303,9 @@ class InternalPriceHistory:
         end: datetime,
         bucket: str,
     ) -> list[dict[str, Any]]:
-        query = text(
-            f"""
-            WITH bucketed AS (
-                SELECT
-                    date_bin(CAST(:bucket AS interval), canonical_at, TIMESTAMPTZ '2000-01-01') AS bucket,
-                    canonical_at,
-                    price
-                FROM canonical_quotes
-                WHERE instrument_id = :instrument_id
-                  AND canonical_at >= :start
-                  AND canonical_at <= :end
-                  AND status = ANY(:statuses)
-                  AND {_DIRECT_GOLD_SQL}
-            )
-            SELECT
-                bucket,
-                (array_agg(price ORDER BY canonical_at ASC))[1] AS open,
-                (array_agg(price ORDER BY canonical_at DESC))[1] AS close,
-                MAX(price) AS high,
-                MIN(price) AS low,
-                COUNT(*) AS sample_count
-            FROM bucketed
-            GROUP BY bucket
-            ORDER BY bucket ASC
-            """
-        )
         db = SessionLocal()
         try:
+            query = _canonical_history_sql(_history_supports_bookends(db))
             rows = db.execute(
                 query,
                 {

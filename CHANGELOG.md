@@ -13,6 +13,7 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Coalesced unfinished WebSocket snapshot reads and batched instrument policies per response, removing the repeated database work exposed by actual cold connection and sustained-load checks.
 - Bounded automatic chart backfill with an owner-checked Redis guard and batched provider settings; repeated GETs no longer create an unrestricted queue of nearly identical ranges. Manual enqueue and fresh policy checks stay intact.
 - Removed completed public price-payload caching, read current quotes after chart inputs, reevaluated expiry when serving each caller and sent `Cache-Control: no-store` for current prices.
+- Shared unfinished history reads and used streaming first/last aggregates only when the actual database exposes the Timescale aggregates; ordinary PostgreSQL retains the original query. Both backends passed real OHLC, count, range and direct-gold equivalence checks.
 - Enabled executable metadata/signing and made the Windows release command fail when a publisher signature is unavailable; the explicit unsigned test package stays separate.
 
 ### Added
