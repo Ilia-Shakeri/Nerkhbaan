@@ -1,6 +1,6 @@
 # Production Acceptance — 2.8.1
 
-Updated: 2026-10-11. The current delivery matrix is [delivery-readiness.md](delivery-readiness.md).
+Updated: 2026-10-12. The current delivery matrix is [delivery-readiness.md](delivery-readiness.md).
 The operational sequence is [release-operations.md](release-operations.md).
 
 Required final evidence: exact release/commit, fresh source canaries and usage rights,

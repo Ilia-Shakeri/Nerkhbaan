@@ -1,6 +1,6 @@
 # Pricing Operations Runbook — 2.8.1
 
-Updated: 2026-10-11. No live host was inspected merely by updating this document.
+Updated: 2026-10-12. Dated target evidence is recorded separately in the delivery matrix.
 
 ## Provider onboarding
 

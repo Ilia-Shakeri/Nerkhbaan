@@ -23,7 +23,14 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ### Acceptance
 
-This patch is under final target acceptance. Completed and blocked external checks are recorded in the delivery matrix; an unsigned installation is never reported as signed.
+Application commit `ce22c1d` passed all 15 hosted jobs and the exact target image passed 182 native
+checks, seven real PostgreSQL checks and three real Timescale history checks. The owned stage
+passed a clean 1800.258-second soak: 27,000 HTTP 200 responses, 14.998 rps, 323.249 ms p95
+and 200 stable filtered WebSockets. Separate API/Redis fault windows passed all-client recovery
+in 3.746/4.495 seconds. The earlier fixture-publisher failure remains a failed receipt; the corrected
+fault-only run links the original clean proof. Owned stage storage was removed after capture.
+Native Windows push, trusted signing and continuous all-source coverage remain blocked.
+An actual unsigned installation is never reported as signed. See the delivery matrix for limits.
 
 ## [2.8.0] - 2026-10-11
 

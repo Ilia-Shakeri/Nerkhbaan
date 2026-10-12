@@ -1,4 +1,4 @@
-> Historical report. Reviewed for the 2.8.0 documentation set on 2026-10-11. Dates, facts and past results below remain historical; use [delivery readiness](delivery-readiness.md) and [current status](../PROJECT_STATUS.md) for current acceptance.
+> Historical report. Reviewed for the 2.8.1 documentation set on 2026-10-12. Dates, facts and past results below remain historical; use [delivery readiness](delivery-readiness.md) and [current status](../PROJECT_STATUS.md) for current acceptance.
 
 # Iran Filtering & Cross-Border Pricing Infrastructure — Scenario Analysis
 

@@ -1,6 +1,6 @@
 # Release Operations — 2.8.1
 
-Updated: 2026-10-11. Execute against the intended host only after review of the concrete release.
+Updated: 2026-10-12. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
 
 ## 1. Final code gates
@@ -10,8 +10,9 @@ Run every CI job on the final commit: clients, desktop package, Python, actual T
 HTTP/browser, migration/restore, Go/sidecars, proxy/monitoring and security scans.
 Keep logs tied to release and commit. Do not replace an executed test with test discovery.
 
-Recorded application result: [CI run 38145319047](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38145319047)
-passed all 15 jobs at `2c8c45b615ec3927be681e19f751a5377930fc33`. All seven image scans kept
+Recorded application result: [CI run 38222923015](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38222923015)
+passed all 15 jobs at `ce22c1d0487d78c58b488aff40616f3ce0a331f1`, including real plain PostgreSQL
+and Timescale history golden cases. All seven image scans kept
 the HIGH/CRITICAL failure gate. Later changes need a new final-commit run. Actual target migration,
 rolling deployment and browser evidence are recorded separately in [delivery readiness](delivery-readiness.md).
 
@@ -175,9 +176,12 @@ docker compose -p nerkhbaan --env-file /opt/Nerkhbaan/.env \
 Stop the sequence on a failed health or identity check; keep the surviving healthy replicas and
 inspect the scoped private log before continuing. Do not rerun old-ID removal after a partial update.
 The earlier 2.8.0 API update passed six HTTPS probes. The 2.8.1 migration transition recorded
-503 readiness responses; the later API cutover recorded one 502 before recovery. Six final
-HTTPS probes passed and all 13 protected container IDs/start times were preserved. Exact outage
-duration was not measured; zero downtime is not claimed. Keep the failed check receipt and reconcile
+503 readiness responses; an earlier API cutover recorded one 502 before recovery. The final
+`ce22c1d` cutover recorded two five-second timeouts before recovery and six final HTTPS 200 probes.
+All sixteen non-API IDs/start times matched its pre-rollout baseline. Three earlier Dolphin
+recreations are retained as differences from the original thirteen-service baseline; a fresh
+reviewed baseline and pre-run frontend/admin/feed baseline protect subsequent acceptance.
+Exact outage duration was not measured; zero downtime is not claimed. Keep the failed check receipt and reconcile
 the actual running replicas before resuming after a partial update. The separate client update
 preserved every nonclient container ID.
 

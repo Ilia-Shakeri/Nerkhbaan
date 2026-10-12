@@ -1,6 +1,6 @@
 # Delivery Readiness — 2.8.1
 
-Updated: 2026-10-11. Code delivery and production acceptance are separate facts.
+Updated: 2026-10-12. Code delivery and production acceptance are separate facts.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
@@ -31,28 +31,66 @@ Do not change a pending marker to passed without a saved successful run for the 
 - Existing compressed chunks and market-price duplicates need target database checks before uniqueness changes.
 - Keep production evidence outside source control and exclude secrets and customer payloads.
 
-## Executed local evidence — 2026-10-11
+## Current executed evidence — 2026-10-12
 
 Current 2.8.1 acceptance is in [the remaining report](remaining-acceptance-2026-10-11.md).
-The full local backend suite ran 363 cases: 353 passed and ten PostgreSQL cases were skipped.
-The exact final API image `sha256:a081a7239bedd090d8cecae085476b8164522ec446c814ae116191d39719fb32`
-passed 152 native cases and four real PostgreSQL delivery-state cases without skips.
+The full local backend suite ran 396 cases: 383 passed and thirteen PostgreSQL cases were skipped.
+The exact final API image `sha256:989b51f1b514817c4f18f0f1e0136ea9613b577b144707199181471fded1ce60`
+passed 182 native cases without skips. Actual PostgreSQL 17.11 passed four delivery-state and
+three history golden cases; actual Timescale 2.28.3/PostgreSQL 16.14 passed three history golden cases.
+The six actual PostgreSQL refresh-concurrency cases also passed in hosted CI. These suites overlap;
+do not sum their counts into one fictional complete run.
 Twenty repeated SQLite tests passed after separate connection fixtures replaced unsafe StaticPool sharing.
 Strict HIGH/CRITICAL image findings are zero, including unfixed findings, without exceptions.
-Hosted [run 38145319047](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38145319047)
-passed all 15 jobs for `2c8c45b615ec3927be681e19f751a5377930fc33`.
+Hosted [run 38222923015](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38222923015)
+passed all 15 jobs for application commit `ce22c1d0487d78c58b488aff40616f3ce0a331f1`.
+Runtime inputs and fifty frozen test files were bound to that commit with recorded SHA-256 hashes.
 
 Actual target 2.8.1 checks passed eight migrations, 25 real admin routes, security gates,
 filtered WebSocket snapshots/ping/reconnect and encrypted pre-migration backup verification.
-Four original users and all 13 protected container IDs/start times were preserved.
-Migration readiness had bounded 503 responses; later API cutover had one observed 502, followed
-by six final 200 probes. Exact outage duration was not measured; zero downtime is not claimed.
+Four original users and all sixteen non-API container IDs/start times were preserved across the
+final API rollout. Ten of thirteen initial protected services remain unchanged. Three Dolphin
+apps were externally recreated at 07:53–07:54 UTC before the final load run; attribution is not
+established. Their historical differences are preserved alongside the freshly reviewed thirteen-service
+guard baseline and a separate pre-run frontend/admin/feed three-service baseline.
+Migration readiness had bounded 503 responses; an earlier API cutover had one observed 502.
+The final cutover recorded two five-second readiness timeouts, followed by six final 200 probes.
+Exact outage duration was not measured; zero downtime is not claimed. The periodic load watcher
+does not replace these finer-grained cutover receipts.
 Actual in-app notification receipt/read passed. Native Windows push failed with ConnectTimeout.
 Actual unsigned NSIS installation/runtime/removal passed; trusted publisher signing is blocked.
 Real provider pagination stored 720 provider and 720 canonical history rows on the owned copy,
-then cleaned only its fixtures. The initial load attempts and final-image short gate failed;
-200 simultaneous cold snapshots passed, but 15 rps throughput and 1-second p95 did not.
-The clean 1800-second soak and separate faults are not yet accepted.
+then cleaned only its fixtures. Earlier rejected load attempts remain dated evidence. The final
+image short gate passed at the unchanged caps: 900/900 HTTP 200 responses, 14.990 rps and
+442.150 ms p95 over 60.039 seconds. Two hundred simultaneous cold snapshots passed with
+zero errors and 1.267-second p95. The fresh clean soak passed 1800.258 seconds, 27,000/27,000
+HTTP 200 responses, 14.998 rps and 323.249 ms p95. Each of three public paths completed 9,000
+requests with 25 HTTP workers; 200 filtered WebSockets stayed connected with zero clean errors
+or disconnects. The cold snapshot p95 in that full run was 1.087 seconds.
+Separate fault windows passed the same application image and caps: 200 clients recovered from
+one owned API shutdown in 3.746 seconds, 20 fault-window HTTP probes passed and filtered updates
+reached every client. Redis outage returned the documented degraded/polling/1013 contract;
+all 200 subscriptions resynchronized in 4.495 seconds and filtered live updates reached every client.
+
+The first post-soak Redis publication failed because the fixture publisher reused its closed pool;
+the actual application had already resynchronized all clients. Its overall failed receipt remains
+unchanged. After 22 helper checks passed, a separate fault-only attempt replaced that fixture pool
+once after application resync and passed. Its receipt explicitly records no renewed HTTP soak and
+links the original server-byte-identical clean receipts. Combined acceptance uses both attempts;
+the failed original overall receipt was not relabelled passed.
+
+Resource caps stayed at PostgreSQL 0.75 CPU/1536 MiB, Redis 0.25/512, each API 0.75/768,
+edge 0.25/160 and client 0.5/384. The isolated stack had background scheduling disabled and
+synthetic ephemeral PubSub; this proof covers anonymous price/history and filtered streaming,
+not arbitrary authenticated/admin traffic or every future workload.
+All four copied users, price counts and 13,358 original backfill rows stayed intact. Automatic
+history GETs created 64 pending jobs only on the owned copy. Its five labelled containers, internal
+network and database volume were then removed; all eighteen nonowned IDs/start times remained
+equal and final public readiness returned 200. Proof files and production storage were preserved.
+
+The tested code/infrastructure correction loop reached **9/10**. All-provider continuity,
+native Windows push and trusted publisher signing remain blocked; the score is scoped and does
+not turn these external acceptance gates into passes.
 
 ### Historical 2.8.0 results
 
