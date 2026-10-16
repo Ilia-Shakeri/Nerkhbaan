@@ -1,11 +1,11 @@
-# Delivery Readiness — 2.8.1
+# Delivery Readiness — 2.8.2
 
-Updated: 2026-10-12. Code delivery and production acceptance are separate facts.
+Updated: 2026-10-16. Code delivery and production acceptance are separate facts.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
 | --- | --- | --- | --- |
-| Release consistency | `npm run check:release` | version 2.8.1, no drift | Local |
+| Release consistency | `npm run check:release` | version 2.8.2, no drift | Local |
 | Python static/unit | `python -m pyflakes app tests scripts`; `python -m unittest discover -s tests -v` from apps/api | zero static errors; all required tests pass | Local |
 | Infra fixture behavior | `python scripts/test_infra_contracts.py` | OK | Local, mocked network/data |
 | Browser fixture safety | `TEST_DATABASE_URL=... python scripts/test_browser_fixture.py` | five cases pass, none skipped | Explicit loopback test PostgreSQL, run-owned schema |
@@ -31,7 +31,30 @@ Do not change a pending marker to passed without a saved successful run for the 
 - Existing compressed chunks and market-price duplicates need target database checks before uniqueness changes.
 - Keep production evidence outside source control and exclude secrets and customer payloads.
 
-## Current executed evidence — 2026-10-12
+## Step-one source validation — 2026-10-16
+
+Release 2.8.2 closes the full first-step code audit, including the pricing, queue, mail, conversation
+and interface defects after the initial session/logout/deployment fixes. The final backend run
+passed **450 tests, zero skips** with explicit owned loopback PostgreSQL 17.11 and Redis 7.4.11.
+The suite also contains unit, SQLite and mocked cases; not every case is a PostgreSQL/Redis test.
+
+Frontend/runtime contracts passed 65 cases. All 26 Edge cases executed: one real public signup and
+alert flow on a run-owned PostgreSQL ORM schema and 25 mocked HTTP flows. The browser schema was
+removed afterwards. This fixture does not prove migrations, Timescale behavior or real delivery.
+Go 1.26.9 passed ten feed checks, including local Git to loopback HTTP forwarding. Fourteen deployment
+CLI tests covered 39 fake Docker/Git/HTTPS scenarios; they do not prove a real container cutover.
+The 31 helper checks include five real PostgreSQL browser-schema safety cases. All three renderer
+builds and Python static checks passed. These suites overlap and must not be combined as one run.
+
+The scoped code correction loop reached 9/10 after the remaining failures were reproduced and fixed.
+Original applied SQL is unchanged. The new alert-race and persistence-queue modules are wired into
+hosted integration with disposable PostgreSQL/Redis. A fresh hosted result is required for this
+release; the older results below are historical. No live service was changed by this work.
+
+Provider coverage is step two. Continuous source operation, actual notification receipt, publisher
+signing, new runtime image scans and target release acceptance remain separate gates.
+
+## Previously executed evidence — 2026-10-12
 
 Current 2.8.1 acceptance is in [the remaining report](remaining-acceptance-2026-10-11.md).
 The full local backend suite ran 396 cases: 383 passed and thirteen PostgreSQL cases were skipped.

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './app/App';
 import { AppErrorBoundary } from './app/components/AppErrorBoundary';
+import { LogoutNotice } from './app/components/LogoutNotice';
 import { registerServiceWorker } from './pwa/registerServiceWorker';
 import './styles/index.css';
 
@@ -28,6 +29,7 @@ const queryClient = new QueryClient({
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
+    <LogoutNotice />
     <AppErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <App />

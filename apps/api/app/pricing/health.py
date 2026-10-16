@@ -14,7 +14,7 @@ from .instruments import get_instrument
 from .models import utc_now
 from .registry import PROVIDERS, PROVIDERS_BY_INSTRUMENT
 from .contracts import provider_contract, provider_contract_inventory
-from .quote_visibility import allowed_current_quote
+from .service import InstrumentPricingService
 
 
 class PricingHealthService:
@@ -28,6 +28,7 @@ class PricingHealthService:
         self.store = store
         self.history = history
         self.backfill = backfill
+        self.pricing = InstrumentPricingService(store=store, history=history)
 
     async def instrument_health(
         self, instrument_id: str, *, authenticated: bool = False
@@ -38,20 +39,11 @@ class PricingHealthService:
             asyncio.to_thread(self._database_probe),
         )
         quote = None
-        if redis_ok:
+        if redis_ok or database["connected"]:
             try:
-                quote = await self.store.get_canonical(normalized)
+                quote = await self.pricing.get_canonical(normalized)
             except Exception:
                 quote = None
-        if quote is not None and not allowed_current_quote(quote):
-            quote = None
-        if quote is None and database["connected"]:
-            try:
-                quote = await self.history.latest_canonical(normalized)
-            except Exception:
-                quote = None
-        if quote is not None and not allowed_current_quote(quote):
-            quote = None
         backlog = await self.store.persistence_backlog() if redis_ok else None
         payload: dict[str, Any] = {
             "instrument_id": normalized,

@@ -84,6 +84,10 @@ class ProviderCallFailure(RuntimeError):
         self.retry_after_seconds = retry_after_seconds
 
 
+class ProviderBudgetUnavailable(RuntimeError):
+    pass
+
+
 class ProviderQuoteCollector:
     failure_threshold = 3
     circuit_open_seconds = 60
@@ -208,25 +212,26 @@ class ProviderQuoteCollector:
                     None,
                     cache_status=FreshnessStatus.LIVE,
                 )
-            budget = await self.budgets.consume(provider, purpose)
-            if not budget.allowed:
-                runtime.operational_status = budget.reason
+            try:
+                return await self._call_and_parse(
+                    provider,
+                    purpose,
+                    runtime,
+                    client,
+                    effective_instrument,
+                )
+            except ProviderBudgetUnavailable as exc:
+                reason = str(exc)
+                runtime.operational_status = reason
                 await self.store.set_provider_runtime(runtime)
                 return QuoteFetchOutcome(
                     cached_after_lock or cached,
                     False,
                     False,
                     False,
-                    budget.reason,
+                    reason,
                     cache_status=locked_cache_status or cached_status,
                 )
-            return await self._call_and_parse(
-                provider,
-                purpose,
-                runtime,
-                client,
-                effective_instrument,
-            )
 
     async def _call_and_parse(
         self,
@@ -250,7 +255,7 @@ class ProviderQuoteCollector:
         )
         try:
             payload, content_type, http_status = await self._request_payload(
-                request_client, provider
+                request_client, provider, purpose=purpose
             )
             parser = build_parser(provider.parser_id)
             received_at = utc_now()
@@ -431,6 +436,8 @@ class ProviderQuoteCollector:
         self,
         client: httpx.AsyncClient,
         provider: ProviderDefinition,
+        *,
+        purpose: RequestPurpose | None = None,
     ) -> tuple[object, str | None, int]:
         headers = dict(provider.static_headers)
         params: dict[str, str] = {}
@@ -470,7 +477,16 @@ class ProviderQuoteCollector:
             elif provider_query_key:
                 params[provider_query_key] = str(key)
         maximum_attempts = settings.pricing_provider_max_retries + 1
+        last_failure: ProviderCallFailure | None = None
         for attempt in range(maximum_attempts):
+            # Operator probes omit a purpose; managed refreshes charge every
+            # actual attempt, including retries, through the shared limits.
+            if purpose is not None:
+                budget = await self.budgets.consume(provider, purpose)
+                if not budget.allowed:
+                    if last_failure is not None:
+                        raise last_failure
+                    raise ProviderBudgetUnavailable(budget.reason)
             try:
                 return await self._request_once(client, provider, headers, params)
             except ProviderCallFailure as exc:
@@ -481,6 +497,7 @@ class ProviderQuoteCollector:
                 )
                 if not retryable or attempt + 1 >= maximum_attempts:
                     raise
+                last_failure = exc
                 delay = float(settings.pricing_provider_backoff_base_seconds) * (2 ** attempt)
                 if exc.retry_after_seconds is not None:
                     delay = max(delay, float(exc.retry_after_seconds))

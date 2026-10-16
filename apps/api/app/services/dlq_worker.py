@@ -5,13 +5,14 @@ import logging
 import random
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import or_, select, update
 
 from ..config import settings
 from ..db import SessionLocal
-from ..models import Alert, AlertDeliveryJob, AlertTriggerEvent
+from ..models import Alert, AlertDeliveryJob
 from ..observability import alert_delivery_total, background_failures_total
 from .alert_engine import PermanentDeliveryError
+from .alert_delivery_state import finalize_trigger_event, lock_trigger_event
 
 logger = logging.getLogger(__name__)
 def _safe_error(exc: Exception) -> str:
@@ -113,22 +114,15 @@ class DLQWorker:
             job = db.scalar(select(AlertDeliveryJob).where(AlertDeliveryJob.id == job_id).with_for_update())
             if not job or job.status != "sending" or (attempt is not None and job.attempt_count != attempt):
                 return
+            # Different channels lock different jobs; the shared event serializes
+            # their terminal state checks so the last one sees committed peers.
+            event = lock_trigger_event(db, job.trigger_event_id)
             job.status = "delivered"
             job.provider_response_summary = summary
             job.last_error = None
             job.delivered_at = now
             job.updated_at = now
-            db.flush()
-            remaining = db.scalar(
-                select(func.count(AlertDeliveryJob.id)).where(
-                    AlertDeliveryJob.trigger_event_id == job.trigger_event_id,
-                    AlertDeliveryJob.status.not_in(("delivered", "cancelled")),
-                )
-            )
-            if remaining == 0:
-                event = db.get(AlertTriggerEvent, job.trigger_event_id)
-                if event:
-                    event.status = "delivered"
+            finalize_trigger_event(db, event)
             db.commit()
         finally:
             db.close()
@@ -140,6 +134,7 @@ class DLQWorker:
             job = db.scalar(select(AlertDeliveryJob).where(AlertDeliveryJob.id == job_id).with_for_update())
             if not job or job.status not in {"processing", "sending"} or (attempt is not None and job.attempt_count != attempt):
                 return
+            event = lock_trigger_event(db, job.trigger_event_id)
             alert = db.get(Alert, job.alert_id)
             retry_enabled = bool(alert and alert.enable_dlq)
             permanent = isinstance(exc, PermanentDeliveryError)
@@ -160,7 +155,6 @@ class DLQWorker:
                 )
                 job.status = "retrying"
                 job.next_retry_at = now + timedelta(seconds=delay + random.randint(0, max(1, delay // 5)))
-            event = db.get(AlertTriggerEvent, job.trigger_event_id)
             if event:
                 event.status = "delivery_failed"
             db.commit()

@@ -26,6 +26,15 @@ class PricingRedisUnavailable(RuntimeError):
     pass
 
 
+_APPEND_PERSISTENCE_EVENT = """
+if redis.call('XLEN', KEYS[1]) >= tonumber(ARGV[1]) then
+    return false
+end
+return redis.call('XADD', KEYS[1], '*',
+    'event_type', ARGV[2], 'idempotency_key', ARGV[3], 'payload', ARGV[4])
+"""
+
+
 _SAFE_COMPONENT = re.compile(r"^[A-Za-z0-9_.:-]+$")
 
 
@@ -234,18 +243,22 @@ class PricingRedisStore:
         maximum_length: int,
     ) -> str:
         try:
-            return str(
-                await self.client().xadd(
-                    self.persistence_stream,
-                    {
-                        "event_type": event_type,
-                        "idempotency_key": idempotency_key,
-                        "payload": canonical_json(payload),
-                    },
-                    maxlen=max(1000, maximum_length),
-                    approximate=True,
-                )
+            # This stream is a write-ahead queue, so only committed consumers
+            # may remove entries. Reject new writes at capacity atomically.
+            stream_id = await self.client().eval(
+                _APPEND_PERSISTENCE_EVENT,
+                1,
+                self.persistence_stream,
+                max(1000, maximum_length),
+                event_type,
+                idempotency_key,
+                canonical_json(payload),
             )
+            if not stream_id:
+                raise PricingRedisUnavailable("Persistence queue is full")
+            return str(stream_id)
+        except PricingRedisUnavailable:
+            raise
         except Exception as exc:
             raise PricingRedisUnavailable("Persistence queue write failed") from exc
 

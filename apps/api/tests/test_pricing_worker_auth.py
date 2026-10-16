@@ -44,7 +44,7 @@ class PricingWorkerAuthenticationTests(unittest.IsolatedAsyncioTestCase):
             "app.routers.pricing_worker.settings.pricing_worker_shared_secret", secret
         ), patch("app.routers.pricing_worker.pricing_redis.client", return_value=client):
             await _authenticate(request, body)
-        client.set.assert_awaited_once_with(f"pricing:worker:replay:{signature}", "1", ex=300, nx=True)
+        client.set.assert_awaited_once_with(f"pricing:worker:replay:{signature}", "1", ex=601, nx=True)
 
     async def test_bad_signature_never_touches_replay_store(self) -> None:
         request = SimpleNamespace(headers={"X-Pricing-Worker-Timestamp": "1700000000", "X-Pricing-Worker-Signature": "bad"})

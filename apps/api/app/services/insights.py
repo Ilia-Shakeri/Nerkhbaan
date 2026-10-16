@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 # Upper bound on conversation turns accepted per request to cap token usage and
 # keep latency predictable under load.
 MAX_HISTORY_MESSAGES = 20
+MAX_MESSAGE_CHARACTERS = 4000
 REQUEST_TIMEOUT_SECONDS = 25
 DAILY_WINDOW_SECONDS = 24 * 60 * 60
 
@@ -149,14 +150,17 @@ class MarketInsightEngine:
                         last_error = exc
                         break
 
-                    text = (content or "").strip()
+                    if not isinstance(content, str):
+                        last_error = InsightUnavailableError("Reasoning provider returned a non-text response")
+                        break
+                    text = content.strip()
                     if text:
                         self.last_provider_metadata = {
                             "provider": provider.name,
                             "configured_model": provider.model,
                             "response_model": str(payload.get("model") or provider.model),
                         }
-                        return text
+                        return text[:MAX_MESSAGE_CHARACTERS]
                     last_error = InsightUnavailableError("Reasoning provider returned an empty response")
                     break
 
@@ -239,7 +243,8 @@ class MarketInsightEngine:
             if language == "fa"
             else "This is informational, may be inaccurate, is not guaranteed, and is not personalized investment advice."
         )
-        return f"{response}\n\n{disclaimer}"
+        reply = response[:MAX_MESSAGE_CHARACTERS - len(disclaimer) - 2].rstrip()
+        return f"{reply}\n\n{disclaimer}"
 
     def _check_quota(self, user_id: str, messages: list[dict[str, str]]) -> None:
         fingerprint = hashlib.sha256(

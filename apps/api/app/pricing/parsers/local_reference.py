@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from ..models import Currency
 from .base import (
     ParsedProviderValue,
     ParserContext,
@@ -62,9 +63,13 @@ def _parsed(
     observed_at: object | None,
     metadata: dict[str, Any],
 ) -> ParsedProviderValue:
+    source_currency, _factor = _unit_factor(metadata.get("source_currency"))
+    currency_code = "TOMAN" if source_currency == "RIAL" else source_currency
+    if currency_code != context.instrument.quote_currency.value:
+        raise ParserError("currency_mismatch", "Provider currency does not match instrument")
     parsed = ParsedProviderValue(
         price=price,
-        currency=context.instrument.quote_currency,
+        currency=Currency(currency_code),
         weight_unit=context.instrument.weight_unit,
         purity=context.instrument.purity,
         observed_at=optional_timestamp(observed_at, context, "quote timestamp"),

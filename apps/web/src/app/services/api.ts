@@ -1,5 +1,7 @@
 ﻿import axios from 'axios';
 
+import { beginLogout, finishLogout, logoutGeneration, logoutIsPending } from './logout-state';
+
 const envApiUrl = import.meta.env.VITE_API_URL;
 const isDesktop = Boolean(window.electronAPI?.auth);
 let baseURL: string;
@@ -59,6 +61,7 @@ export const apiInstance = axios.create({
 });
 
 apiInstance.interceptors.request.use(async (config) => {
+  if (isDesktop && logoutIsPending() && String(config.url) !== 'auth/signout') requireCompletedLogout();
   const token = (await getDesktopCredentials())?.access_token;
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
@@ -66,11 +69,44 @@ apiInstance.interceptors.request.use(async (config) => {
 
 let refreshRequest: Promise<boolean> | null = null;
 let signoutRequest: Promise<void> | null = null;
+const authenticationRequests = new Set<Promise<AuthResponse>>();
+
+const withSessionLock = async <T>(operation: () => Promise<T>): Promise<T> => navigator.locks
+  ? await navigator.locks.request('nerkhbaan-session-refresh', operation)
+  : operation();
+
+function requireCompletedLogout(): void {
+  if (logoutIsPending()) throw new Error(document.documentElement.lang === 'fa' ? 'خروج قبلی کامل نشده. ابتدا دوباره برای خروج تلاش کنید.' : 'Previous sign-out is incomplete. Retry sign-out first.');
+}
+
+async function authenticate(path: 'signin' | 'signup', payload: unknown): Promise<AuthResponse> {
+  await signoutRequest?.catch(() => undefined);
+  requireCompletedLogout();
+  const generation = logoutGeneration();
+  const request = withSessionLock(async () => {
+    requireCompletedLogout();
+    if (generation !== logoutGeneration()) throw new Error(document.documentElement.lang === 'fa' ? 'ورود با خروج لغو شد. دوباره تلاش کنید.' : 'Sign-in was cancelled by sign-out. Try again.');
+    const { data } = await apiInstance.post<AuthResponse>(`auth/${path}`, payload, { headers: isDesktop ? { 'X-Client-Type': 'desktop' } : {} });
+    if (isDesktop && data.access_token) await storeDesktopCredentials({ access_token: data.access_token, refresh_token: data.refresh_token ?? null });
+    // Without cross-tab locks a late response can set a new cookie after the
+    // previous logout finished. Keep that new session locked until retried.
+    if (generation !== logoutGeneration() && !logoutIsPending()) {
+      beginLogout();
+      finishLogout(false);
+    }
+    requireCompletedLogout();
+    return data;
+  });
+  authenticationRequests.add(request);
+  try { return await request; }
+  finally { authenticationRequests.delete(request); }
+}
 
 async function refreshSession(): Promise<boolean> {
-  if (signoutRequest) return false;
+  if (signoutRequest || logoutIsPending()) return false;
   if (refreshRequest) return refreshRequest;
   const rotate = async (): Promise<boolean> => {
+    if (signoutRequest || logoutIsPending()) return false;
     if (isDesktop) desktopCredentials = undefined;
     const credentials = await getDesktopCredentials();
     if (isDesktop && !credentials?.refresh_token) return false;
@@ -106,9 +142,7 @@ async function refreshSession(): Promise<boolean> {
     }
   };
   // Claim the promise before any credential I/O; tabs share a lock, never tokens.
-  refreshRequest = (async () => navigator.locks
-    ? navigator.locks.request('nerkhbaan-session-refresh', rotate)
-    : rotate())()
+  refreshRequest = withSessionLock(rotate)
     .finally(() => {
       refreshRequest = null;
     });
@@ -132,7 +166,7 @@ apiInstance.interceptors.response.use(
     }
     let message = error.message || 'An unexpected error occurred.';
     if (error.response) {
-      if (error.response.status === 401 && !publicAuthRequest) {
+      if (error.response.status === 401 && !publicAuthRequest && !logoutIsPending()) {
         window.dispatchEvent(new Event('auth-expired'));
       }
       try {
@@ -175,16 +209,10 @@ export type AuthResponse = {
 export const api = {
   auth: {
     async signin(credentials: { username_or_email: string; password: string }): Promise<AuthResponse> {
-      await signoutRequest?.catch(() => undefined);
-      const { data } = await apiInstance.post<AuthResponse>('auth/signin', credentials, { headers: isDesktop ? { 'X-Client-Type': 'desktop' } : {} });
-      if (isDesktop && data.access_token) await storeDesktopCredentials({ access_token: data.access_token, refresh_token: data.refresh_token ?? null });
-      return data;
+      return authenticate('signin', credentials);
     },
     async signup(userData: { username: string; full_name?: string; email: string; password: string; accepted_terms: boolean; account_data_consent: boolean; policy_version: string }): Promise<AuthResponse> {
-      await signoutRequest?.catch(() => undefined);
-      const { data } = await apiInstance.post<AuthResponse>('auth/signup', userData, { headers: isDesktop ? { 'X-Client-Type': 'desktop' } : {} });
-      if (isDesktop && data.access_token) await storeDesktopCredentials({ access_token: data.access_token, refresh_token: data.refresh_token ?? null });
-      return data;
+      return authenticate('signup', userData);
     },
     async forgotPassword(email: string): Promise<void> {
       await apiInstance.post('auth/forgot-password', { email });
@@ -209,14 +237,18 @@ export const api = {
     signout(beforeSignout?: () => Promise<void>): Promise<void> {
       if (signoutRequest) return signoutRequest;
       signoutRequest = (async () => {
-        try {
+        // A sign-in already on the wire can set cookies after the user leaves.
+        // Let it settle before revoking the session it may create.
+        await Promise.allSettled([...authenticationRequests]);
+        await refreshRequest?.catch(() => false);
+        await withSessionLock(async () => {
           try { await beforeSignout?.(); } catch { /* Session revocation must still run if push teardown fails. */ }
-          await refreshRequest?.catch(() => false);
           const credentials = await getDesktopCredentials();
           await apiInstance.post('auth/signout', isDesktop ? { refresh_token: credentials?.refresh_token } : {});
-        } finally {
+          // A failed native signout keeps only the existing encrypted record
+          // for retry. The pending logout guard blocks normal credential use.
           await clearDesktopCredentials();
-        }
+        });
       })().finally(() => { signoutRequest = null; });
       return signoutRequest;
     },

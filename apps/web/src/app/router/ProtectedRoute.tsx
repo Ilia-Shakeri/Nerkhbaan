@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
+import { logoutAuthPath } from '../services/logout-state';
 
 export const ProtectedRoute = ({ children, allowPasswordChange = false }: { children: React.ReactNode; allowPasswordChange?: boolean }) => {
   const { isAuthenticated, authReady, mustChangePassword } = useAppContext();
@@ -11,7 +12,7 @@ export const ProtectedRoute = ({ children, allowPasswordChange = false }: { chil
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/auth" replace state={{ from: location }} />;
+    return <Navigate to={logoutAuthPath()} replace state={{ from: location }} />;
   }
 
   if (mustChangePassword && !allowPasswordChange) {

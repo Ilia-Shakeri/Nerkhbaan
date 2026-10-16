@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { MessageCircle, Send, Loader2 } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
@@ -18,6 +18,14 @@ export function SupportView() {
 
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [isLoadingTickets, setIsLoadingTickets] = useState(true);
+  const [ticketLoadFailed, setTicketLoadFailed] = useState(false);
+  const [messageLoadFailed, setMessageLoadFailed] = useState(false);
+  const alive = useRef(true);
+  const ticketGeneration = useRef(0);
+  const messageGeneration = useRef(0);
+  const ticketRequestActive = useRef(false);
+  const messageRequestActive = useRef(false);
+  const writing = useRef(false);
 
   const [selectedTicket, setSelectedTicket] = useState<number | null>(null);
   const selectedTicketRef = useRef<number | null>(null);
@@ -58,62 +66,110 @@ export function SupportView() {
     noTickets: { fa: 'هنوز تیکتی ثبت نشده است', en: 'No tickets yet' },
     noMessages: { fa: 'هنوز پیامی ثبت نشده است', en: 'No messages yet' },
     messageLoadFail: { fa: 'پیام‌های تیکت بارگذاری نشد', en: 'Ticket messages could not be loaded' },
+    retryTickets: { fa: 'دریافت دوباره تیکت‌ها', en: 'Retry tickets' },
+    retryMessages: { fa: 'دریافت دوباره پیام‌ها', en: 'Retry messages' },
+    refresh: { fa: 'تازه‌سازی', en: 'Refresh support' },
   };
 
   useEffect(() => {
     if (showNewTicketForm) subjectRef.current?.focus();
   }, [showNewTicketForm]);
 
-  const loadTickets = async () => {
+  const loadTickets = useCallback(async (quiet = false) => {
+    if (quiet && ticketRequestActive.current) return;
+    const requestId = ++ticketGeneration.current;
+    ticketRequestActive.current = true;
+    if (!quiet) setIsLoadingTickets(true);
     try {
       const data = await api.support.listTickets();
+      if (!alive.current || requestId !== ticketGeneration.current) return;
       setTickets(data);
+      setTicketLoadFailed(false);
     } catch {
-      toast.error(t.loadFail[language]);
+      if (alive.current && requestId === ticketGeneration.current) setTicketLoadFailed(true);
     } finally {
-      setIsLoadingTickets(false);
+      if (alive.current && requestId === ticketGeneration.current) {
+        ticketRequestActive.current = false;
+        setIsLoadingTickets(false);
+      }
     }
-  };
+  }, []);
+
+  const loadMessages = useCallback(async (ticketId: number, quiet = false) => {
+    if (quiet && messageRequestActive.current) return;
+    const requestId = ++messageGeneration.current;
+    messageRequestActive.current = true;
+    if (!quiet) setIsLoadingMessages(true);
+    try {
+      const data = await api.support.listMessages(ticketId);
+      if (!alive.current || requestId !== messageGeneration.current || selectedTicketRef.current !== ticketId) return;
+      setMessages(data);
+      setMessageLoadFailed(false);
+    } catch {
+      if (alive.current && requestId === messageGeneration.current && selectedTicketRef.current === ticketId) setMessageLoadFailed(true);
+    } finally {
+      if (alive.current && requestId === messageGeneration.current) {
+        messageRequestActive.current = false;
+        setIsLoadingMessages(false);
+      }
+    }
+  }, []);
+
+  const refreshSupport = useCallback((quiet = false) => {
+    if (writing.current) return;
+    void loadTickets(quiet);
+    if (selectedTicketRef.current !== null) void loadMessages(selectedTicketRef.current, quiet);
+  }, [loadTickets, loadMessages]);
 
   useEffect(() => {
-    loadTickets();
-  }, []);
+    alive.current = true;
+    void loadTickets();
+    const refresh = () => { if (document.visibilityState === 'visible') refreshSupport(true); };
+    const timer = window.setInterval(refresh, 15_000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      alive.current = false;
+      ticketGeneration.current++;
+      messageGeneration.current++;
+      ticketRequestActive.current = false;
+      messageRequestActive.current = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [loadTickets, refreshSupport]);
 
   useEffect(() => {
     setMessages([]);
     setNewMessage('');
     setReplyConsent(false);
+    setMessageLoadFailed(false);
+    messageGeneration.current++;
+    messageRequestActive.current = false;
     if (selectedTicket === null) {
       setIsLoadingMessages(false);
       return;
     }
-    let cancelled = false;
-    setIsLoadingMessages(true);
-    api.support
-      .listMessages(selectedTicket)
-      .then((data) => {
-        if (!cancelled) setMessages(data);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMessages([]);
-          toast.error(t.messageLoadFail[language]);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingMessages(false);
-      });
+    void loadMessages(selectedTicket);
     return () => {
-      cancelled = true;
+      messageGeneration.current++;
+      messageRequestActive.current = false;
     };
-  }, [selectedTicket]);
+  }, [selectedTicket, loadMessages]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim() || selectedTicket === null || isSending || isLoadingMessages || !replyConsent) return;
+    if (!newMessage.trim() || selectedTicket === null || writing.current || isLoadingMessages || messageLoadFailed || !replyConsent) return;
     const ticketId = selectedTicket;
+    writing.current = true;
+    messageGeneration.current++;
+    ticketGeneration.current++;
+    messageRequestActive.current = ticketRequestActive.current = false;
+    setIsLoadingTickets(false);
     setIsSending(true);
     try {
       const sent = await api.support.sendMessage(selectedTicket, newMessage.trim(), { support_data_consent: replyConsent, policy_version: POLICY_VERSION });
+      if (!alive.current) return;
       if (selectedTicketRef.current === ticketId) {
         setMessages((prev) => [...prev, sent]);
         setNewMessage('');
@@ -125,14 +181,19 @@ export function SupportView() {
         )
       );
     } catch {
-      toast.error(t.sendFail[language]);
+      if (alive.current) toast.error(t.sendFail[language]);
     } finally {
-      setIsSending(false);
+      writing.current = false;
+      if (alive.current) setIsSending(false);
     }
   };
 
   const handleCreateTicket = async () => {
-    if (!newTicketSubject.trim() || !newTicketMessage.trim() || isCreating || !ticketConsent) return;
+    if (!newTicketSubject.trim() || !newTicketMessage.trim() || writing.current || !ticketConsent) return;
+    writing.current = true;
+    ticketGeneration.current++;
+    ticketRequestActive.current = false;
+    setIsLoadingTickets(false);
     setIsCreating(true);
     try {
       const ticket = await api.support.createTicket({
@@ -141,6 +202,7 @@ export function SupportView() {
         support_data_consent: ticketConsent,
         policy_version: POLICY_VERSION,
       });
+      if (!alive.current) return;
       setTickets((prev) => [ticket, ...prev]);
       setNewTicketSubject('');
       setNewTicketMessage('');
@@ -149,9 +211,10 @@ export function SupportView() {
       setSelectedTicket(ticket.id);
       toast.success(t.ticketCreated[language]);
     } catch {
-      toast.error(t.createFail[language]);
+      if (alive.current) toast.error(t.createFail[language]);
     } finally {
-      setIsCreating(false);
+      writing.current = false;
+      if (alive.current) setIsCreating(false);
     }
   };
 
@@ -168,6 +231,9 @@ export function SupportView() {
     <div className="h-full flex flex-col space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>{t.title[language]}</h1>
+        <Button variant="outline" onClick={() => refreshSupport()} disabled={isSending || isCreating || isLoadingTickets || isLoadingMessages}>
+          {t.refresh[language]}
+        </Button>
         <Button
           onClick={() => setShowNewTicketForm(!showNewTicketForm)}
           aria-expanded={showNewTicketForm}
@@ -248,12 +314,18 @@ export function SupportView() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0">
         <Card className={`lg:col-span-1 p-4 overflow-y-auto ${isDark ? 'bg-[#0E0E0E]/60 border-white/5' : 'bg-white/60 border-black/5'}`}>
           <h2 className={`text-lg font-bold mb-4 ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>{t.tickets[language]}</h2>
+          {ticketLoadFailed && !isLoadingTickets && (
+            <div role="alert" aria-label={language === 'fa' ? 'تیکت‌ها در دسترس نیست' : 'Ticket list unavailable'} className="mb-4 space-y-2 text-sm">
+              <p>{t.loadFail[language]}</p>
+              <Button variant="outline" onClick={() => void loadTickets()} disabled={isSending || isCreating}>{t.retryTickets[language]}</Button>
+            </div>
+          )}
           <div className="space-y-3">
             {isLoadingTickets ? (
               <div className="flex justify-center py-8">
                 <Loader2 size={24} className={`animate-spin ${isDark ? 'text-[#D4AF37]' : 'text-[#9D7A20]'}`} />
               </div>
-            ) : tickets.length === 0 ? (
+            ) : ticketLoadFailed && tickets.length === 0 ? null : tickets.length === 0 ? (
               <p className={`py-8 text-center text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>
                 {t.noTickets[language]}
               </p>
@@ -303,6 +375,11 @@ export function SupportView() {
                   <div className="flex h-full items-center justify-center">
                     <Loader2 size={24} className={`animate-spin ${isDark ? 'text-[#D4AF37]' : 'text-[#9D7A20]'}`} />
                   </div>
+                ) : messageLoadFailed ? (
+                  <div role="alert" aria-label={language === 'fa' ? 'پیام‌های تیکت در دسترس نیست' : 'Ticket messages unavailable'} className="space-y-2 text-sm">
+                    <p>{t.messageLoadFail[language]}</p>
+                    <Button variant="outline" onClick={() => void loadMessages(selectedTicket)}>{t.retryMessages[language]}</Button>
+                  </div>
                 ) : messages.length === 0 ? (
                   <div className={`flex h-full items-center justify-center text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                     {t.noMessages[language]}
@@ -351,7 +428,7 @@ export function SupportView() {
                     placeholder={t.typeMessage[language]}
                     className={`flex-1 ${isDark ? 'bg-[#141414] border-[#D4AF37]/20' : 'bg-white border-[#D4AF37]/30'}`}
                   />
-                  <Button type="submit" disabled={isSending || !replyConsent || !newMessage.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={language === 'fa' ? 'ارسال پاسخ پشتیبانی' : 'Send support reply'}>
+                  <Button type="submit" disabled={isSending || isLoadingMessages || messageLoadFailed || !replyConsent || !newMessage.trim()} className="h-11 w-11 bg-[#D4AF37] text-black disabled:opacity-50" aria-label={language === 'fa' ? 'ارسال پاسخ پشتیبانی' : 'Send support reply'}>
                     {isSending ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
                   </Button>
                 </form>

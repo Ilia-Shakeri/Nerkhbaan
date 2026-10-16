@@ -9,12 +9,12 @@ const root = path.resolve(import.meta.dirname, '..');
 const defer = () => { let resolve, reject; const promise = new Promise((done, fail) => { resolve = done; reject = fail; }); return { promise, resolve, reject }; };
 const flush = async () => { for (let index = 0; index < 6; index++) await Promise.resolve(); };
 
-function contextHarness() {
+function contextHarness(pending = false) {
   const states = [];
   const refs = [];
   const effects = [];
   const initial = defer();
-  let stateIndex = 0, refIndex = 0, signouts = 0, syncs = 0;
+  let stateIndex = 0, refIndex = 0, signouts = 0, syncs = 0, profiles = 0, logoutListener;
   const context = {};
   const react = {
     createContext: () => ({ Provider: {} }),
@@ -31,7 +31,9 @@ function contextHarness() {
   };
   const imports = {
     react,
-    '../services/api': { api: { auth: { me: () => initial.promise, signout: async before => { signouts++; await before?.(); } } } },
+    '../services/api': { api: { auth: { me: () => { profiles++; return initial.promise; } } } },
+    '../services/logout': { requestLogout: async () => { signouts++; } },
+    '../services/logout-state': { logoutIsPending: () => pending, subscribeLogoutStatus: listener => { logoutListener = listener; return () => {}; } },
     '@/pwa/push': { disablePushNotifications: async () => {}, syncPushSubscription: async () => { syncs++; } },
     '../legal/storage': { readPreference: () => null, rememberPreference() {} },
   };
@@ -43,7 +45,7 @@ function contextHarness() {
   render();
   const cleanup = effects.map(effect => effect());
   context.mounted = true;
-  return { initial, render, value: () => context.value, unmount: () => cleanup.forEach(effect => effect?.()), signouts: () => signouts, syncs: () => syncs };
+  return { initial, render, value: () => context.value, unmount: () => cleanup.forEach(effect => effect?.()), signouts: () => signouts, syncs: () => syncs, profiles: () => profiles, pending: () => { pending = true; logoutListener(); } };
 }
 
 test('late startup profile cannot restore authentication after logout', async () => {
@@ -83,4 +85,18 @@ test('current startup profile is applied and unmounted startup is ignored', asyn
   await flush();
   assert.equal(closed.render().isAuthenticated, false);
   assert.equal(closed.syncs(), 0);
+});
+
+test('unfinished logout skips startup profile and a cross-tab logout invalidates an in-flight profile', async () => {
+  const locked = contextHarness(true);
+  assert.equal(locked.profiles(), 0);
+  assert.equal(locked.render().authReady, true);
+  locked.value().login({ must_change_password: false });
+  assert.equal(locked.render().isAuthenticated, false);
+  const shared = contextHarness();
+  shared.pending();
+  shared.initial.resolve({ must_change_password: false });
+  await flush();
+  assert.equal(shared.render().isAuthenticated, false);
+  assert.equal(shared.syncs(), 0);
 });

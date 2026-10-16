@@ -9,7 +9,7 @@ const root = path.resolve(import.meta.dirname, '..');
 function moduleAt(file, globals, imports) {
   const source = readFileSync(path.join(root, file), 'utf8').replaceAll('import.meta.env', '__env');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const context = { exports: {}, require: name => imports[name], URL, Event, CustomEvent, setTimeout, clearTimeout, console, ...globals };
+  const context = { exports: {}, require: name => imports[name] ?? (name.endsWith('logout-state') ? { logoutIsPending: () => false, logoutGeneration: () => 0 } : undefined), URL, Event, CustomEvent, setTimeout, clearTimeout, console, ...globals };
   vm.runInNewContext(compiled, context, { filename: file });
   return context.exports;
 }
@@ -26,6 +26,7 @@ function clientHarness(shared, locks) {
         if (shared.signoutFails) throw new Error('test signout outage');
         return { status: 204 };
       }
+      await shared.signinGate;
       return { data: { access_token: 'signed-in-access', refresh_token: 'signed-in-refresh', user: { id: 2 } } };
     },
   };
@@ -47,7 +48,7 @@ function clientHarness(shared, locks) {
     async getCredentials() { shared.reads += 1; const stored = shared.credentials; await shared.readGate; await new Promise(resolve => setTimeout(resolve, 5)); return stored; },
     async setCredentials(value) { shared.credentials = value; }, async clearCredentials() { shared.credentials = null; },
   } } };
-  const exported = moduleAt('apps/web/src/app/services/api.ts', { __env: { VITE_API_URL: '/api' }, navigator: { locks }, window }, { axios });
+  const exported = moduleAt('apps/web/src/app/services/api.ts', { __env: { VITE_API_URL: '/api' }, navigator: { locks }, window, document: { documentElement: { lang: 'en' } } }, { axios, './logout-state': { logoutIsPending: () => Boolean(shared.pending), logoutGeneration: () => shared.generation || 0, beginLogout: () => { shared.pending = true; shared.generation = (shared.generation || 0) + 1; }, finishLogout: success => { if (success) shared.pending = false; } } });
   return { exported, fail: url => interceptors.error({ config: { url }, response: { status: 401 } }) };
 }
 
@@ -193,4 +194,125 @@ test('an older secure credential read cannot replace a newer successful sign-in'
   await oldRequest;
   const latest = await client.exported.apiInstance.request({ url: 'prices' });
   assert.equal(latest.config.headers.Authorization, 'Bearer signed-in-access');
+});
+
+test('pending logout blocks sign-in, registration and automatic refresh without replacing credentials', async () => {
+  const shared = sharedSession();
+  shared.pending = true;
+  const client = clientHarness(shared);
+  await assert.rejects(client.exported.api.auth.signin({}), /sign-out is incomplete/);
+  await assert.rejects(client.exported.api.auth.signup({}), /sign-out is incomplete/);
+  await assert.rejects(client.fail('alerts'));
+  assert.equal(shared.calls.length, 0);
+  assert.equal(shared.rotations, 0);
+  assert.equal(shared.credentials.refresh_token, 'original-refresh');
+});
+
+test('logout waits for sign-in already sent and revokes the credential it creates', async () => {
+  const shared = sharedSession();
+  let finishSignin;
+  shared.signinGate = new Promise(resolve => { finishSignin = resolve; });
+  const client = clientHarness(shared);
+  const signin = client.exported.api.auth.signin({});
+  const rejected = assert.rejects(signin, /sign-out is incomplete/);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  shared.pending = true;
+  const logout = client.exported.api.auth.signout();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(shared.calls.map(call => call.url), ['auth/signin']);
+  finishSignin();
+  await Promise.all([logout, rejected]);
+  assert.equal(shared.calls[1].payload.refresh_token, 'signed-in-refresh');
+  assert.equal(shared.credentials, null);
+});
+
+test('a late sign-in in another renderer restores the logout lock when shared locks are unavailable', async () => {
+  const shared = sharedSession();
+  let finishSignin;
+  shared.signinGate = new Promise(resolve => { finishSignin = resolve; });
+  const late = clientHarness(shared);
+  const other = clientHarness(shared);
+  const signin = late.exported.api.auth.signin({});
+  const rejected = assert.rejects(signin, /sign-out is incomplete/);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  shared.pending = true; shared.generation = 1;
+  await other.exported.api.auth.signout();
+  shared.pending = false; shared.generation = 2;
+  finishSignin();
+  await rejected;
+  assert.equal(shared.pending, true);
+  assert.equal(shared.credentials.refresh_token, 'signed-in-refresh');
+  await late.exported.api.auth.signout();
+  assert.equal(shared.calls.at(-1).payload.refresh_token, 'signed-in-refresh');
+  assert.equal(shared.credentials, null);
+});
+
+test('failed desktop logout retains secure revocation credentials across reload until retry succeeds', async () => {
+  const shared = sharedSession();
+  shared.pending = true;
+  shared.signoutFails = true;
+  const first = clientHarness(shared);
+  const state = { beginLogout: () => { shared.pending = true; }, finishLogout: success => { if (success) shared.pending = false; } };
+  const flow = client => moduleAt('apps/web/src/app/services/logout.ts', {}, { '@/pwa/push': { disablePushNotifications: async () => {} }, './api': { api: client.exported.api }, './logout-state': state });
+  await assert.rejects(flow(first).requestLogout(), /test signout outage/);
+  assert.equal(shared.pending, true);
+  assert.equal(shared.credentials.refresh_token, 'original-refresh');
+  await assert.rejects(first.exported.apiInstance.request({ url: 'prices' }), /sign-out is incomplete/);
+  const reloaded = clientHarness(shared);
+  shared.signoutFails = false;
+  await flow(reloaded).requestLogout();
+  assert.deepEqual(shared.calls.filter(call => call.url === 'auth/signout').map(call => call.payload.refresh_token), ['original-refresh', 'original-refresh']);
+  assert.equal(shared.credentials, null);
+  assert.equal(shared.pending, false);
+});
+
+test('late startup subscription read cannot bind an endpoint after logout begins', async () => {
+  let releaseRead, pending = false, generation = 0, writes = 0;
+  const read = new Promise(resolve => { releaseRead = resolve; });
+  const worker = { pushManager: { getSubscription: () => read } };
+  const push = moduleAt('apps/web/src/pwa/push.ts', {
+    __env: { VITE_VAPID_PUBLIC_KEY: 'test-key' }, window: { Notification: {}, PushManager: {} },
+    navigator: { serviceWorker: { getRegistration: async () => worker, ready: Promise.resolve(worker) } },
+  }, { '@/app/services/api': { apiInstance: { post: async () => { writes++; } } }, '@/app/services/logout-state': { logoutIsPending: () => pending, logoutGeneration: () => generation } });
+  const sync = push.syncPushSubscription();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  pending = true; generation++;
+  releaseRead({ toJSON: () => ({ endpoint: 'old-endpoint' }) });
+  await sync;
+  assert.equal(writes, 0);
+});
+
+test('push cleanup waits for an already sent subscription write before detaching it', async () => {
+  let releaseWrite, pending = false;
+  const write = new Promise(resolve => { releaseWrite = resolve; });
+  const calls = [];
+  const subscription = { endpoint: 'test-endpoint', toJSON: () => ({}), unsubscribe: async () => { calls.push('browser-detach'); } };
+  const worker = { pushManager: { getSubscription: async () => subscription } };
+  const push = moduleAt('apps/web/src/pwa/push.ts', {
+    __env: { VITE_VAPID_PUBLIC_KEY: 'test-key' }, window: { Notification: {}, PushManager: {} },
+    navigator: { serviceWorker: { getRegistration: async () => worker, ready: Promise.resolve(worker) } },
+  }, { '@/app/services/api': { apiInstance: { post: async url => { calls.push(url); if (url === 'push/subscribe') await write; } } }, '@/app/services/logout-state': { logoutIsPending: () => pending, logoutGeneration: () => 0 } });
+  const sync = push.syncPushSubscription();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  pending = true;
+  const cleanup = push.disablePushNotifications();
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.deepEqual(calls, ['push/subscribe']);
+  releaseWrite();
+  await Promise.all([sync, cleanup]);
+  assert.deepEqual(calls, ['push/subscribe', 'browser-detach', 'push/unsubscribe']);
+});
+
+test('bounded push cleanup still sends server signout and keeps the logout lock for retry', async () => {
+  const finished = [], timeouts = [];
+  let signouts = 0;
+  const logout = moduleAt('apps/web/src/app/services/logout.ts', {
+    setTimeout: (callback, delay) => { timeouts.push(delay); return setTimeout(callback, 5); },
+  }, { '@/pwa/push': { disablePushNotifications: () => new Promise(() => {}) }, './api': { api: { auth: { signout: async before => { await before(); signouts++; } } } }, './logout-state': { beginLogout() {}, finishLogout: success => finished.push(success) } });
+  const first = logout.requestLogout();
+  assert.equal(first, logout.requestLogout());
+  await assert.rejects(first, /Notification cleanup/);
+  assert.deepEqual(timeouts, [4000]);
+  assert.equal(signouts, 1);
+  assert.deepEqual(finished, [false]);
 });

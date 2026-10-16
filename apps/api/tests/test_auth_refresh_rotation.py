@@ -8,6 +8,7 @@ import unittest
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import HTTPException, Request, Response
@@ -18,6 +19,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.models import SecurityEvent, User, UserSession
+from app.admin.models import AdminAuditLog
+from app.admin.routers import access
+from app.admin.schemas import DangerousConfirmation
 from app.routers import auth
 from app.schemas import ChangePasswordRequest, RefreshRequest
 from app.security import hash_refresh_token, hash_client_value
@@ -74,6 +78,30 @@ class _ReuseProbeSession:
 
 
 class RefreshRotationUnitTests(unittest.TestCase):
+    def test_admin_close_locks_owner_before_session_and_revokes_family(self) -> None:
+        now = datetime.now(UTC)
+        session = UserSession(id="selected-session", user_id=7, token_family="family",
+                              refresh_token_hash="a" * 64, created_at=now,
+                              last_used_at=now, expires_at=now + timedelta(days=1))
+        db = _ReuseProbeSession(session)
+        principal = SimpleNamespace(user=SimpleNamespace(id=7),
+                                    session=SimpleNamespace(reauthenticated_at=now))
+        result = access.close_single_session(
+            7, "user", session.id,
+            DangerousConfirmation(confirmation="CLOSE USER SESSION selected-session"),
+            _request(), principal, db,
+        )
+        self.assertTrue(result["closed"])
+        self.assertEqual([statement.column_descriptions[0]["entity"] for statement in db.selected], [User, UserSession])
+        for statement in db.selected:
+            self.assertIn("FOR UPDATE", str(statement.compile(dialect=postgresql.dialect())).upper())
+            self.assertTrue(statement.get_execution_options()["populate_existing"])
+        self.assertEqual(len(db.executed), 1)
+        conditions = db.executed[0].compile(dialect=postgresql.dialect())
+        self.assertIn("user_sessions.user_id", str(conditions))
+        self.assertIn("user_sessions.token_family", str(conditions))
+        self.assertIn("user_sessions.revoked_at IS NULL", str(conditions))
+
     def test_refresh_session_locks_owner_before_token_state_check(self) -> None:
         db = _LockProbeSession()
 
@@ -184,7 +212,7 @@ class RefreshRotationPostgresTests(unittest.TestCase):
                 connection.execute(text(f"CREATE SCHEMA {quoted_schema}"))
 
             metadata = MetaData()
-            for table in (User.__table__, UserSession.__table__, SecurityEvent.__table__):
+            for table in (User.__table__, UserSession.__table__, SecurityEvent.__table__, AdminAuditLog.__table__):
                 table.to_metadata(metadata, schema=cls.schema_name)
             metadata.create_all(cls.admin_engine)
             cls.test_engine = create_engine(
@@ -216,7 +244,7 @@ class RefreshRotationPostgresTests(unittest.TestCase):
     def setUp(self) -> None:
         assert self.test_engine is not None
         with self.test_engine.begin() as connection:
-            for table in (SecurityEvent.__table__, UserSession.__table__, User.__table__):
+            for table in (AdminAuditLog.__table__, SecurityEvent.__table__, UserSession.__table__, User.__table__):
                 connection.execute(table.delete())
 
     def _seed_family(self) -> tuple[str, str, str]:
@@ -279,6 +307,14 @@ class RefreshRotationPostgresTests(unittest.TestCase):
                     return auth.signout(_request(), Response(), db, RefreshRequest(refresh_token=old_token)).status_code
                 if operation == "terminate":
                     return auth.terminate_session("previous", db.get(User, 7), db).status_code
+                if operation == "admin_close":
+                    principal = SimpleNamespace(user=SimpleNamespace(id=7),
+                                                session=SimpleNamespace(reauthenticated_at=datetime.now(UTC)))
+                    return access.close_single_session(
+                        7, "user", "previous",
+                        DangerousConfirmation(confirmation="CLOSE USER SESSION previous"),
+                        _request(), principal, db,
+                    )["closed"]
                 if operation == "password":
                     return auth.change_password(
                         ChangePasswordRequest(current_password="CurrentPassword12!", new_password="NextPasswordSafe12!"),
@@ -319,7 +355,7 @@ class RefreshRotationPostgresTests(unittest.TestCase):
                     release_rotation.set()
                 rotating.result(timeout=10)
                 result = revoking.result(timeout=10) if revoking is not None else None
-        self.assertEqual(result, "Password changed successfully" if operation == "password" else 401 if operation == "replay" else 204)
+        self.assertEqual(result, "Password changed successfully" if operation == "password" else 401 if operation == "replay" else True if operation == "admin_close" else 204)
         with Session(self.test_engine) as db:
             members = db.scalars(select(UserSession).where(UserSession.token_family == family)).all()
             self.assertEqual(len(members), 3)
@@ -335,6 +371,86 @@ class RefreshRotationPostgresTests(unittest.TestCase):
 
     def test_terminate_rotated_session_revokes_a_concurrent_child(self) -> None:
         self._assert_revocation_waits_for_rotation("terminate")
+
+    def test_admin_close_rotated_session_revokes_a_concurrent_child(self) -> None:
+        self._assert_revocation_waits_for_rotation("admin_close")
+
+    def test_rotation_waits_for_admin_close_and_cannot_create_a_child(self) -> None:
+        assert self.test_engine is not None
+        _old_token, active_token, family = self._seed_family()
+        closing = threading.Event()
+        release_close = threading.Event()
+        rotation_lock_attempted = threading.Event()
+        rotation_backend: dict[str, int] = {}
+        real_add_audit = access.add_audit_event
+
+        class ObservedSession(Session):
+            def scalar(inner_self, statement, *args, **kwargs):
+                if (inner_self.info.get("rotating")
+                        and statement.column_descriptions[0]["entity"] is User
+                        and statement._for_update_arg is not None):
+                    rotation_backend["pid"] = inner_self.connection().exec_driver_sql(
+                        "SELECT pg_backend_pid()"
+                    ).scalar_one()
+                    rotation_lock_attempted.set()
+                return super().scalar(statement, *args, **kwargs)
+
+        def pause_before_commit(*args, **kwargs):
+            result = real_add_audit(*args, **kwargs)
+            closing.set()
+            if not release_close.wait(timeout=10):
+                raise TimeoutError("Close coordinator did not release the transaction")
+            return result
+
+        def close():
+            with Session(self.test_engine) as db:
+                principal = SimpleNamespace(user=SimpleNamespace(id=7),
+                                            session=SimpleNamespace(reauthenticated_at=datetime.now(UTC)))
+                return access.close_single_session(
+                    7, "user", "active",
+                    DangerousConfirmation(confirmation="CLOSE USER SESSION active"),
+                    _request(), principal, db,
+                )["closed"]
+
+        def rotate():
+            with ObservedSession(self.test_engine, info={"rotating": True}) as db:
+                try:
+                    auth.refresh_session(_request(), Response(), RefreshRequest(refresh_token=active_token), db)
+                except HTTPException as exc:
+                    return exc.status_code
+                raise AssertionError("A closed session created a replacement")
+
+        with patch.object(access, "add_audit_event", side_effect=pause_before_commit):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                closed = executor.submit(close)
+                rotated = None
+                try:
+                    self.assertTrue(closing.wait(timeout=5), "Close did not revoke the family")
+                    rotated = executor.submit(rotate)
+                    self.assertTrue(rotation_lock_attempted.wait(timeout=5), "Rotation did not lock the owner")
+                    deadline = time.monotonic() + 3
+                    waiting = False
+                    with self.test_engine.connect() as observer:
+                        while time.monotonic() < deadline:
+                            waiting = observer.execute(
+                                text("SELECT wait_event_type = 'Lock' FROM pg_stat_activity WHERE pid = :pid"),
+                                {"pid": rotation_backend["pid"]},
+                            ).scalar() is True
+                            observer.commit()
+                            if waiting:
+                                break
+                            threading.Event().wait(0.01)
+                    self.assertTrue(waiting, "PostgreSQL did not block rotation on the owner lock")
+                    self.assertFalse(rotated.done(), "Rotation passed the uncommitted close")
+                finally:
+                    release_close.set()
+                self.assertTrue(closed.result(timeout=10))
+                self.assertEqual(rotated.result(timeout=10), 401)
+        with Session(self.test_engine) as db:
+            members = db.scalars(select(UserSession).where(UserSession.token_family == family)).all()
+            self.assertEqual(len(members), 2)
+            self.assertTrue(all(row.revoked_at is not None for row in members))
+            self.assertEqual(len(db.scalars(select(AdminAuditLog)).all()), 1)
 
     def test_replay_revokes_a_concurrent_rotated_child(self) -> None:
         self._assert_revocation_waits_for_rotation("replay")

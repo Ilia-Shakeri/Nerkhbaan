@@ -63,6 +63,10 @@ def create_alert(
         )
     # Every active alert is re-evaluated on each cycle, so an unbounded count
     # is a cost the whole platform pays for one account.
+    # Serialize the count and insert for this owner, including an empty list.
+    owner = db.scalar(select(User).where(User.id == current_user.id).with_for_update())
+    if owner is None or not owner.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User is not active")
     active_alerts = db.scalar(
         select(func.count(Alert.id)).where(
             Alert.user_id == current_user.id, Alert.is_active.is_(True)
@@ -164,5 +168,9 @@ def delete_alert(
     if not alert:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found")
     alert.is_active = False
+    # A triggered one-time alert is already inactive. Explicit deletion also
+    # withdraws channel consent so its pending occurrence cannot still send.
+    for flag in ("notify_app", "notify_email", "notify_webhook", "notify_telegram", "notify_sms"):
+        setattr(alert, flag, False)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

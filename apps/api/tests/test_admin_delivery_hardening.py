@@ -12,14 +12,14 @@ from unittest.mock import patch
 os.environ.setdefault("DEBUG", "false")
 os.environ.setdefault("JWT_SECRET_KEY", "test-only-jwt-secret-key-with-32-characters")
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Response
 from pydantic import ValidationError
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db import Base
-from app.models import Alert, AlertDeliveryJob, AlertTriggerEvent, SupportTicket, User
+from app.models import Alert, AlertDeliveryJob, AlertTriggerEvent, SupportTicket, User, UserSession
 from app.admin.bootstrap import ensure_admin_catalog
 from app.admin.deps import rotate_csrf_token, token_digest
 from app.admin.mfa import backup_digest, encrypt_secret, totp_code, verify_mfa
@@ -30,6 +30,9 @@ from app.admin.routers import access, health_jobs, providers, settings, support
 from app.admin.schemas import AdminRoleAssignmentRequest, AdminRoleUpdate, DangerousConfirmation, OperationalSettingUpdate, SupportTicketUpdate, UserStateUpdate
 from app.admin.session_security import revoke_admin_sessions
 from app.admin.worker import AdminOperationsWorker
+from app.routers import auth
+from app.schemas import RefreshRequest
+from app.security import hash_refresh_token
 
 
 def request() -> Request:
@@ -132,6 +135,89 @@ class AdminRegressionTests(unittest.TestCase):
         self.db.refresh(row)
         self.assertIsNotNone(row.revoked_at)
         self.assertIsNotNone(self.db.get(UserSecurityProfile, 2).sessions_revoked_before)
+
+    def test_close_rotated_user_session_revokes_only_its_owner_and_family(self) -> None:
+        rows = [
+            UserSession(id="rotated-parent", user_id=2, token_family="target-family",
+                        refresh_token_hash="a" * 64, created_at=self.now,
+                        last_used_at=self.now, expires_at=self.now + timedelta(days=1),
+                        revoked_at=self.now - timedelta(seconds=20),
+                        replaced_by_session_id="replacement"),
+            UserSession(id="replacement", user_id=2, token_family="target-family",
+                        refresh_token_hash="b" * 64, created_at=self.now,
+                        last_used_at=self.now, expires_at=self.now + timedelta(days=1)),
+            UserSession(id="other-device", user_id=2, token_family="other-family",
+                        refresh_token_hash="c" * 64, created_at=self.now,
+                        last_used_at=self.now, expires_at=self.now + timedelta(days=1)),
+            UserSession(id="other-owner", user_id=3, token_family="target-family",
+                        refresh_token_hash="d" * 64, created_at=self.now,
+                        last_used_at=self.now, expires_at=self.now + timedelta(days=1)),
+        ]
+        self.db.add_all(rows)
+        self.db.commit()
+        administrator = self.admin_session(2)
+        result = access.close_single_session(
+            2, "user", "rotated-parent",
+            DangerousConfirmation(confirmation="CLOSE USER SESSION rotated-parent"),
+            request(), self.principal, self.db,
+        )
+        self.assertEqual(result, {"session_id": "rotated-parent", "closed": True})
+        self.assertIsNotNone(self.db.get(UserSession, "rotated-parent").revoked_at)
+        self.assertIsNotNone(self.db.get(UserSession, "replacement").revoked_at)
+        self.assertIsNone(self.db.get(UserSession, "other-device").revoked_at)
+        self.assertIsNone(self.db.get(UserSession, "other-owner").revoked_at)
+        self.db.refresh(administrator)
+        self.assertIsNone(administrator.revoked_at)
+
+    def test_close_user_session_rejects_another_owner(self) -> None:
+        row = UserSession(id="owned-session", user_id=2, token_family="target-family",
+                          refresh_token_hash="a" * 64, created_at=self.now,
+                          last_used_at=self.now, expires_at=self.now + timedelta(days=1))
+        self.db.add(row)
+        self.db.commit()
+        with self.assertRaises(HTTPException) as rejected:
+            access.close_single_session(
+                3, "user", "owned-session",
+                DangerousConfirmation(confirmation="CLOSE USER SESSION owned-session"),
+                request(), self.principal, self.db,
+            )
+        self.assertEqual(rejected.exception.status_code, 404)
+        self.assertIsNone(row.revoked_at)
+
+    def test_admin_close_before_refresh_prevents_a_replacement(self) -> None:
+        refresh_token = "selected-refresh-token-for-admin-close"
+        row = UserSession(id="selected-session", user_id=2, token_family="target-family",
+                          refresh_token_hash=hash_refresh_token(refresh_token),
+                          created_at=self.now, last_used_at=self.now,
+                          expires_at=self.now + timedelta(days=1))
+        self.db.add(row)
+        self.db.commit()
+        access.close_single_session(
+            2, "user", row.id,
+            DangerousConfirmation(confirmation="CLOSE USER SESSION selected-session"),
+            request(), self.principal, self.db,
+        )
+        with self.assertRaises(HTTPException) as rejected:
+            auth.refresh_session(
+                request(), Response(), RefreshRequest(refresh_token=refresh_token), self.db,
+            )
+        self.assertEqual(rejected.exception.status_code, 401)
+        self.assertEqual(len(self.db.scalars(select(UserSession)).all()), 1)
+
+    def test_close_single_admin_session_keeps_other_admin_sessions(self) -> None:
+        selected = self.admin_session(2, "selected-admin")
+        other = self.admin_session(2, "other-admin")
+        result = access.close_single_session(
+            2, "admin", selected.id,
+            DangerousConfirmation(confirmation="CLOSE ADMIN SESSION selected-admin"),
+            request(), self.principal, self.db,
+        )
+        self.assertTrue(result["closed"])
+        self.db.refresh(selected)
+        self.db.refresh(other)
+        self.assertIsNotNone(selected.revoked_at)
+        self.assertEqual(selected.revoke_reason, "administrator_forced_close")
+        self.assertIsNone(other.revoked_at)
 
     def test_support_rejects_regular_assignee_and_allows_unassign(self) -> None:
         ticket = SupportTicket(id=1, user_id=3, subject="Test", status="open", last_message="test")

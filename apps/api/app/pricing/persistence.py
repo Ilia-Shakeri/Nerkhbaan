@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import json
+import logging
 import os
 import socket
 from dataclasses import dataclass
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, DecimalException
 from typing import Any, Callable
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import DataError
 
 from ..config import settings
 from ..db import SessionLocal
+from ..observability import background_failures_total
 from .cache import PricingRedisStore, PricingRedisUnavailable, pricing_redis
 from .db_models import (
     CanonicalQuoteRecord,
@@ -37,6 +41,19 @@ from .models import (
     utc_now,
 )
 from .registry import PROVIDERS
+
+
+logger = logging.getLogger(__name__)
+
+
+_ACK_DELETE_PERSISTENCE_EVENT = """
+redis.call('XACK', KEYS[1], ARGV[1], ARGV[2])
+return redis.call('XDEL', KEYS[1], ARGV[2])
+"""
+
+
+class InvalidPersistenceEvent(ValueError):
+    """A queued record cannot be replayed without an operator repair."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,12 +86,15 @@ class PricingPersistence:
             return PersistenceResult(True, False, None, None)
         except Exception as exc:
             quote.persistence_status = PersistenceStatus.QUEUED
-            return await self._queue(
+            result = await self._queue(
                 "provider_quote",
                 quote.idempotency_key,
                 quote.to_dict(authenticated=True),
                 exc,
             )
+            if not result.queued:
+                quote.persistence_status = PersistenceStatus.UNPERSISTED
+            return result
 
     async def persist_canonical(self, quote: CanonicalQuote) -> PersistenceResult:
         try:
@@ -205,39 +225,50 @@ class PricingPersistence:
         except Exception as exc:
             if "BUSYGROUP" not in str(exc):
                 raise PricingRedisUnavailable("Persistence consumer group failed") from exc
-        recovered: list[tuple[str, dict[str, str]]] = []
+        recovered: list[tuple[bytes, dict[bytes, bytes]]] = []
+        limit = max(1, min(batch_size, 1000))
         try:
-            claimed = await client.xautoclaim(
+            # Per-command raw decoding leaves the shared cache pool unchanged
+            # and lets malformed UTF-8 reach the durable quarantine path.
+            claimed = await client.execute_command(
+                "XAUTOCLAIM",
                 self.store.persistence_stream,
                 self.consumer_group,
                 self.consumer_name,
-                min_idle_time=60_000,
-                start_id="0-0",
-                count=max(1, min(batch_size, 1000)),
+                60_000, "0-0", "COUNT", limit,
+                NEVER_DECODE=True,
             )
             if isinstance(claimed, (list, tuple)) and len(claimed) >= 2:
                 recovered = list(claimed[1] or [])
         except Exception:
             recovered = []
-        messages = await client.xreadgroup(
-            self.consumer_group,
-            self.consumer_name,
-            {self.store.persistence_stream: ">"},
-            count=max(1, min(batch_size, 1000)),
-            block=1,
+        messages = await client.execute_command(
+            "XREADGROUP", "GROUP", self.consumer_group, self.consumer_name,
+            "COUNT", limit, "BLOCK", 1, "STREAMS", self.store.persistence_stream, ">",
+            NEVER_DECODE=True,
         )
         processed = 0
         failed = 0
+        quarantined = 0
         batches = [(self.store.persistence_stream, recovered)] if recovered else []
         batches.extend(messages)
         for _stream, rows in batches:
             for stream_id, fields in rows:
+                stream_id = stream_id.decode("ascii") if isinstance(stream_id, bytes) else str(stream_id)
                 try:
-                    event_type = str(fields["event_type"])
-                    idempotency_key = str(fields["idempotency_key"])
-                    payload = json.loads(fields["payload"])
-                    if not isinstance(payload, dict):
-                        raise ValueError("Persistence payload must be an object")
+                    try:
+                        decoded = {key.decode("utf-8") if isinstance(key, bytes) else key: value for key, value in fields.items()}
+                        event_type = decoded["event_type"]
+                        event_type = event_type.decode("ascii") if isinstance(event_type, bytes) else str(event_type)
+                        idempotency_key = decoded["idempotency_key"]
+                        idempotency_key = idempotency_key.decode("ascii") if isinstance(idempotency_key, bytes) else str(idempotency_key)
+                        payload = json.loads(decoded["payload"])
+                        if not isinstance(payload, dict):
+                            raise ValueError("Persistence payload must be an object")
+                        if not idempotency_key or len(idempotency_key) > 160:
+                            raise ValueError("Invalid persistence idempotency key")
+                    except (KeyError, TypeError, ValueError) as exc:
+                        raise InvalidPersistenceEvent("Invalid persistence envelope") from exc
                     await asyncio.to_thread(
                         self._replay_event,
                         str(stream_id),
@@ -245,17 +276,59 @@ class PricingPersistence:
                         idempotency_key,
                         payload,
                     )
-                    await client.xack(
-                        self.store.persistence_stream, self.consumer_group, stream_id
-                    )
-                    await client.xdel(self.store.persistence_stream, stream_id)
+                except (InvalidPersistenceEvent, DataError) as exc:
+                    try:
+                        # Preserve every original field durably before removing
+                        # poison from the queue. An unavailable database leaves
+                        # the original entry pending for a later retry.
+                        await asyncio.to_thread(self._quarantine_event, str(stream_id), fields, exc)
+                        quarantined += 1
+                        background_failures_total.labels(loop="pricing_persistence_quarantine").inc()
+                        logger.warning("Pricing persistence record quarantined: stream_id=%s", stream_id)
+                    except Exception:
+                        failed += 1
+                        break
+                except Exception:
+                    failed += 1
+                    break
+                else:
                     processed += 1
+                try:
+                    await self._acknowledge_stream_event(stream_id)
                 except Exception:
                     failed += 1
                     break
             if failed:
                 break
-        return {"processed": processed, "failed": failed}
+        return {"processed": processed, "failed": failed, "quarantined": quarantined}
+
+    async def _acknowledge_stream_event(self, stream_id: str) -> None:
+        # A network failure may leave both commands committed or neither;
+        # it must never strand an acknowledged entry outside the pending list.
+        await self.store.client().eval(_ACK_DELETE_PERSISTENCE_EVENT, 1, self.store.persistence_stream, self.consumer_group, stream_id)
+
+    def _quarantine_event(self, stream_id: str, fields: dict, error: Exception) -> None:
+        def encode(value: Any) -> str:
+            raw = value if isinstance(value, bytes) else str(value).encode("utf-8", errors="surrogatepass")
+            return base64.b64encode(raw).decode("ascii")
+
+        # Base64 retains NULs and the complete malformed payload, which JSONB
+        # could otherwise reject. Do not truncate or log provider contents.
+        preserved = {"fields_base64": [[encode(key), encode(value)] for key, value in fields.items()]}
+        quarantine_key = hashlib.sha256(f"{self.store.persistence_stream}|{stream_id}".encode()).hexdigest()
+        db = SessionLocal()
+        try:
+            existing = db.scalar(select(PricingPersistenceEventRecord).where(PricingPersistenceEventRecord.stream_event_id == stream_id).with_for_update())
+            if existing is None:
+                db.add(PricingPersistenceEventRecord(stream_event_id=stream_id, event_type="quarantined", idempotency_key=f"quarantine:{quarantine_key}", payload=preserved, status="quarantined", attempt_count=1, last_error=f"{type(error).__name__}: invalid persistence record"))
+            elif existing.status != "quarantined" or existing.payload != preserved:
+                raise RuntimeError("Persistence quarantine conflicts with an existing record")
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     async def _queue(
         self,
@@ -273,6 +346,8 @@ class PricingPersistence:
                 self.stream_max_length,
             )
         except Exception:
+            background_failures_total.labels(loop="pricing_persistence_queue").inc()
+            logger.warning("Pricing persistence enqueue failed; quote remains unpersisted")
             return PersistenceResult(False, False, None, sanitized_error)
         return PersistenceResult(False, True, stream_id, sanitized_error)
 
@@ -646,7 +721,7 @@ class PricingPersistence:
         try:
             handler = handlers[event_type]
         except KeyError as exc:
-            raise ValueError("Unsupported persistence event type") from exc
+            raise InvalidPersistenceEvent("Unsupported persistence event type") from exc
         handler(payload)
         db = SessionLocal()
         try:
@@ -680,17 +755,23 @@ class PricingPersistence:
 
     @staticmethod
     def _replay_provider_quote(payload: dict[str, Any]) -> None:
-        quote = ProviderQuote.from_dict(payload)
+        try:
+            quote = ProviderQuote.from_dict(payload)
+        except (KeyError, TypeError, ValueError, DecimalException, OverflowError) as exc:
+            raise InvalidPersistenceEvent("Invalid provider quote") from exc
         quote.persistence_status = PersistenceStatus.PERSISTED
         PricingPersistence._persist_provider_quote(quote)
 
     @staticmethod
     def _replay_canonical_quote(payload: dict[str, Any]) -> None:
-        quote = CanonicalQuote.from_dict(payload)
-        quote.is_persisted = True
-        prior_status = quote.source_summary.get("status_before_persistence_failure")
-        if quote.status is CanonicalStatus.UNPERSISTED and isinstance(prior_status, str):
-            quote.status = CanonicalStatus(prior_status)
+        try:
+            quote = CanonicalQuote.from_dict(payload)
+            quote.is_persisted = True
+            prior_status = quote.source_summary.get("status_before_persistence_failure")
+            if quote.status is CanonicalStatus.UNPERSISTED and isinstance(prior_status, str):
+                quote.status = CanonicalStatus(prior_status)
+        except (KeyError, TypeError, ValueError, DecimalException, OverflowError) as exc:
+            raise InvalidPersistenceEvent("Invalid canonical quote") from exc
         PricingPersistence._persist_canonical(quote)
 
 

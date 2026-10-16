@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User, Mail, Lock, CheckCircle2, XCircle, Sun, Moon, Languages } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
@@ -9,12 +9,14 @@ import { toast } from 'sonner';
 import { useNavigate, Link } from 'react-router-dom';
 import { LegalLinks } from '../components/LegalLinks';
 import { POLICY_VERSION } from '../legal/policies';
+import { getLogoutStatus, subscribeLogoutStatus } from '../services/logout-state';
 
 export function AuthView() {
   const { language, toggleLanguage, login, theme, toggleTheme } = useAppContext();
   const isDark = theme === 'dark';
   const isRtl = language === 'fa';
   const navigate = useNavigate();
+  const logoutPending = useSyncExternalStore(subscribeLogoutStatus, getLogoutStatus) !== 'idle';
 
   // Feature flag check for public registration capabilities
   const registrationEnabled = import.meta.env.VITE_ENABLE_REGISTRATION !== 'false';
@@ -307,7 +309,7 @@ export function AuthView() {
                 type="submit"
                 aria-label={isLogin ? t.submitLogin[language] : t.submitSignup[language]}
                 aria-busy={isSubmitting}
-                disabled={isSubmitting || (!isLogin && !isPasswordValid)}
+                disabled={logoutPending || isSubmitting || (!isLogin && !isPasswordValid)}
                 className={`w-full rounded-2xl text-sm font-bold transition-all duration-300 ${isLogin ? 'mt-6 h-12' : 'mt-4 h-11'} ${
                   (!isLogin && !isPasswordValid) ? 'opacity-50 cursor-not-allowed' : ''
                 } ${
@@ -330,6 +332,7 @@ export function AuthView() {
                   </span>
                   <button
                     type="button"
+                    disabled={logoutPending || isSubmitting}
                     onClick={() => {
                       setIsLogin(!isLogin);
                       setPassword('');

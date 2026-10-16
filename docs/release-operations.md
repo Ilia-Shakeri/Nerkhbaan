@@ -1,7 +1,8 @@
-# Release Operations — 2.8.1
+# Release Operations — 2.8.2
 
-Updated: 2026-10-12. Execute against the intended host only after review of the concrete release.
+Updated: 2026-10-16. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
+Release 2.8.2 has local source validation only. This change does not deploy it; 2.8.1 target receipts below remain historical.
 
 ## 1. Final code gates
 
@@ -108,14 +109,65 @@ The responsible owner supplies source rights and private-store evidence. Record 
 target health and browser proof separately; do not fill them from a build result or a placeholder.
 
 ```bash
+export RELEASE_DIR="/opt/Nerkhbaan/.releases/${REVIEWED_COMMIT:?Set the reviewed full commit}"
+COMPOSE_PROJECT_NAME=nerkhbaan \
+COMPOSE_ENV_FILE=/opt/Nerkhbaan/.env \
+COMPOSE_OVERRIDE_FILE="$RELEASE_DIR/runtime.override.json" \
+DEPLOY_IMAGE_MANIFEST=/run/nerkhbaan/reviewed-images.json \
+DEPLOY_READINESS_URL="${DEPLOY_READINESS_URL:?Set the reviewed target HTTPS readiness URL}" \
 OPERATOR_EVIDENCE_PATH=/run/nerkhbaan/operator-gates.json \
 BACKEND_REPLICAS=2 \
-sh scripts/deploy-nerkhbaan-prod.sh
+sh "$RELEASE_DIR/scripts/deploy-nerkhbaan-prod.sh"
 ```
 
-The script is configured for `/opt/Nerkhbaan`; review the path on the actual target.
-It refuses missing/invalid evidence and a dirty tracked worktree. Preserve all volumes.
-Use reviewed immutable image/version tags and retain previous images.
+The helper updates an existing healthy stack only. Initial infrastructure creation is separate.
+It requires the reviewed absolute checkout, explicit existing project, private environment/override,
+operator evidence, HTTPS readiness route and image manifest. It refuses a dirty tracked checkout,
+missing/unhealthy PostgreSQL, Redis or backup service, a changed network or an ambiguous replica count.
+It never pulls source/images or builds. Load reviewed images separately; pin digest or commit tags in
+the override and retain previous images. `COMPOSE_FILE` is no longer a deployment input.
+
+The private `DEPLOY_IMAGE_MANIFEST` binds review to the exact checkout and loaded image IDs:
+
+```json
+{
+  "commit": "<full 40-character checkout commit>",
+  "images": {
+    "backend": "sha256:<reviewed loaded API image ID>",
+    "migrate": "sha256:<same reviewed loaded API image ID>",
+    "frontend": "sha256:<reviewed loaded public image ID>",
+    "admin-frontend": "sha256:<reviewed loaded admin image ID>",
+    "price-feed-pull": "sha256:<reviewed loaded feed image ID>"
+  }
+}
+```
+
+Include only the currently installed client/feed services; admin is updated only if already present.
+Use `docker image inspect --format '{{.Id}}' <reviewed-reference>` to record each loaded ID.
+The helper checks the migration/API identity, loaded IDs and resolved configuration before mutations.
+It verifies backend/migrate `env_file` paths resolve to `COMPOSE_ENV_FILE`; `--env-file` alone only
+sets interpolation inputs. Keep the release `.env` as a private link to the selected runtime file,
+or use a reviewed override that replaces the service file list. Competing files cause refusal.
+It probes SQL checksums from the exact desired image in an ephemeral read-only container with no
+network, environment file or volumes, then compares the checkout, old API's migration files and a
+read-only ledger query. All four must match before the migration service runs. A new, changed or
+unknown schema requires a separately reviewed migration/cutover plan; this automatic route only
+checks an already current schema. It runs that service explicitly with `--no-deps --pull never`,
+adds one backend with `--no-recreate`,
+checks all replicas and HTTPS, then stops/removes only the recorded old ID after rechecking its
+project/service labels, image, static configuration, mounts, network identity and start time.
+Each replacement keeps the requested number of healthy replicas. Same-image configuration changes
+also roll; an already current backend retains its IDs. Client/feed changes use explicit targets and
+`--no-deps --no-build --pull never`. Data, backup, ingress, monitoring and unrelated containers are
+compared against their original IDs/configuration/mounts/start times throughout the update.
+
+Redirect deployment output to a private release log. On any health/identity/configuration failure,
+the helper stops and keeps remaining replicas. Reconcile the actual stack before retrying; an extra
+replica from a partial attempt causes preflight refusal. No automatic rollback, volume removal,
+infrastructure recreation or replica scale-down is performed. A different schema stops the procedure
+before executing the migration service, so the old API's strict ledger readiness is retained.
+Passing mocked CLI tests is not target deployment evidence. Compose must support
+[`config --no-env-resolution` and `--hash`](https://docs.docker.com/reference/cli/docker/compose/config/).
 
 ### Existing stack with shared ingress
 
@@ -186,8 +238,8 @@ the actual running replicas before resuming after a partial update. The separate
 preserved every nonclient container ID.
 
 Keep PostgreSQL, Redis, their containers and their volumes running. Compare their recorded IDs
-and mounts after the application update. The generic full-stack script above recreates services;
-use this scoped rolling sequence for an existing stack with shared ingress. Do not use `down`, volume
+and mounts after the application update. The checked script now implements the scoped application
+sequence; the manual commands above document its review gates. Do not use `down`, volume
 removal or an unscoped forced recreation. The admin health probe uses `http://127.0.0.1/` with a
 ten-second `start_period`; this avoids a loopback IPv6 mismatch and early startup failures.
 The four custom Nginx images remove the default IPv6-rewrite helper at build time. Their listeners

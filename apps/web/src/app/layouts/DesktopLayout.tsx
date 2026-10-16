@@ -217,6 +217,8 @@ export function DesktopLayout() {
           <NavLink
             key={item.path}
             to={item.path}
+            aria-label={item.label[language]}
+            title={collapsed ? item.label[language] : undefined}
             onClick={() => setIsSidebarOpen(false)}
             className={({ isActive }) =>
               `min-h-11 flex items-center rounded-xl px-4 py-3 text-sm font-medium transition-[background-color,color,box-shadow] ${
@@ -228,7 +230,7 @@ export function DesktopLayout() {
               } ${collapsed ? 'justify-center px-2' : 'gap-3'}`
             }
           >
-            <item.icon size={18} />
+            <item.icon size={18} aria-hidden="true" />
             <AnimatePresence initial={false}>
               {!collapsed && (
                 <motion.span
@@ -513,6 +515,11 @@ export function DesktopLayout() {
                             <div className={`font-medium ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'} ${!notif.read_at ? 'ps-3' : ''}`}>
                               {notif.title || notif.message}
                             </div>
+                            {notif.title && notif.message && notif.title !== notif.message && (
+                              <p className={`whitespace-pre-wrap break-words text-sm ${isDark ? 'text-[#CFBE91]' : 'text-[#6E5317]'} ${!notif.read_at ? 'ps-3' : ''}`}>
+                                {notif.message}
+                              </p>
+                            )}
                             <div className={`text-xs ${isDark ? 'text-[#9C8A5D]' : 'text-[#8A6B20]'} ${!notif.read_at ? 'ps-3' : ''}`}>
                               {new Date(notif.created_at).toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}
                             </div>

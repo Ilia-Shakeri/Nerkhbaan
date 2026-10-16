@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import time
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -27,6 +28,8 @@ async def _authenticate(request: Request, body: bytes) -> None:
     secret = (settings.pricing_worker_shared_secret or "").strip()
     timestamp = request.headers.get("X-Pricing-Worker-Timestamp", "")
     signature = request.headers.get("X-Pricing-Worker-Signature", "")
+    if not re.fullmatch(r"[0-9]{1,20}", timestamp) or not re.fullmatch(r"[a-f0-9]{64}", signature):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Worker authentication failed")
     try:
         timestamp_value = int(timestamp)
     except ValueError as exc:
@@ -38,7 +41,9 @@ async def _authenticate(request: Request, body: bytes) -> None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Worker authentication failed")
     try:
         accepted = await pricing_redis.client().set(
-            f"pricing:worker:replay:{signature}", "1", ex=_MAX_CLOCK_SKEW_SECONDS, nx=True
+            # A future-dated request remains valid for two skew windows. Keep
+            # the claim through the inclusive final second as well.
+            f"pricing:worker:replay:{signature}", "1", ex=2 * _MAX_CLOCK_SKEW_SECONDS + 1, nx=True
         )
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Worker replay protection unavailable") from exc

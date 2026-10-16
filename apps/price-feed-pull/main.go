@@ -102,7 +102,7 @@ func runOnce(client *http.Client, cfg config, lastUpdate string) (string, error)
 	if err := json.Unmarshal(payload, &current); err != nil {
 		return "", fmt.Errorf("decode feed: %w", err)
 	}
-	if err := validateFeed(current, time.Now().UTC()); err != nil {
+	if err := validateFeed(&current, time.Now().UTC()); err != nil {
 		return "", err
 	}
 	if current.UpdatedAt == lastUpdate {
@@ -154,7 +154,7 @@ func runGit(ctx context.Context, args ...string) error {
 	return nil
 }
 
-func validateFeed(value feed, now time.Time) error {
+func validateFeed(value *feed, now time.Time) error {
 	if (value.Version != 1 && value.Version != 2) || value.Source != "public-market-relay" {
 		return errors.New("unsupported price feed contract")
 	}
@@ -177,6 +177,7 @@ func validateFeed(value feed, now time.Time) error {
 	}
 	seenProviders := map[string]bool{}
 	seenInstruments := map[string]bool{}
+	fresh := make([]quote, 0, len(value.Quotes))
 	for _, item := range value.Quotes {
 		if allowed[item.ProviderID] != item.InstrumentID || item.Historical {
 			return errors.New("price feed contains an unauthorized route")
@@ -187,13 +188,20 @@ func validateFeed(value feed, now time.Time) error {
 		seenProviders[item.ProviderID] = true
 		seenInstruments[item.InstrumentID] = true
 		observed, err := time.Parse(time.RFC3339Nano, item.ObservedAt)
-		if err != nil || observed.After(now.Add(5*time.Minute)) || now.Sub(observed) > maximumFeedAge {
+		if err != nil || observed.After(now.Add(5*time.Minute)) {
 			return errors.New("quote timestamp is outside the safe window")
 		}
 		price, err := strconv.ParseFloat(item.Price, 64)
 		if err != nil || !safePrice(item.InstrumentID, price) {
 			return errors.New("quote price is outside the safe range")
 		}
+		if now.Sub(observed) > maximumFeedAge {
+			if value.Version == 1 {
+				return errors.New("quote timestamp is outside the safe window")
+			}
+			continue
+		}
+		fresh = append(fresh, item)
 	}
 	if value.Version == 1 {
 		for _, instrument := range []string{"XAG_USD_OZ", "BTC_USD", "USDT_USD"} {
@@ -202,6 +210,10 @@ func validateFeed(value feed, now time.Time) error {
 			}
 		}
 	}
+	if len(fresh) == 0 {
+		return errors.New("price feed contains no fresh quotes")
+	}
+	value.Quotes = fresh
 	return nil
 }
 

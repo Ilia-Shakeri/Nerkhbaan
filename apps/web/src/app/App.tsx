@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { useCallback, useEffect, useState, useRef } from "react";
 import { SplashScreen } from "@/app/components/SplashScreen";
 import { applyPendingUpdate } from "@/pwa/registerServiceWorker";
+import { logoutAuthPath } from './services/logout-state';
 import { motion, AnimatePresence, MotionConfig } from "motion/react";
 
 function AuthEventsBridge() {
@@ -14,7 +15,7 @@ function AuthEventsBridge() {
   useEffect(() => {
     const onUnauthorized = () => {
   logout();
-  navigate("/auth", { replace: true });
+  navigate(logoutAuthPath(), { replace: true });
 };
 
     window.addEventListener("auth-expired", onUnauthorized);

@@ -1,5 +1,17 @@
 import { apiInstance } from "@/app/services/api";
 
+import { logoutGeneration, logoutIsPending } from '@/app/services/logout-state';
+
+const subscriptionWrites = new Set<Promise<unknown>>();
+
+async function writeSubscription(subscription: PushSubscription, generation: number): Promise<void> {
+  if (logoutIsPending() || generation !== logoutGeneration()) return;
+  const request = apiInstance.post('push/subscribe', subscription.toJSON());
+  subscriptionWrites.add(request);
+  try { await request; }
+  finally { subscriptionWrites.delete(request); }
+}
+
 function base64ToUint8Array(base64String: string) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -52,13 +64,14 @@ export async function hasPushSubscription(): Promise<boolean> {
  * authentication the account never receives a push.
  */
 export async function syncPushSubscription(): Promise<void> {
-  if (!pushIsConfigured()) return;
+  if (!pushIsConfigured() || logoutIsPending()) return;
+  const generation = logoutGeneration();
   const worker = await registration();
   if (!worker) return;
   const existing = await worker.pushManager.getSubscription();
   if (!existing) return;
   try {
-    await apiInstance.post("push/subscribe", existing.toJSON());
+    await writeSubscription(existing, generation);
   } catch {
     // A failed sync is retried the next time the app starts.
   }
@@ -71,13 +84,14 @@ export async function syncPushSubscription(): Promise<void> {
  * have asked for alerts is how browsers end up blocking the prompt outright.
  */
 export async function enablePushNotifications(): Promise<boolean> {
-  if (!pushIsConfigured() || !pushIsSupported()) return false;
+  if (!pushIsConfigured() || !pushIsSupported() || logoutIsPending()) return false;
+  const generation = logoutGeneration();
 
   const permission = await Notification.requestPermission();
-  if (permission !== "granted") return false;
+  if (permission !== "granted" || logoutIsPending() || generation !== logoutGeneration()) return false;
 
   const worker = await registration();
-  if (!worker) return false;
+  if (!worker || logoutIsPending() || generation !== logoutGeneration()) return false;
 
   const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string;
   const subscription =
@@ -87,7 +101,8 @@ export async function enablePushNotifications(): Promise<boolean> {
       applicationServerKey: base64ToUint8Array(vapidPublicKey),
     }));
 
-  await apiInstance.post("push/subscribe", subscription.toJSON());
+  if (logoutIsPending() || generation !== logoutGeneration()) return false;
+  await writeSubscription(subscription, generation);
   return true;
 }
 
@@ -98,19 +113,19 @@ export async function enablePushNotifications(): Promise<boolean> {
  * person to use the device inherits their alerts.
  */
 export async function disablePushNotifications(): Promise<void> {
+  // Finish writes already sent before deleting their endpoint. New writes are
+  // blocked by the logout marker, including a late startup subscription read.
+  await Promise.allSettled([...subscriptionWrites]);
   const worker = await registration();
   if (!worker) return;
   const subscription = await worker.pushManager.getSubscription();
   if (!subscription) return;
   const endpoint = subscription.endpoint;
-  try {
-    await subscription.unsubscribe();
-  } catch {
-    // Continue: the server record still has to be released.
-  }
-  try {
-    await apiInstance.post("push/unsubscribe", { endpoint });
-  } catch {
-    // Best effort; the endpoint is already dead from the browser's side.
-  }
+  const results = await Promise.allSettled([
+    subscription.unsubscribe(),
+    apiInstance.post('push/unsubscribe', { endpoint }),
+  ]);
+  if (results[1].status === 'fulfilled') return;
+  if (results[0].status === 'fulfilled' && (results[0].value === true || !await worker.pushManager.getSubscription())) return;
+  throw new Error('Notification cleanup failed');
 }

@@ -211,7 +211,7 @@ test("push registration waits for an explicit opt-in", () => {
 test("push subscriptions are rebound at sign-in and released at sign-out", () => {
   const context = read("apps/web/src/app/context/AppContext.tsx");
   assert.match(context, /syncPushSubscription/);
-  assert.match(context, /disablePushNotifications/);
+  assert.match(read('apps/web/src/app/services/logout.ts'), /disablePushNotifications/);
 });
 
 test("web ships only the font files the stylesheet references", () => {
@@ -357,8 +357,8 @@ test("support and contact surfaces expose only working actions", () => {
 
 test("production backup health fits inside the deployment wait window", () => {
   const compose = read("docker-compose.prod.yaml");
-  const deploy = read("scripts/deploy-nerkhbaan-prod.sh");
+  const deploy = read("scripts/deploy_application.py");
   assert.match(compose, /db-backup:[\s\S]*healthcheck:[\s\S]*interval: 30s/);
   assert.match(compose, /HEALTHCHECK_PORT/);
-  assert.match(deploy, /DEPLOY_WAIT_SECONDS="\$\{DEPLOY_WAIT_SECONDS:-240\}"/);
+  assert.match(deploy, /self\.wait = int\(env\.get\("DEPLOY_WAIT_SECONDS", "240"\)\)/);
 });

@@ -2,6 +2,25 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.8.2] - 2026-10-16
+
+### Fixed
+
+- Revoked an entire user refresh family under the owner lock when an administrator closes any rotated member. Unified normal and crash-recovery logout, preserved incomplete logout across reloads and tabs, serialized credential operations and retained encrypted native revocation credentials until a successful retry.
+- Charged every managed provider attempt against its shared budget, applied public quote visibility and current instrument policy to health, rejected currency relabeling and forwarded fresh version-two feed siblings after dropping expired quotes. Version-one feeds and invalid routes remain strict.
+- Stored immutable alert conditions, destinations and occurrence times. Kept current account/channel consent checks, withdrew delivery consent on deletion, safely handled legacy records, serialized the active-alert cap and completed multi-channel occurrences under a shared event lock, including administrator cancellation.
+- Replaced lossy persistence-stream trimming with atomic capacity checks. Quarantined malformed records with every original byte retained in PostgreSQL before atomic acknowledgement/removal; transient database failures keep the original queued record.
+- Shared SMTP transport across account and alert mail, including verified implicit TLS on port 465. Rejected malformed worker headers before hashing and retained replay claims for the full accepted timestamp window. Bounded conversation replies/history to 4000 characters and continued fallback after invalid provider response types.
+- Restored notification bodies and collapsed-navigation names. Added explicit support errors, retry and refresh with stale-response guards, plus bounded/cancellable admin reads without automatically retrying writes.
+- Replaced unscoped production recreation with reviewed application-only overlap, exact image/container/config/network checks, a private environment binding, strict HTTPS readiness and a pre-write schema compatibility gate. Existing data, monitoring and shared-ingress containers are protected.
+
+### Validation
+
+- 450 backend tests passed with zero skips, including owned PostgreSQL 17.11 and Redis 7.4.11 cases; the suite also contains unit, SQLite and mocked checks.
+- 65 frontend tests, 26 Edge cases, 10 Go feed checks, 14 deployment CLI fixtures and 31 infrastructure/helper checks passed. Browser coverage includes one real disposable HTTP/PostgreSQL flow and 25 mocked HTTP flows. The deployment checks use fake containers and HTTPS responses.
+- Web, admin and desktop renderer builds passed. Applied SQL and dependency versions remain unchanged. New real alert/queue regression modules are included in hosted integration configuration.
+- This is source-code validation. No live deployment, new Timescale restore, current image scan, signed installer or real notification receipt is claimed for 2.8.2. Earlier 2.8.1 target evidence retains its original date and scope.
+
 ## [2.8.1] - 2026-10-11
 
 ### Fixed

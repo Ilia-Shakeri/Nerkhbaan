@@ -366,12 +366,27 @@ def close_single_session(user_id: int, kind: str, session_id: str, payload: Dang
     require_confirmation(payload.confirmation, f"CLOSE {kind.upper()} SESSION {session_id}")
     if kind not in {"user", "admin"}:
         raise HTTPException(status_code=404, detail="Session kind not found")
+    # Rotation locks the owner first; closing a family must use the same order.
+    if kind == "user" and _locked_user(db, user_id) is None:
+        raise HTTPException(status_code=404, detail="Session not found")
     model = AdminSession if kind == "admin" else UserSession
-    row = db.scalar(select(model).where(model.id == session_id, model.user_id == user_id).with_for_update())
+    row = db.scalar(
+        select(model).where(model.id == session_id, model.user_id == user_id)
+        .with_for_update().execution_options(populate_existing=True)
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="Session not found")
-    row.revoked_at = datetime.now(UTC)
-    if kind == "admin":
+    now = datetime.now(UTC)
+    if kind == "user":
+        db.execute(
+            update(UserSession).where(
+                UserSession.user_id == user_id,
+                UserSession.token_family == row.token_family,
+                UserSession.revoked_at.is_(None),
+            ).values(revoked_at=now)
+        )
+    else:
+        row.revoked_at = now
         row.revoke_reason = "administrator_forced_close"
     add_audit_event(db, request, actor_admin_id=principal.user.id, action="admin.session.closed", resource_type=f"{kind}_session", resource_id=session_id, after={"user_id": user_id})
     db.commit()

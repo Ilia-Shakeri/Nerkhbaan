@@ -17,6 +17,7 @@ from ..security import rate_limit_hit
 from ..services.insights import (
     InsightQuotaExceeded,
     InsightUnavailableError,
+    MAX_MESSAGE_CHARACTERS,
     insight_engine,
 )
 
@@ -54,7 +55,7 @@ class AnalyzeResponse(BaseModel):
 
 class ChatMessage(BaseModel):
     role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=4000)
+    content: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARACTERS)
 
 
 class ChatRequest(BaseModel):
@@ -80,7 +81,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     session_id: int
-    reply: str
+    reply: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARACTERS)
 
 
 class ChatSessionSummary(BaseModel):
@@ -258,7 +259,7 @@ def get_chat_session(
     summary = _session_summary(session)
     return ChatSessionDetail(
         **summary.model_dump(),
-        messages=[ChatMessage(role=row.role, content=row.content) for row in rows],
+        messages=[ChatMessage(role=row.role, content=row.content[:MAX_MESSAGE_CHARACTERS]) for row in rows],
     )
 
 

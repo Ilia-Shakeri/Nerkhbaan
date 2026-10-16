@@ -1,6 +1,6 @@
 # Nerkhbaan API Reference
 
-Code release: **2.8.1**. Updated: 2026-10-12.
+Code release: **2.8.2**. Updated: 2026-10-16.
 The complete generated contract is [docs/api-contracts.json](docs/api-contracts.json).
 The [route index](docs/api-route-index.md) lists all HTTP methods, paths and request schemas.
 Regenerate both with `python scripts/export_api_contracts.py` after route or model changes.
@@ -13,6 +13,7 @@ Regenerate both with `python scripts/export_api_contracts.py` after route or mod
 - Error body uses `detail`; it may be a string or field-error list. Do not parse message text as a status code.
 - Use the route's exact pagination parameters and success status from the generated schema.
 - A missing optional property differs from explicit `null`. Updates validate the merged resource.
+- Conversation replies and individual history messages are bounded to 4000 characters; legacy stored text is retained and bounded only in the response.
 - Never send provider credentials in requests to admin setting endpoints or in URLs.
 
 ## User auth and consent

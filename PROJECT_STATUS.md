@@ -1,8 +1,26 @@
 # Project Status
 
-Code release: **2.8.1**. Record updated: 2026-10-12.
+Code release: **2.8.2**. Record updated: 2026-10-16.
 
-## Current code
+## Step-one code acceptance — 2026-10-16
+
+The complete code-fix scope is closed: user/admin session closure, durable logout, scoped deployment,
+provider budgets/health/currency/feed isolation, immutable alert occurrences, alert-cap and channel
+completion races, durable queue backpressure/quarantine, SMTP, worker authentication, conversation
+responses and the public/admin interface fixes. Applied SQL and dependency versions are unchanged.
+
+The final local suite passed 450 backend tests with zero skips, 65 frontend checks and 26 Edge cases.
+Owned PostgreSQL 17.11 and Redis 7.4.11 exercised the database/queue races; other cases use unit,
+SQLite and mocked fixtures. Ten Go feed cases, fourteen fake deployment CLI tests and 31 helper
+checks passed. Public/admin/desktop renderer builds passed. The scoped code correction loop reached
+9/10. These counts are separate suites; they do not represent a complete target acceptance run.
+
+Provider coverage is the next roadmap step. Source rights, direct 24K/cash-dollar inputs, continuous
+collection, real notification receipt, trusted signing and target acceptance retain their own gates.
+No live service or customer data was changed. Hosted results for older commits below are historical;
+they do not certify this source release.
+
+## Previous release context — 2.8.1
 
 The October fixes cover units, source freshness, persisted history, notification delivery,
 sessions, admin operations, desktop installation, migrations and operational documents.
@@ -11,7 +29,7 @@ freshness, XAU HTTP validation, shared unfinished WebSocket/history reads, batch
 reads, bounded automatic history enqueue and verified streaming history aggregates.
 The changelog lists changes. Generated API contracts cover 117 paths.
 
-## Executed checks
+## Previously executed checks — 2026-10-12
 
 The backend suite ran 396 cases: 383 passed and thirteen PostgreSQL cases skipped locally.
 The exact final API runtime passed 182 targeted cases without skips. Real PostgreSQL 17.11
@@ -26,7 +44,7 @@ passed all 15 jobs for application commit `ce22c1d0487d78c58b488aff40616f3ce0a33
 Both actual PostgreSQL history backends also passed in CI.
 Earlier frontend, Edge, restore and admin results remain dated evidence in the delivery matrix.
 
-## Live target
+## Last target record — 2026-10-12
 
 [Site](https://nerkhbaan.ir/) and [panel](https://nerkhbaan.ir/admin/) run 2.8.1.
 HTTPS readiness reports `ready=true`; PostgreSQL and Redis connect; eight migrations are current.

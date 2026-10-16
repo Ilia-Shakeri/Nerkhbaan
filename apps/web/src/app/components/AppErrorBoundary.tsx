@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { api } from '../services/api';
+import { requestLogout } from '../services/logout';
+import { logoutAuthPath } from '../services/logout-state';
 import { readPreference } from '../legal/storage';
 
 type Props = {
@@ -26,9 +27,9 @@ export class AppErrorBoundary extends Component<Props, State> {
   };
 
   private signOut = () => {
-    void api.auth.signout().catch(() => undefined).finally(() => {
-      if (window.electronAPI) { window.location.hash = '/auth'; window.location.reload(); }
-      else window.location.assign('/auth');
+    void requestLogout().catch(() => undefined).finally(() => {
+      if (window.electronAPI) { window.location.hash = logoutAuthPath(); window.location.reload(); }
+      else window.location.assign(logoutAuthPath());
     });
   };
 

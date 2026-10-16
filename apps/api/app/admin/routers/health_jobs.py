@@ -18,6 +18,7 @@ except ImportError:
 
 from ...config import settings
 from ...db import get_db
+from ...services.alert_delivery_state import finalize_trigger_event, lock_trigger_event
 from ..audit import add_audit_event
 from ..dbtools import reflected_table, safe_count, safe_rows
 from ..deps import (
@@ -351,9 +352,13 @@ def cancel_delivery_job(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Delivery job not found")
     if current.get("status") not in {"pending", "retrying", "processing", "failed", "dead"}:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Delivery job cannot be cancelled")
+    event = None
+    if current.get("trigger_event_id") is not None and reflected_table(db, "alert_trigger_events") is not None:
+        event = lock_trigger_event(db, current["trigger_event_id"])
     db.execute(
         table.update().where(cast(table.c.id, String) == delivery_job_id, table.c.status == current["status"]).values(status="cancelled")
     )
+    finalize_trigger_event(db, event)
     add_audit_event(
         db,
         request,

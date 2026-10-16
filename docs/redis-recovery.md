@@ -31,12 +31,25 @@ in TimescaleDB, so lengthening the Redis window buys nothing and costs memory.
 
 ## Normal deploy (safe)
 
-Use the checked deploy script. It rejects tracked local edits, requires current operator evidence, pulls by fast-forward only, validates production Compose, starts two API replicas by default, and waits for health:
+Use the checked application deploy script with the reviewed checkout and private runtime inputs.
+It retains PostgreSQL, Redis, backup, ingress and monitoring containers/volumes, runs migration
+explicitly and replaces API replicas with healthy overlap. It does not pull, build or recreate
+infrastructure. Initial stack creation and Redis recovery remain separate manual operations:
 
 ```bash
-cd /opt/Nerkhbaan && OPERATOR_EVIDENCE_PATH=/run/nerkhbaan/operator-gates.json COMPOSE_FILE=docker-compose.prod.yaml sh scripts/deploy-nerkhbaan-prod.sh
+export RELEASE_DIR="/opt/Nerkhbaan/.releases/${REVIEWED_COMMIT:?Set the reviewed full commit}"
+COMPOSE_PROJECT_NAME=nerkhbaan \
+COMPOSE_ENV_FILE=/opt/Nerkhbaan/.env \
+COMPOSE_OVERRIDE_FILE="$RELEASE_DIR/runtime.override.json" \
+DEPLOY_IMAGE_MANIFEST=/run/nerkhbaan/reviewed-images.json \
+DEPLOY_READINESS_URL="${DEPLOY_READINESS_URL:?Set the reviewed target HTTPS readiness URL}" \
+OPERATOR_EVIDENCE_PATH=/run/nerkhbaan/operator-gates.json \
+sh "$RELEASE_DIR/scripts/deploy-nerkhbaan-prod.sh"
 ```
 
+See [release operations](release-operations.md#4-target-deployment) for the image manifest and
+compatibility gates. Missing/unhealthy data services stop deployment; they are never repaired
+automatically. A partial failure preserves surviving replicas and needs baseline reconciliation.
 If backend and frontend are healthy, no recovery actions are needed.
 
 ## Redis startup check logic (current behavior)
@@ -94,16 +107,5 @@ docker compose -f docker-compose.prod.yaml logs -f redis --tail 80
 3. If one service is unhealthy, inspect only that service log first.
 4. Keep Redis recovery manual only; do not auto-delete data on normal deploy.
 
-## One command for VPS deploy
-
-Use this helper script:
-
-```bash
-OPERATOR_EVIDENCE_PATH=/run/nerkhbaan/operator-gates.json sh scripts/deploy-nerkhbaan-prod.sh
-```
-
-You can keep it in crontab/CI with:
-
-```bash
-cd /opt/Nerkhbaan && OPERATOR_EVIDENCE_PATH=/run/nerkhbaan/operator-gates.json COMPOSE_FILE=docker-compose.prod.yaml sh scripts/deploy-nerkhbaan-prod.sh
-```
+Use the reviewed application deployment inputs above for each release. Keep the checkout,
+runtime override and image manifest fixed during the run and retain the private receipt.

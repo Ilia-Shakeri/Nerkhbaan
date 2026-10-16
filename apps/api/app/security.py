@@ -319,6 +319,25 @@ def validate_public_https_url(value: str, allowed_hosts: set[str] | None = None)
     return value.strip()
 
 
+def send_smtp_message(message: EmailMessage, *, timeout: float = 5, smtp_settings: Any = None) -> None:
+    """Use implicit TLS on 465 and the configured STARTTLS policy elsewhere."""
+    config = smtp_settings if smtp_settings is not None else settings
+    implicit_tls = config.smtp_port == 465
+    transport = smtplib.SMTP_SSL if implicit_tls else smtplib.SMTP
+    options: dict[str, Any] = {"timeout": timeout}
+    if implicit_tls:
+        options["context"] = ssl.create_default_context()
+    with transport(config.smtp_host, config.smtp_port, **options) as client:
+        if not implicit_tls:
+            client.ehlo()
+            if config.smtp_use_tls:
+                client.starttls(context=ssl.create_default_context())
+                client.ehlo()
+        if config.smtp_username and config.smtp_password:
+            client.login(config.smtp_username, config.smtp_password)
+        client.send_message(message)
+
+
 def send_email(recipient: str, subject: str, body: str) -> bool:
     if not settings.smtp_host or "\n" in recipient or "\r" in recipient:
         return False
@@ -328,14 +347,7 @@ def send_email(recipient: str, subject: str, body: str) -> bool:
     message["Subject"] = subject
     message.set_content(body)
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=5) as client:
-            client.ehlo()
-            if settings.smtp_use_tls:
-                client.starttls(context=ssl.create_default_context())
-                client.ehlo()
-            if settings.smtp_username and settings.smtp_password:
-                client.login(settings.smtp_username, settings.smtp_password)
-            client.send_message(message)
+        send_smtp_message(message)
     except (OSError, smtplib.SMTPException):
         logger.error("Email delivery failed", exc_info=settings.debug)
         return False

@@ -10,7 +10,9 @@ import React, {
   useState
 } from 'react';
 import { api, type UserProfile } from '../services/api';
-import { disablePushNotifications, syncPushSubscription } from '@/pwa/push';
+import { syncPushSubscription } from '@/pwa/push';
+import { requestLogout } from '../services/logout';
+import { logoutIsPending, subscribeLogoutStatus } from '../services/logout-state';
 import { readPreference, rememberPreference } from '../legal/storage';
 
 type Language = 'fa' | 'en';
@@ -43,7 +45,6 @@ export function AppProvider({
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [mustChangePassword, setMustChangePassword] = useState(false);
-  const logoutRequest = useRef<Promise<void> | null>(null);
   const authGeneration = useRef(0);
 
   const [language, setLanguage] = useState<Language>(() => {
@@ -64,7 +65,11 @@ export function AppProvider({
   useEffect(() => {
     let active = true;
     const generation = ++authGeneration.current;
-    const current = () => active && authGeneration.current === generation;
+    const current = () => active && authGeneration.current === generation && !logoutIsPending();
+    if (logoutIsPending()) {
+      setAuthReady(true);
+      return;
+    }
     api.auth.me()
       .then((user) => {
         if (current()) {
@@ -89,6 +94,14 @@ export function AppProvider({
     };
   }, []);
 
+  useEffect(() => subscribeLogoutStatus(() => {
+    if (!logoutIsPending()) return;
+    authGeneration.current++;
+    setIsAuthenticated(false);
+    setMustChangePassword(false);
+    setAuthReady(true);
+  }), []);
+
   useEffect(() => {
     document.documentElement.dir = language === 'fa' ? 'rtl' : 'ltr';
     document.documentElement.lang = language;
@@ -109,6 +122,7 @@ export function AppProvider({
   };
 
   const login = useCallback((user: UserProfile) => {
+    if (logoutIsPending()) return;
     authGeneration.current++;
     setIsAuthenticated(true);
     setMustChangePassword(user.must_change_password);
@@ -118,21 +132,10 @@ export function AppProvider({
 
   const logout = useCallback(() => {
     authGeneration.current++;
-    if (logoutRequest.current) return logoutRequest.current;
     setIsAuthenticated(false);
     setMustChangePassword(false);
     setAuthReady(true);
-    // Release the browser endpoint before the session goes away, so the next
-    // person to use this device does not inherit the previous user's alerts.
-    logoutRequest.current = api.auth.signout(async () => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        await Promise.race([disablePushNotifications(), new Promise<void>(resolve => { timer = setTimeout(resolve, 4000); })]);
-      } finally { clearTimeout(timer); }
-    }).catch(() => {
-        window.dispatchEvent(new CustomEvent('api-error', { detail: { key: 'signout', message: 'Server sign-out failed. Reconnect and retry before sharing this device.' } }));
-    }).finally(() => { logoutRequest.current = null; });
-    return logoutRequest.current;
+    return requestLogout().catch(() => undefined);
   }, []);
 
   const toggleTheme = () => {

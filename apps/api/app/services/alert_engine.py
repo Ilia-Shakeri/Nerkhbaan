@@ -9,10 +9,9 @@ import logging
 import math
 import re
 import socket
-import smtplib
-import ssl
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
+from decimal import Decimal
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -27,9 +26,11 @@ from ..models import (
     AlertTriggerEvent,
     NotificationPreference,
     PushSubscription,
+    User,
     UserNotification,
 )
 from ..db import SessionLocal
+from ..security import send_smtp_message
 from .webhook_transport import PinnedWebhookTransport
 
 logger = logging.getLogger(__name__)
@@ -534,10 +535,13 @@ class AlertEngine:
         # every asset with its full history array turned each trigger row into
         # hundreds of kilobytes of JSON that is re-read on every retry.
         snapshot = {
+            "triggered_at": now.isoformat(),
             "refreshed_at": current_prices.get("refreshed_at"),
             "assets": self._relevant_assets(alert, current_prices),
         }
         delivery_alert = self._delivery_alert(alert)
+        # Retries must describe the condition and destination at occurrence time.
+        snapshot["delivery_alert"] = dict(vars(delivery_alert))
         snapshot["selected_price_context"] = self._selected_price_context(
             delivery_alert,
             snapshot,
@@ -684,10 +688,36 @@ class AlertEngine:
             row = db.get(AlertModel, job.alert_id)
             if not event or not row:
                 raise PermanentDeliveryError("Alert trigger context no longer exists")
-            alert = self._delivery_alert(row)
+            owner = db.get(User, row.user_id)
+            if not owner or not owner.is_active:
+                raise PermanentDeliveryError("Alert owner is not active")
+            snapshot = dict(event.condition_snapshot)
+            if not snapshot.get("triggered_at"):
+                snapshot["triggered_at"] = event.created_at.isoformat()
+            context = snapshot.get("delivery_alert")
+            if context is None:
+                # Old records cannot recover a condition or webhook URL after
+                # an edit. Render only stored facts for user-bound channels.
+                if job.channel == "webhook":
+                    raise PermanentDeliveryError("Legacy occurrence has no original webhook destination")
+                alert = Alert(id=row.id, user_id=row.user_id, asset_id=event.instrument_id or "alert", target_price=None, condition="recorded", currency="unknown", active=False, in_app_enabled=True, email_enabled=True, webhook_enabled=False, webhook_url=None, alert_type="legacy")
+                alert.occurrence_price = event.price
+            else:
+                try:
+                    alert = Alert(**context)
+                except (TypeError, ValueError) as exc:
+                    raise PermanentDeliveryError("Invalid alert occurrence context") from exc
+                if alert.id != row.id or alert.user_id != row.user_id:
+                    raise PermanentDeliveryError("Alert occurrence owner does not match")
             alert.delivery_key = job.idempotency_key
-            snapshot = event.condition_snapshot
             channel = job.channel
+            channel_flag = {"push": "notify_app", "email": "notify_email", "webhook": "notify_webhook", "telegram": "notify_telegram"}.get(channel)
+            if channel_flag and not getattr(row, channel_flag):
+                raise PermanentDeliveryError("Alert delivery channel is disabled")
+            if channel == "webhook" and not (row.webhook_url or "").strip():
+                raise PermanentDeliveryError("Alert webhook destination was cleared")
+            if row.mode == "recurring" and not row.is_active:
+                raise PermanentDeliveryError("Recurring alert is no longer active")
             # Sending is the irreversible boundary. Admin cancellation takes
             # the same row lock and can only win before this transition.
             job.status = "sending"
@@ -824,6 +854,10 @@ class AlertEngine:
         return contexts
 
     def _alert_summary(self, alert: Alert, current_prices: dict[str, Any]) -> tuple[str, str]:
+        if alert.alert_type == "legacy":
+            price = alert.occurrence_price
+            price_text = f" Recorded trigger price: {price:,.2f}." if isinstance(price, (int, float, Decimal)) else ""
+            return "Nerkhbaan alert occurrence", f"A stored alert occurrence was triggered.{price_text} Original condition unavailable."
         if alert.alert_type == "formula":
             title = "Nerkhbaan formula alert"
             contexts = self._formula_price_contexts(alert, current_prices)
@@ -967,36 +1001,15 @@ class AlertEngine:
         message["Subject"] = title
         message.set_content(body)
 
-        def _smtp_send() -> None:
-            # Port 465 is implicit TLS; everything else negotiates STARTTLS.
-            # The previous branch used SMTP_SSL when TLS was *disabled*, which
-            # hung against the default STARTTLS port.
-            if settings.smtp_port == 465:
-                with smtplib.SMTP_SSL(
-                    settings.smtp_host,
-                    settings.smtp_port,
-                    timeout=15,
-                    context=ssl.create_default_context(),
-                ) as server:
-                    if settings.smtp_username and settings.smtp_password:
-                        server.login(settings.smtp_username, settings.smtp_password)
-                    server.send_message(message)
-                return
-            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15) as server:
-                server.ehlo()
-                if settings.smtp_use_tls:
-                    server.starttls(context=ssl.create_default_context())
-                    server.ehlo()
-                if settings.smtp_username and settings.smtp_password:
-                    server.login(settings.smtp_username, settings.smtp_password)
-                server.send_message(message)
-
-        await asyncio.to_thread(_smtp_send)
+        await asyncio.to_thread(send_smtp_message, message, timeout=15, smtp_settings=settings)
         logger.info("Email sent for alert_id=%s", alert.id)
 
     async def _send_webhook(self, alert: Alert, current_prices: dict[str, Any]) -> None:
         if not alert.webhook_url:
             return
+        triggered_at = current_prices.get("triggered_at")
+        if not isinstance(triggered_at, str) or not triggered_at:
+            raise PermanentDeliveryError("Webhook occurrence timestamp is unavailable")
 
         try:
             vetted = await asyncio.wait_for(
@@ -1016,7 +1029,7 @@ class AlertEngine:
                     "target_price": alert.target_price,
                     "condition": alert.condition,
                     "currency": alert.currency,
-                    "triggered_at": datetime.now(UTC).isoformat(),
+                    "triggered_at": triggered_at,
                     # Only the triggering price. The full snapshot carried
                     # internal source metadata for every asset to a third-party
                     # endpoint chosen by the user.

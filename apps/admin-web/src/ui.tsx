@@ -126,8 +126,11 @@ export function useResource<T>(path: string, initial: T, enabled = true) {
   const [error, setError] = useState("");
   const generation = useRef(0);
   const alive = useRef(true);
+  const activeRequest = useRef<AbortController | null>(null);
   const reload = useCallback(async () => {
     const requestId = ++generation.current;
+    activeRequest.current?.abort();
+    activeRequest.current = null;
     if (!enabled) {
       setLoading(false);
       setError("");
@@ -135,11 +138,13 @@ export function useResource<T>(path: string, initial: T, enabled = true) {
     }
     setLoading(true);
     setError("");
+    const controller = new AbortController();
+    activeRequest.current = controller;
     try {
-      const result = await adminApi.get<T>(path);
+      const result = await adminApi.get<T>(path, controller.signal);
       if (alive.current && generation.current === requestId) setData(result);
     } catch (reason) {
-      if (alive.current && generation.current === requestId)
+      if (!controller.signal.aborted && alive.current && generation.current === requestId)
         setError(humanError(reason));
     } finally {
       if (alive.current && generation.current === requestId) setLoading(false);
@@ -151,6 +156,8 @@ export function useResource<T>(path: string, initial: T, enabled = true) {
     return () => {
       alive.current = false;
       generation.current++;
+      activeRequest.current?.abort();
+      activeRequest.current = null;
     };
   }, [reload]);
   return { data, setData, loading, error, reload };
