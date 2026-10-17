@@ -109,7 +109,16 @@ class ChangePasswordRequest(BaseModel):
         return UserCreate.password_must_be_mixed(value)
 
 
-class PricePoint(BaseModel):
+class HistoryTimeInfo(BaseModel):
+    timestamp_precision: Literal["instant", "day"] | None = None
+    timestamp_role: Literal["day_bucket_start"] | None = None
+    source_observation_time_known: bool | None = None
+    source_timezone: str | None = None
+    source_calendar: Literal["jalali"] | None = None
+    source_date: str | None = None
+
+
+class PricePoint(HistoryTimeInfo):
     timestamp: str
     value_usd: float | None
     value_toman: float | None
@@ -118,6 +127,8 @@ class PricePoint(BaseModel):
     high: float | None = None
     low: float | None = None
     volume: float | None = None
+    time_info_usd: HistoryTimeInfo | None = None
+    time_info_toman: HistoryTimeInfo | None = None
 
 
 class PricingWorkerQuote(BaseModel):

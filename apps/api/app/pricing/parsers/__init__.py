@@ -27,8 +27,16 @@ from .nobitex import NobitexOrderBookParser, NobitexStatsParser
 from .tickers import AlanchandGold18Parser, CoinCapParser, TetherlandParser
 
 
+class HistoricalOnlyParser:
+    parser_version = "historical-only/1.0.0"
+
+    def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
+        raise ParserError("history_only", "Daily archives cannot provide current quotes")
+
+
 def build_parser(parser_id: str) -> ExplicitParser:
     factories = {
+        "historical_only_v1": HistoricalOnlyParser,
         "wallgold_gold18_v1": lambda: WallgoldMarketParser(symbol="GLD_18C_750TMN"),
         "wallgold_silver925_v1": lambda: WallgoldMarketParser(symbol="SLV_925TMN"),
         "bitpin_btc_toman_v1": lambda: BitpinPricesParser(symbol="BTC_IRT"),

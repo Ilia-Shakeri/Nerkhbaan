@@ -175,7 +175,7 @@ class LegacyPricingAdapter:
         strict = bool(settings.pricing_require_provider_keys)
         permitted_instruments = {
             provider.instrument_id for provider in PROVIDERS.values()
-            if provider.enabled and provider.configured(settings)
+            if provider.enabled and not provider.history_only and provider.configured(settings)
             and rights.provider_allowed(provider.provider_id, "collect")
             and rights.provider_allowed(provider.provider_id, "store")
             and rights.provider_allowed(provider.provider_id, "display")
@@ -365,12 +365,17 @@ class LegacyPricingAdapter:
     ) -> list[dict[str, Any]]:
         combined: dict[str, dict[str, Any]] = {}
         for point in usd_points:
-            combined.setdefault(point["timestamp"], {"timestamp": point["timestamp"]})[
-                "value_usd"
-            ] = point["value"]
+            row = combined.setdefault(point["timestamp"], {"timestamp": point["timestamp"]})
+            row["value_usd"] = point["value"]
+            row["time_info_usd"] = {key: point[key] for key in ("timestamp_precision", "timestamp_role", "source_observation_time_known", "source_timezone", "source_calendar", "source_date") if key in point} or {"timestamp_precision": "instant"}
+            if point.get("timestamp_precision") == "day":
+                row.update({key: point[key] for key in ("timestamp_precision", "timestamp_role", "source_observation_time_known", "source_timezone", "source_calendar", "source_date") if key in point})
         for point in toman_points:
             row = combined.setdefault(point["timestamp"], {"timestamp": point["timestamp"]})
             row["value_toman"] = point["value"]
+            row["time_info_toman"] = {key: point[key] for key in ("timestamp_precision", "timestamp_role", "source_observation_time_known", "source_timezone", "source_calendar", "source_date") if key in point} or {"timestamp_precision": "instant"}
+            if point.get("timestamp_precision") == "day":
+                row.update({key: point[key] for key in ("timestamp_precision", "timestamp_role", "source_observation_time_known", "source_timezone", "source_calendar", "source_date") if key in point})
             for key in ("open", "close", "high", "low"):
                 row[key] = point.get(key)
         return [
@@ -383,6 +388,8 @@ class LegacyPricingAdapter:
                 "high": row.get("high"),
                 "low": row.get("low"),
                 "volume": None,
+                **({key: row[key] for key in ("timestamp_precision", "timestamp_role", "source_observation_time_known", "source_timezone", "source_calendar", "source_date", "time_info_usd", "time_info_toman") if key in row}
+                   if row.get("timestamp_precision") == "day" else {}),
             }
             for timestamp, row in sorted(combined.items())
         ]

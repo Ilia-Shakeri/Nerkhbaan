@@ -1,5 +1,6 @@
 ﻿import axios from 'axios';
 
+import type { HistoryTimeInfo } from './history-time';
 import { beginLogout, finishLogout, logoutGeneration, logoutIsPending } from './logout-state';
 import { acceptRightsRevision, currentRightsEpoch, currentRightsRevision, rightsArePending } from './price-stream';
 
@@ -543,14 +544,14 @@ export type InstrumentSourceHistoryResponse = {
   instrument_id: string;
   timeframe?: string;
   status?: 'complete' | 'partial' | string;
-  sources: Array<{ provider_id: string; provider_name?: string; points: Array<{ timestamp: string; value: number }> }>;
+  sources: Array<{ provider_id: string; provider_name?: string; points: Array<HistoryTimeInfo & { timestamp: string; value: number }> }>;
 };
 
 export type InstrumentHistoryResponse = {
   instrument_id: string;
   timeframe?: string;
   status?: 'complete' | 'partial' | string;
-  points: Array<{ timestamp: string; value: number; status?: OperationalPriceStatus }>;
+  points: Array<HistoryTimeInfo & { timestamp: string; value: number; status?: OperationalPriceStatus }>;
 };
 
 export type InstrumentVerification = {
@@ -680,10 +681,12 @@ export type PriceAsset = {
   verification_status?: string | null;
 };
 
-export type PricePoint = {
+export type PricePoint = HistoryTimeInfo & {
   timestamp: string;
   value_usd: number | null;
   value_toman: number | null;
+  time_info_usd?: HistoryTimeInfo | null;
+  time_info_toman?: HistoryTimeInfo | null;
   open?: number | null;
   close?: number | null;
   high?: number | null;

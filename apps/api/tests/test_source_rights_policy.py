@@ -136,8 +136,9 @@ class RightsPolicyTests(StrictFixture, unittest.TestCase):
         health = LegacyPricingAdapter.startup_checks()
         self.assertFalse(health["ok"])
         self.assertIn("USDT_USD", health["instruments_without_permitted_configured_source"])
+        self.assertIn("SILVER_999_TOMAN_GRAM", health["instruments_without_permitted_configured_source"])
         self.assertEqual(health["source_rights"]["approved_display_sources"],
-                         ["gold_api_free_btc", "gold_api_free_xag", "gold_api_free_xau"])
+                         ["gold_api_free_btc", "gold_api_free_xag", "gold_api_free_xau", "nerkhsanj_silver999_history"])
 
     def test_revoked_cached_outcome_cannot_still_be_usable_or_expose_raw_payload(self):
         quote = Mock(spec=ProviderQuote, provider_id="coingecko_btc")

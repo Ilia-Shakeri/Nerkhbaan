@@ -15,7 +15,8 @@ import httpx
 from app.pricing.instruments import get_instrument
 from app.pricing.models import utc_now
 from app.pricing.parsers.base import ParsedProviderValue
-from app.pricing.registry import PROVIDERS
+from app.pricing.providers import ProviderCallFailure
+from app.pricing.registry import PROVIDERS, ProviderDefinition
 from scripts.probe_provider_coverage import (
     bounded_history, independence_proof, run, safe_error, value_proof,
 )
@@ -78,6 +79,54 @@ class ProviderCoverageProofTests(unittest.TestCase):
 
 
 class ProviderCoverageNetworkTests(unittest.IsolatedAsyncioTestCase):
+    async def test_history_only_skips_live_and_history_transport_before_configuration(self):
+        archive = PROVIDERS["nerkhsanj_silver999_history"]
+        instrument = get_instrument(archive.instrument_id)
+        with patch("scripts.probe_provider_coverage.INSTRUMENTS", {archive.instrument_id: instrument}), \
+             patch("scripts.probe_provider_coverage.operational_pricing_settings.instrument", AsyncMock(return_value=instrument)), \
+             patch("scripts.probe_provider_coverage.operational_pricing_settings.providers_for", AsyncMock(return_value=(archive,))), \
+             patch.object(ProviderDefinition, "configured", side_effect=AssertionError("archive must skip first")), \
+             patch("scripts.probe_provider_coverage.ProviderQuoteCollector._request_payload", AsyncMock()) as request, \
+             patch("scripts.probe_provider_coverage.bounded_history", AsyncMock()) as history:
+            result = await run(execute_network=True, history=True)
+        request.assert_not_awaited()
+        history.assert_not_awaited()
+        row = result["providers"][0]
+        self.assertEqual((row["status"], row["reason"]), ("skipped", "history_only"))
+        self.assertIs(row["history_only"], True)
+        self.assertFalse(result["all_enabled_configured_routes_passed"])
+        self.assertEqual(result["independent_comparisons"], [])
+
+    async def run_live_with_archive(self, failure=False):
+        archive = PROVIDERS["nerkhsanj_silver999_history"]
+        live = PROVIDERS["nobitex_stats_usdt"]
+
+        async def providers(iid):
+            return (archive,) if iid == archive.instrument_id else (live,)
+
+        payload = {"stats": {"usdt-rls": {"latest": "1000000"}}}
+        request = AsyncMock(return_value=(payload, "application/json", 200))
+        if failure:
+            request.side_effect = ProviderCallFailure("http_error", "owned transport failure", http_status=503)
+        with patch("scripts.probe_provider_coverage.INSTRUMENTS", {archive.instrument_id: None, live.instrument_id: None}), \
+             patch("scripts.probe_provider_coverage.operational_pricing_settings.instrument", AsyncMock(side_effect=get_instrument)), \
+             patch("scripts.probe_provider_coverage.operational_pricing_settings.providers_for", providers), \
+             patch("scripts.probe_provider_coverage.ProviderQuoteCollector._request_payload", request):
+            result = await run(execute_network=True)
+        request.assert_awaited_once()
+        return result
+
+    async def test_skipped_archive_is_not_counted_as_price_success_or_live_failure(self):
+        result = await self.run_live_with_archive()
+        self.assertTrue(result["all_enabled_configured_routes_passed"])
+        self.assertEqual(result["summary"], {"ok": 1, "failed": 0, "skipped": 1, "pending": 0})
+        self.assertNotIn("value_proof", next(row for row in result["providers"] if row["history_only"]))
+
+    async def test_real_live_failure_still_fails_when_archive_is_skipped(self):
+        result = await self.run_live_with_archive(failure=True)
+        self.assertFalse(result["all_enabled_configured_routes_passed"])
+        self.assertEqual(result["summary"], {"ok": 0, "failed": 1, "skipped": 1, "pending": 0})
+
     async def test_network_gate_and_effective_disabled_policy(self):
         provider = replace(PROVIDERS["wallgold_gold18"], enabled=False)
         instrument = get_instrument(provider.instrument_id)

@@ -123,6 +123,8 @@ class ProviderQuoteCollector:
         client: httpx.AsyncClient | None = None,
         instrument: InstrumentDefinition | None = None,
     ) -> QuoteFetchOutcome:
+        if provider.history_only:
+            return QuoteFetchOutcome(None, False, False, False, "history_only")
         if (not rights.provider_allowed(provider.provider_id, "collect")
                 or not rights.provider_allowed(provider.provider_id, "store")
                 or not rights.endpoint_allowed(provider.provider_id, provider.url)):
@@ -461,6 +463,8 @@ class ProviderQuoteCollector:
         *,
         purpose: RequestPurpose | None = None,
     ) -> tuple[object, str | None, int]:
+        if getattr(provider, "history_only", False):
+            raise ProviderCallFailure("history_only", "This source supports historical collection only")
         if (not rights.provider_allowed(provider.provider_id, "collect")
                 or not rights.endpoint_allowed(provider.provider_id, provider.url)):
             raise ProviderCallFailure("provider_rights_denied", "Source permission unavailable")
@@ -540,6 +544,8 @@ class ProviderQuoteCollector:
         headers: dict[str, str],
         params: dict[str, str],
     ) -> tuple[object, str | None, int]:
+        if getattr(provider, "history_only", False):
+            raise ProviderCallFailure("history_only", "This source supports historical collection only")
         if (not rights.provider_allowed(provider.provider_id, "collect")
                 or not rights.endpoint_allowed(provider.provider_id, provider.url)):
             raise ProviderCallFailure("provider_rights_denied", "Source permission unavailable")
@@ -588,6 +594,21 @@ class ProviderQuoteCollector:
                         ),
                     )
                 if response.status_code < 200 or response.status_code >= 300:
+                    if (
+                        provider.source_family == "servix"
+                        and response.status_code == 403
+                        and isinstance(payload, dict)
+                        and payload.get("code") == "EMAIL_VERIFICATION_REQUIRED"
+                    ):
+                        # The source account needs verification. Keep the stable
+                        # reason while dropping messages and account identifiers.
+                        raise ProviderCallFailure(
+                            "email_verification_required",
+                            "Source account email verification is required",
+                            http_status=403,
+                            payload={"status": 403, "code": "EMAIL_VERIFICATION_REQUIRED"},
+                            content_type=content_type,
+                        )
                     raise ProviderCallFailure(
                         "http_error",
                         "Provider returned an unsuccessful status",

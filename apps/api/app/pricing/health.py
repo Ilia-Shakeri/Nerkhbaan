@@ -113,6 +113,8 @@ class PricingHealthService:
         from ..config import settings
 
         for provider in providers:
+            if provider.history_only:
+                continue
             contract = provider_contract(provider)
             configured = provider.configured(settings)
             if not provider.enabled:

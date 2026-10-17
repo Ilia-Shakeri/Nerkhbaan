@@ -2,7 +2,17 @@
 
 Code release: **2.8.6**. Record updated: 2026-10-17. Reviewed provider permissions now gate collection, storage and every application output. The [rights review](docs/provider-rights-2026-10-17.md) records approved own-application sources, restricted routes and remaining account/network evidence. Full operational coverage remains incomplete; the user's selected replacement scope must pass before live deployment. Final-commit hosted checks and target evidence are separate requirements.
 
-Final local code checks: 673 backend cases passed with zero skips, including owned PostgreSQL/Redis cases. Frontend 72, standalone channel-worker 28, Go 11 and three renderer builds passed; a real disposable proxy passed eight permission checks. These local results do not establish authenticated provider access, production coverage or end-user notification receipt. Failed earlier adapter-fixture runs are retained outside Git.
+Tagged 2.8.6 local code checks: 673 backend cases passed with zero skips, including owned PostgreSQL/Redis cases. Frontend 72, standalone channel-worker 28, Go 11 and three renderer builds passed; a real disposable proxy passed eight permission checks. These local results do not establish authenticated provider access, production coverage or end-user notification receipt. Failed earlier adapter-fixture runs are retained outside Git.
+
+## Source recovery after tag 2.8.6 — unreleased
+
+The published `v2.8.6` remains at `7460a48aec09801eee600b5cffba50998f370f46`; its [15 successful hosted jobs](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39021033677) validate that commit. New source changes need their own checks and are not the tagged installer or a live update.
+
+Servix now reports its actual `EMAIL_VERIFICATION_REQUIRED` denial without storing account details. The existing account remains blocked because the user cannot access its email. Durable 31-date history jobs preserve quotas without long worker sleeps or quota-induced retry exhaustion. A permitted, keyless Nerkhsanj daily archive adds historical silver 999; it never becomes a live quote or verifier. Daily Tehran dates and unknown observation hours remain explicit through storage, SQL aggregation, paired currency responses and charts. Sparse chart polling reuses bounded durable jobs. [Recovery evidence and remaining limits](docs/provider-recovery-2026-10-17.md).
+
+The target backend successfully downloaded the public archive with verified TLS; the downloaded source's most recent year parsed to 281 daily observations locally. This is not production ingestion. Full current-price coverage, silver 925 history and a permitted USDT/USD replacement remain unproved. Live deployment and step-three delivery receipt remain pending under the selected full-replacement scope.
+
+Local recovery checks passed 764 backend cases with zero skips using owned PostgreSQL/Redis plus unit, SQLite and mocks. Frontend 75 and 22 mocked Edge browser cases passed; full web-source strict type checks and web/desktop renderer builds passed. New database cases cover durable queue races and daily/instant bucket collisions. Source payload validation, target connectivity, final-commit hosted checks and actual deployment remain distinct evidence.
 
 ## Deployment guard correction — 2.8.5
 

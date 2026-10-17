@@ -14,6 +14,7 @@ from sqlalchemy.engine import Engine
 
 from ..db import SessionLocal
 from .instruments import get_instrument
+from .registry import PROVIDERS
 from . import rights
 from .models import (
     CanonicalQuote,
@@ -124,6 +125,27 @@ class HistoryResult:
 
 def _canonical_permissions(action: str):
     clause, parameters = rights.sql_filter(action)
+    if action == "display":
+        # Filter complete source trees before DISTINCT/LIMIT. A later Python
+        # rejection must not hide an older valid current price.
+        clause += """ AND NOT EXISTS (
+            WITH RECURSIVE current_source_nodes(summary, depth) AS (
+                SELECT source_summary, 0
+                UNION ALL
+                SELECT child.value->'source_summary', node.depth + 1
+                FROM current_source_nodes AS node
+                CROSS JOIN LATERAL jsonb_array_elements(CASE
+                    WHEN node.depth < 6 AND jsonb_typeof(node.summary->'inputs') = 'array'
+                    THEN node.summary->'inputs' ELSE '[]'::jsonb END) AS child(value)
+            )
+            SELECT 1 FROM current_source_nodes AS node
+            WHERE node.summary->>'timestamp_precision' = 'day'
+               OR COALESCE(node.summary->'provider_ids', '[]'::jsonb) ?| :history_only_sources
+               OR node.summary->>'primary_provider_id' = ANY(:history_only_sources)
+               OR node.summary->>'candidate_provider_id' = ANY(:history_only_sources)
+               OR node.summary->>'previous_provider_id' = ANY(:history_only_sources)
+        ) AND (candidate_provider_id IS NULL OR NOT (candidate_provider_id = ANY(:history_only_sources)))"""
+        parameters["history_only_sources"] = [name for name, provider in PROVIDERS.items() if provider.history_only]
     if rights.enforced():
         clause = f"({clause}) AND (candidate_provider_id IS NULL OR candidate_provider_id = ANY(:rights_candidate_ids)) AND (candidate_price IS NULL OR candidate_provider_id = ANY(:rights_candidate_ids))"
         clause += " AND (status <> 'derived_fallback' OR source_summary->>'derived' = 'true' OR source_summary->>'primary_provider_id' LIKE 'derived:%')"
@@ -168,8 +190,11 @@ def _canonical_history_sql(use_bookends: bool):
         f"""
         WITH bucketed AS (
             SELECT
-                date_bin(CAST(:bucket AS interval), canonical_at, TIMESTAMPTZ '2000-01-01') AS bucket,
+                CASE WHEN source_summary->>'timestamp_precision' = 'day' THEN canonical_at
+                     ELSE date_bin(CAST(:bucket AS interval), canonical_at, TIMESTAMPTZ '2000-01-01') END AS bucket,
                 canonical_at,
+                COALESCE(source_summary->>'timestamp_precision' = 'day', false) AS day_precision,
+                source_summary,
                 price{lineage}
             FROM canonical_quotes
             WHERE instrument_id = :instrument_id
@@ -178,16 +203,23 @@ def _canonical_history_sql(use_bookends: bool):
               AND status = ANY(:statuses)
               AND {_DIRECT_GOLD_SQL}
               AND {permitted}
-        )
+        ), aggregated AS (
         SELECT
             bucket,
             {opening} AS open,
             {closing} AS close,
             MAX(price) AS high,
             MIN(price) AS low,
-            COUNT(*) AS sample_count{attribution}
+            COUNT(*) AS sample_count,
+            day_precision,
+            MAX(source_summary->>'source_date') AS source_date{attribution}
         FROM bucketed
-        GROUP BY bucket
+        GROUP BY bucket, day_precision
+        ), chosen AS (
+            SELECT aggregated.*, ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY day_precision ASC) AS precision_rank
+            FROM aggregated
+        )
+        SELECT * FROM chosen WHERE precision_rank = 1
         ORDER BY bucket ASC
         """
     ).bindparams(**parameters)
@@ -378,6 +410,10 @@ class InternalPriceHistory:
                 "low": float(row["low"]),
                 "value": float(row["close"]),
                 "sample_count": int(row["sample_count"]),
+                **({"timestamp_precision": "day", "timestamp_role": "day_bucket_start",
+                    "source_observation_time_known": False, "source_timezone": "Asia/Tehran",
+                    "source_calendar": "jalali", "source_date": row.get("source_date")}
+                   if row.get("day_precision") else {}),
                 **({"attributions": _attributions_for_groups(row.get("rights_source_groups") or [])} if rights.enforced() else {}),
             }
             for row in rows
@@ -448,7 +484,7 @@ class InternalPriceHistory:
         query = text(
             f"""
             SELECT provider_id, price, bid, ask, observed_at, validation_status,
-                   is_direct, is_derived, is_suspicious, rejection_reason
+                   is_direct, is_derived, is_suspicious, rejection_reason, metadata
             FROM provider_quotes
             WHERE instrument_id = :instrument_id
               AND observed_at >= :start
@@ -485,6 +521,8 @@ class InternalPriceHistory:
                 "is_derived": bool(row["is_derived"]),
                 "is_suspicious": bool(row["is_suspicious"]),
                 "rejection_reason": row["rejection_reason"],
+                **({key: row["metadata"][key] for key in ("timestamp_precision", "timestamp_role", "source_observation_time_known", "source_timezone", "source_calendar", "source_date") if key in row["metadata"]}
+                   if isinstance(row.get("metadata"), dict) and row["metadata"].get("timestamp_precision") == "day" else {}),
             }
             for row in rows
         ]
@@ -500,6 +538,7 @@ class InternalPriceHistory:
               AND status = ANY(:statuses)
               AND {_DIRECT_GOLD_SQL}
               AND {permitted}
+              AND COALESCE(source_summary->>'timestamp_precision', 'instant') <> 'day'
             ORDER BY canonical_at DESC
             LIMIT :limit
             """
@@ -529,6 +568,7 @@ class InternalPriceHistory:
               AND status = ANY(:statuses)
               AND {_DIRECT_GOLD_SQL}
               AND {permitted}
+              AND COALESCE(source_summary->>'timestamp_precision', 'instant') <> 'day'
               AND canonical_at <= :target
               AND canonical_at >= :earliest
             ORDER BY canonical_at DESC
@@ -621,12 +661,14 @@ class InternalPriceHistory:
             FROM provider_quotes
             WHERE instrument_id = :instrument_id
               AND {permission_filter}
+              AND NOT (provider_id = ANY(:history_only_sources))
             ORDER BY provider_id, observed_at DESC
             """
         )
         db = SessionLocal()
         try:
             rows = db.execute(query, {"instrument_id": instrument_id,
+                "history_only_sources": [name for name, provider in PROVIDERS.items() if provider.history_only],
                 **({"rights_provider_ids": list(allowed)} if allowed is not None else {})}).mappings().all()
         finally:
             db.close()

@@ -26,6 +26,13 @@ _BUILTIN = {
     }
     for name in ("gold_api_free_xau", "gold_api_free_xag", "gold_api_free_btc")
 }
+_BUILTIN["nerkhsanj_silver999_history"] = {
+    "permissions": ["collect", "store", "display", "history", "own_app_transport"],
+    "checked_at": _REVIEWED, "expires_at": _EXPIRES,
+    "evidence_ref": "https://nerkh.jahankhahan.shop/developers",
+    "hosts": ["nerkh.jahankhahan.shop"],
+    "attribution": {"label": "نرخ‌سنج", "url": "https://nerkh.jahankhahan.shop/developers"},
+}
 
 
 def enforced() -> bool:

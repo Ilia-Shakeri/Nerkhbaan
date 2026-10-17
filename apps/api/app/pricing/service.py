@@ -642,6 +642,8 @@ class InstrumentPricingService:
         for instrument_id in INSTRUMENTS:
             providers = await self.operational.providers_for(instrument_id)
             for provider in providers:
+                if provider.history_only and not authenticated:
+                    continue
                 runtime = None
                 try:
                     runtime = await self.store.get_provider_runtime(
@@ -656,7 +658,8 @@ class InstrumentPricingService:
                     "role": provider.role.value,
                     "enabled": provider.enabled,
                     "configured": provider.configured(_settings_object()),
-                    "status": runtime.operational_status if runtime else "unknown",
+                    "history_only": provider.history_only,
+                    "status": "history_only" if provider.history_only else (runtime.operational_status if runtime else "unknown"),
                     "last_success_at": (
                         runtime.last_success_at.isoformat()
                         if runtime and runtime.last_success_at
@@ -833,7 +836,7 @@ class InstrumentPricingService:
     ) -> list[ProviderDefinition]:
         scored: list[tuple[Decimal, ProviderDefinition]] = []
         for provider in providers:
-            if not provider.enabled or not provider.configured(_settings_object()):
+            if provider.history_only or not provider.enabled or not provider.configured(_settings_object()):
                 continue
             runtime = await self.store.get_provider_runtime(
                 provider.provider_id, provider.instrument_id
@@ -861,7 +864,7 @@ class InstrumentPricingService:
         instrument: Any,
     ) -> QuoteFetchOutcome | None:
         candidates = [provider for provider in providers
-                      if rights.provider_allowed(provider.provider_id, "collect")
+                      if not provider.history_only and rights.provider_allowed(provider.provider_id, "collect")
                       and rights.provider_allowed(provider.provider_id, "display")]
         trace: list[dict[str, object]] = []
         for provider in candidates:

@@ -54,6 +54,36 @@ function clientHarness(shared, locks) {
 
 function sharedSession() { return { credentials: { access_token: 'original-access', refresh_token: 'original-refresh' }, rotations: 0, reads: 0, baseURLs: [], calls: [] }; }
 
+test('daily closing prices show their Tehran date without an invented observation hour', () => {
+  const history = moduleAt('apps/web/src/app/services/history-time.ts', { Intl, Date }, {});
+  const info = { timestamp_precision: 'day', timestamp_role: 'day_bucket_start', source_observation_time_known: false };
+  const bucket = new Date('2026-10-14T20:30:00Z');
+  const english = history.formatHistoryTimestamp(bucket, 'en', info);
+  assert.match(english, /15\/10\/2026/);
+  assert.match(english, /Daily close; observation time unavailable/);
+  assert.doesNotMatch(english, /00:00/);
+  const persian = history.formatHistoryTimestamp(bucket, 'fa', info);
+  assert.match(persian, /۱۴۰۵/);
+  assert.match(persian, /پایانی روز/);
+  assert.doesNotMatch(persian, /۰۰:۰۰/);
+});
+
+test('paired history keeps the dollar observation separate from a daily toman close', () => {
+  const history = moduleAt('apps/web/src/app/services/history-time.ts', { Intl, Date }, {});
+  const point = { timestamp_precision: 'day', time_info_usd: { timestamp_precision: 'instant' }, time_info_toman: { timestamp_precision: 'day' } };
+  const bucket = new Date('2026-10-14T20:30:00Z');
+  assert.match(history.formatHistoryTimestamp(bucket, 'en', history.historyTimeInfoForCurrency(point, 'usd')), /00:00/);
+  assert.doesNotMatch(history.formatHistoryTimestamp(bucket, 'en', history.historyTimeInfoForCurrency(point, 'toman')), /00:00/);
+  assert.equal(history.isDailyHistory(history.historyTimeInfoForCurrency(point, 'usd')), false);
+});
+
+test('daily chart ticks and missing dates never introduce an observation time', () => {
+  const history = moduleAt('apps/web/src/app/services/history-time.ts', { Intl, Date }, {});
+  assert.doesNotMatch(history.formatHistoryTimestamp(new Date('2026-10-14T20:30:00Z'), 'en', { timestamp_role: 'day_bucket_start' }, true), /00:00|observation/);
+  assert.equal(history.formatHistoryTimestamp(new Date('invalid'), 'en', { timestamp_precision: 'day' }), '');
+  assert.equal(history.isDailyHistory({}), false);
+});
+
 test('parallel renderer failures share one rotation before credential I/O', async () => {
   const shared = sharedSession();
   const client = clientHarness(shared);

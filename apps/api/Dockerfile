@@ -1,6 +1,7 @@
 FROM python:3.12.13-alpine3.24
 
 RUN apk upgrade --no-cache
+RUN apk add --no-cache tzdata
 
 WORKDIR /app
 

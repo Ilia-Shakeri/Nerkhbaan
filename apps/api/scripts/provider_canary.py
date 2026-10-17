@@ -27,6 +27,11 @@ from app.config import settings
 async def probe_provider(provider_id: str) -> dict[str, object]:
     provider = PROVIDERS[provider_id]
     contract = provider_contract(provider)
+    if provider.history_only:
+        return {
+            "provider_id": provider_id, "status": "skipped", "reason": "history_only",
+            "history_only": True, "tier": contract.tier, "owner": contract.owner,
+        }
     try:
         ProviderQuoteCollector._validate_destination(provider)
     except ProviderCallFailure as exc:

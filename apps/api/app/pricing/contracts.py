@@ -49,6 +49,7 @@ _DOCS = {
     "nobitex": ("https://apidocs.nobitex.ir/",),
     "wallex": ("https://developers.wallex.ir/docs/basic-services-candles",),
     "servix": ("https://servix.cc/docs", "https://servix.cc/terms"),
+    "nerkhsanj": ("https://nerkh.jahankhahan.shop/developers",),
     "persian_toolbox": (
         "https://persiantoolbox.ir/developers/api/market",
         "https://persiantoolbox.ir/terms",
@@ -98,11 +99,18 @@ def provider_contract(provider: ProviderDefinition) -> ProviderContract:
         # This records that narrow product-use statement, not a data-resale licence.
         commercial_status = "official_terms_allow_commercial_apps"
         redistribution_status = "app_display_per_official_terms_no_resale_attestation"
+    if family == "nerkhsanj":
+        tier = "A"
+        commercial_status = "official_open_api_own_product_use_with_credit"
+        redistribution_status = "own_app_history_with_attribution_no_public_relay"
+        attribution_required = True
     unit_contract = "parser_strict_allowlist"
     if family == "navasan":
         unit_contract = "operator_confirmed_rial_or_toman_no_unit_guess"
     if family == "servix":
         unit_contract = "explicit_quote_unit_and_operator_confirmed_weight_purity"
+    if family == "nerkhsanj":
+        unit_contract = "documented_toman_per_gram_silver999_daily_archive_only"
     if family == "nerkh_io":
         unit_contract = "operator_configured_category_unit"
     if family == "persian_toolbox":
@@ -117,7 +125,8 @@ def provider_contract(provider: ProviderDefinition) -> ProviderContract:
         endpoint_version=endpoint_version,
         credential_placement=provider.credential_placement,
         unit_contract=unit_contract,
-        source_timestamp=("required_timezone_bearing_source_timestamp" if family in {"servix", "tala"}
+        source_timestamp=("jalali_day_bucket_tehran_not_exact_observation_time" if family == "nerkhsanj"
+                          else "required_timezone_bearing_source_timestamp" if family in {"servix", "tala"}
                           else "required_unix_source_timestamp" if family == "navasan"
                           else "provider_timestamp_or_receive_time"),
         redistribution_status=redistribution_status,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -13,6 +13,7 @@ class HistoricalPricePoint:
     observed_at: datetime
     price: Decimal
     volume: Decimal | None
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,6 +229,9 @@ class ServixHistoryParser:
 def build_history_parser(
     parser_id: str,
 ) -> NobitexUdfHistoryParser | WallexUdfHistoryParser | CoinGeckoHistoryParser | ServixHistoryParser:
+    if parser_id == "nerkhsanj_silver999_daily_v1":
+        from .nerkhsanj_history import NerkhsanjDailyHistoryParser
+        return NerkhsanjDailyHistoryParser()
     parsers = {
         "nobitex_udf_usdtirt_v1": NobitexUdfHistoryParser("USDTIRT"),
         "nobitex_udf_btcirt_v1": NobitexUdfHistoryParser("BTCIRT"),

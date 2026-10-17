@@ -177,7 +177,8 @@ class AutomaticBackfillTests(unittest.IsolatedAsyncioTestCase):
         )
         service = InstrumentPricingService(history=history, backfill=self.queue,
                                            operational=self.operational)
-        result = await service.canonical_history("SILVER_999_TOMAN_GRAM", "30d")
+        with patch("app.pricing.service.PROVIDERS_BY_INSTRUMENT", {"SILVER_999_TOMAN_GRAM": ()}):
+            result = await service.canonical_history("SILVER_999_TOMAN_GRAM", "30d")
         self.assertEqual(result.status, "partial")
         self.operational.instrument.assert_not_awaited()
         self.operational.providers_for.assert_not_awaited()

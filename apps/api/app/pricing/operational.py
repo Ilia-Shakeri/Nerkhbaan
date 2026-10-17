@@ -248,7 +248,7 @@ class OperationalPricingSettings:
         if not roles:
             return providers
         allowed = set(roles)
-        return tuple(provider for provider in providers if provider.role in allowed)
+        return tuple(provider for provider in providers if provider.role in allowed and not provider.history_only)
 
     @staticmethod
     def _provider_override_rows(provider_ids: tuple[str, ...]):

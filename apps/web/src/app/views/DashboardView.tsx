@@ -13,6 +13,7 @@ import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { toast } from 'sonner';
+import { formatHistoryTimestamp, historyTimeInfoForCurrency, isDailyHistory, type HistoryTimeInfo } from '../services/history-time';
 import { acceptRightsRevision, canonicalLegDetails, clearSnapshotPrices, currentRightsRevision, PRICING_RIGHTS_EVENT, safeAttributions } from '../services/price-stream';
 import {
   api,
@@ -32,10 +33,12 @@ import {
 
 type AssetId = 'gold' | 'silver' | 'usdt' | 'btc';
 
-type AssetPoint = {
+type AssetPoint = HistoryTimeInfo & {
   timestamp: string;
   value_usd: number | null;
   value_toman: number | null;
+  time_info_usd?: HistoryTimeInfo | null;
+  time_info_toman?: HistoryTimeInfo | null;
 };
 
 type AssetCard = {
@@ -263,31 +266,16 @@ const chartTimeToDate = (time: Time): Date | null => {
   return new Date(Date.UTC(time.year, time.month - 1, time.day));
 };
 
-const formatChartDateTime = (time: Time, language: 'fa' | 'en'): string => {
+const formatChartDateTime = (time: Time, language: 'fa' | 'en', info?: HistoryTimeInfo): string => {
   const date = chartTimeToDate(time);
   if (!date) return '';
-  return new Intl.DateTimeFormat(language === 'fa' ? 'fa-IR' : 'en-GB', {
-    timeZone: 'Asia/Tehran',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(date);
+  return formatHistoryTimestamp(date, language, info);
 };
 
-const formatChartTick = (time: Time, language: 'fa' | 'en'): string => {
+const formatChartTick = (time: Time, language: 'fa' | 'en', info?: HistoryTimeInfo): string => {
   const date = chartTimeToDate(time);
   if (!date) return '';
-  return new Intl.DateTimeFormat(language === 'fa' ? 'fa-IR' : 'en-GB', {
-    timeZone: 'Asia/Tehran',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).format(date);
+  return formatHistoryTimestamp(date, language, info, true);
 };
 
 const toChartValue = (point: AssetPoint, mode: CurrencyMode) => {
@@ -301,16 +289,18 @@ const toChartData = (
   points: AssetPoint[],
   mode: CurrencyMode,
 ): LineData<UTCTimestamp>[] => {
-  const unique = new Map<number, number>();
+  const unique = new Map<number, LineData<UTCTimestamp>>();
   for (const point of points) {
     const milliseconds = parseChartTimestamp(point.timestamp);
     const value = toChartValue(point, mode);
     if (!Number.isFinite(milliseconds) || value === null) continue;
-    unique.set(Math.floor(milliseconds / 1_000), value);
+    const time = Math.floor(milliseconds / 1_000);
+    unique.set(time, { time: time as UTCTimestamp, value,
+      customValues: { history_time: historyTimeInfoForCurrency(point, mode) } });
   }
   return [...unique.entries()]
     .sort(([left], [right]) => left - right)
-    .map(([time, value]) => ({ time: time as UTCTimestamp, value }));
+    .map(([, point]) => point);
 };
 
 function ChartUnavailableState({
@@ -368,18 +358,32 @@ function FinancialChart({
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const fittedRef = useRef(false);
-  const [crosshairPoint, setCrosshairPoint] = useState<{ value: number; time: Time } | null>(null);
+  const timeInfoRef = useRef(new Map<number, HistoryTimeInfo>());
+  const dailyOnlyRef = useRef(false);
+  const [crosshairPoint, setCrosshairPoint] = useState<{ value: number; time: Time; info?: HistoryTimeInfo } | null>(null);
   const descriptionId = useId();
   const tableId = useId();
   const values = data.map((point) => point.value).filter(Number.isFinite);
   const latestPoint = data.length ? data[data.length - 1] : undefined;
   const minimum = values.length ? Math.min(...values) : null;
   const maximum = values.length ? Math.max(...values) : null;
+  const dailyOnly = data.length > 0 && data.every(point => isDailyHistory(point.customValues?.history_time as HistoryTimeInfo | undefined));
+  const hasDaily = data.some(point => isDailyHistory(point.customValues?.history_time as HistoryTimeInfo | undefined));
+  const timeInfoAt = (time: Time): HistoryTimeInfo | undefined => {
+    const date = chartTimeToDate(time);
+    return (date ? timeInfoRef.current.get(Math.floor(date.getTime() / 1_000)) : undefined)
+      ?? (dailyOnlyRef.current ? { timestamp_precision: 'day' } : undefined);
+  };
   const chartDescription = data.length
     ? language === 'fa'
       ? `نمودار دارای ${data.length} نقطه است. آخرین مقدار ${formatPrice(latestPoint?.value ?? null, currencyMode, language)}، کمینه ${formatPrice(minimum, currencyMode, language)} و بیشینه ${formatPrice(maximum, currencyMode, language)} است.`
       : `Chart with ${data.length} points. Latest ${formatPrice(latestPoint?.value ?? null, currencyMode, language)}, minimum ${formatPrice(minimum, currencyMode, language)}, and maximum ${formatPrice(maximum, currencyMode, language)}.`
     : language === 'fa' ? 'نمودار داده‌ای ندارد.' : 'The chart has no data.';
+
+  useEffect(() => {
+    timeInfoRef.current = new Map(data.map(point => [Number(point.time), (point.customValues?.history_time as HistoryTimeInfo | undefined) ?? {}]));
+    dailyOnlyRef.current = dailyOnly;
+  }, [data, dailyOnly]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -412,14 +416,14 @@ function FinancialChart({
         rightOffset: 3,
         barSpacing: 8,
         minBarSpacing: 2,
-        tickMarkFormatter: (time: Time) => formatChartTick(time, language),
+        tickMarkFormatter: (time: Time) => formatChartTick(time, language, timeInfoAt(time)),
       },
       handleScale: true,
       handleScroll: true,
       localization: {
         locale: language === 'fa' ? 'fa-IR' : 'en-US',
         priceFormatter: (value: number) => formatPrice(value, currencyMode, language),
-        timeFormatter: (time: Time) => formatChartDateTime(time, language),
+        timeFormatter: (time: Time) => formatChartDateTime(time, language, timeInfoAt(time)),
       },
     });
     const series = chart.addSeries(LineSeries, {
@@ -435,7 +439,7 @@ function FinancialChart({
       const point = event.seriesData.get(series);
       setCrosshairPoint(
         event.time && point && 'value' in point && typeof point.value === 'number'
-          ? { value: point.value, time: event.time }
+          ? { value: point.value, time: event.time, info: timeInfoAt(event.time) }
           : null,
       );
     });
@@ -457,25 +461,30 @@ function FinancialChart({
   }, [color, currencyMode, isDark, language]);
 
   useEffect(() => {
+    setCrosshairPoint(null);
+    chartRef.current?.applyOptions({ timeScale: { timeVisible: !dailyOnly } });
     seriesRef.current?.setData(data);
     if (data.length > 0 && !fittedRef.current) {
       chartRef.current?.timeScale().fitContent();
       fittedRef.current = true;
     }
-  }, [data, color, currencyMode, isDark, language]);
+  }, [data, dailyOnly, color, currencyMode, isDark, language]);
 
   return (
     <div className={`relative w-full ${className}`} dir="ltr" data-chart-interactive="true">
       <p id={descriptionId} className="sr-only">{chartDescription}</p>
       {/* TradingView Lightweight Charts™ Copyright (с) 2025 TradingView, Inc. https://www.tradingview.com/ */}
       <div ref={containerRef} className="h-full w-full" role="img" tabIndex={0} aria-describedby={descriptionId} />
+      {hasDaily && <span className={`pointer-events-none absolute start-3 top-3 max-w-[calc(100%-8rem)] rounded px-2 py-1 text-xs ${isDark ? 'bg-black/75 text-gray-300' : 'bg-white/85 text-gray-700'}`} style={{ visibility: crosshairPoint ? 'hidden' : 'visible' }} data-history-precision="day">
+        {language === 'fa' ? 'شامل نرخ پایانی روز' : 'Includes daily closing rates'}
+      </span>}
       {crosshairPoint && (
         <div className={`pointer-events-none absolute start-3 top-3 z-10 rounded-lg border px-2 py-1 text-xs font-bold backdrop-blur ${
           isDark ? 'border-white/10 bg-black/75 text-white' : 'border-black/10 bg-white/85 text-[#3B2E13]'
         }`}>
           <div>{formatPrice(crosshairPoint.value, currencyMode, language)}</div>
           <div className={`mt-0.5 text-xs font-medium ${isDark ? 'text-[#CDBB8C]' : 'text-[#7A5E24]'}`}>
-            {formatChartDateTime(crosshairPoint.time, language)}
+            {formatChartDateTime(crosshairPoint.time, language, crosshairPoint.info)}
           </div>
         </div>
       )}
@@ -484,7 +493,7 @@ function FinancialChart({
         <thead><tr><th>{language === 'fa' ? 'زمان' : 'Time'}</th><th>{language === 'fa' ? 'قیمت' : 'Price'}</th></tr></thead>
         <tbody>
           {data.slice(-20).map((point) => (
-            <tr key={String(point.time)}><td>{formatChartDateTime(point.time, language)}</td><td>{formatPrice(point.value, currencyMode, language)}</td></tr>
+            <tr key={String(point.time)}><td>{formatChartDateTime(point.time, language, point.customValues?.history_time as HistoryTimeInfo | undefined)}</td><td>{formatPrice(point.value, currencyMode, language)}</td></tr>
           ))}
         </tbody>
       </table>

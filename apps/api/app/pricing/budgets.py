@@ -115,6 +115,10 @@ class RedisRequestBudget:
                 7200,
             ),
         ]
+        if provider.source_family == "nerkhsanj":
+            # One atomic family lease also covers different routes sharing a URL.
+            # Operator route overrides cannot weaken the published one-minute cap.
+            key_limits.append(("pricing:budget:family:nerkhsanj:minimum_interval", 1, 60))
         if purpose is RequestPurpose.ANOMALY:
             if budget.reserved_anomaly_requests <= 0:
                 return BudgetDecision(False, "no_reserved_anomaly_budget", 0)

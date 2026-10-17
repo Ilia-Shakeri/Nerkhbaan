@@ -69,6 +69,7 @@ class ProviderDefinition:
     selected_price_semantic_contract: str | None = None
     independence_group: str | None = None
     required_settings: tuple[str, ...] = ()
+    history_only: bool = False
 
     def configured(self, settings: object) -> bool:
         if self.provider_id == "persian_toolbox_gold24":
@@ -212,6 +213,7 @@ def _provider(
     selected_price_semantic_contract: str | None = None,
     independence_group: str | None = None,
     required_settings: tuple[str, ...] = (),
+    history_only: bool = False,
 ) -> ProviderDefinition:
     enabled = _bool_env(f"PRICING_PROVIDER_{provider_id.upper()}_ENABLED", enabled_default)
     return ProviderDefinition(
@@ -250,12 +252,26 @@ def _provider(
         selected_price_semantic_contract=selected_price_semantic_contract,
         independence_group=independence_group,
         required_settings=required_settings,
+        history_only=history_only,
     )
 
 
 _NOBITEX_HEADERS = (("User-Agent", "Nerkhbaan-Pricing/2"),)
 
 _PROVIDERS = (
+    _provider(
+        "nerkhsanj_silver999_history", "Nerkhsanj Silver 999 Daily Archive", "SILVER_999_TOMAN_GRAM",
+        ProviderRole.FALLBACK, 200, "0.65",
+        "https://nerkh.jahankhahan.shop/data/rates.json",
+        "historical_only_v1", "nerkhsanj-daily-history/1.0.0", 120,
+        rpm=1, rph=6, rpd=24, interval=60,
+        history_url="https://nerkh.jahankhahan.shop/data/rates.json",
+        history_parser_id="nerkhsanj_silver999_daily_v1",
+        history_requires_live_quote=False, history_priority=50,
+        history_only=True, requires_https=True, maximum_payload_bytes=8_388_608,
+        source_semantic=SourceSemantic.REFERENCE_RATE, source_family="nerkhsanj",
+        venue="tehran_reference", symbol_or_pair="silver",
+    ),
     *(
         _provider(
             f"wallgold_{asset}", f"Wallgold {label}", instrument,
@@ -824,7 +840,7 @@ def providers_for(
     if not roles:
         return providers
     allowed = set(roles)
-    return tuple(provider for provider in providers if provider.role in allowed)
+    return tuple(provider for provider in providers if provider.role in allowed and not provider.history_only)
 
 
 def instrument_source_coverage(settings: object) -> dict[str, dict[str, object]]:
@@ -841,7 +857,7 @@ def instrument_source_coverage(settings: object) -> dict[str, dict[str, object]]
         configured = [
             provider.provider_id
             for provider in providers
-            if provider.enabled and provider.configured(settings)
+            if provider.enabled and not provider.history_only and provider.configured(settings)
         ]
         coverage[instrument_id] = {
             "registered": [provider.provider_id for provider in providers],

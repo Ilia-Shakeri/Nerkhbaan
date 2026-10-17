@@ -162,7 +162,9 @@ async def run(*, execute_network: bool = False, history: bool = False) -> dict[s
                     contract = provider_contract(provider)
                     row: dict[str, object] = {
                         "provider_id": provider.provider_id, "instrument_id": iid,
-                        "enabled": provider.enabled, "configured": provider.configured(settings),
+                        "enabled": provider.enabled,
+                        "configured": None if provider.history_only else provider.configured(settings),
+                        "history_only": provider.history_only,
                         "instrument_enabled": instrument.enabled, "role": provider.role.value,
                         "source_family": provider.source_family, "venue": provider.venue,
                         "history_supported": bool(provider.history_url and provider.history_parser_id),
@@ -171,6 +173,9 @@ async def run(*, execute_network: bool = False, history: bool = False) -> dict[s
                         "official_docs": list(contract.docs), "route_host": urlsplit(provider.url).hostname,
                     }
                     rows.append(row)
+                    if provider.history_only:
+                        row.update(status="skipped", reason="history_only")
+                        continue
                     if not instrument.enabled or not provider.enabled:
                         row.update(status="skipped", reason="disabled_by_effective_policy")
                         continue

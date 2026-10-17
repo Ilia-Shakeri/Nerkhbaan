@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [Unreleased]
+
+- Added an attributed, keyless Nerkhsanj daily silver-999 archive with explicit calendar, time precision and unknown observation-hour metadata. Historical-only sources cannot supply live prices, verifiers, recent anomaly inputs or percentage baselines. Daily and instant samples retain separate aggregation and currency metadata.
+- Bound archive fetch memory and a shared source quota; sparse daily chart polling reuses durable jobs. Servix ranges use durable 31-date windows and quota deferral preserves error attempts.
+- Classified Servix's exact email-verification denial without retaining account details. The inaccessible account, remaining source coverage, target deployment and actual user-device notification receipt remain unresolved. The published 2.8.6 tag is unchanged.
+- Recovery checks passed 764 local backend cases without skips, 75 frontend cases and 22 mocked Edge browser cases. This validates code paths and isolated services, not full live-source coverage or production rollout.
+
 ## [2.8.6] - 2026-10-17
 
 ### Fixed

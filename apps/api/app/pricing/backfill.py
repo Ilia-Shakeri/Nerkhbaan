@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import httpx
 from sqlalchemy import and_, func, or_, select
@@ -54,6 +55,27 @@ class HistoryBudgetDeferred(RuntimeError):
     """A subsequent history page needs quota; the original range stays pending."""
 
 
+def _servix_history_windows(start: datetime, end: datetime) -> tuple[tuple[datetime, datetime], ...]:
+    """Bound each request to 31 dates without changing source timestamps."""
+    start, end = ensure_utc(start), ensure_utc(end)
+    if start >= end:
+        raise ValueError("Backfill range must have a positive duration")
+    if end - start > timedelta(days=366):
+        raise ValueError("history_range_exceeds_one_year")
+    windows = []
+    cursor = start
+    while cursor < end:
+        # Adjacent windows share midnight. A source observation at that exact
+        # endpoint keeps its timestamp and is deduplicated by persistence.
+        boundary = cursor.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=30)
+        window_end = min(boundary, end)
+        windows.append((cursor, window_end))
+        cursor = window_end
+    if len(windows) > 13:
+        raise ValueError("history_window_limit_exceeded")
+    return tuple(windows)
+
+
 def _history_rights_allowed(provider: ProviderDefinition) -> bool:
     return (all(rights.provider_allowed(provider.provider_id, action)
                 for action in ("collect", "store", "history"))
@@ -77,6 +99,10 @@ def _history_request_options(
             min(365, int((range_end - range_start).total_seconds() / 86400) + 1),
         )
         params: dict[str, str | int] = {"vs_currency": "usd", "days": str(days)}
+    elif parser.parser_version.startswith("nerkhsanj-daily-history/"):
+        if range_end - range_start > timedelta(days=366):
+            raise ValueError("history_range_exceeds_one_year")
+        params = {}
     elif parser.parser_version.startswith("servix-history/"):
         if (range_end.date() - range_start.date()).days > 30:
             raise ValueError("servix_history_maximum_31_calendar_days")
@@ -142,7 +168,18 @@ class PricingBackfillQueue:
         if start >= end or bucket_seconds <= 0:
             raise ValueError("Automatic backfill range and bucket must be positive")
         raw = f"{instrument.instrument_id}|{int(start.timestamp()) // bucket_seconds}|{int(end.timestamp()) // bucket_seconds}|{bucket_seconds}"
+        daily_history = False
+        if any(provider.history_only for provider in PROVIDERS_BY_INSTRUMENT.get(instrument.instrument_id, ())):
+            history_provider = await self._history_provider(instrument.instrument_id)
+            daily_history = bool(history_provider and history_provider.history_only)
+        if daily_history:
+            # Sparse daily archives cannot fill intraday/holiday gaps. Repeated
+            # chart polls share one durable job per Tehran calendar range/day.
+            tehran = ZoneInfo("Asia/Tehran")
+            raw = f"daily|{instrument.instrument_id}|{start.astimezone(tehran).date()}|{end.astimezone(tehran).date()}|{bucket_seconds}"
         key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        if daily_history and end - start < timedelta(days=1):
+            return BackfillEnqueueResult("unsupported", key, None, None)
         if not instrument.enabled or not await self.operational.feature_enabled(
             "backfill_enabled", scope_id=instrument.instrument_id
         ):
@@ -156,10 +193,11 @@ class PricingBackfillQueue:
             return BackfillEnqueueResult("coalesced", key, None, None)
         try:
             # The manual path keeps its exact range, policy reads and retry behavior.
-            result = await self.enqueue(
-                instrument_id=instrument.instrument_id, range_start=start,
-                range_end=end, priority=priority,
-            )
+            arguments = {"instrument_id": instrument.instrument_id, "range_start": start,
+                         "range_end": end, "priority": priority}
+            if daily_history:
+                arguments["_automatic_day_key"] = key
+            result = await self.enqueue(**arguments)
         except BaseException:
             await self.automatic_locks.release(lease)
             raise
@@ -174,6 +212,7 @@ class PricingBackfillQueue:
         range_start: datetime,
         range_end: datetime,
         priority: int = 200,
+        _automatic_day_key: str | None = None,
     ) -> BackfillEnqueueResult:
         instrument = await self.operational.instrument(instrument_id)
         start = ensure_utc(range_start)
@@ -182,6 +221,10 @@ class PricingBackfillQueue:
             raise ValueError("Backfill range must have a positive duration")
         raw = f"{instrument.instrument_id}|{start.isoformat()}|{end.isoformat()}"
         idempotency_key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        if _automatic_day_key is not None:
+            if len(_automatic_day_key) != 64 or any(char not in "0123456789abcdef" for char in _automatic_day_key):
+                raise ValueError("Automatic daily history key must be a SHA-256 digest")
+            idempotency_key = _automatic_day_key
         if not instrument.enabled or not await self.operational.feature_enabled("backfill_enabled", scope_id=instrument.instrument_id):
             return BackfillEnqueueResult("disabled", idempotency_key, None, None)
         if await self._history_provider(instrument.instrument_id) is None:
@@ -268,6 +311,19 @@ class PricingBackfillQueue:
                 )
                 counts["deferred"] += 1
                 continue
+            if (provider.source_family == "servix"
+                    and (job["range_end"].date() - job["range_start"].date()).days > 30):
+                try:
+                    status = await asyncio.to_thread(self._schedule_servix_history_windows, job, provider)
+                except Exception as exc:
+                    await asyncio.to_thread(
+                        self._retry_job, job["id"],
+                        f"{type(exc).__name__}: history scheduling failed", job["attempt_count"],
+                    )
+                    counts["failed"] += 1
+                else:
+                    counts[status] += 1
+                continue
             async with self.locks.backfill_lock(job["instrument_id"]) as lease:
                 if lease is None:
                     await asyncio.to_thread(
@@ -278,9 +334,9 @@ class PricingBackfillQueue:
                 decision = await self.budgets.consume(provider, RequestPurpose.BACKFILL)
                 if not decision.allowed:
                     await asyncio.to_thread(
-                        self._retry_job, job["id"], decision.reason, job["attempt_count"]
+                        self._finish_job, job["id"], "deferred", decision.reason, job["attempt_count"]
                     )
-                    counts["failed"] += 1
+                    counts["deferred"] += 1
                     continue
                 try:
                     point_count = await self._execute_history_job(job, provider)
@@ -309,6 +365,80 @@ class PricingBackfillQueue:
                     await asyncio.to_thread(self._finish_job, job["id"], "completed", None, job["attempt_count"])
                     counts["completed"] += 1
         return counts
+
+    @staticmethod
+    def _schedule_servix_history_windows(job: dict[str, Any], provider: ProviderDefinition) -> str:
+        """Resume bounded child jobs; a parent never waits for account quota."""
+        windows = _servix_history_windows(job["range_start"], job["range_end"])
+        if not _history_rights_allowed(provider):
+            PricingBackfillQueue._finish_job(
+                job["id"], "deferred", "history_provider_rights_revoked", job["attempt_count"]
+            )
+            return "deferred"
+        db = SessionLocal()
+        try:
+            parent = db.scalar(select(PricingBackfillJobRecord).where(
+                PricingBackfillJobRecord.id == job["id"],
+            ).with_for_update())
+            if (parent is None or parent.status != "processing"
+                    or parent.attempt_count != job["attempt_count"]
+                    or parent.instrument_id != job["instrument_id"]
+                    or ensure_utc(parent.range_start) != ensure_utc(job["range_start"])
+                    or ensure_utc(parent.range_end) != ensure_utc(job["range_end"])):
+                raise RuntimeError("backfill_job_no_longer_owned")
+            keyed_windows = {
+                hashlib.sha256(
+                    f"servix-window-v1|{parent.instrument_id}|{start.isoformat()}|{end.isoformat()}".encode()
+                ).hexdigest(): (start, end)
+                for start, end in windows
+            }
+            children = {row.idempotency_key: row for row in db.scalars(
+                select(PricingBackfillJobRecord).where(
+                    PricingBackfillJobRecord.idempotency_key.in_(tuple(keyed_windows)),
+                ).order_by(PricingBackfillJobRecord.idempotency_key).with_for_update()
+            )}
+            now = utc_now()
+            for key, (start, end) in keyed_windows.items():
+                child = children.get(key)
+                if child is None:
+                    # Current policy may select a permitted fallback later;
+                    # the persisted quote records its actual provider.
+                    child = PricingBackfillJobRecord(
+                        instrument_id=parent.instrument_id,
+                        range_start=start, range_end=end, priority=parent.priority,
+                        status="pending", attempt_count=0, idempotency_key=key,
+                        created_at=now, updated_at=now,
+                    )
+                    db.add(child)
+                    children[key] = child
+                elif (child.instrument_id != parent.instrument_id
+                      or ensure_utc(child.range_start) != start
+                      or ensure_utc(child.range_end) != end):
+                    raise RuntimeError("backfill_window_identity_changed")
+            states = {child.status for child in children.values()}
+            invalid_completion = any(child.status == "completed" and child.completed_at is None
+                                     for child in children.values())
+            if invalid_completion or not states <= {"pending", "retrying", "processing", "deferred", "completed"}:
+                parent.status = "failed"
+                parent.last_error = "servix_history_child_failed_or_invalid"
+            elif states == {"completed"}:
+                parent.status = "completed"
+                parent.last_error = "servix_history_windows_fetched; coverage_requires_observation_check"
+            else:
+                parent.status = "deferred"
+                completed = sum(child.status == "completed" for child in children.values())
+                parent.last_error = f"servix_history_windows_pending:{completed}/{len(children)}"
+                parent.attempt_count = max(0, parent.attempt_count - 1)
+            parent.next_attempt_at = now + timedelta(minutes=5) if parent.status == "deferred" else None
+            parent.updated_at = now
+            parent.completed_at = now if parent.status == "completed" else None
+            db.commit()
+            return parent.status
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     async def _eligible_instruments(self) -> tuple[str, ...]:
         # Resolve the finite catalogue once per pass, before touching job rows.
@@ -395,6 +525,25 @@ class PricingBackfillQueue:
                 async with asyncio.timeout(15):
                     if not _history_rights_allowed(provider):
                         raise RuntimeError("history_provider_rights_revoked")
+                    if parser.parser_version.startswith("nerkhsanj-daily-history/"):
+                        async with client.stream("GET", provider.history_url, params=request_params, headers=headers) as response:
+                            response.raise_for_status()
+                            if response.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
+                                raise ValueError("history_response_content_type")
+                            limit = min(provider.maximum_payload_bytes, 8_388_608)
+                            length = response.headers.get("content-length", "")
+                            if length.isdigit() and int(length) > limit:
+                                raise ValueError("history_payload_too_large")
+                            body = bytearray()
+                            async for chunk in response.aiter_bytes(chunk_size=65_536):
+                                if len(body) + len(chunk) > limit:
+                                    raise ValueError("history_payload_too_large")
+                                body.extend(chunk)
+                            payload = json.loads(body)
+                        if not _history_rights_allowed(provider):
+                            raise RuntimeError("history_provider_rights_revoked")
+                        points = parser.parse(payload, instrument, job["range_start"], job["range_end"])
+                        break
                     response = await client.get(provider.history_url, params=request_params, headers=headers)
                 if response.status_code == 429:
                     await self.budgets.record_rate_limit(provider)
@@ -482,6 +631,7 @@ class PricingBackfillQueue:
                     "provider_role": provider.role.value,
                     "history_symbol": getattr(parser, "symbol", getattr(parser, "asset_id", "unknown")),
                     "history_point_kind": "hourly_candle_close" if windowed_udf else "provider_observation",
+                    **point.metadata,
                 },
                 persistence_status=PersistenceStatus.UNPERSISTED,
             )
@@ -501,6 +651,7 @@ class PricingBackfillQueue:
                     "direct_source_count": 1,
                     "derived": False,
                     "historical_backfill": True,
+                    **point.metadata,
                 },
                 observed_at=point.observed_at,
                 canonical_at=point.observed_at,

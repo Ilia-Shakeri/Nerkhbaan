@@ -151,7 +151,7 @@ class Settings(BaseSettings):
         "api.alanchand.com,api.gold-api.com,www.goldapi.io,api.metals.dev,xaus.com,"
         "api.exchange.coinbase.com,api.coingecko.com,api.coincap.io,"
         "api.nobitex.ir,apiv2.nobitex.ir,api.wallex.ir,api.bitpin.org,api.wallgold.ir,api.tetherland.com,"
-        "servix.cc,persiantoolbox.ir,api.tala.ir,api.navasan.tech,api.nerkh.io"
+        "servix.cc,persiantoolbox.ir,api.tala.ir,api.navasan.tech,api.nerkh.io,nerkh.jahankhahan.shop"
     )
     pricing_require_provider_keys: bool = False
     pricing_lock_ttl_seconds: int = 45

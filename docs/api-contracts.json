@@ -7046,6 +7046,84 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "HistoryTimeInfo": {
+        "properties": {
+          "timestamp_precision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "instant",
+                  "day"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp Precision"
+          },
+          "timestamp_role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "day_bucket_start"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp Role"
+          },
+          "source_observation_time_known": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Observation Time Known"
+          },
+          "source_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timezone"
+          },
+          "source_calendar": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "jalali"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Calendar"
+          },
+          "source_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Date"
+          }
+        },
+        "type": "object",
+        "title": "HistoryTimeInfo"
+      },
       "InstrumentUnit": {
         "properties": {
           "instrument_id": {
@@ -7615,6 +7693,78 @@
       },
       "PricePoint": {
         "properties": {
+          "timestamp_precision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "instant",
+                  "day"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp Precision"
+          },
+          "timestamp_role": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "day_bucket_start"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp Role"
+          },
+          "source_observation_time_known": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Observation Time Known"
+          },
+          "source_timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timezone"
+          },
+          "source_calendar": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "jalali"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Calendar"
+          },
+          "source_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Date"
+          },
           "timestamp": {
             "type": "string",
             "title": "Timestamp"
@@ -7695,6 +7845,26 @@
               }
             ],
             "title": "Volume"
+          },
+          "time_info_usd": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistoryTimeInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time_info_toman": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HistoryTimeInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",

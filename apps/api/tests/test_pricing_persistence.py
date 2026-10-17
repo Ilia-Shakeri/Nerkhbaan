@@ -168,7 +168,7 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
             rows = InternalPriceHistory._query_latest_rows(None)
 
         self.assertEqual(rows, [])
-        self.assertEqual(session.calls[0][1], {})
+        self.assertEqual(session.calls[0][1], {"history_only_sources": ["nerkhsanj_silver999_history"]})
         self.assertNotIn(":instrument_id", session.calls[0][0])
 
     def test_latest_instrument_keeps_typed_column_comparison(self) -> None:
@@ -178,7 +178,7 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
             rows = InternalPriceHistory._query_latest_rows("BTC_USD")
 
         self.assertEqual(rows, [])
-        self.assertEqual(session.calls[0][1], {"instrument_id": "BTC_USD"})
+        self.assertEqual(session.calls[0][1], {"instrument_id": "BTC_USD", "history_only_sources": ["nerkhsanj_silver999_history"]})
         self.assertIn("instrument_id = :instrument_id", session.calls[0][0])
 
 

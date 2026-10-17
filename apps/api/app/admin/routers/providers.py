@@ -117,8 +117,9 @@ def _catalogue_providers() -> list[dict[str, Any]]:
                 "minimum_interval_seconds": provider.budget.minimum_interval_seconds,
                 "operational_ttl_seconds": provider.operational_ttl_seconds,
                 "parser_version": provider.parser_version,
+                "history_only": provider.history_only,
                 "health_status": (
-                    "configured"
+                    "history_only" if provider.history_only else "configured"
                     if provider.enabled and configured
                     else "disabled" if not provider.enabled else "disabled_missing_key"
                 ),
@@ -169,6 +170,9 @@ def _db_providers(db: Session) -> list[dict[str, Any]]:
         )
         if row["provider_id"] in PROVIDERS:
             registered = PROVIDERS[row["provider_id"]]
+            row["history_only"] = registered.history_only
+            if registered.history_only:
+                row["health_status"] = "history_only"
             row["configured"] = registered.configured(settings)
             row["asset"] = registered.instrument_id
             row["region"] = "iran" if "TOMAN" in registered.instrument_id else "international"
@@ -208,6 +212,7 @@ def _impact_preview(
             and item.get("region") == provider.get("region")
             and item.get("provider_id") != provider.get("provider_id")
             and item.get("enabled", True)
+            and not item.get("history_only", False)
         )
     warnings: list[str] = []
     if provider.get("role") == "primary" and not enabled_after:
