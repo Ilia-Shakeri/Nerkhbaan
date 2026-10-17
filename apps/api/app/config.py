@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     api_port: int = 8000
     debug: bool = False
     background_tasks_enabled: bool = True
+    pricing_rights_enforced: bool = True
+    pricing_rights_manifest_path: str | None = None
 
     database_url: str = Field(
         default="postgresql+psycopg://nerkhbaan:nerkhbaan@localhost:5432/nerkhbaan"

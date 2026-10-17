@@ -104,7 +104,7 @@ class IranianSourceRegistryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_default_servix_account_total_is_below_fifty_calls(self):
         routes = [provider for provider in PROVIDERS.values() if provider.source_family == "servix"]
-        self.assertEqual(len(routes), 7)
+        self.assertEqual(len(routes), 9)
         self.assertLessEqual(sum(provider.budget.requests_per_day for provider in routes), 48)
         self.assertTrue(all(provider.budget.minimum_interval_seconds >= 14400 for provider in routes))
 

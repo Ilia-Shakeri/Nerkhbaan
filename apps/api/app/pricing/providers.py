@@ -39,6 +39,7 @@ from .parsers import ParserContext, ParserError, build_parser
 from .parsers.base import sanitize_raw_payload
 from .persistence import PricingPersistence, pricing_persistence
 from .registry import ProviderDefinition
+from . import rights
 
 
 def _raw_payload_bound(provider: ProviderDefinition) -> int:
@@ -62,6 +63,15 @@ class QuoteFetchOutcome:
     cache_status: FreshnessStatus | None = None
     selection_trace: list[dict[str, object]] = field(default_factory=list)
     retry_after_seconds: int | None = None
+
+    def __post_init__(self):
+        if self.quote is not None and not all(
+            rights.provider_allowed(self.quote.provider_id, action) for action in ("collect", "store")
+        ):
+            self.quote = None
+            self.usable = self.from_fresh_cache = False
+            self.sanitized_payload = None
+            self.failure_reason = "provider_rights_denied"
 
 
 class ProviderCallFailure(RuntimeError):
@@ -113,6 +123,10 @@ class ProviderQuoteCollector:
         client: httpx.AsyncClient | None = None,
         instrument: InstrumentDefinition | None = None,
     ) -> QuoteFetchOutcome:
+        if (not rights.provider_allowed(provider.provider_id, "collect")
+                or not rights.provider_allowed(provider.provider_id, "store")
+                or not rights.endpoint_allowed(provider.provider_id, provider.url)):
+            return QuoteFetchOutcome(None, False, False, False, "provider_rights_denied")
         effective_instrument = instrument or get_instrument(provider.instrument_id)
         cached = await self.store.get_provider_quote(
             provider.provider_id, provider.instrument_id
@@ -257,6 +271,10 @@ class ProviderQuoteCollector:
             payload, content_type, http_status = await self._request_payload(
                 request_client, provider, purpose=purpose
             )
+            if (not rights.provider_allowed(provider.provider_id, "collect")
+                    or not rights.provider_allowed(provider.provider_id, "store")
+                    or not rights.endpoint_allowed(provider.provider_id, provider.url)):
+                return QuoteFetchOutcome(None, False, False, True, "provider_rights_denied")
             parser = build_parser(provider.parser_id)
             received_at = utc_now()
             parsed = parser.parse(
@@ -332,6 +350,10 @@ class ProviderQuoteCollector:
             self._apply_current_live_boundary(quote, provider, instrument)
             freshness = self._cache_status(quote, provider, instrument)
             persistence_result = await self.persistence.persist_provider_quote(quote)
+            if (not rights.provider_allowed(provider.provider_id, "collect")
+                    or not rights.provider_allowed(provider.provider_id, "store")
+                    or getattr(persistence_result, "sanitized_error", None) == "provider_rights_denied"):
+                return QuoteFetchOutcome(None, False, False, True, "provider_rights_denied")
             await self.store.set_provider_quote(
                 quote, provider.operational_ttl_seconds
             )
@@ -439,6 +461,9 @@ class ProviderQuoteCollector:
         *,
         purpose: RequestPurpose | None = None,
     ) -> tuple[object, str | None, int]:
+        if (not rights.provider_allowed(provider.provider_id, "collect")
+                or not rights.endpoint_allowed(provider.provider_id, provider.url)):
+            raise ProviderCallFailure("provider_rights_denied", "Source permission unavailable")
         headers = dict(provider.static_headers)
         params: dict[str, str] = {}
         self._validate_destination(provider)
@@ -446,6 +471,8 @@ class ProviderQuoteCollector:
             relay_host = urlparse(settings.pricing_relay_base_url).hostname
             provider_host = urlparse(provider.url).hostname
             if relay_host and provider_host == relay_host:
+                if not rights.provider_allowed(provider.provider_id, "own_app_transport"):
+                    raise ProviderCallFailure("provider_rights_denied", "Application transport permission unavailable")
                 if not settings.pricing_relay_shared_token:
                     raise ProviderCallFailure(
                         "missing_relay_token", "Relay token is not configured"
@@ -479,6 +506,8 @@ class ProviderQuoteCollector:
         maximum_attempts = settings.pricing_provider_max_retries + 1
         last_failure: ProviderCallFailure | None = None
         for attempt in range(maximum_attempts):
+            if not rights.provider_allowed(provider.provider_id, "collect"):
+                raise ProviderCallFailure("provider_rights_denied", "Source permission unavailable")
             # Operator probes omit a purpose; managed refreshes charge every
             # actual attempt, including retries, through the shared limits.
             if purpose is not None:
@@ -511,6 +540,9 @@ class ProviderQuoteCollector:
         headers: dict[str, str],
         params: dict[str, str],
     ) -> tuple[object, str | None, int]:
+        if (not rights.provider_allowed(provider.provider_id, "collect")
+                or not rights.endpoint_allowed(provider.provider_id, provider.url)):
+            raise ProviderCallFailure("provider_rights_denied", "Source permission unavailable")
         try:
             async with client.stream(
                 provider.method,

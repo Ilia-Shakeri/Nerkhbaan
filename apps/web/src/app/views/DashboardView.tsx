@@ -13,7 +13,7 @@ import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { toast } from 'sonner';
-import { canonicalLegDetails, clearSnapshotPrices } from '../services/price-stream';
+import { acceptRightsRevision, canonicalLegDetails, clearSnapshotPrices, currentRightsRevision, PRICING_RIGHTS_EVENT, safeAttributions } from '../services/price-stream';
 import {
   api,
   formatPrice,
@@ -27,6 +27,7 @@ import {
   type PriceAsset,
   type PricesResponse,
   type PriceTimeframe,
+  type SourceAttribution,
 } from '../services/api';
 
 type AssetId = 'gold' | 'silver' | 'usdt' | 'btc';
@@ -50,6 +51,8 @@ type AssetCard = {
   history: AssetPoint[];
   sourceUsd: string;
   sourceToman: string;
+  usdAttributions: SourceAttribution[];
+  tomanAttributions: SourceAttribution[];
   usdStatus: OperationalPriceStatus;
   tomanStatus: OperationalPriceStatus;
   staleMinutes: number | null;
@@ -184,6 +187,7 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, mode: Currenc
       history: placeholder.history,
       sourceUsd: placeholder.source_usd,
       sourceToman: placeholder.source_toman,
+      usdAttributions: [], tomanAttributions: [],
       usdStatus: placeholder.usd_status,
       tomanStatus: placeholder.toman_status,
       staleMinutes: placeholder.stale_minutes,
@@ -215,6 +219,8 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, mode: Currenc
     history: asset.history,
     sourceUsd: asset.source_usd,
     sourceToman: asset.source_toman,
+    usdAttributions: safeAttributions(asset.usd_attributions),
+    tomanAttributions: safeAttributions(asset.toman_attributions),
     usdStatus: normalizeStatus(asset.usd_status),
     tomanStatus: normalizeStatus(asset.toman_status),
     staleMinutes: asset.stale_minutes,
@@ -505,6 +511,14 @@ function AssetIcon({ id, className = '' }: { id: AssetId; className?: string }) 
   );
 }
 
+function SourceCredits({ items, language, kind = 'price' }: { items: SourceAttribution[]; language: 'fa' | 'en'; kind?: 'price' | 'history' }) {
+  if (!items.length) return null;
+  return <p className="my-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[#6A4D16] dark:text-[#CDBB8C]" aria-label={kind === 'history' ? (language === 'fa' ? 'منابع نمودار' : 'Chart sources') : (language === 'fa' ? 'منابع قیمت' : 'Price sources')}>
+    <span>{kind === 'history' ? (language === 'fa' ? 'منبع نمودار:' : 'Chart sources:') : (language === 'fa' ? 'منبع قیمت:' : 'Price sources:')}</span>
+    {items.map(item => <a key={`${item.label}:${item.url}`} href={item.url} target="_blank" rel="noopener noreferrer" className="min-h-6 underline underline-offset-4 hover:text-[#D4AF37]">{item.label}</a>)}
+  </p>;
+}
+
 export function DashboardView() {
   const { language, theme, currencyMode } = useAppContext();
   const isDark = theme === 'dark';
@@ -530,6 +544,8 @@ export function DashboardView() {
   const [sourceDetails, setSourceDetails] = useState<Partial<Record<AssetId, InstrumentSourcesResponse>>>({});
   const [sourceLoading, setSourceLoading] = useState<Partial<Record<AssetId, boolean>>>({});
   const [sourceErrors, setSourceErrors] = useState<Partial<Record<AssetId, string>>>({});
+  const [rightsRevision, setRightsRevision] = useState(currentRightsRevision);
+  const sourceGeneration = useRef(0);
   const lastWsEventsRef = useRef(new Map<string, { sequence: number | null; timestamp: number | null }>());
   const dragActivationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -561,9 +577,8 @@ export function DashboardView() {
     queries: DEFAULT_ASSET_ORDER.map((asset) => {
       const assetTimeframe = timeframeByAsset[asset];
       return {
-        queryKey: queryKeys.priceHistory(asset, assetTimeframe),
-        queryFn: ({ signal }: { signal: AbortSignal }) => getPriceHistory(asset, assetTimeframe, signal),
-        placeholderData: keepPreviousData,
+        queryKey: queryKeys.priceHistory(asset, assetTimeframe, rightsRevision),
+        queryFn: ({ signal }: { signal: AbortSignal }) => getPriceHistory(asset, assetTimeframe, signal, rightsRevision),
         staleTime: assetTimeframe === '1h' || assetTimeframe === '24h' ? 30_000 : 5 * 60_000,
         refetchInterval: assetTimeframe === '1h' || assetTimeframe === '24h' ? 60_000 : 5 * 60_000,
         refetchIntervalInBackground: false,
@@ -582,6 +597,8 @@ export function DashboardView() {
     const mergeMessage = (message: unknown): void => {
       if (!message || typeof message !== 'object') return;
       const root = message as Record<string, unknown>;
+      const nestedRevision = root.data && typeof root.data === 'object' ? (root.data as Record<string, unknown>).rights_revision : undefined;
+      if (!acceptRightsRevision(root.rights_revision ?? nestedRevision, 'socket')) return;
       if (root.type === 'heartbeat' || root.event_type === 'heartbeat') return;
       if (Array.isArray(root.prices)) {
         if (root.type === 'snapshot' || root.event_type === 'snapshot') {
@@ -589,7 +606,7 @@ export function DashboardView() {
           lastWsEventsRef.current.clear();
           void queryClient.invalidateQueries({ queryKey: queryKeys.prices });
         }
-        root.prices.forEach((price) => mergeMessage(price));
+        root.prices.forEach((price) => mergeMessage(price && typeof price === 'object' ? { rights_revision: root.rights_revision, ...price } : price));
         return;
       }
       const nested = root.data ?? root.payload ?? root;
@@ -686,6 +703,7 @@ export function DashboardView() {
             : current?.refreshed_at ?? new Date().toISOString();
         return {
           refreshed_at: refreshedAt,
+          rights_revision: currentRightsRevision(),
           source: payload.source && typeof payload.source === 'object'
             ? payload.source as PricesResponse['source']
             : current?.source ?? {},
@@ -772,7 +790,29 @@ export function DashboardView() {
   }, [assetOrder, historyByAsset, pricesData, currencyMode]);
 
   const chartByAsset = useMemo(() => Object.fromEntries(DEFAULT_ASSET_ORDER.map(id => [id, toChartData(historyByAsset[id], currencyMode)])) as Record<AssetId, LineData<UTCTimestamp>[]>, [historyByAsset, currencyMode]);
-  const sourceGeneration = useRef(0);
+  useEffect(() => {
+    const changed = (event: Event) => {
+      const detail = (event as CustomEvent<{ revision: string; origin: string }>).detail;
+      sourceGeneration.current += 1;
+      lastWsEventsRef.current.clear();
+      setRightsRevision(detail.revision);
+      setExpandedSources({}); setSourceDetails({}); setSourceErrors({}); setSourceLoading({});
+      setFullscreenAsset(null);
+      const obsolete = (query: { queryKey: readonly unknown[] }) => query.queryKey.includes('history') || query.queryKey[0] === 'insights';
+      void queryClient.cancelQueries({ predicate: obsolete }, { revert: false });
+      queryClient.removeQueries({ predicate: obsolete });
+      queryClient.setQueryData<PricesResponse>(queryKeys.prices, current => {
+        const cleared = clearSnapshotPrices(current);
+        return cleared ? { ...cleared, rights_revision: detail.revision } : cleared;
+      });
+      if (detail.origin === 'socket') {
+        void queryClient.cancelQueries({ queryKey: queryKeys.prices, exact: true }, { revert: false });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.prices, exact: true });
+      }
+    };
+    window.addEventListener(PRICING_RIGHTS_EVENT, changed);
+    return () => window.removeEventListener(PRICING_RIGHTS_EVENT, changed);
+  }, [queryClient]);
 
   useEffect(() => {
     setExpandedSources({});
@@ -1067,6 +1107,8 @@ export function DashboardView() {
                   </span>
                 </div>
 
+                {typeof fallbackValue === 'number' && Number.isFinite(fallbackValue) && <SourceCredits items={currencyMode === 'usd' ? asset.usdAttributions : asset.tomanAttributions} language={language} />}
+
                 <div className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs ${
                   isDark ? 'border-white/5 bg-black/20 text-[#A89668]' : 'border-black/5 bg-white/50 text-[#7A5E24]'
                 }`}>
@@ -1192,6 +1234,7 @@ export function DashboardView() {
                   </div>
                 </div>
 
+                <SourceCredits items={safeAttributions(currencyMode === 'usd' ? historyQuery?.data?.usd_attributions : historyQuery?.data?.toman_attributions)} language={language} kind="history" />
                 {showChartUnavailable ? (
                   <ChartUnavailableState
                     isDark={isDark}
@@ -1429,6 +1472,8 @@ export function DashboardView() {
               <div className={`text-center text-4xl font-bold ${isDark ? 'text-[#D4AF37]' : 'text-[#8A6B20]'}`}>
                 {formatPrice(currencyMode === 'usd' ? asset.priceUsd : asset.priceToman, currencyMode, language)}
               </div>
+              {typeof (currencyMode === 'usd' ? asset.priceUsd : asset.priceToman) === 'number' && <SourceCredits items={currencyMode === 'usd' ? asset.usdAttributions : asset.tomanAttributions} language={language} />}
+              <SourceCredits items={safeAttributions(currencyMode === 'usd' ? historyQuery?.data?.usd_attributions : historyQuery?.data?.toman_attributions)} language={language} kind="history" />
               {historyQuery?.isPending ? (
                 <div className={`h-[60vh] animate-pulse rounded-2xl ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
               ) : chartData.length === 0 ? (

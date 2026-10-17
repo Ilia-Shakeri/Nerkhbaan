@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from ..models import Currency
+from ..models import Currency, WeightUnit
 from .base import (
     ParsedProviderValue,
     ParserContext,
@@ -219,6 +219,7 @@ class ServixAssetsParser:
     def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
         expected = {
             "USD_RLS": "USD_TOMAN", "BTC_USD": "BTC_USD", "USDT_USD": "USDT_USD",
+            "BTC_RLS": "BTC_TOMAN", "USDT_RLS": "USDT_TOMAN",
             "GOLD_OUNCE_USD": "XAU_USD_OZ", "SILVER_OUNCE_USD": "XAG_USD_OZ",
             "GOLD_18_RLS": "GOLD_18K_TOMAN_GRAM", "GOLD_24_RLS": "GOLD_24K_TOMAN_GRAM",
         }
@@ -247,6 +248,11 @@ class ServixAssetsParser:
         quote_unit = exact_path(node, "quoteUnit")
         if not isinstance(quote_unit, str):
             raise ParserError("unknown_unit", "Servix quoteUnit must be explicit text")
+        if self.code in {"BTC_RLS", "USDT_RLS"}:
+            if quote_unit != "RLS":
+                raise ParserError("unknown_unit", "Servix local crypto quoteUnit must be RLS")
+            if context.instrument.weight_unit is not WeightUnit.UNIT or context.instrument.purity is not None:
+                raise ParserError("unit_mismatch", "Servix crypto quote must be per asset unit")
         source_unit, factor = _unit_factor(quote_unit)
         source_time = exact_path(node, "businessTime")
         if not isinstance(source_time, str) or not source_time.strip():

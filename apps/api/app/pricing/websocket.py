@@ -11,9 +11,11 @@ from typing import Any
 from fastapi import WebSocket, WebSocketDisconnect
 
 from ..config import settings
+from . import rights
 from .cache import PricingRedisStore, pricing_redis
 from .instruments import INSTRUMENTS, get_instrument, legacy_asset_for_instrument
 from .models import CanonicalQuote
+from .quote_visibility import allowed_current_quote
 from .service import instrument_pricing_service
 
 logger = logging.getLogger(__name__)
@@ -24,6 +26,10 @@ _CLIENT_QUEUE_SIZE = 64
 
 #: Client frames accepted per connection per minute.
 _CLIENT_MESSAGE_LIMIT = 30
+
+
+def _quote_allowed(quote: CanonicalQuote) -> bool:
+    return not rights.enforced() or allowed_current_quote(quote)
 
 
 class PriceWebSocketHub:
@@ -110,7 +116,8 @@ class PriceWebSocketHub:
                         quote = CanonicalQuote.from_dict(payload)
                     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                         continue
-                    event = self._public_event(quote)
+                    # Keep proof private in the queue; permission can change while waiting.
+                    event = {"event_type": "canonical_quote", "quote": quote}
                     async with self._guard:
                         targets = list(self._clients.values())
                     for queue in targets:
@@ -166,6 +173,7 @@ class PriceWebSocketHub:
                 {
                     "event_type": "snapshot",
                     "type": "snapshot",
+                    "rights_revision": rights.revision(),
                     "connection_id": connection_id,
                     "heartbeat_seconds": self.heartbeat_seconds,
                     # Tells the client how often to poll if it loses the socket.
@@ -173,7 +181,7 @@ class PriceWebSocketHub:
                     "prices": [
                         self._public_event(quote)
                         for instrument_id, quote in initial_quotes.items()
-                        if instrument_id in subscriptions
+                        if instrument_id in subscriptions and _quote_allowed(quote)
                     ],
                 }
             )
@@ -238,11 +246,23 @@ class PriceWebSocketHub:
                         snapshots = await self._read_snapshot()
                         await websocket.send_json({
                             "event_type": "snapshot", "type": "snapshot", "reason": event["reason"],
-                            "prices": [self._public_event(quote) for key, quote in snapshots.items() if key in subscriptions],
+                            "rights_revision": rights.revision(),
+                            "prices": [self._public_event(quote) for key, quote in snapshots.items()
+                                       if key in subscriptions and _quote_allowed(quote)],
                         })
                         continue
-                    if event.get("instrument_id") in subscriptions:
-                        await websocket.send_json(event)
+                    quote = event.get("quote")
+                    if isinstance(quote, CanonicalQuote) and quote.instrument_id in subscriptions:
+                        if _quote_allowed(quote):
+                            await websocket.send_json(self._public_event(quote))
+                        else:
+                            snapshots = await self._read_snapshot()
+                            await websocket.send_json({
+                                "event_type": "snapshot", "type": "snapshot", "reason": "source_permission_changed",
+                                "rights_revision": rights.revision(),
+                                "prices": [self._public_event(item) for key, item in snapshots.items()
+                                           if key in subscriptions and _quote_allowed(item)],
+                            })
         finally:
             for task in (receive_task, queue_task):
                 if task is not None:
@@ -257,6 +277,7 @@ class PriceWebSocketHub:
             "type": "heartbeat",
             "event_id": int(time.time() * 1000),
             "server_time": time.time(),
+            "rights_revision": rights.revision(),
         }
 
     @staticmethod
@@ -286,10 +307,14 @@ class PriceWebSocketHub:
     def _public_event(quote: CanonicalQuote) -> dict[str, Any]:
         instrument = get_instrument(quote.instrument_id)
         payload = quote.to_dict(authenticated=False)
+        if rights.enforced():
+            for field in ("change_1h", "change_24h", "change_7d", "change_30d"):
+                payload[field] = None
         payload.update(
             {
                 "event_type": "canonical_update",
                 "type": "canonical_update",
+                "rights_revision": rights.revision(),
                 "compatibility_asset_id": legacy_asset_for_instrument(quote.instrument_id),
                 "compatibility_asset": legacy_asset_for_instrument(quote.instrument_id),
                 "sequence": quote.sequence_number,
@@ -299,6 +324,7 @@ class PriceWebSocketHub:
                 "purity": float(instrument.purity) if instrument.purity is not None else None,
                 "display_decimals": instrument.display_decimals,
                 "persistence_status": "persisted" if quote.is_persisted else "unpersisted",
+                "attribution": rights.attribution(quote.source_summary),
             }
         )
         return payload

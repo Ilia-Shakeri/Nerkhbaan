@@ -9,6 +9,7 @@ import logging
 import math
 import re
 import socket
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from decimal import Decimal
@@ -30,6 +31,7 @@ from ..models import (
     UserNotification,
 )
 from ..db import SessionLocal
+from ..pricing import rights
 from ..security import send_smtp_message
 from .webhook_transport import PinnedWebhookTransport
 
@@ -68,6 +70,10 @@ class FormulaValidationError(ValueError):
 
 class PermanentDeliveryError(RuntimeError):
     pass
+
+
+class SourceRightsDeliveryError(PermanentDeliveryError):
+    """Withheld source data: the durable worker marks the job dead, keeping evidence."""
 
 
 def validate_webhook_url(url: str, *, resolve_dns: bool = False) -> set[str]:
@@ -214,6 +220,51 @@ def evaluate_formula(formula: str, values: dict[str, float]) -> bool:
     return bool(_formula_value(_parse_formula(formula).body, values))
 
 
+def source_rights_snapshot_allowed(snapshot: Any) -> bool:
+    """Recheck occurrence provenance, including every formula input, before output."""
+    if not rights.enforced():
+        return True
+    if not isinstance(snapshot, dict):
+        return False
+    context = snapshot.get("delivery_alert")
+    assets = snapshot.get("assets")
+    if not isinstance(context, dict) or not isinstance(assets, list):
+        return False
+    currency = context.get("currency")
+    if currency not in {"usd", "toman"}:
+        return False
+    if context.get("alert_type") == "formula":
+        try:
+            wanted = {node.id.lower() for node in ast.walk(_parse_formula(context.get("formula")))
+                      if isinstance(node, ast.Name)} - {"x"}
+        except (FormulaValidationError, TypeError, AttributeError):
+            return False
+    else:
+        asset_id = context.get("asset_id")
+        if not isinstance(asset_id, str) or not asset_id:
+            return False
+        wanted = {asset_id.lower()}
+    if not wanted:
+        return False
+    found: set[str] = set()
+    for asset in assets:
+        if not isinstance(asset, dict):
+            return False
+        asset_id = str(asset.get("asset", "")).lower()
+        source = SOURCE_NAME_PATTERN.sub("_", str(asset.get(f"source_{currency}", "")).lower()).strip("_")
+        aliases = {asset_id, f"{asset_id}_{source}"} if source else {asset_id}
+        if asset_id == "usd":
+            aliases.add("dollar")
+        used = wanted & aliases
+        if not used:
+            continue
+        summary = asset.get(f"_{currency}_rights_source_summary")
+        if not isinstance(summary, dict) or not rights.canonical_allowed(summary):
+            return False
+        found.update(used)
+    return wanted <= found
+
+
 class Alert:
     def __init__(
         self,
@@ -310,7 +361,7 @@ class AlertEngine:
                 if row.notifications_today >= row.max_notifications_per_day:
                     continue
 
-                self._queue_trigger(
+                queued = self._queue_trigger(
                     db,
                     row,
                     current_prices,
@@ -318,6 +369,8 @@ class AlertEngine:
                     preferences=preferences,
                     push_available=row.user_id in push_users,
                 )
+                if queued is False:
+                    continue
                 row.last_condition_state = True
                 row.triggered_at = now
                 row.notifications_today += 1
@@ -349,6 +402,8 @@ class AlertEngine:
                 }
             except FormulaValidationError:
                 pass
+            if "dollar" in wanted:
+                wanted.add("usd")
         trimmed: list[dict[str, Any]] = []
         for asset in current_prices.get("assets", []):
             asset_id = str(asset.get("asset", "")).lower()
@@ -358,7 +413,7 @@ class AlertEngine:
             if not any(name == asset_id or name.startswith(f"{asset_id}_") for name in wanted):
                 continue
             trimmed.append(
-                {key: value for key, value in asset.items() if key != "history"}
+                deepcopy({key: value for key, value in asset.items() if key != "history"})
             )
         return trimmed
 
@@ -416,6 +471,9 @@ class AlertEngine:
         currency: str,
         price_source_mode: str = "ordinary",
     ) -> bool:
+        summary = asset.get(f"_{currency}_rights_source_summary")
+        if rights.enforced() and (not isinstance(summary, dict) or not rights.canonical_allowed(summary)):
+            return False
         status_value = self._asset_status(asset, currency)
         policy = ALERT_SOURCE_ELIGIBILITY.get(price_source_mode)
         if policy is None:
@@ -530,7 +588,7 @@ class AlertEngine:
         *,
         preferences: NotificationPreference | None,
         push_available: bool,
-    ) -> None:
+    ) -> bool:
         # Only the assets this alert actually references are retained. Storing
         # every asset with its full history array turned each trigger row into
         # hundreds of kilobytes of JSON that is re-read on every retry.
@@ -542,6 +600,8 @@ class AlertEngine:
         delivery_alert = self._delivery_alert(alert)
         # Retries must describe the condition and destination at occurrence time.
         snapshot["delivery_alert"] = dict(vars(delivery_alert))
+        if not source_rights_snapshot_allowed(snapshot):
+            return False
         snapshot["selected_price_context"] = self._selected_price_context(
             delivery_alert,
             snapshot,
@@ -578,8 +638,8 @@ class AlertEngine:
                     title=title,
                     message=body,
                     severity="warning",
-                    resource_type="alert",
-                    resource_id=str(alert.id),
+                    resource_type="alert_trigger",
+                    resource_id=str(event.id),
                 )
             )
             if (
@@ -619,6 +679,7 @@ class AlertEngine:
         event.status = "queued" if channels else (
             "delivered" if in_app_delivered else "no_delivery_channel"
         )
+        return True
 
     @staticmethod
     def _push_is_enabled(preferences: NotificationPreference | None) -> bool:
@@ -692,6 +753,8 @@ class AlertEngine:
             if not owner or not owner.is_active:
                 raise PermanentDeliveryError("Alert owner is not active")
             snapshot = dict(event.condition_snapshot)
+            if not source_rights_snapshot_allowed(snapshot):
+                raise SourceRightsDeliveryError("Source permission is missing or withdrawn")
             if not snapshot.get("triggered_at"):
                 snapshot["triggered_at"] = event.created_at.isoformat()
             context = snapshot.get("delivery_alert")
@@ -787,6 +850,8 @@ class AlertEngine:
             ).lower(),
             "source_summary": source_summary,
             "price_source_mode": alert.price_source_mode,
+            **({"attribution": rights.attribution(asset_data.get(f"_{alert.currency}_rights_source_summary", {}))}
+               if rights.enforced() else {}),
         }
 
     def _formula_price_contexts(
@@ -849,11 +914,21 @@ class AlertEngine:
                     ).lower(),
                     "source_summary": source_summary,
                     "price_source_mode": alert.price_source_mode,
+                    **({"attribution": rights.attribution(asset.get(f"_{alert.currency}_rights_source_summary", {}))}
+                       if rights.enforced() else {}),
                 }
             )
         return contexts
 
+    @staticmethod
+    def _attribution_suffix(contexts: list[dict[str, Any]]) -> str:
+        credits = list(dict.fromkeys(f"{item['label']} ({item['url']})"
+                                    for context in contexts for item in context.get("attribution", [])))
+        return " Data: " + "; ".join(credits) + "." if credits else ""
+
     def _alert_summary(self, alert: Alert, current_prices: dict[str, Any]) -> tuple[str, str]:
+        if not source_rights_snapshot_allowed(current_prices):
+            raise SourceRightsDeliveryError("Source permission is missing or withdrawn")
         if alert.alert_type == "legacy":
             price = alert.occurrence_price
             price_text = f" Recorded trigger price: {price:,.2f}." if isinstance(price, (int, float, Decimal)) else ""
@@ -867,7 +942,7 @@ class AlertEngine:
                 for context in contexts
             )
             suffix = f" Sources: {source_text}." if source_text else ""
-            return title, f"Formula condition met: {alert.formula}.{suffix}"
+            return title, f"Formula condition met: {alert.formula}.{suffix}{self._attribution_suffix(contexts)}"
         price = self._current_price(alert, current_prices)
         price_text = f"{price:,.2f}" if isinstance(price, (int, float)) else "-"
         unit = alert.currency.upper()
@@ -878,7 +953,7 @@ class AlertEngine:
             f"({alert.condition} target {alert.target_price:,.2f} {unit}; "
             f"status={context['status']}; source={context['source_semantic']})."
         )
-        return title, body
+        return title, body + self._attribution_suffix([context])
 
     async def _send_push_notification(self, alert: Alert, current_prices: dict[str, Any]) -> None:
         if not (settings.vapid_private_key and settings.vapid_public_key):
@@ -934,6 +1009,8 @@ class AlertEngine:
         expired_endpoints: list[str] = []
 
         def _push(endpoint: str, p256dh: str, auth: str) -> None:
+            if not source_rights_snapshot_allowed(current_prices):
+                raise SourceRightsDeliveryError("Source permission is missing or withdrawn")
             webpush(
                 subscription_info={"endpoint": endpoint, "keys": {"p256dh": p256dh, "auth": auth}},
                 data=payload,
@@ -1001,7 +1078,12 @@ class AlertEngine:
         message["Subject"] = title
         message.set_content(body)
 
-        await asyncio.to_thread(send_smtp_message, message, timeout=15, smtp_settings=settings)
+        def send() -> None:
+            if not source_rights_snapshot_allowed(current_prices):
+                raise SourceRightsDeliveryError("Source permission is missing or withdrawn")
+            send_smtp_message(message, timeout=15, smtp_settings=settings)
+
+        await asyncio.to_thread(send)
         logger.info("Email sent for alert_id=%s", alert.id)
 
     async def _send_webhook(self, alert: Alert, current_prices: dict[str, Any]) -> None:
@@ -1037,6 +1119,8 @@ class AlertEngine:
                     "price_context": self._selected_price_context(alert, current_prices),
                 }
                 headers = {"Idempotency-Key": alert.delivery_key} if getattr(alert, "delivery_key", None) else {}
+                if not source_rights_snapshot_allowed(current_prices):
+                    raise SourceRightsDeliveryError("Source permission is missing or withdrawn")
                 async with client.stream("POST", alert.webhook_url, json=payload, headers=headers) as response:
                     self._assert_peer_was_vetted(response, vetted)
                     if 400 <= response.status_code < 500 and response.status_code != 429:
@@ -1088,6 +1172,8 @@ class AlertEngine:
         url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
         try:
             async with httpx.AsyncClient(timeout=8.0, follow_redirects=False) as client:
+                if not source_rights_snapshot_allowed(current_prices):
+                    raise SourceRightsDeliveryError("Source permission is missing or withdrawn")
                 response = await client.post(
                     url,
                     json={

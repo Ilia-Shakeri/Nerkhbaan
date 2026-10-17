@@ -6,6 +6,7 @@ from decimal import Decimal
 from statistics import median
 
 from .anomaly import AnomalyAssessment
+from . import rights
 from .freshness import FreshnessPolicy, FreshnessStatus, freshness_boundaries
 from .models import (
     CanonicalQuote,
@@ -44,6 +45,8 @@ class CanonicalPricePolicy:
         now: datetime | None = None,
     ) -> CanonicalDecision:
         current = ensure_utc(now or utc_now())
+        if not rights.provider_allowed(primary.provider_id, "display"):
+            raise ValueError("Primary source has no display permission")
         if primary.price is None or primary.validation_status is ValidationStatus.REJECTED:
             raise ValueError("Rejected provider quotes cannot become canonical")
         if primary.persistence_status is not PersistenceStatus.PERSISTED:
@@ -62,7 +65,8 @@ class CanonicalPricePolicy:
         for quote in verifier_quotes:
             family, venue = self._independence_values(quote)
             if (
-                quote.price is not None
+                rights.provider_allowed(quote.provider_id, "display")
+                and quote.price is not None
                 and self._is_eligible_verifier(quote, instrument, current)
                 and quote.validation_status is ValidationStatus.ACCEPTED
                 and quote.persistence_status is PersistenceStatus.PERSISTED
@@ -279,6 +283,9 @@ class CanonicalPricePolicy:
         current: datetime | None = None,
     ) -> CanonicalQuote:
         now = ensure_utc(current or utc_now())
+        if (not rights.canonical_allowed(previous.source_summary, "display")
+                or not rights.provider_allowed(candidate.provider_id, "display")):
+            raise ValueError("Anomaly sources have no display permission")
         if candidate.price is None:
             raise ValueError("Suspicious candidate requires a price")
         return CanonicalQuote.create(
@@ -327,6 +334,9 @@ class CanonicalPricePolicy:
             or not derived.is_derived
             or derived.price is None
             or derived.persistence_status is not PersistenceStatus.PERSISTED
+            or not rights.canonical_allowed({"primary_provider_id": derived.provider_id,
+                "provider_ids": [derived.provider_id], "derived": True,
+                "inputs": derived.metadata.get("inputs")}, "display")
         ):
             raise ValueError("Instrument does not allow this derived fallback")
         now = ensure_utc(current or utc_now())
@@ -373,6 +383,7 @@ class CanonicalPricePolicy:
     ) -> CanonicalQuote:
         if not quotes or any(
             quote.source_type is not SourceType.TELEGRAM
+            or not rights.provider_allowed(quote.provider_id, "display")
             or quote.source_semantic is not SourceSemantic.TELEGRAM_OBSERVATION
             or quote.validation_status is not ValidationStatus.ACCEPTED
             or quote.instrument_id != instrument.instrument_id
@@ -660,6 +671,7 @@ class CanonicalPricePolicy:
     @staticmethod
     def _source_fields(quote: ProviderQuote) -> dict:
         return {
+            "provider_id": quote.provider_id,
             "source_semantic": quote.source_semantic.value,
             "source_family": quote.source_family,
             "venue": quote.venue,

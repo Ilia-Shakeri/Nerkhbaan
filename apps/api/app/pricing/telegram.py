@@ -8,6 +8,7 @@ from typing import Any, Iterable
 from sqlalchemy import text
 
 from ..db import SessionLocal
+from . import rights
 from .operational import operational_pricing_settings
 from .models import (
     Currency,
@@ -32,6 +33,8 @@ class StoredTelegramQuoteRepository:
         roles: Iterable[str],
         now: datetime | None = None,
     ) -> list[ProviderQuote]:
+        if rights.enforced() and not any(name.startswith("telegram:") for name in rights.allowed_provider_ids("display")):
+            return []
         if not await operational_pricing_settings.feature_enabled("telegram_source_enabled", scope_id=instrument.instrument_id):
             return []
         current = ensure_utc(now or utc_now())
@@ -47,7 +50,7 @@ class StoredTelegramQuoteRepository:
         quotes: list[ProviderQuote] = []
         for row in rows:
             quote = self._quote_from_row(row, instrument, allowed_roles, current)
-            if quote is not None:
+            if quote is not None and rights.provider_allowed(quote.provider_id, "display"):
                 quotes.append(quote)
         return quotes
 
@@ -92,6 +95,7 @@ class StoredTelegramQuoteRepository:
                       AND parsed.validation_status = 'accepted'
                       AND source.enabled = TRUE
                       AND source.role IN ('verifier', 'fallback')
+                      AND (:rights_enforced = FALSE OR quote.provider_id = ANY(:rights_provider_ids))
                       AND quote.observed_at >= :earliest
                       AND quote.observed_at <= :current
                     ORDER BY source.id, quote.observed_at DESC
@@ -101,6 +105,8 @@ class StoredTelegramQuoteRepository:
                     "instrument_id": instrument_id,
                     "earliest": earliest,
                     "current": current,
+                    "rights_enforced": rights.enforced(),
+                    "rights_provider_ids": list(rights.allowed_provider_ids("display")),
                 },
             ).mappings().all()
         finally:

@@ -22,44 +22,13 @@ server {
         return 404;
     }
 
-    location /coinbase/ {
-        allow ${CORE_IP_CIDR}; deny all;
-        if ($relay_token_ok = 0) { return 401; }
-        proxy_ssl_server_name on;
-        proxy_set_header Host api.exchange.coinbase.com;
-        proxy_set_header X-Relay-Token "";
-        proxy_pass https://api.exchange.coinbase.com/;
-    }
-    location /coingecko/ {
-        allow ${CORE_IP_CIDR}; deny all;
-        if ($relay_token_ok = 0) { return 401; }
-        proxy_ssl_server_name on;
-        proxy_set_header Host api.coingecko.com;
-        proxy_set_header X-Relay-Token "";
-        proxy_pass https://api.coingecko.com/;
-    }
-    location /goldapi/ {
-        allow ${CORE_IP_CIDR}; deny all;
-        if ($relay_token_ok = 0) { return 401; }
-        proxy_ssl_server_name on;
-        proxy_set_header Host www.goldapi.io;
-        proxy_set_header X-Relay-Token "";
-        proxy_pass https://www.goldapi.io/;
-    }
-    location /gold-api/ {
+    location ~ ^/gold-api/price/(XAU|XAG|BTC)$ {
         allow ${CORE_IP_CIDR}; deny all;
         if ($relay_token_ok = 0) { return 401; }
         proxy_ssl_server_name on;
         proxy_set_header Host api.gold-api.com;
         proxy_set_header X-Relay-Token "";
-        proxy_pass https://api.gold-api.com/;
-    }
-    location /metals/ {
-        allow ${CORE_IP_CIDR}; deny all;
-        if ($relay_token_ok = 0) { return 401; }
-        proxy_ssl_server_name on;
-        proxy_set_header Host api.metals.dev;
-        proxy_set_header X-Relay-Token "";
-        proxy_pass https://api.metals.dev/;
+        rewrite ^/gold-api(/price/(XAU|XAG|BTC))$ $1 break;
+        proxy_pass https://api.gold-api.com;
     }
 }

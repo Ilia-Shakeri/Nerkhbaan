@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Nerkhbaan API",
-    "version": "2.8.5"
+    "version": "2.8.6"
   },
   "paths": {
     "/api/auth/signup": {
@@ -6663,6 +6663,26 @@
             "type": "string",
             "title": "Source Toman"
           },
+          "usd_attributions": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Usd Attributions"
+          },
+          "toman_attributions": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Toman Attributions"
+          },
           "usd_status": {
             "type": "string",
             "title": "Usd Status"
@@ -7527,6 +7547,41 @@
             "type": "string",
             "title": "Asset"
           },
+          "rights_revision": {
+            "type": "string",
+            "title": "Rights Revision",
+            "default": ""
+          },
+          "usd_attributions": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Usd Attributions"
+          },
+          "toman_attributions": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Toman Attributions"
+          },
+          "attributions": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Attributions"
+          },
           "points": {
             "items": {
               "$ref": "#/components/schemas/PricePoint"
@@ -7695,6 +7750,11 @@
           "refreshed_at": {
             "type": "string",
             "title": "Refreshed At"
+          },
+          "rights_revision": {
+            "type": "string",
+            "title": "Rights Revision",
+            "default": ""
           },
           "source": {
             "additionalProperties": {

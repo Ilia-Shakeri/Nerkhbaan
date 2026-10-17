@@ -36,6 +36,7 @@ def plan(config: object) -> dict:
             "catalogue_budget": {"requests_per_day": provider.budget.requests_per_day,
                                  "minimum_interval_seconds": provider.budget.minimum_interval_seconds},
             "scope": "catalogue_only_not_a_price_or_rights_proof",
+            "permission_status": "not_verified_by_catalogue_plan",
         })
     covered = {row["instrument_id"] for row in rows if row["history_registered"]}
     return {
@@ -48,7 +49,7 @@ def plan(config: object) -> dict:
         "routes": rows, "instruments_without_iranian_history_route": sorted(set(INSTRUMENTS)-covered),
         "candidate_not_integrated": {"BRSAPI_API_KEY": "Commodity plan candidate; troy-ounce and account usage proof still required"},
         "notes": ["Registration is not verified coverage", "TALA and Alanchand trial keys are not permanent free production plans",
-                  "Servix catalogue defaults total 42 calls/day; stored budgets and overrides may differ and must be read before activation",
+                  "Servix catalogue defaults total 48 calls/day; stored budgets and overrides may differ and must be read before activation",
                   "Source freshness limits stay unchanged; no account-level quota or rights verification was performed"],
     }
 

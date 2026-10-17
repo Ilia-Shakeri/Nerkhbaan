@@ -1,8 +1,8 @@
-# Release Operations — 2.8.5
+# Release Operations — 2.8.6
 
 Updated: 2026-10-17. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
-Release 2.8.5 includes bounded Iranian history and stricter source contracts. Keyed providers stay disabled; final-commit hosted checks and target deployment remain pending. Fresh release evidence is separate from earlier hosted runs; 2.8.1 target receipts below remain historical.
+Release 2.8.6 enforces reviewed source permissions across collection, storage and output. Keyed providers stay disabled pending account, quota, unit and fresh-payload proof. Final-commit hosted checks and target deployment need separate receipts. The target remained 2.8.1 during the October 17 review. The chosen replacement scope must pass before deployment; reduced coverage is not authorized. See [the source review](provider-rights-2026-10-17.md).
 
 Mount identities retain every field and compare deterministic mount order; Docker response ordering alone is not a change. The private operator-evidence requirement remains mandatory.
 

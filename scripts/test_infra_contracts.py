@@ -67,53 +67,55 @@ class TelegramParserTests(unittest.TestCase):
 
 
 class ExternalWorkerTests(unittest.TestCase):
-    def test_history_does_not_ack_ignored_quotes(self):
-        response = MagicMock()
-        response.__enter__.return_value = response
-        response.status = 202
-        response.read.return_value = json.dumps({"accepted": 1, "history_persisted": 0, "ignored": 1}).encode()
-        with patch.object(worker, "ENDPOINT", "https://fixture.invalid/worker"), patch.object(worker, "urlopen", return_value=response):
-            with self.assertRaisesRegex(RuntimeError, "persist every historical"):
-                worker.send([{"historical": True}])
-        response.read.return_value = json.dumps({"accepted": 1, "history_persisted": 1, "ignored": 0}).encode()
-        with patch.object(worker, "ENDPOINT", "https://fixture.invalid/worker"), patch.object(worker, "urlopen", return_value=response):
-            worker.send([{"historical": True}])
+    def test_history_never_contacts_source_or_changes_progress(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state=Path(directory)/"state.json"
+            state.write_text('{"old":{"last_timestamp":123}}')
+            before=state.read_bytes()
+            with patch.object(worker,"STATE_FILE",state),patch.object(worker,"get_json") as get,patch.object(worker,"send") as send:
+                self.assertEqual(worker.backfill()["status"],"unavailable")
+            get.assert_not_called()
+            send.assert_not_called()
+            self.assertEqual(state.read_bytes(),before)
 
-    def test_live_preserves_source_time(self):
-        source_time = int(datetime.now(UTC).timestamp()) - 120
-        data = {asset: {"usd": 1, "last_updated_at": source_time} for asset, _, _ in worker.ASSETS}
-        with patch.object(worker, "get_json", return_value=data), patch.object(worker, "send") as send:
+    def test_live_preserves_source_time_and_uses_exact_approved_routes(self):
+        stamp=datetime.now(UTC)-timedelta(seconds=120)
+        prices={"XAU":4000,"XAG":50,"BTC":90000}
+        def get(url):
+            symbol=url.rsplit("/",1)[1]
+            return {"symbol":symbol,"currency":"USD","price":prices[symbol],"updatedAt":stamp.isoformat()}
+        with patch.object(worker,"get_json",side_effect=get),patch.object(worker,"send") as send:
             worker.live()
-        self.assertTrue(all(datetime.fromisoformat(q["observed_at"]).timestamp() == source_time for q in send.call_args.args[0]))
+        self.assertEqual(len(send.call_args.args[0]),3)
+        self.assertTrue(all(datetime.fromisoformat(q["observed_at"])==stamp for q in send.call_args.args[0]))
 
     def test_stale_live_is_not_sent(self):
-        data = {asset: {"usd": 1, "last_updated_at": 1} for asset, _, _ in worker.ASSETS}
-        with patch.object(worker, "get_json", return_value=data), patch.object(worker, "send") as send:
+        stale=(datetime.now(UTC)-timedelta(hours=1)).isoformat()
+        with patch.object(worker,"get_json",side_effect=lambda url:{"symbol":url.rsplit("/",1)[1],"currency":"USD","price":4000,"updatedAt":stale}),patch.object(worker,"send") as send:
             with self.assertRaises(RuntimeError):
                 worker.live()
         send.assert_not_called()
 
-    def test_live_runs_before_failed_history(self):
-        order = []
-        with patch.object(worker, "live", side_effect=lambda: order.append("live")), patch.object(worker, "backfill", side_effect=RuntimeError("fixture")):
-            with self.assertRaises(RuntimeError):
-                worker.run()
-        self.assertEqual(order, ["live"])
+    def test_live_run_has_no_hidden_historical_request(self):
+        with patch.object(worker,"live") as live,patch.object(worker,"backfill") as history:
+            worker.run()
+        live.assert_called_once()
+        history.assert_not_called()
 
-    def test_history_continues_next_asset_and_keeps_progress(self):
-        with tempfile.TemporaryDirectory() as directory:
-            calls = []
-            def get(url):
-                calls.append(url)
-                if "bitcoin" in url:
-                    raise RuntimeError("fixture")
-                return {"prices": [[1700000000000, 1]]}
-            with patch.object(worker, "STATE_FILE", Path(directory) / "state.json"), patch.object(worker, "get_json", side_effect=get), patch.object(worker, "send") as send:
-                with self.assertRaises(RuntimeError):
-                    worker.backfill()
-                self.assertTrue((Path(directory) / "state.json").exists())
-                self.assertEqual(send.call_count, 1)
-                self.assertEqual(len(calls), 2)
+    def test_send_requires_actual_published_acknowledgement(self):
+        quote=worker.gold_quote({"symbol":"BTC","currency":"USD","price":90000,"updatedAt":datetime.now(UTC).isoformat()},"gold_api_free_btc")
+        response=MagicMock()
+        response.__enter__.return_value=response
+        response.status=202
+        response.geturl.return_value="https://fixture.invalid/worker/ingest"
+        response.read.return_value=json.dumps({"accepted":1,"published":0,"ignored":1}).encode()
+        opener=MagicMock()
+        opener.open.return_value=response
+        with patch.object(worker,"ENDPOINT","https://fixture.invalid/worker"),patch.object(worker,"SECRET","x"*48),patch.object(worker,"build_opener",return_value=opener):
+            with self.assertRaisesRegex(RuntimeError,"publish every"):
+                worker.send([quote])
+            response.read.return_value=json.dumps({"accepted":1,"published":1}).encode()
+            worker.send([quote])
 
 
 class PublicFeedTests(unittest.TestCase):
@@ -123,11 +125,12 @@ class PublicFeedTests(unittest.TestCase):
     def test_ten_minute_bound(self):
         now = datetime(2026, 10, 11, tzinfo=UTC)
         metals = {"symbol": "XAG", "currency": "USD", "price": 30, "updatedAt": (now - timedelta(seconds=601)).isoformat()}
-        crypto = {asset: {"usd": value, "last_updated_at": now.timestamp()} for asset, value in (("bitcoin", 60000), ("tether", 1))}
+        crypto = {"symbol": "BTC", "currency": "USD", "price": 60000, "updatedAt": now.isoformat()}
+        gold = {"symbol": "XAU", "currency": "USD", "price": 4000, "updatedAt": now.isoformat()}
         with self.assertRaises(ValueError):
-            feed.build_feed(metals, crypto, now)
+            feed.build_feed(metals, crypto, now, gold=gold)
         metals["updatedAt"] = (now - timedelta(seconds=600)).isoformat()
-        self.assertEqual(len(feed.build_feed(metals, crypto, now)["quotes"]), 3)
+        self.assertEqual(len(feed.build_feed(metals, crypto, now, gold=gold)["quotes"]), 3)
 
 
 class DeliveryExclusionTests(unittest.TestCase):

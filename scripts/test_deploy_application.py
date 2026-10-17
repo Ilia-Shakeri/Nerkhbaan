@@ -463,7 +463,7 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assert_no_mutation(final)
 
     def test_refuses_mutable_images_manifest_mismatch_dirty_or_absent_data(self):
-        for case in ("mutable", "manifest", "commit", "dirty", "absent", "network", "replicas", "env_binding"):
+        for case in ("mutable", "manifest", "commit", "dirty", "absent", "network", "replicas", "env_binding", "rights_off", "rights_unknown", "migration_rights_off"):
             with self.subTest(case=case):
                 state = fixture()
                 if case == "mutable":
@@ -480,6 +480,9 @@ runpy.run_path(sys.argv[0], run_name='__main__')
                     state["config"]["networks"]["app"]["name"] = "replacement-network"
                 elif case == "replicas":
                     state["containers"].append(container("backend", "unknown-extra"))
+                elif case in {"rights_off", "rights_unknown", "migration_rights_off"}:
+                    service = "migrate" if case == "migration_rights_off" else "backend"
+                    state["config"]["services"][service].setdefault("environment", {})["PRICING_RIGHTS_ENFORCED"] = "off" if case != "rights_unknown" else "unknown"
                 else:
                     state["wrong_env_binding"] = True
                 result, final, _ = self.run_deploy(state)

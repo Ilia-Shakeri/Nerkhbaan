@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from ..pricing.compatibility import legacy_pricing_adapter
+from ..pricing import rights
 from ..pricing.health import pricing_health_service
 from ..pricing.instruments import LEGACY_ASSET_MAPPING
 from ..schemas import PriceHistoryResponse, PricesHealthResponse, PricesResponse
@@ -28,7 +29,7 @@ async def get_price_history(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Price history is unavailable") from exc
-    response.headers["Cache-Control"] = "public, max-age=60"
+    response.headers["Cache-Control"] = "no-store" if rights.enforced() else "public, max-age=60"
     return PriceHistoryResponse.model_validate(payload)
 
 

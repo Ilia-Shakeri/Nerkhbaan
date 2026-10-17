@@ -30,6 +30,7 @@ import { ChangePasswordModal } from '../components/ChangePasswordModal';
 import logo from '../../logo/logo.png';
 import { BarChart3 } from 'lucide-react';
 import { api, type NotificationItem } from '../services/api';
+import { PRICING_RIGHTS_EVENT } from '../services/price-stream';
 
 const NAV_ITEMS = [
   { path: '/', label: { fa: 'داشبورد', en: 'Dashboard' }, icon: LayoutDashboard },
@@ -56,6 +57,8 @@ export function DesktopLayout() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [notificationsUnavailable, setNotificationsUnavailable] = useState(false);
+  const [notificationEpoch, setNotificationEpoch] = useState(0);
+  const notificationGeneration = useRef(0);
   const mobileNavigationRef = useRef<HTMLElement>(null);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -95,27 +98,43 @@ export function DesktopLayout() {
   }, []);
 
   useEffect(() => {
+    const changed = () => {
+      notificationGeneration.current += 1;
+      setNotifications([]);
+      setNotificationsLoading(false);
+      setNotificationsUnavailable(false);
+      setNotificationEpoch(value => value + 1);
+    };
+    window.addEventListener(PRICING_RIGHTS_EVENT, changed);
+    return () => window.removeEventListener(PRICING_RIGHTS_EVENT, changed);
+  }, []);
+
+  useEffect(() => {
     if (!isNotificationsOpen || !isAuthenticated) return;
     let active = true;
+    const generation = ++notificationGeneration.current;
+    const controller = new AbortController();
+    const current = () => active && generation === notificationGeneration.current;
     setNotificationsLoading(true);
     setNotificationsUnavailable(false);
-    api.notifications.list()
+    api.notifications.list(controller.signal)
       .then((items) => {
-        if (active) setNotifications(items);
+        if (current()) setNotifications(items);
       })
       .catch(() => {
-        if (active) {
+        if (current()) {
           setNotifications([]);
           setNotificationsUnavailable(true);
         }
       })
       .finally(() => {
-        if (active) setNotificationsLoading(false);
+        if (current()) setNotificationsLoading(false);
       });
     return () => {
       active = false;
+      controller.abort();
     };
-  }, [isAuthenticated, isNotificationsOpen]);
+  }, [isAuthenticated, isNotificationsOpen, notificationEpoch]);
 
   useEffect(() => {
     if (!isSidebarOpen && !isNotificationsOpen && !isUserMenuOpen) return;

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+
+from ..models import Currency, WeightUnit
 
 from .base import (
     ParsedProviderValue,
@@ -64,6 +67,36 @@ class GoldApiFreeParser:
                 source_timestamp, context, "quote timestamp"
             ),
             metadata={"metal_symbol": self.symbol},
+        )
+        return validate_parsed_value(parsed, context)
+
+
+@dataclass(frozen=True, slots=True)
+class GoldApiFreeBtcParser:
+    parser_version: str = "gold-api-free-btc/1.0.0"
+
+    def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
+        root = require_object(payload, "Gold API Bitcoin response")
+        if context.instrument.instrument_id != "BTC_USD" or root.get("symbol") != "BTC":
+            raise ParserError("instrument_mismatch", "Bitcoin symbol or instrument does not match")
+        if root.get("currency") != "USD":
+            raise ParserError("currency_mismatch", "Bitcoin quote must explicitly identify USD")
+        source_time = root.get("updatedAt")
+        if not isinstance(source_time, str) or not source_time.strip():
+            raise ParserError("invalid_timestamp", "Bitcoin updatedAt is required")
+        try:
+            observed_at = datetime.fromisoformat(source_time.strip().replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ParserError("invalid_timestamp", "Bitcoin updatedAt is invalid") from exc
+        if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+            raise ParserError("invalid_timestamp", "Bitcoin updatedAt timezone is required")
+        parsed = ParsedProviderValue(
+            price=strict_decimal(exact_path(root, "price"), "price"),
+            currency=Currency.USD,
+            weight_unit=WeightUnit.UNIT,
+            purity=None,
+            observed_at=optional_timestamp(source_time, context, "Bitcoin updatedAt"),
+            metadata={"asset_symbol": "BTC", "source_currency": "USD", "unit_contract": "USD_per_BTC"},
         )
         return validate_parsed_value(parsed, context)
 

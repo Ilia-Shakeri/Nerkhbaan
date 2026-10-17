@@ -58,6 +58,7 @@ from .providers import ProviderQuoteCollector, QuoteFetchOutcome, provider_colle
 from .registry import PROVIDERS_BY_INSTRUMENT, ProviderDefinition
 from .source_policy import SourceEligibilityPolicy, source_eligibility_policy
 from .quote_visibility import allowed_current_quote
+from . import rights
 from .telegram import StoredTelegramQuoteRepository, stored_telegram_quotes
 
 
@@ -356,6 +357,10 @@ class InstrumentPricingService:
     def _current_policy(quote: CanonicalQuote, instrument: Any) -> CanonicalQuote | None:
         if not instrument.enabled or not instrument.accepts(quote.price):
             return None
+        if rights.enforced():
+            # Old percentage fields have no record of their baseline sources.
+            # Keep stored evidence intact; omit these unproved derived outputs.
+            quote.change_1h = quote.change_24h = quote.change_7d = quote.change_30d = None
         anchor = quote.observed_at
         source_bound = quote.valid_until
         try:
@@ -406,6 +411,8 @@ class InstrumentPricingService:
         )
         has_history_route = any(
             provider.history_url and provider.history_parser_id
+            and rights.provider_allowed(provider.provider_id, "collect")
+            and rights.provider_allowed(provider.provider_id, "history")
             for provider in PROVIDERS_BY_INSTRUMENT.get(result.instrument_id, ())
         )
         if result.status == "partial" and has_history_route:
@@ -439,6 +446,8 @@ class InstrumentPricingService:
         except Exception:
             rows = []
             for provider in PROVIDERS_BY_INSTRUMENT.get(normalized, ()):
+                if not rights.provider_allowed(provider.provider_id, "display"):
+                    continue
                 try:
                     quote = await self.store.get_provider_quote(
                         provider.provider_id, normalized
@@ -447,6 +456,7 @@ class InstrumentPricingService:
                     break
                 if quote is not None:
                     rows.append(quote.to_dict(authenticated=True))
+        rows = [row for row in rows if rights.provider_allowed(str(row.get("provider_id", "")), "display")]
         if not authenticated:
             usable = sum(
                 1 for row in rows if row.get("validation_status") == "accepted"
@@ -470,6 +480,9 @@ class InstrumentPricingService:
         self, instrument_id: str, timeframe: str, provider_id: str | None
     ) -> dict[str, Any]:
         normalized = get_instrument(instrument_id).instrument_id
+        if provider_id is not None and not rights.provider_allowed(provider_id, "history"):
+            return {"instrument_id": normalized, "timeframe": timeframe,
+                    "status": "unavailable", "visible": False, "sources": []}
         if not await self.operational.feature_enabled("comparison_visible", scope_id=normalized):
             return {
                 "instrument_id": normalized,
@@ -507,11 +520,9 @@ class InstrumentPricingService:
         provider = PROVIDERS_BY_INSTRUMENT.get(instrument_id, ())
         definition = next((item for item in provider if item.provider_id == provider_id), None)
         if definition is None or provider_id not in {
-            "coingecko_btc",
-            "coingecko_usdt",
+            "gold_api_free_btc",
             "gold_api_free_xag",
             "gold_api_free_xau",
-            "xaus_xag",
         }:
             raise ValueError("Worker provider is not allowed for this instrument")
         observed_at = ensure_utc(observed_at)
@@ -522,8 +533,9 @@ class InstrumentPricingService:
             seconds=_WORKER_MAXIMUM_SOURCE_AGE_SECONDS
         ):
             raise ValueError("Worker quote timestamp is too old")
-        if historical and provider_id in {"gold_api_free_xag", "gold_api_free_xau", "xaus_xag"}:
+        if historical:
             raise ValueError("Worker provider does not support historical quotes")
+        self._require_worker_permissions(provider_id)
         instrument = await self.operational.instrument(instrument_id)
         if not instrument.enabled:
             return "ignored_disabled"
@@ -555,26 +567,6 @@ class InstrumentPricingService:
                 "anchor_live_window_at_receive_time": not historical,
             },
         )
-        if historical:
-            providers = await self.operational.providers_for(instrument_id)
-            definition = next((item for item in providers if item.provider_id == provider_id), definition)
-            if not definition.enabled or not definition.configured(_settings_object()):
-                return "ignored_disabled"
-            if definition.role not in {ProviderRole.PRIMARY, ProviderRole.FALLBACK}:
-                return "ignored_role"
-            quote.confidence_score = definition.trust_score
-            persisted = await self.persistence.persist_provider_quote(quote)
-            if not persisted.persisted:
-                raise PricingRefreshSuspended("Worker quote persistence is unavailable")
-            canonical = self.policy.select(
-                instrument=instrument, primary=quote, previous=None, assessment=None,
-                verifier_quotes=[], now=quote.observed_at,
-            ).canonical
-            canonical.source_summary["historical_backfill"] = True
-            stored = await self.persistence.persist_canonical(canonical)
-            if not stored.persisted:
-                raise PricingRefreshSuspended("Worker history persistence is unavailable")
-            return "historical_persisted"
         if not await self.store.ping():
             raise PricingRefreshSuspended("Worker live refresh requires Redis")
         async with self.locks.refresh_lock(instrument_id) as lease:
@@ -607,6 +599,7 @@ class InstrumentPricingService:
             if assessment is not None and assessment.is_suspicious:
                 quote.is_suspicious = True
                 quote.validation_status = ValidationStatus.SUSPICIOUS
+            self._require_worker_permissions(provider_id)
             persisted = await self.persistence.persist_provider_quote(quote)
             if not persisted.persisted:
                 raise PricingRefreshSuspended("Worker quote persistence is unavailable")
@@ -630,10 +623,16 @@ class InstrumentPricingService:
                 await self.persistence.persist_verification(
                     anomaly_id=anomaly_id, instrument_id=instrument_id, decision=decision.verification,
                 )
+            self._require_worker_permissions(provider_id)
             await self.store.set_provider_quote(quote, definition.operational_ttl_seconds)
             await self._attach_changes(decision.canonical)
             await self._commit(decision.canonical, previous)
             return "accepted"
+
+    @staticmethod
+    def _require_worker_permissions(provider_id: str) -> None:
+        if not all(rights.provider_allowed(provider_id, action) for action in ("collect", "store", "own_app_transport")):
+            raise PricingRefreshSuspended("Worker source permission unavailable")
 
     async def process_backfill_jobs(self, maximum_jobs: int = 2) -> dict[str, int]:
         return await self.backfill.process_jobs(maximum_jobs=maximum_jobs)
@@ -861,7 +860,9 @@ class InstrumentPricingService:
         maximum_external_calls: int,
         instrument: Any,
     ) -> QuoteFetchOutcome | None:
-        candidates = list(providers)
+        candidates = [provider for provider in providers
+                      if rights.provider_allowed(provider.provider_id, "collect")
+                      and rights.provider_allowed(provider.provider_id, "display")]
         trace: list[dict[str, object]] = []
         for provider in candidates:
             cache_reason = "no_live_cached_quote"
@@ -1048,18 +1049,42 @@ class InstrumentPricingService:
             or utc_now() > previous.expires_at
         ):
             return None
-        try:
-            recent = [quote.price for quote in await self.store.recent_canonical(candidate.instrument_id)]
-        except PricingRedisUnavailable:
-            recent = []
-        if len(recent) < 3:
+        strict = rights.enforced()
+        revision = rights.revision() if strict else None
+
+        def require_calculation_permissions():
+            if not strict:
+                return
+            summary = {"provider_ids": [candidate.provider_id], "primary_provider_id": candidate.provider_id, "derived": candidate.is_derived}
+            if candidate.is_derived:
+                summary["inputs"] = candidate.metadata.get("inputs")
+            permitted = self._allowed_current_quote(previous) and all(
+                rights.canonical_allowed(summary, action)
+                and rights.canonical_allowed(previous.source_summary, action)
+                and (previous.candidate_provider_id is None or rights.provider_allowed(previous.candidate_provider_id, action))
+                for action in ("derive", "display", "store")
+            )
+            if not permitted or revision != rights.revision():
+                raise PricingRefreshSuspended("Anomaly source permission unavailable")
+
+        require_calculation_permissions()
+        recent = []
+        if not strict:
             try:
-                recent = await self.history.recent_prices(candidate.instrument_id)
-            except Exception:
+                recent = [quote.price for quote in await self.store.recent_canonical(candidate.instrument_id)]
+            except PricingRedisUnavailable:
                 recent = []
+            if len(recent) < 3:
+                try:
+                    recent = await self.history.recent_prices(candidate.instrument_id)
+                except Exception:
+                    recent = []
+        # Stored anomaly rows reference these two inputs only. Untracked older
+        # prices cannot affect a threshold that remains visible after revocation.
         runtime = await self.store.get_provider_runtime(
             candidate.provider_id, candidate.instrument_id
         )
+        require_calculation_permissions()
         return self.detector.assess(
             instrument=instrument,
             candidate_price=candidate.price,
@@ -1130,6 +1155,10 @@ class InstrumentPricingService:
             return None
 
     async def _attach_changes(self, quote: CanonicalQuote) -> None:
+        if rights.enforced():
+            # A baseline value alone cannot prove the rights of every input.
+            quote.change_1h = quote.change_24h = quote.change_7d = quote.change_30d = None
+            return
         try:
             changes = await self.history.changes(
                 quote.instrument_id, quote.price, quote.canonical_at
@@ -1146,16 +1175,31 @@ class InstrumentPricingService:
         quote: CanonicalQuote,
         previous: CanonicalQuote | None,
     ) -> CanonicalQuote:
+        self._require_write_permissions(quote)
+        if rights.enforced():
+            quote.change_1h = quote.change_24h = quote.change_7d = quote.change_30d = None
+        if previous is not None and not self._allowed_current_quote(previous):
+            previous = None
         if previous is not None and quote.observed_at < previous.observed_at:
             return previous
         quote.sequence_number = await self.store.next_sequence()
         await self.persistence.persist_canonical(quote)
+        self._require_write_permissions(quote)
         await self.store.set_canonical(quote)
         observe_canonical(quote)
+        self._require_write_permissions(quote)
         await self.store.append_short_history(quote)
         if self._publication_changed(previous, quote):
+            self._require_write_permissions(quote)
             await self.store.publish_canonical(quote)
         return quote
+
+    def _require_write_permissions(self, quote: CanonicalQuote) -> None:
+        candidate = quote.candidate_provider_id
+        if (not self._allowed_current_quote(quote)
+                or not rights.canonical_allowed(quote.source_summary, "store")
+                or candidate is not None and not rights.provider_allowed(candidate, "store")):
+            raise PricingRefreshSuspended("Canonical source permission unavailable")
 
     @staticmethod
     def _publication_changed(

@@ -1,6 +1,8 @@
 # Project Status
 
-Code release: **2.8.5**. Record updated: 2026-10-17. This source release contains the step-two Iranian price/history work; operational provider coverage remains incomplete. Push, final-commit hosted checks and target deployment are pending for this release.
+Code release: **2.8.6**. Record updated: 2026-10-17. Reviewed provider permissions now gate collection, storage and every application output. The [rights review](docs/provider-rights-2026-10-17.md) records approved own-application sources, restricted routes and remaining account/network evidence. Full operational coverage remains incomplete; the user's selected replacement scope must pass before live deployment. Final-commit hosted checks and target evidence are separate requirements.
+
+Final local code checks: 668 backend cases passed with zero skips, including owned PostgreSQL/Redis cases. Frontend 72, standalone channel-worker 28, Go 11 and three renderer builds passed; a real disposable proxy passed eight permission checks. These local results do not establish authenticated provider access, production coverage or end-user notification receipt. Failed earlier adapter-fixture runs are retained outside Git.
 
 ## Deployment guard correction — 2.8.5
 
@@ -10,7 +12,7 @@ type and access changes still fail. This patch retains the required operator-evi
 Release 2.8.4 at `91934abb5ca2324132c5b250e600e4114afeeed1` was pushed and passed all 15 jobs in
 [run 39013450991](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39013450991).
 Its guarded target attempt stopped before service replacement because the private operator-evidence
-file was absent. The live baseline remained 2.8.1. These are distinct from pending 2.8.5 checks.
+file was absent. The live baseline remained 2.8.1. Published 2.8.5 at `686551079e8b90858ca6488065102a9484d9dcd7` later passed all 15 jobs in [run 39015454935](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39015454935); its guarded attempt stopped at the unverified source-rights gate before replacing services. Those results do not validate 2.8.6.
 
 ## Step two — 2.8.4 source release, target pending
 

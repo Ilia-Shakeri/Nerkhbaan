@@ -2,6 +2,20 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.8.6] - 2026-10-17
+
+### Fixed
+
+- Enforced reviewed provider permissions at collection, persistence/replay, cache reads/writes, history aggregation, administrator output, notification dispatch and WebSocket delivery. Historical evidence remains stored; missing or revoked permission withholds its outputs. Derived quotes require bounded, complete parent provenance, including candidate and previous dependencies.
+- Cleared browser price, chart, analysis and notification state when source permissions change; delayed responses and unacknowledged WebSocket revisions cannot restore withdrawn data. Show credits for actual current and historical sources.
+- Added a strict independent Gold API BTC/USD parser and disabled Servix BTC/Toman and USDT/Toman price/history routes, preserving source times and Rial conversion. No USDT dollar peg or physical silver history is invented.
+- Replaced restricted standalone producer paths with reviewed own-application sources. Public redistribution and external analysis are separate permissions. Production deployment refuses disabled rights enforcement.
+
+### Acceptance
+
+- Local final-source validation passed 668 backend cases with zero skips using owned PostgreSQL/Redis plus unit, SQLite and mocked cases; 72 frontend cases, 28 standalone channel-worker cases, three renderer builds and 11 Go cases also passed. A real local proxy fixture passed eight permission/TLS-routing checks. Initial failed adapter-fixture receipts remain separate. Hosted checks, target canaries and actual notification receipt are distinct acceptance gates.
+- Version 2.8.5 and its published tag remain immutable. This corrective release requires separate final-commit hosted checks and target evidence. The target remains 2.8.1 until the chosen full replacement scope passes; source rights, account quota, network reachability and fresh data are independent gates.
+
 ## [2.8.5] - 2026-10-17
 
 ### Fixed

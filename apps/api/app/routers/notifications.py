@@ -19,8 +19,10 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..deps import get_current_user
-from ..models import NotificationPreference, OtpVerification, User, UserNotification
+from ..models import Alert, AlertTriggerEvent, NotificationPreference, OtpVerification, User, UserNotification
+from ..pricing import rights
 from ..security import hash_password, rate_limit_clear, rate_limit_hit, send_email, verify_password
+from ..services.alert_engine import source_rights_snapshot_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,7 @@ TELEGRAM_START_RE = re.compile(
     r"^/start(?:@[A-Za-z][A-Za-z0-9_]{4,31})?\s+([A-Za-z0-9_-]{48})$"
 )
 EMAIL_ADAPTER = TypeAdapter(EmailStr)
+_NON_MARKET_NOTICE_TYPES = frozenset({"security", "account", "support", "system"})
 
 
 class NotificationPreferencesResponse(BaseModel):
@@ -296,6 +299,28 @@ def _send_telegram_verification(destination: str, code: str) -> None:
         ) from exc
 
 
+def _visible_notification_ids(db: Session, rows: list[UserNotification]) -> set[int]:
+    if not rights.enforced():
+        return {row.id for row in rows}
+    visible = {row.id for row in rows if row.resource_type in _NON_MARKET_NOTICE_TYPES}
+    event_ids: dict[int, list[UserNotification]] = {}
+    for row in rows:
+        if (row.resource_type == "alert_trigger" and isinstance(row.resource_id, str)
+                and re.fullmatch(r"[0-9]{1,19}", row.resource_id)
+                and 0 < int(row.resource_id) < 2**63):
+            event_ids.setdefault(int(row.resource_id), []).append(row)
+    if event_ids:
+        occurrences = db.execute(
+            select(AlertTriggerEvent.id, AlertTriggerEvent.condition_snapshot, Alert.user_id)
+            .join(Alert, Alert.id == AlertTriggerEvent.alert_id)
+            .where(AlertTriggerEvent.id.in_(event_ids))
+        ).all()
+        for event_id, snapshot, owner_id in occurrences:
+            if source_rights_snapshot_allowed(snapshot):
+                visible.update(row.id for row in event_ids[event_id] if row.user_id == owner_id)
+    return visible
+
+
 @router.get("", response_model=list[NotificationItem])
 def list_notifications(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
@@ -309,6 +334,34 @@ def list_notifications(
     )
     if unread_only:
         statement = statement.where(UserNotification.read_at.is_(None))
+    if rights.enforced():
+        # Unknown old notices have no proof. Preserve them in storage, not output.
+        statement = statement.where(UserNotification.resource_type.in_(
+            (*_NON_MARKET_NOTICE_TYPES, "alert_trigger")
+        ))
+        visible: list[UserNotification] = []
+        scan_offset = 0
+        remaining_skip = offset
+        while len(visible) < limit:
+            batch = list(db.scalars(statement.order_by(
+                UserNotification.created_at.desc(), UserNotification.id.desc()
+            ).limit(200).offset(scan_offset)).all())
+            if not batch:
+                break
+            allowed = _visible_notification_ids(db, batch)
+            for row in batch:
+                if row.id not in allowed:
+                    continue
+                if remaining_skip:
+                    remaining_skip -= 1
+                else:
+                    visible.append(row)
+                    if len(visible) == limit:
+                        break
+            if len(batch) < 200:
+                break
+            scan_offset += len(batch)
+        return visible
     return list(
         db.scalars(
             statement
@@ -333,7 +386,7 @@ def mark_notification_read(
             UserNotification.user_id == current_user.id,
         )
     )
-    if not notification:
+    if not notification or notification.id not in _visible_notification_ids(db, [notification]):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found")
     notification.read_at = datetime.now(UTC)
     db.commit()

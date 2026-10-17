@@ -70,8 +70,7 @@ class GoldFeedHttpContractTests(unittest.TestCase):
              "observed_at": NOW.isoformat(), "historical": False}
             for iid, provider, price in (
                 ("XAG_USD_OZ", "gold_api_free_xag", "50"),
-                ("BTC_USD", "coingecko_btc", "90000"),
-                ("USDT_USD", "coingecko_usdt", "1"),
+                ("BTC_USD", "gold_api_free_btc", "90000"),
                 ("XAU_USD_OZ", "gold_api_free_xau", "4000"),
             )
         ]
@@ -89,11 +88,11 @@ class GoldFeedHttpContractTests(unittest.TestCase):
                                         "X-Pricing-Worker-Timestamp": timestamp,
                                         "X-Pricing-Worker-Signature": signature})
 
-    def test_signed_four_quote_feed_passes_http_schema_and_exact_route_validation(self):
+    def test_signed_three_quote_feed_passes_http_schema_and_exact_route_validation(self):
         response = self.post(self.quotes)
         self.assertEqual(response.status_code, 202, response.text)
-        self.assertEqual(response.json()["published"], 4)
-        self.assertEqual(self.service.ingest_worker_quote.await_count, 4)
+        self.assertEqual(response.json()["published"], 3)
+        self.assertEqual(self.service.ingest_worker_quote.await_count, 3)
         xau = self.service.ingest_worker_quote.call_args.kwargs
         self.assertEqual(xau["provider_id"], "gold_api_free_xau")
         self.assertEqual(xau["instrument_id"], "XAU_USD_OZ")

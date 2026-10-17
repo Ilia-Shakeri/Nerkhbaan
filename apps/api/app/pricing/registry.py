@@ -481,6 +481,16 @@ _PROVIDERS = (
         symbol_or_pair="BTC/USD",
     ),
     _provider(
+        "gold_api_free_btc", "Gold API Free Bitcoin", "BTC_USD", ProviderRole.FALLBACK, 5,
+        "0.80", _setting_url("gold_api_base_url", "/price/BTC"), "gold_api_free_btc_v1",
+        "gold-api-free-btc/1.0.0", 60, rpm=2, rph=60, rpd=1440, interval=60,
+        maximum_source_age_seconds=120,
+        source_semantic=SourceSemantic.REFERENCE_RATE,
+        source_family="gold_api_free", venue="gold_api_free",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        requires_https=True, symbol_or_pair="BTC/USD",
+    ),
+    _provider(
         "persian_toolbox_gold24", "PersianToolbox Gold Reference",
         "GOLD_24K_TOMAN_GRAM", ProviderRole.FALLBACK, 20, "0.68",
         _setting_url("persian_toolbox_api_base_url", "/api/market"),
@@ -699,6 +709,28 @@ _PROVIDERS = (
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header", symbol_or_pair="GOLD_OUNCE_USD",
         required_settings=("servix_metals_unit",),
+    ),
+    *(
+        _provider(
+            f"servix_{asset}_toman", f"Servix {symbol}", instrument,
+            ProviderRole.FALLBACK, 30, "0.74",
+            _setting_url("servix_api_base_url", f"/api/v1/assets/{symbol}"),
+            f"servix_{asset}_toman_v1", "servix-assets/1.2.0", 120,
+            rpm=1, rph=1, rpd=3, interval=28800,
+            api_key_setting="servix_api_key", api_key_header="X-API-Key",
+            history_url=_setting_url("servix_api_base_url", f"/api/v1/assets/{symbol}/history"),
+            history_parser_id=f"servix_{asset}_toman_history_v1",
+            history_requires_live_quote=False,
+            enabled_default=False, requires_https=True,
+            source_semantic=SourceSemantic.AGGREGATOR,
+            source_family="servix", venue="opaque_aggregator",
+            selected_price_semantic=PriceSemantic.REFERENCE,
+            credential_placement="header", symbol_or_pair=symbol,
+        )
+        for asset, instrument, symbol in (
+            ("btc", "BTC_TOMAN", "BTC_RLS"),
+            ("usdt", "USDT_TOMAN", "USDT_RLS"),
+        )
     ),
     _provider(
         "servix_xag_usd", "Servix SILVER_OUNCE_USD", "XAG_USD_OZ",

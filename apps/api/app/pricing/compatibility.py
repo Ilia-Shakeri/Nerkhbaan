@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,6 +11,8 @@ from .history import TIMEFRAMES
 from .instruments import LEGACY_ASSET_MAPPING
 from .models import CanonicalQuote, CanonicalStatus
 from .service import InstrumentPricingService, instrument_pricing_service
+from .quote_visibility import allowed_current_quote
+from . import rights
 
 _LABELS = {
     "gold": {"fa": "\u0637\u0644\u0627", "en": "Gold"},
@@ -22,6 +25,12 @@ _CHART_ERROR = {
     "fa": "\u062f\u0627\u062f\u0647 \u0628\u0627\u0632\u0627\u0631 \u062f\u0631 \u062f\u0633\u062a\u0631\u0633 \u0646\u06cc\u0633\u062a",
     "en": "Unable to fetch market data",
 }
+
+
+class _HistoryInputs(dict):
+    def __init__(self, values, revision):
+        super().__init__(values)
+        self.rights_revision = revision
 
 
 class LegacyPricingAdapter:
@@ -50,6 +59,7 @@ class LegacyPricingAdapter:
             self._prices_task = None
 
     async def _load_price_inputs(self):
+        revision = rights.revision()
         assets = ("gold", "silver", "usdt", "btc")
         series = await asyncio.gather(*(
             self._short_history(LEGACY_ASSET_MAPPING[(asset, "usd")],
@@ -58,9 +68,18 @@ class LegacyPricingAdapter:
         ))
         # Read current quotes and admin policy after potentially slow history reads.
         snapshots = await self.service.get_all_canonical()
-        return snapshots, dict(zip(assets, series))
+        if rights.enforced() and revision != rights.revision():
+            series = [[] for _ in assets]
+        histories = dict(zip(assets, series))
+        if rights.enforced():
+            histories = _HistoryInputs(histories, rights.revision())
+        return snapshots, histories
 
     async def _build_prices(self, snapshots, histories) -> dict[str, Any]:
+        if rights.enforced():
+            snapshots = {key: quote for key, quote in snapshots.items() if allowed_current_quote(quote)}
+            if getattr(histories, "rights_revision", None) != rights.revision():
+                histories = {asset: [] for asset in ("gold", "silver", "usdt", "btc")}
         assets = [
             await self._asset_payload(asset, snapshots, history=histories[asset])
             for asset in ("gold", "silver", "usdt", "btc")
@@ -71,6 +90,7 @@ class LegacyPricingAdapter:
         refreshed_at = max(refresh_times).isoformat() if refresh_times else datetime.now(UTC).isoformat()
         return {
             "refreshed_at": refreshed_at,
+            "rights_revision": rights.revision(),
             "source": {"usd": "canonical", "toman": "canonical"},
             "assets": assets,
         }
@@ -83,12 +103,23 @@ class LegacyPricingAdapter:
             raise ValueError("Unsupported timeframe")
         usd_id = LEGACY_ASSET_MAPPING[(normalized, "usd")]
         toman_id = LEGACY_ASSET_MAPPING[(normalized, "toman")]
+        revision = rights.revision()
         usd, toman = await self._paired_history(usd_id, toman_id, timeframe)
-        merged = self._merge_history(usd.points, toman.points)
+        changed = rights.enforced() and revision != rights.revision()
+        merged = [] if changed else self._merge_history(usd.points, toman.points)
+        usd_attributions = [] if changed else getattr(usd, "attributions", [])
+        toman_attributions = [] if changed else getattr(toman, "attributions", [])
         return {
             "asset": normalized,
+            "rights_revision": rights.revision(),
             "timeframe": timeframe,
-            "status": "partial" if "partial" in {usd.status, toman.status} else "complete",
+            "usd_attributions": usd_attributions,
+            "toman_attributions": toman_attributions,
+            "attributions": [dict(item) for item in {
+                (entry["label"], entry["url"]): entry
+                for entry in (*usd_attributions, *toman_attributions)
+            }.values()],
+            "status": "partial" if changed or "partial" in {usd.status, toman.status} else "complete",
             "points": merged,
         }
 
@@ -142,6 +173,15 @@ class LegacyPricingAdapter:
             name for name in key_settings if not getattr(settings, name, None)
         ]
         strict = bool(settings.pricing_require_provider_keys)
+        permitted_instruments = {
+            provider.instrument_id for provider in PROVIDERS.values()
+            if provider.enabled and provider.configured(settings)
+            and rights.provider_allowed(provider.provider_id, "collect")
+            and rights.provider_allowed(provider.provider_id, "store")
+            and rights.provider_allowed(provider.provider_id, "display")
+            and rights.endpoint_allowed(provider.provider_id, provider.url)
+        }
+        rights_uncovered = sorted(set(coverage) - permitted_instruments) if rights.enforced() else []
         return {
             "checked_at": datetime.now(UTC).isoformat(),
             "required_env_keys": key_settings if strict else [],
@@ -149,9 +189,11 @@ class LegacyPricingAdapter:
             "optional_env_keys": [] if strict else key_settings,
             "missing_optional_env_keys": [] if strict else missing_keys,
             "strict_mode": strict,
+            "source_rights": rights.describe(),
+            "instruments_without_permitted_configured_source": rights_uncovered,
             "instruments_without_direct_source": missing_sources,
             "instruments_unservable": unservable,
-            "ok": not unservable and not (strict and missing_keys),
+            "ok": not unservable and not rights_uncovered and not (strict and missing_keys),
         }
 
     async def _asset_payload(
@@ -256,6 +298,8 @@ class LegacyPricingAdapter:
         }
         return {
             f"{prefix}_is_persisted": quote.is_persisted,
+            f"_{prefix}_rights_source_summary": deepcopy(quote.source_summary),
+            f"{prefix}_attributions": rights.attribution(quote.source_summary),
             f"{prefix}_persistence_status": (
                 "persisted" if quote.is_persisted else "unpersisted"
             ),
@@ -293,6 +337,9 @@ class LegacyPricingAdapter:
         buckets: dict[str, dict[str, Any]] = {}
         for field, quotes in (("value_usd", usd_quotes), ("value_toman", toman_quotes)):
             for quote in reversed(quotes):
+                if rights.enforced() and (not allowed_current_quote(quote)
+                        or not rights.canonical_allowed(quote.source_summary, "history")):
+                    continue
                 timestamp = quote.canonical_at.replace(second=0, microsecond=0).isoformat()
                 buckets.setdefault(timestamp, {"timestamp": timestamp})[field] = float(
                     quote.price

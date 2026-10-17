@@ -279,7 +279,7 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
         service = InstrumentPricingService(store=store, persistence=persistence, locks=_Locks(), operational=operational)
         service.get_canonical = AsyncMock(return_value=canonical(age=0))
         with patch("app.pricing.service.utc_now", return_value=NOW):
-            outcome = await service.ingest_worker_quote(instrument_id="BTC_USD", provider_id="coingecko_btc",
+            outcome = await service.ingest_worker_quote(instrument_id="BTC_USD", provider_id="gold_api_free_btc",
                 price=Decimal("20000"), observed_at=NOW-timedelta(seconds=599), historical=False)
         self.assertEqual(outcome, "ignored_older")
         persistence.persist_provider_quote.assert_not_called()
@@ -288,8 +288,8 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
         from app.routers import pricing_worker
         request = Mock()
         request.body = AsyncMock(return_value=json.dumps({"quotes":[
-            {"instrument_id":"BTC_USD","provider_id":"coingecko_btc","price":90000,"observed_at":NOW.isoformat()},
-            {"instrument_id":"USDT_USD","provider_id":"coingecko_usdt","price":1,"observed_at":NOW.isoformat()},
+            {"instrument_id":"BTC_USD","provider_id":"gold_api_free_btc","price":90000,"observed_at":NOW.isoformat()},
+            {"instrument_id":"XAG_USD_OZ","provider_id":"gold_api_free_xag","price":50,"observed_at":NOW.isoformat()},
         ]}).encode())
         with patch.object(pricing_worker, "_authenticate", new=AsyncMock()), \
              patch.object(pricing_worker.instrument_pricing_service, "ingest_worker_quote", new=AsyncMock(side_effect=["ignored_older","accepted"])) as ingest:
@@ -300,7 +300,7 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
     async def test_worker_jump_keeps_previous_when_not_independently_confirmed(self):
         operational = AsyncMock()
         operational.instrument.return_value = get_instrument("BTC_USD")
-        operational.providers_for.return_value = (PROVIDERS["coingecko_btc"],)
+        operational.providers_for.return_value = (PROVIDERS["gold_api_free_btc"],)
         persistence = AsyncMock()
         async def persist(candidate):
             candidate.persistence_status = PersistenceStatus.PERSISTED
@@ -317,7 +317,7 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
         service._attach_changes = AsyncMock()
         service._commit = AsyncMock()
         with patch("app.pricing.service.utc_now", return_value=NOW):
-            await service.ingest_worker_quote(instrument_id="BTC_USD", provider_id="coingecko_btc",
+            await service.ingest_worker_quote(instrument_id="BTC_USD", provider_id="gold_api_free_btc",
                 price=Decimal("20000"), observed_at=NOW, historical=False)
         committed = service._commit.call_args.args[0]
         self.assertEqual(committed.price, previous.price)
@@ -363,24 +363,21 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(current.effective_status(NOW),CanonicalStatus.EXPIRED)
         self.assertEqual(current.expires_at,current.observed_at+timedelta(seconds=30))
 
-    async def test_worker_history_requires_durable_both_writes_and_stays_historical(self):
+    async def test_worker_without_approved_history_rejects_before_any_storage(self):
         operational, persistence = AsyncMock(), AsyncMock()
         operational.instrument.return_value = get_instrument("BTC_USD")
-        operational.providers_for.return_value = (PROVIDERS["coingecko_btc"],)
+        operational.providers_for.return_value = (PROVIDERS["gold_api_free_btc"],)
         async def persist(candidate):
             candidate.persistence_status = PersistenceStatus.PERSISTED
             return PersistenceResult(True,False,None,None)
         persistence.persist_provider_quote.side_effect = persist
         persistence.persist_canonical.return_value = PersistenceResult(False,True,"queued",None)
         service = InstrumentPricingService(store=AsyncMock(),operational=operational,persistence=persistence)
-        from app.pricing.service import PricingRefreshSuspended
         with patch("app.pricing.service.utc_now",return_value=NOW):
-            with self.assertRaises(PricingRefreshSuspended):
-                await service.ingest_worker_quote(instrument_id="BTC_USD",provider_id="coingecko_btc",price=Decimal("90000"),observed_at=NOW-timedelta(days=1),historical=True)
-            persistence.persist_canonical.return_value = PersistenceResult(True,False,None,None)
-            outcome = await service.ingest_worker_quote(instrument_id="BTC_USD",provider_id="coingecko_btc",price=Decimal("90000"),observed_at=NOW-timedelta(days=1),historical=True)
-        self.assertEqual(outcome,"historical_persisted")
-        self.assertTrue(persistence.persist_canonical.call_args.args[0].source_summary["historical_backfill"])
+            with self.assertRaisesRegex(ValueError, "does not support historical"):
+                await service.ingest_worker_quote(instrument_id="BTC_USD",provider_id="gold_api_free_btc",price=Decimal("90000"),observed_at=NOW-timedelta(days=1),historical=True)
+        persistence.persist_provider_quote.assert_not_called()
+        persistence.persist_canonical.assert_not_called()
         service.store.set_canonical.assert_not_called()
 
     def test_approved_telegram_can_confirm_but_unapproved_cannot(self):

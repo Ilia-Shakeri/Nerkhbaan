@@ -41,6 +41,7 @@ from .models import (
     utc_now,
 )
 from .registry import PROVIDERS
+from . import rights
 
 
 logger = logging.getLogger(__name__)
@@ -80,10 +81,16 @@ class PricingPersistence:
         await asyncio.to_thread(self._sync_provider_catalog)
 
     async def persist_provider_quote(self, quote: ProviderQuote) -> PersistenceResult:
+        if not self._provider_storage_allowed(quote):
+            quote.persistence_status = PersistenceStatus.UNPERSISTED
+            return PersistenceResult(False, False, None, "provider_rights_denied")
         try:
             await asyncio.to_thread(self._persist_provider_quote, quote)
             quote.persistence_status = PersistenceStatus.PERSISTED
             return PersistenceResult(True, False, None, None)
+        except InvalidPersistenceEvent:
+            quote.persistence_status = PersistenceStatus.UNPERSISTED
+            return PersistenceResult(False, False, None, "provider_rights_denied")
         except Exception as exc:
             quote.persistence_status = PersistenceStatus.QUEUED
             result = await self._queue(
@@ -97,10 +104,17 @@ class PricingPersistence:
             return result
 
     async def persist_canonical(self, quote: CanonicalQuote) -> PersistenceResult:
+        if not self._canonical_storage_allowed(quote):
+            quote.is_persisted = False
+            return PersistenceResult(False, False, None, "provider_rights_denied")
+        quote.source_summary = rights.stamp_summary(quote.source_summary)
         try:
             await asyncio.to_thread(self._persist_canonical, quote)
             quote.is_persisted = True
             return PersistenceResult(True, False, None, None)
+        except InvalidPersistenceEvent:
+            quote.is_persisted = False
+            return PersistenceResult(False, False, None, "provider_rights_denied")
         except Exception as exc:
             quote.is_persisted = False
             if quote.status in {
@@ -173,6 +187,8 @@ class PricingPersistence:
         sanitized_text: str,
         content_type: str | None,
     ) -> str | None:
+        if not rights.provider_allowed(provider_id, "store"):
+            return None
         try:
             record_id = await asyncio.to_thread(
                 self._store_raw_payload,
@@ -337,6 +353,17 @@ class PricingPersistence:
         payload: dict[str, Any],
         error: Exception,
     ) -> PersistenceResult:
+        if rights.enforced():
+            try:
+                allowed = (
+                    self._provider_storage_allowed(ProviderQuote.from_dict(payload))
+                    if event_type == "provider_quote"
+                    else event_type == "canonical_quote" and self._canonical_storage_allowed(CanonicalQuote.from_dict(payload))
+                )
+            except (ValueError, TypeError, KeyError, DecimalException, OverflowError):
+                allowed = False
+            if not allowed:
+                return PersistenceResult(False, False, None, "provider_rights_denied")
         sanitized_error = _sanitize_error(error)
         try:
             stream_id = await self.store.append_persistence_event(
@@ -352,7 +379,34 @@ class PricingPersistence:
         return PersistenceResult(False, True, stream_id, sanitized_error)
 
     @staticmethod
+    def _canonical_storage_allowed(quote: CanonicalQuote) -> bool:
+        if rights.enforced():
+            if quote.candidate_price is not None and quote.candidate_provider_id is None:
+                return False
+            status = getattr(quote.status, "value", quote.status)
+            if status == CanonicalStatus.DERIVED_FALLBACK.value and quote.source_summary.get("derived") is not True:
+                return False
+        if not rights.canonical_allowed(quote.source_summary, "store"):
+            return False
+        if quote.candidate_provider_id is not None and not rights.provider_allowed(quote.candidate_provider_id, "store"):
+            return False
+        return not quote.source_summary.get("historical_backfill") or rights.canonical_allowed(quote.source_summary, "history")
+
+    @staticmethod
+    def _provider_storage_allowed(quote: ProviderQuote) -> bool:
+        if quote.metadata.get("quote_role") == "backfill" and not rights.provider_allowed(quote.provider_id, "history"):
+            return False
+        if quote.is_derived:
+            return rights.canonical_allowed({
+                "derived": True, "primary_provider_id": quote.provider_id,
+                "provider_ids": [quote.provider_id], "inputs": quote.metadata.get("inputs"),
+            }, "store")
+        return rights.provider_allowed(quote.provider_id, "store")
+
+    @staticmethod
     def _persist_provider_quote(quote: ProviderQuote) -> None:
+        if not PricingPersistence._provider_storage_allowed(quote):
+            raise InvalidPersistenceEvent("Provider storage permission unavailable")
         db = SessionLocal()
         try:
             existing = db.scalar(
@@ -405,6 +459,9 @@ class PricingPersistence:
 
     @staticmethod
     def _persist_canonical(quote: CanonicalQuote) -> None:
+        if not PricingPersistence._canonical_storage_allowed(quote):
+            raise InvalidPersistenceEvent("Canonical storage permission unavailable")
+        quote.source_summary = rights.stamp_summary(quote.source_summary)
         db = SessionLocal()
         try:
             existing = db.scalar(
@@ -471,6 +528,80 @@ class PricingPersistence:
             db.close()
 
     @staticmethod
+    def _decision_id(value: int | None) -> int:
+        if type(value) is not int or not 0 < value < 2**63:
+            raise InvalidPersistenceEvent("Decision source identity unavailable")
+        return value
+
+    @staticmethod
+    def _decision_record(db, entity, instrument_id: str, record_id: int | None):
+        record_id = PricingPersistence._decision_id(record_id)
+        rows = db.scalars(select(entity).where(
+            entity.instrument_id == instrument_id, entity.id == record_id,
+        ).with_for_update(read=True)).all()
+        if len(rows) != 1:
+            raise InvalidPersistenceEvent("Decision source record unavailable or ambiguous")
+        return rows[0]
+
+    @staticmethod
+    def _require_decision_sources(
+        db,
+        instrument_id: str,
+        candidate_quote_id: int | None,
+        previous_canonical_quote_id: int | None,
+        verifier_quote_ids: tuple[int, ...] = (),
+    ) -> None:
+        if not rights.enforced():
+            return
+        revision = rights.revision()
+        candidate_id = PricingPersistence._decision_id(candidate_quote_id)
+        if not isinstance(verifier_quote_ids, (list, tuple)) or len(verifier_quote_ids) > 64:
+            raise InvalidPersistenceEvent("Decision verifier identities unavailable")
+        verifier_ids = [PricingPersistence._decision_id(value) for value in verifier_quote_ids]
+        if len(set(verifier_ids)) != len(verifier_ids) or candidate_id in verifier_ids:
+            raise InvalidPersistenceEvent("Decision verifier identities are not independent")
+        source_ids = {candidate_id, *verifier_ids}
+        sources = db.scalars(select(ProviderQuoteRecord).where(
+            ProviderQuoteRecord.instrument_id == instrument_id,
+            ProviderQuoteRecord.id.in_(sorted(source_ids)),
+        ).with_for_update(read=True)).all()
+        if len(sources) != len(source_ids) or {row.id for row in sources} != source_ids:
+            raise InvalidPersistenceEvent("Decision provider evidence unavailable or ambiguous")
+        for row in sources:
+            metadata = row.extra if isinstance(row.extra, dict) else {}
+            derived = (row.is_derived or row.source_type == "derived"
+                       or metadata.get("source_semantic") == "derived")
+            summary = {"provider_ids": [row.provider_id], "primary_provider_id": row.provider_id,
+                       "derived": bool(derived)}
+            if derived:
+                summary["inputs"] = metadata.get("inputs")
+            if not all(rights.canonical_allowed(summary, action) for action in ("store", "derive")):
+                raise InvalidPersistenceEvent("Decision provider permissions unavailable")
+        previous = PricingPersistence._decision_record(
+            db, CanonicalQuoteRecord, instrument_id, previous_canonical_quote_id,
+        )
+        if (not PricingPersistence._canonical_storage_allowed(previous)
+                or not rights.canonical_allowed(previous.source_summary, "derive")
+                or (previous.candidate_provider_id is not None
+                    and not rights.provider_allowed(previous.candidate_provider_id, "derive"))
+                or revision != rights.revision()):
+            raise InvalidPersistenceEvent("Decision previous-source permissions unavailable")
+
+    @staticmethod
+    def _require_verification_sources(
+        db, anomaly_id: int | None, instrument_id: str, decision: VerificationDecision,
+    ) -> None:
+        if not rights.enforced():
+            return
+        anomaly = PricingPersistence._decision_record(db, PricingAnomalyRecord, instrument_id, anomaly_id)
+        if anomaly.candidate_quote_id != decision.candidate_quote_id:
+            raise InvalidPersistenceEvent("Verification candidate does not match its anomaly")
+        PricingPersistence._require_decision_sources(
+            db, instrument_id, decision.candidate_quote_id,
+            anomaly.previous_canonical_quote_id, decision.verification_quote_ids,
+        )
+
+    @staticmethod
     def _persist_anomaly(
         instrument_id: str,
         candidate_quote_id: int | None,
@@ -482,6 +613,9 @@ class PricingPersistence:
     ) -> int:
         db = SessionLocal()
         try:
+            PricingPersistence._require_decision_sources(
+                db, instrument_id, candidate_quote_id, previous_canonical_quote_id,
+            )
             record = PricingAnomalyRecord(
                 instrument_id=instrument_id,
                 candidate_quote_id=candidate_quote_id,
@@ -493,6 +627,9 @@ class PricingPersistence:
                 reason=reason[:240],
             )
             db.add(record)
+            PricingPersistence._require_decision_sources(
+                db, instrument_id, candidate_quote_id, previous_canonical_quote_id,
+            )
             db.commit()
             db.refresh(record)
             return record.id
@@ -510,6 +647,7 @@ class PricingPersistence:
     ) -> int:
         db = SessionLocal()
         try:
+            PricingPersistence._require_verification_sources(db, anomaly_id, instrument_id, decision)
             record = PricingVerificationRecord(
                 anomaly_id=anomaly_id,
                 instrument_id=instrument_id,
@@ -520,6 +658,7 @@ class PricingPersistence:
                 decision_reason=decision.decision_reason[:240],
             )
             db.add(record)
+            PricingPersistence._require_verification_sources(db, anomaly_id, instrument_id, decision)
             db.commit()
             db.refresh(record)
             return record.id
@@ -537,6 +676,8 @@ class PricingPersistence:
         sanitized_text: str,
         content_type: str | None,
     ) -> int:
+        if not rights.provider_allowed(provider_id, "store"):
+            raise InvalidPersistenceEvent("Raw source storage permission unavailable")
         payload_bytes = len(sanitized_text.encode("utf-8"))
         checksum = hashlib.sha256(sanitized_text.encode("utf-8")).hexdigest()
         parsed_payload: dict[str, Any] | None = None

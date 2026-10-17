@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from ..models import InstrumentDefinition, ensure_utc, utc_now
+from ..models import InstrumentDefinition, WeightUnit, ensure_utc, utc_now
 from .base import ParserError, exact_path, require_list, require_object, strict_decimal
 
 
@@ -171,11 +171,17 @@ class ServixHistoryParser:
     ) -> list[HistoricalPricePoint]:
         expected = {
             "USD_RLS": "USD_TOMAN", "BTC_USD": "BTC_USD", "USDT_USD": "USDT_USD",
+            "BTC_RLS": "BTC_TOMAN", "USDT_RLS": "USDT_TOMAN",
             "GOLD_OUNCE_USD": "XAU_USD_OZ", "SILVER_OUNCE_USD": "XAG_USD_OZ",
             "GOLD_18_RLS": "GOLD_18K_TOMAN_GRAM", "GOLD_24_RLS": "GOLD_24K_TOMAN_GRAM",
         }
         if expected.get(self.symbol) != instrument.instrument_id:
             raise ParserError("unsupported_symbol", "Servix history code does not match instrument")
+        if self.symbol in {"BTC_RLS", "USDT_RLS"}:
+            if self.quote_unit != "RLS" or self.conversion_factor != Decimal("0.1"):
+                raise ParserError("unknown_unit", "Servix local crypto history requires rial conversion")
+            if instrument.weight_unit is not WeightUnit.UNIT or instrument.purity is not None:
+                raise ParserError("unit_mismatch", "Servix crypto history must be per asset unit")
         expected_currency = "TOMAN" if self.quote_unit == "RLS" else self.quote_unit
         if instrument.quote_currency.value != expected_currency:
             raise ParserError("currency_mismatch", "Servix history currency does not match instrument")
@@ -231,6 +237,8 @@ def build_history_parser(
         "coingecko_tether_usd_history_v1": CoinGeckoHistoryParser("tether"),
         "servix_btc_usd_history_v1": ServixHistoryParser("BTC_USD", "USD"),
         "servix_usdt_usd_history_v1": ServixHistoryParser("USDT_USD", "USD"),
+        "servix_btc_toman_history_v1": ServixHistoryParser("BTC_RLS", "RLS", Decimal("0.1")),
+        "servix_usdt_toman_history_v1": ServixHistoryParser("USDT_RLS", "RLS", Decimal("0.1")),
         "servix_usd_rls_history_v1": ServixHistoryParser(
             "USD_RLS", "RLS", Decimal("0.1")
         ),

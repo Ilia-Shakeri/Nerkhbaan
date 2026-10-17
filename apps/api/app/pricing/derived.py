@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 from typing import Callable, Mapping
 
 from ..config import settings
 from .instruments import get_instrument
+from . import rights
 from .models import (
     CanonicalQuote,
     CanonicalStatus,
@@ -194,6 +196,7 @@ class DerivedPriceEngine:
                         "derivation_depth": input_depths[input_id],
                         "confidence_score": str(input_confidences[input_id]),
                         "provenance": self._provenance(input_id, inputs[input_id]),
+                        "source_summary": deepcopy(inputs[input_id].source_summary),
                     }
                     for input_id in input_ids
                 ],
@@ -274,7 +277,8 @@ class DerivedPriceEngine:
     @staticmethod
     def _is_operationally_fresh(quote: CanonicalQuote, now: datetime) -> bool:
         return (
-            quote.status
+            rights.canonical_allowed(quote.source_summary, "derive")
+            and quote.status
             in {
                 CanonicalStatus.LIVE,
                 CanonicalStatus.CONFIRMED,

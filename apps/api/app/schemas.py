@@ -121,8 +121,8 @@ class PricePoint(BaseModel):
 
 
 class PricingWorkerQuote(BaseModel):
-    instrument_id: str = Field(pattern=r"^(BTC_USD|USDT_USD|XAG_USD_OZ|XAU_USD_OZ)$")
-    provider_id: str = Field(pattern=r"^(coingecko_(btc|usdt)|gold_api_free_xag|gold_api_free_xau|xaus_xag)$")
+    instrument_id: str = Field(pattern=r"^(BTC_USD|XAG_USD_OZ|XAU_USD_OZ)$")
+    provider_id: str = Field(pattern=r"^gold_api_free_(xag|xau|btc)$")
     price: Decimal = Field(gt=0)
     observed_at: datetime
     historical: bool = False
@@ -134,6 +134,10 @@ class PricingWorkerIngestRequest(BaseModel):
 
 class PriceHistoryResponse(BaseModel):
     asset: str
+    rights_revision: str = ""
+    usd_attributions: list[dict[str, str]] = Field(default_factory=list)
+    toman_attributions: list[dict[str, str]] = Field(default_factory=list)
+    attributions: list[dict[str, str]] = Field(default_factory=list)
     points: list[PricePoint]
     timeframe: str | None = None
     status: str = "complete"
@@ -167,6 +171,8 @@ class AssetPrice(BaseModel):
     history: list[PricePoint]
     source_usd: str
     source_toman: str
+    usd_attributions: list[dict[str, str]] = Field(default_factory=list)
+    toman_attributions: list[dict[str, str]] = Field(default_factory=list)
     usd_status: str
     toman_status: str
     stale_minutes: int | None = None
@@ -176,6 +182,7 @@ class AssetPrice(BaseModel):
 
 class PricesResponse(BaseModel):
     refreshed_at: str
+    rights_revision: str = ""
     source: dict[str, str]
     assets: list[AssetPrice]
 

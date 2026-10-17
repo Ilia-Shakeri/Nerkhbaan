@@ -22,7 +22,7 @@ from .local_reference import (
     TicaroPricesParser,
     WallexMarketParser,
 )
-from .metals import GoldApiFreeParser, GoldApiParser, MetalsDevParser, XausSilverParser
+from .metals import GoldApiFreeBtcParser, GoldApiFreeParser, GoldApiParser, MetalsDevParser, XausSilverParser
 from .nobitex import NobitexOrderBookParser, NobitexStatsParser
 from .tickers import AlanchandGold18Parser, CoinCapParser, TetherlandParser
 
@@ -49,6 +49,7 @@ def build_parser(parser_id: str) -> ExplicitParser:
         "goldapi_xag_v1": lambda: GoldApiParser(symbol="XAG"),
         "gold_api_free_xau_v1": lambda: GoldApiFreeParser(symbol="XAU"),
         "gold_api_free_xag_v1": lambda: GoldApiFreeParser(symbol="XAG"),
+        "gold_api_free_btc_v1": GoldApiFreeBtcParser,
         "xaus_xag_v1": XausSilverParser,
         "metals_dev_gold_v1": lambda: MetalsDevParser(metal="gold"),
         "metals_dev_silver_v1": lambda: MetalsDevParser(metal="silver"),
@@ -71,6 +72,8 @@ def build_parser(parser_id: str) -> ExplicitParser:
         "servix_xag_usd_v1": lambda: ServixAssetsParser(code="SILVER_OUNCE_USD"),
         "servix_btc_usd_v1": lambda: ServixAssetsParser(code="BTC_USD"),
         "servix_usdt_usd_v1": lambda: ServixAssetsParser(code="USDT_USD"),
+        "servix_btc_toman_v1": lambda: ServixAssetsParser(code="BTC_RLS"),
+        "servix_usdt_toman_v1": lambda: ServixAssetsParser(code="USDT_RLS"),
         "tala_xau_usd_v1": lambda: TalaRatesParser(key=_setting("TALA_XAU_USD_KEY", "ons")),
         "tala_xag_usd_v1": lambda: TalaRatesParser(key=_setting("TALA_XAG_USD_KEY", "silver")),
         "tala_usdt_toman_v1": lambda: TalaRatesParser(key=_setting("TALA_USDT_TOMAN_KEY", "usdt_irt")),

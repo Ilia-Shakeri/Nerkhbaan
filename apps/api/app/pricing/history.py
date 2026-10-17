@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
 from threading import Lock
@@ -14,6 +14,7 @@ from sqlalchemy.engine import Engine
 
 from ..db import SessionLocal
 from .instruments import get_instrument
+from . import rights
 from .models import (
     CanonicalQuote,
     CanonicalStatus,
@@ -104,9 +105,10 @@ class HistoryResult:
     range_end: datetime
     points: list[dict[str, Any]]
     missing_before: datetime | None = None
+    attributions: list[dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        result = {
             "instrument_id": self.instrument_id,
             "timeframe": self.timeframe,
             "status": self.status,
@@ -115,9 +117,51 @@ class HistoryResult:
             "missing_before": self.missing_before.isoformat() if self.missing_before else None,
             "points": self.points,
         }
+        if rights.enforced():
+            result["attributions"] = self.attributions
+        return result
+
+
+def _canonical_permissions(action: str):
+    clause, parameters = rights.sql_filter(action)
+    if rights.enforced():
+        clause = f"({clause}) AND (candidate_provider_id IS NULL OR candidate_provider_id = ANY(:rights_candidate_ids)) AND (candidate_price IS NULL OR candidate_provider_id = ANY(:rights_candidate_ids))"
+        clause += " AND (status <> 'derived_fallback' OR source_summary->>'derived' = 'true' OR source_summary->>'primary_provider_id' LIKE 'derived:%')"
+        parameters["rights_candidate_ids"] = list(rights.allowed_provider_ids(action))
+    return clause, parameters
 
 
 def _canonical_history_sql(use_bookends: bool):
+    permitted, parameters = _canonical_permissions("history")
+    lineage = ""
+    attribution = ""
+    if rights.enforced():
+        lineage = """, (
+            WITH RECURSIVE attribution_nodes(summary, depth) AS (
+                SELECT source_summary, 0
+                UNION ALL
+                SELECT attribution_input.value->'source_summary', attribution_node.depth + 1
+                FROM attribution_nodes AS attribution_node
+                CROSS JOIN LATERAL jsonb_array_elements(CASE
+                    WHEN attribution_node.depth < 6
+                      AND (attribution_node.summary->>'derived' = 'true'
+                        OR attribution_node.summary->>'primary_provider_id' LIKE 'derived:%')
+                      AND jsonb_typeof(attribution_node.summary->'inputs') = 'array'
+                    THEN attribution_node.summary->'inputs' ELSE '[]'::jsonb END
+                ) AS attribution_input(value)
+            )
+            SELECT COALESCE(jsonb_agg(DISTINCT attribution_source.value), '[]'::jsonb)
+            FROM attribution_nodes AS attribution_node
+            CROSS JOIN LATERAL jsonb_array_elements(
+                CASE WHEN jsonb_typeof(attribution_node.summary->'provider_ids') = 'array'
+                    THEN attribution_node.summary->'provider_ids' ELSE '[]'::jsonb END
+                || jsonb_build_array(attribution_node.summary->'candidate_provider_id',
+                                     attribution_node.summary->'previous_provider_id')
+            ) AS attribution_source(value)
+            WHERE jsonb_typeof(attribution_source.value) = 'string'
+              AND attribution_source.value #>> '{}' NOT LIKE 'derived:%'
+        ) || jsonb_build_array(candidate_provider_id) AS rights_source_ids"""
+        attribution = ", jsonb_agg(DISTINCT rights_source_ids) AS rights_source_groups"
     opening = "first(price, canonical_at)" if use_bookends else "(array_agg(price ORDER BY canonical_at ASC))[1]"
     closing = "last(price, canonical_at)" if use_bookends else "(array_agg(price ORDER BY canonical_at DESC))[1]"
     return text(
@@ -126,13 +170,14 @@ def _canonical_history_sql(use_bookends: bool):
             SELECT
                 date_bin(CAST(:bucket AS interval), canonical_at, TIMESTAMPTZ '2000-01-01') AS bucket,
                 canonical_at,
-                price
+                price{lineage}
             FROM canonical_quotes
             WHERE instrument_id = :instrument_id
               AND canonical_at >= :start
               AND canonical_at <= :end
               AND status = ANY(:statuses)
               AND {_DIRECT_GOLD_SQL}
+              AND {permitted}
         )
         SELECT
             bucket,
@@ -140,17 +185,17 @@ def _canonical_history_sql(use_bookends: bool):
             {closing} AS close,
             MAX(price) AS high,
             MIN(price) AS low,
-            COUNT(*) AS sample_count
+            COUNT(*) AS sample_count{attribution}
         FROM bucketed
         GROUP BY bucket
         ORDER BY bucket ASC
         """
-    )
+    ).bindparams(**parameters)
 
 
 class InternalPriceHistory:
     def __init__(self) -> None:
-        self._canonical_reads: dict[tuple[str, str, datetime | None], asyncio.Task] = {}
+        self._canonical_reads: dict[tuple[str, str, datetime | None, str | None], asyncio.Task] = {}
         self._canonical_guard = asyncio.Lock()
 
     async def canonical_history(
@@ -160,7 +205,8 @@ class InternalPriceHistory:
         if timeframe not in TIMEFRAMES:
             raise ValueError("Unsupported timeframe")
         requested_end = ensure_utc(end) if end is not None else None
-        key = (normalized, timeframe, requested_end)
+        revision = rights.revision() if rights.enforced() else None
+        key = (normalized, timeframe, requested_end, revision)
         async with self._canonical_guard:
             task = self._canonical_reads.get(key)
             if task is None or task.done():
@@ -168,7 +214,11 @@ class InternalPriceHistory:
                 self._canonical_reads[key] = task
                 task.add_done_callback(lambda done: self._canonical_read_done(key, done))
         await asyncio.wait({task})
-        return task.result()
+        result = task.result()
+        if revision is not None and revision != rights.revision():
+            # Aggregated values cannot be separated once a source loses permission.
+            return HistoryResult(result.instrument_id, result.timeframe, "partial", result.range_start, result.range_end, [])
+        return result
 
     def _canonical_read_done(self, key, task: asyncio.Task) -> None:
         if not task.cancelled():
@@ -223,6 +273,7 @@ class InternalPriceHistory:
             range_end=range_end,
             points=points,
             missing_before=first if is_partial and first and first > range_start + tolerance else None,
+            attributions=_attribution_union(point.get("attributions", []) for point in points),
         )
 
     async def provider_history(
@@ -327,6 +378,7 @@ class InternalPriceHistory:
                 "low": float(row["low"]),
                 "value": float(row["close"]),
                 "sample_count": int(row["sample_count"]),
+                **({"attributions": _attributions_for_groups(row.get("rights_source_groups") or [])} if rights.enforced() else {}),
             }
             for row in rows
         ]
@@ -338,6 +390,9 @@ class InternalPriceHistory:
         end: datetime,
         bucket: str,
     ) -> list[dict[str, Any]]:
+        if rights.enforced():
+            # These rows have no complete, reviewed provider lineage.
+            return []
         asset = "usdt" if instrument_id.startswith("USDT") else "btc"
         region = "iran" if instrument_id.endswith("TOMAN") else "international"
         column = "price_toman" if region == "iran" else "price_usd"
@@ -386,8 +441,12 @@ class InternalPriceHistory:
         start: datetime,
         end: datetime,
     ) -> list[dict[str, Any]]:
+        allowed = rights.allowed_provider_ids("history") if rights.enforced() else None
+        if allowed is not None and (not allowed or provider_id is not None and provider_id not in allowed):
+            return []
+        permission_filter = "provider_id = ANY(:rights_provider_ids)" if allowed is not None else "TRUE"
         query = text(
-            """
+            f"""
             SELECT provider_id, price, bid, ask, observed_at, validation_status,
                    is_direct, is_derived, is_suspicious, rejection_reason
             FROM provider_quotes
@@ -395,6 +454,7 @@ class InternalPriceHistory:
               AND observed_at >= :start
               AND observed_at <= :end
               AND (CAST(:provider_id AS TEXT) IS NULL OR provider_id = :provider_id)
+              AND {permission_filter}
             ORDER BY observed_at ASC
             LIMIT 10000
             """
@@ -408,6 +468,7 @@ class InternalPriceHistory:
                     "provider_id": provider_id,
                     "start": start,
                     "end": end,
+                    **({"rights_provider_ids": list(allowed)} if allowed is not None else {}),
                 },
             ).mappings().all()
         finally:
@@ -430,6 +491,7 @@ class InternalPriceHistory:
 
     @staticmethod
     def _query_recent_prices(instrument_id: str, limit: int) -> list[Decimal]:
+        permitted, parameters = _canonical_permissions("history")
         query = text(
             f"""
             SELECT price
@@ -437,6 +499,7 @@ class InternalPriceHistory:
             WHERE instrument_id = :instrument_id
               AND status = ANY(:statuses)
               AND {_DIRECT_GOLD_SQL}
+              AND {permitted}
             ORDER BY canonical_at DESC
             LIMIT :limit
             """
@@ -445,7 +508,7 @@ class InternalPriceHistory:
         try:
             rows = db.execute(
                 query,
-                {"instrument_id": instrument_id, "statuses": list(_ACCEPTED_STATUSES), "limit": max(3, min(limit, 1000))},
+                {"instrument_id": instrument_id, "statuses": list(_ACCEPTED_STATUSES), "limit": max(3, min(limit, 1000)), **parameters},
             ).scalars().all()
         finally:
             db.close()
@@ -457,6 +520,7 @@ class InternalPriceHistory:
         target: datetime,
         earliest: datetime,
     ) -> Decimal | None:
+        permitted, parameters = _canonical_permissions("history")
         query = text(
             f"""
             SELECT price
@@ -464,6 +528,7 @@ class InternalPriceHistory:
             WHERE instrument_id = :instrument_id
               AND status = ANY(:statuses)
               AND {_DIRECT_GOLD_SQL}
+              AND {permitted}
               AND canonical_at <= :target
               AND canonical_at >= :earliest
             ORDER BY canonical_at DESC
@@ -479,6 +544,7 @@ class InternalPriceHistory:
                     "statuses": list(_ACCEPTED_STATUSES),
                     "target": target,
                     "earliest": earliest,
+                    **parameters,
                 },
             ).scalar_one_or_none()
         finally:
@@ -513,6 +579,7 @@ class InternalPriceHistory:
 
     @staticmethod
     def _query_latest_rows(instrument_id: str | None) -> list[Any]:
+        permitted, parameters = _canonical_permissions("display")
         query_sql = f"""
             SELECT DISTINCT ON (instrument_id)
                 id, instrument_id, price, status, primary_quote_id,
@@ -523,9 +590,9 @@ class InternalPriceHistory:
                 change_30d, idempotency_key, sequence_number
             FROM canonical_quotes
             WHERE {_DIRECT_GOLD_SQL}
+              AND {permitted}
               AND COALESCE(source_summary->>'historical_backfill', 'false') <> 'true'
         """
-        parameters: dict[str, str] = {}
         if instrument_id is not None:
             query_sql += " AND instrument_id = :instrument_id"
             parameters["instrument_id"] = instrument_id
@@ -539,8 +606,12 @@ class InternalPriceHistory:
 
     @staticmethod
     def _query_latest_sources(instrument_id: str) -> list[dict[str, Any]]:
+        allowed = rights.allowed_provider_ids("display") if rights.enforced() else None
+        if allowed is not None and not allowed:
+            return []
+        permission_filter = "provider_id = ANY(:rights_provider_ids)" if allowed is not None else "TRUE"
         query = text(
-            """
+            f"""
             SELECT DISTINCT ON (provider_id)
                 id, provider_id, source_type, price, currency, weight_unit,
                 purity, bid, ask, volume, observed_at, received_at, latency_ms,
@@ -549,12 +620,14 @@ class InternalPriceHistory:
                 metadata, raw_payload_reference, persistence_status
             FROM provider_quotes
             WHERE instrument_id = :instrument_id
+              AND {permission_filter}
             ORDER BY provider_id, observed_at DESC
             """
         )
         db = SessionLocal()
         try:
-            rows = db.execute(query, {"instrument_id": instrument_id}).mappings().all()
+            rows = db.execute(query, {"instrument_id": instrument_id,
+                **({"rights_provider_ids": list(allowed)} if allowed is not None else {})}).mappings().all()
         finally:
             db.close()
         now = utc_now()
@@ -583,7 +656,9 @@ class InternalPriceHistory:
             """
             SELECT
                 a.id AS anomaly_id, a.deviation_percent, a.dynamic_threshold_percent,
+                a.candidate_quote_id, a.previous_canonical_quote_id,
                 a.severity, a.status AS anomaly_status, a.reason, a.created_at,
+                v.id AS verification_id, v.candidate_quote_id AS verification_candidate_id,
                 v.verifier_quote_ids, v.decision, v.tolerance_percent,
                 v.decision_reason, v.created_at AS verification_created_at
             FROM pricing_anomalies a
@@ -601,6 +676,40 @@ class InternalPriceHistory:
         db = SessionLocal()
         try:
             row = db.execute(query, {"instrument_id": instrument_id}).mappings().first()
+            if row is not None and rights.enforced():
+                # A decision, percentage or severity is also source data.
+                # Resolve every contributing record before exposing any part.
+                candidate = row.get("candidate_quote_id")
+                has_verification = row.get("verification_id") is not None
+                verification_candidate = row.get("verification_candidate_id")
+                verifier_ids = row.get("verifier_quote_ids") if has_verification else []
+                valid_ids = (isinstance(candidate, int) and not isinstance(candidate, bool)
+                             and (not has_verification or isinstance(verification_candidate, int) and not isinstance(verification_candidate, bool))
+                             and isinstance(verifier_ids, list)
+                             and all(isinstance(value, int) and not isinstance(value, bool) for value in verifier_ids))
+                approved = False
+                if valid_ids:
+                    quote_ids = {candidate, *verifier_ids}
+                    if has_verification:
+                        quote_ids.add(verification_candidate)
+                    sources = db.execute(text("""SELECT id, provider_id FROM provider_quotes
+                        WHERE instrument_id = :instrument_id AND id = ANY(:quote_ids)"""),
+                        {"instrument_id": instrument_id, "quote_ids": list(quote_ids)}).mappings().all()
+                    approved = ({source["id"] for source in sources} == quote_ids
+                                and all(rights.provider_allowed(source["provider_id"], "display") for source in sources))
+                previous_id = row.get("previous_canonical_quote_id")
+                approved = approved and isinstance(previous_id, int) and not isinstance(previous_id, bool)
+                if approved and previous_id is not None:
+                    previous = db.execute(text("""SELECT source_summary, candidate_provider_id, candidate_price FROM canonical_quotes
+                        WHERE id = :quote_id AND instrument_id = :instrument_id"""),
+                        {"quote_id": previous_id, "instrument_id": instrument_id}).mappings().all()
+                    approved = (len(previous) == 1
+                        and rights.canonical_allowed(previous[0]["source_summary"], "display")
+                        and (previous[0]["candidate_price"] is None or previous[0]["candidate_provider_id"] is not None)
+                        and (previous[0]["candidate_provider_id"] is None
+                            or rights.provider_allowed(previous[0]["candidate_provider_id"], "display")))
+                if not approved:
+                    return {"instrument_id": instrument_id, "status": "unavailable"}
         finally:
             db.close()
         if row is None:
@@ -660,3 +769,13 @@ def _canonical_from_row(row: Any) -> CanonicalQuote:
 
 
 internal_history = InternalPriceHistory()
+
+
+def _attributions_for_groups(groups) -> list[dict[str, str]]:
+    providers = sorted({name for group in groups if isinstance(group, list) for name in group if isinstance(name, str)})
+    return rights.attribution({"provider_ids": providers, "derived": False})
+
+
+def _attribution_union(groups) -> list[dict[str, str]]:
+    entries = {(entry["label"], entry["url"]) for group in groups for entry in group}
+    return [{"label": label, "url": url} for label, url in sorted(entries)]

@@ -1,111 +1,55 @@
-# External Pricing Transports — 2.8.4
+# External pricing transports — 2.8.6
 
-Updated: 2026-10-17. Choose a transport based on a fresh test from the intended host.
-The transport behavior below is unchanged by the 2.8.4 price/history work; dated receipts retain their original scope.
-Neither a relay nor a worker grants provider usage or redistribution rights.
+Updated: 2026-10-17. This document describes code. It does not confirm an installed timer, current host reachability, or continuous delivery.
 
-## Public Git feed
+## Allowed application routes
 
-`.github/workflows/price-feed.yml` requests a normalized public feed on a five-minute cron.
-That schedule is not an execution guarantee. The 2026-10-11 workflow receipts include gaps of several
-hours; a manual successful run proves one publication, not continuous price coverage.
-It validates source currency, ranges and original observation timestamps. The maximum accepted
-observation age is 600 seconds in the producer and Go consumer. Publication time is not source time.
-Version 1 requires its original three routes. Version 2 publishes one to four independently valid
-routes: XAG/USD per troy ounce, XAU/USD per troy ounce, BTC/USD and USDT/USD. An invalid source is
-omitted while healthy sources may still publish. No valid route means the previous feed remains;
-its original timestamps continue aging. Gold and silver spot routes remain separate from Iranian
-physical gram quotes. The XAU route cannot substitute for domestic 24-karat gold.
+The signed worker and version-three consumer accept these exact pairs:
 
-The bot publishes only `prices.json` in a one-commit orphan `price-feed` branch using force-with-lease.
-Enable lease-protected replacement for this bot/output branch only. A branch protection rule that rejects
-replacement must be adjusted by the repository owner or publication will fail. Source branches remain protected.
-Previous output commits are not a history store; canonical history is persisted by the core.
+| Provider | Instrument | Currency and unit | Source endpoint |
+| --- | --- | --- | --- |
+| gold_api_free_xau | XAU_USD_OZ | USD per troy ounce | https://api.gold-api.com/price/XAU |
+| gold_api_free_xag | XAG_USD_OZ | USD per troy ounce | https://api.gold-api.com/price/XAG |
+| gold_api_free_btc | BTC_USD | USD per bitcoin | https://api.gold-api.com/price/BTC |
 
-`apps/price-feed-pull` fetches the feed and signs approved records for the core. The sidecar has no
-DB, Redis, user or admin credentials. Its only application credential is PRICING_WORKER_SHARED_SECRET.
-Inspect scheduled workflow success and consumer acceptance, not just the process being up.
+There is no stablecoin substitute. USDT/USD is not set to one. These routes cannot stand in for Iranian physical gold, local currency, or domestic gram prices. The old crypto and alternate silver sources are absent from the executable worker and feed route lists.
 
-```bash
-docker compose -f docker-compose.prod.yaml logs --tail 40 price-feed-pull
-curl -fsS https://nerkhbaan.ir/api/instruments/XAG_USD_OZ
-curl -fsS 'https://nerkhbaan.ir/api/prices/silver/history?timeframe=30d'
-```
+Each observation needs the exact asset symbol, explicit USD currency, a finite price within instrument bounds, and the original timezone-aware source timestamp. Missing currency or time makes that observation unavailable. Receipt time cannot create freshness. Quotes older than 600 seconds are rejected or omitted; quotes over five minutes in the future are rejected. One unavailable source does not invent a replacement.
 
-Expected consumer log: `price feed accepted at ...`. Then check source observation, unit,
-persistence and current validity. An accepted feed does not guarantee every instrument is available.
-To stop the transport, stop only price-feed-pull; preserve stored prices and let them age normally.
+The code uses the current reviewed source grants. Their built-in review window ends on 2027-01-15. Source terms and coverage still need the release gates in [release-operations.md](release-operations.md).
 
-## Signed push worker
+## Signed private worker
 
-`infra/price-worker/worker.py` is a restricted worker for a managed external host.
-Use the tracked systemd service/timer and a root-owned private environment file, mode 600.
-Set endpoint to the HTTPS `/api/internal/pricing-worker` URL; store a shared random secret of at least 32 characters.
-Worker state is per-asset JSON under NERKHBAAN_WORKER_STATE_FILE and records acknowledged progress.
-Never share the secret, session credentials, environment file or state through the public feed.
+`infra/price-worker/worker.py` has only standard-library dependencies. Install that file with the tracked service and timer on the separately reviewed worker host. Use a private root-owned environment file with mode 600. Set the HTTPS endpoint to `/api/internal/pricing-worker` and use the shared secret store for the same random secret at both ends, at least 32 characters. Do not place secrets in a feed, repository, command history, or log.
 
-Each timer run sends live data first. It requests CoinGecko `include_last_updated_at=true`, preserves
-that timestamp and rejects missing/stale observations. Missing one asset does not prevent valid others being sent.
-This tracked signed push worker currently supports the two crypto routes only. It does not fetch
-XAU or XAG, and no managed external host was verified during this delivery. The timer configuration
-alone does not prove scheduled execution or source coverage.
-History runs independently, one bounded chunk per asset per run. A failed asset retains progress while other
-assets may advance. The full year may need several runs. No empty/failed history is marked complete.
-Repeated points remain idempotent in the core. The worker advances a history watermark only when
-`history_persisted` equals the historical batch size; an ignored/disabled route keeps that batch pending.
-Do not delete state during an outage.
+Every collection and private send requires `collect`, `store`, and `own_app_transport`. The latter is a narrow application transport gate. It does not enable public resale or general redistribution. An optional absolute `PRICING_RIGHTS_MANIFEST_PATH` replaces the built-in grants. A missing, expired, malformed, or revoked private grant blocks use. Host entries must be exact strings in a list. The worker does not have an enforcement-off switch.
 
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now nerkhbaan-price-worker.timer
-sudo systemctl start nerkhbaan-price-worker.service
-sudo systemctl status nerkhbaan-price-worker.timer --no-pager
-sudo journalctl -u nerkhbaan-price-worker.service -n 80 --no-pager
-```
+A private manifest uses schema version 1, environment `production`, and a `providers` object. Each selected provider needs a permission list, timezone-aware `checked_at` and `expires_at`, an HTTPS `evidence_ref`, and an exact `hosts` list containing `api.gold-api.com`. The review window must not exceed 366 days. Use the same reviewed grant policy as the core.
 
-## Core trust boundary
+A run fetches the three allowed live endpoints separately. It preserves each observation time, rechecks permissions after a response, and sends only valid records. Redirects are refused. The signed core response must acknowledge both accepted and published counts. A partial or ignored response is not reported as full delivery.
 
-The server uses a route-specific provider/instrument allowlist. A request needs:
+Historical backfill is unavailable: the approved free source has no implemented historical endpoint. No historical request runs, no empty range is marked complete, and the old `NERKHBAAN_WORKER_STATE_FILE` remains intact. The timer does not retry a removed historical source.
 
-- timestamp within the allowed server-clock window;
-- HMAC-SHA256 of timestamp, a dot and the exact raw JSON body;
-- X-Pricing-Worker-Timestamp and X-Pricing-Worker-Signature;
-- a Redis replay claim; repeated signed requests are rejected.
+The service and timer files describe installation; they do not prove execution. After a separately approved activation, inspect worker logs, original source time, actual core persistence, and a current instrument response. A running process or HTTP 202 alone is not enough.
 
-Live ingestion uses the same canonical lock, freshness, anomaly and independence rules as direct providers.
-It cannot move canonical observation backwards or replace a fresh primary with a lower-ranked worker.
-A successful ingest status proves acknowledgement, not final alert delivery.
-The Gold API XAG and verified XAU relay routes are FALLBACK routes. Stored runtime roles remain
-authoritative; the 2026-10-11 XAU role change was applied separately and audited. VERIFIER/COMPARE
-roles cannot publish a worker canonical. Both schema allowlists and the provider/instrument pair
-check must accept the route; a valid four-quote feed formerly failed with HTTP 422 until the XAU
-schema entries were added. Signed HTTP tests cover acceptance and rejection of an incorrect pair.
-Live relay TTL is at most 360 seconds and is further limited by the runtime provider TTL;
-maximum original source age is 600 seconds.
-The source time and canonical expiry remain bounded; receipt time cannot fabricate freshness.
-Persisted relay freshness anchors retain that vetted receive window on later reads. Current admin
-policy may shorten the stored bounds; reads cannot extend them. A cache status is not proof that
-`valid_until` is still open, and HTTP 202 is not proof that a particular quote became canonical.
+## Public feed and pull consumer
 
-The 2026-10-11 production acceptance did verify all four version-two routes: the
-ordinary consumer retry received HTTP 202 at 14:05:47 UTC after an earlier 503,
-and four accepted provider records joined to four persisted canonicals with equal
-original observation times and prices. The XAU source time was 14:04:07 UTC;
-its USD/troy-ounce reference quote matched the real public instrument response.
-That observation became `fresh_cache` after its 14:10:47 UTC live deadline.
-`provider-live-persistence-proof.json` and `provider-final-relay-metadata.json`
-record the actual producer, acknowledgement and database joins. This is proof of
-one delivered feed; continuous scheduled delivery still needs separate evidence.
+The public publisher is disabled by default. Scheduled and push-triggered publication are removed. A manual workflow also needs its explicit workflow approval gate and a reviewed `relay` grant. Built-in grants do not include `relay`. The builder stops before provider requests and before changing the output when that grant is absent. No publication was executed for this code change.
 
-## Cutover and incident recovery
+Version 3 keeps the JSON quote envelope and adds an explicit own-application audience, source URLs, currency, unit, credits, and original observation times. It contains one to three valid routes from the table. Versions 1 and 2, unknown pairs, duplicate instruments, invented stablecoin values, wrong units, and missing credits are refused. If no quote is valid, the previous feed is preserved and continues aging.
 
-1. Verify the new transport and actual fresh persisted instrument before stopping the old one.
-2. Stop the old timer/sidecar only; preserve DB, Redis and worker progress.
-3. Rotate the shared key across both ends in a controlled window using the secret store.
-4. Check timestamp/clock, 401 auth, 409 replay/conflict and 503 storage failures separately.
-5. After recovery, inspect history coverage, queue state and actual notification receipt.
+`apps/price-feed-pull` checks current `collect`, `store`, and `own_app_transport` grants before repository access and again before sending. It signs only fresh approved observations for the private ingest endpoint. It has no user, administrator, database, or cache credentials. Its application secret is `NERKHBAAN_WORKER_SECRET`. The pull process does not authorize a public publishing platform or a public redistribution use.
 
-Historical September hosting/network observations are not claims about today's server.
-Use fresh canaries and the [release runbook](release-operations.md) for production acceptance.
-The [current provider coverage report](provider-coverage-2026-10-11.md) records direct-route failures,
-the uncovered 24-karat quote, original source timestamps, history pagination and acceptance receipts.
+Repository preflight requires grants for the whole three-source bundle. A custom manifest that allows only one source keeps the pull process stopped, even if the available file is partial. The private direct worker can collect an approved subset; unavailable routes remain unavailable.
+
+Public publication remains a separate blocked gate until the intended hosting use and source permissions are approved. An internal transport grant alone cannot open it.
+
+## Core boundary and acceptance
+
+The core schema, router, and service all accept only the three exact provider/instrument pairs. Historical worker records are rejected before storage. Current grants must permit collection, storage, and private application transport.
+
+Requests need a bounded server-clock timestamp, HMAC-SHA256 over timestamp plus a dot plus exact body bytes, and a Redis replay claim. The core applies its canonical lock, enabled provider role, source freshness, anomaly, and persistence rules. A lower-priority fallback cannot replace a fresh primary. Current source permissions also gate old cache and history reads.
+
+Before any transport cutover, require current provider terms, host clock and reachability, durable source/canonical joins, correct units, original observation timestamps, and actual consumer acknowledgement. Preserve data, old worker progress, other services, and the old transport until that acceptance passes. Use the guarded application release path. This document does not authorize a deployment or a timer change.
+
+Older dated transport receipts describe their original observations only. They do not approve current source rights, current continuous coverage, or this new release.

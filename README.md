@@ -1,9 +1,9 @@
 # Nerkhbaan
 
-Current code release: **2.8.5**. `VERSION` is the source of release truth.
+Current code release: **2.8.6**. `VERSION` is the source of release truth.
 Step-one fixes and the step-two Iranian price/history work are recorded in the [changelog](CHANGELOG.md) and
 [delivery matrix](docs/delivery-readiness.md). This source release has not been deployed by this change.
-Target checked on 2026-10-12: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.1.
+Target checked on 2026-10-17: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.1.
 See the [server handoff](docs/production-handoff-fa.md) and [saved proof](docs/delivery-readiness.md).
 The [remaining acceptance report](docs/remaining-acceptance-2026-10-11.md) separates real
 in-app receipt and unsigned installation from blocked native push, publisher signing and source coverage.

@@ -9,28 +9,42 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 )
 
 type quote struct {
-	InstrumentID string `json:"instrument_id"`
-	ProviderID   string `json:"provider_id"`
-	Price        string `json:"price"`
-	ObservedAt   string `json:"observed_at"`
-	Historical   bool   `json:"historical"`
+	InstrumentID string   `json:"instrument_id"`
+	ProviderID   string   `json:"provider_id"`
+	Price        string   `json:"price"`
+	ObservedAt   string   `json:"observed_at"`
+	Historical   bool     `json:"historical"`
+	Currency     string   `json:"currency"`
+	WeightUnit   string   `json:"weight_unit"`
+	SourceURL    string   `json:"source_url"`
+	Attributions []credit `json:"attributions"`
+}
+
+type credit struct {
+	Label string `json:"label"`
+	URL   string `json:"url"`
 }
 
 type feed struct {
-	Version   int     `json:"feed_version"`
-	Source    string  `json:"source"`
-	UpdatedAt string  `json:"updated_at"`
-	Quotes    []quote `json:"quotes"`
+	Version      int      `json:"feed_version"`
+	Source       string   `json:"source"`
+	UpdatedAt    string   `json:"updated_at"`
+	Quotes       []quote  `json:"quotes"`
+	Audience     string   `json:"audience"`
+	Attributions []credit `json:"attributions"`
 }
 
 type ingest struct {
@@ -94,6 +108,11 @@ func env(name, fallback string) string {
 }
 
 func runOnce(client *http.Client, cfg config, lastUpdate string) (string, error) {
+	for _, provider := range []string{"gold_api_free_xau", "gold_api_free_xag", "gold_api_free_btc"} {
+		if !sourceAllowed(provider, time.Now().UTC()) {
+			return "", errors.New("application feed transport permission unavailable")
+		}
+	}
 	payload, err := fetchFeed(cfg)
 	if err != nil {
 		return "", err
@@ -155,7 +174,7 @@ func runGit(ctx context.Context, args ...string) error {
 }
 
 func validateFeed(value *feed, now time.Time) error {
-	if (value.Version != 1 && value.Version != 2) || value.Source != "public-market-relay" {
+	if value.Version != 3 || value.Source != "own-app-market-feed" || value.Audience != "nerkhbaan-own-app" || !validCredit(value.Attributions) {
 		return errors.New("unsupported price feed contract")
 	}
 	updated, err := time.Parse(time.RFC3339Nano, value.UpdatedAt)
@@ -165,15 +184,10 @@ func validateFeed(value *feed, now time.Time) error {
 	allowed := map[string]string{
 		"gold_api_free_xag": "XAG_USD_OZ",
 		"gold_api_free_xau": "XAU_USD_OZ",
-		"xaus_xag":          "XAG_USD_OZ",
-		"coingecko_btc":     "BTC_USD",
-		"coingecko_usdt":    "USDT_USD",
+		"gold_api_free_btc": "BTC_USD",
 	}
-	if value.Version == 1 && len(value.Quotes) != 3 {
-		return errors.New("price feed must contain exactly three quotes")
-	}
-	if value.Version == 2 && (len(value.Quotes) < 1 || len(value.Quotes) > 4) {
-		return errors.New("partial price feed must contain one to four quotes")
+	if len(value.Quotes) < 1 || len(value.Quotes) > 3 {
+		return errors.New("application feed must contain one to three quotes")
 	}
 	seenProviders := map[string]bool{}
 	seenInstruments := map[string]bool{}
@@ -181,6 +195,21 @@ func validateFeed(value *feed, now time.Time) error {
 	for _, item := range value.Quotes {
 		if allowed[item.ProviderID] != item.InstrumentID || item.Historical {
 			return errors.New("price feed contains an unauthorized route")
+		}
+		if !sourceAllowed(item.ProviderID, now) {
+			return errors.New("source transport permission unavailable")
+		}
+		symbol, unit := "", "troy_ounce"
+		switch item.ProviderID {
+		case "gold_api_free_xau":
+			symbol = "XAU"
+		case "gold_api_free_xag":
+			symbol = "XAG"
+		case "gold_api_free_btc":
+			symbol, unit = "BTC", "unit"
+		}
+		if item.Currency != "USD" || item.WeightUnit != unit || item.SourceURL != "https://api.gold-api.com/price/"+symbol || !validCredit(item.Attributions) {
+			return errors.New("source currency, unit or attribution changed")
 		}
 		if seenProviders[item.ProviderID] || seenInstruments[item.InstrumentID] {
 			return errors.New("price feed contains a duplicate route")
@@ -196,19 +225,9 @@ func validateFeed(value *feed, now time.Time) error {
 			return errors.New("quote price is outside the safe range")
 		}
 		if now.Sub(observed) > maximumFeedAge {
-			if value.Version == 1 {
-				return errors.New("quote timestamp is outside the safe window")
-			}
 			continue
 		}
 		fresh = append(fresh, item)
-	}
-	if value.Version == 1 {
-		for _, instrument := range []string{"XAG_USD_OZ", "BTC_USD", "USDT_USD"} {
-			if !seenInstruments[instrument] {
-				return errors.New("price feed omitted a required instrument")
-			}
-		}
 	}
 	if len(fresh) == 0 {
 		return errors.New("price feed contains no fresh quotes")
@@ -225,14 +244,94 @@ func safePrice(instrument string, price float64) bool {
 		return price >= 500 && price <= 10000
 	case "BTC_USD":
 		return price >= 1000 && price <= 1000000
-	case "USDT_USD":
-		return price >= 0.8 && price <= 1.2
 	default:
 		return false
 	}
 }
 
+func validCredit(values []credit) bool {
+	return len(values) == 1 && values[0].Label == "Gold API" && values[0].URL == "https://gold-api.com/"
+}
+
+func sourceAllowed(provider string, now time.Time) bool {
+	if provider != "gold_api_free_xau" && provider != "gold_api_free_xag" && provider != "gold_api_free_btc" {
+		return false
+	}
+	path := os.Getenv("PRICING_RIGHTS_MANIFEST_PATH")
+	if path == "" {
+		return !now.Before(time.Date(2026, 10, 17, 0, 0, 0, 0, time.UTC)) && now.Before(time.Date(2027, 1, 15, 0, 0, 0, 0, time.UTC))
+	}
+	if !filepath.IsAbs(path) {
+		return false
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
+	body, err := io.ReadAll(io.LimitReader(file, 262145))
+	if err != nil || len(body) > 262144 {
+		return false
+	}
+	var manifest struct {
+		Version     int    `json:"schema_version"`
+		Environment string `json:"environment"`
+		Providers   map[string]struct {
+			Permissions []string `json:"permissions"`
+			Checked     string   `json:"checked_at"`
+			Expires     string   `json:"expires_at"`
+			Evidence    string   `json:"evidence_ref"`
+			Hosts       []string `json:"hosts"`
+		} `json:"providers"`
+	}
+	if json.Unmarshal(body, &manifest) != nil || manifest.Version != 1 || manifest.Environment != "production" {
+		return false
+	}
+	grant, ok := manifest.Providers[provider]
+	if !ok {
+		return false
+	}
+	checked, err := time.Parse(time.RFC3339Nano, grant.Checked)
+	if err != nil {
+		return false
+	}
+	expires, err := time.Parse(time.RFC3339Nano, grant.Expires)
+	if err != nil || now.Before(checked) || !now.Before(expires) || expires.Sub(checked) > 366*24*time.Hour {
+		return false
+	}
+	evidence, err := url.Parse(grant.Evidence)
+	if err != nil || evidence.Scheme != "https" || evidence.Hostname() == "" || evidence.User != nil {
+		return false
+	}
+	allowedActions := map[string]bool{"collect": true, "store": true, "display": true, "history": true, "derive": true, "own_app_transport": true, "external_processing": true, "relay": true}
+	permissions := map[string]bool{}
+	for _, action := range grant.Permissions {
+		if !allowedActions[action] {
+			return false
+		}
+		permissions[action] = true
+	}
+	hostAllowed := false
+	for _, host := range grant.Hosts {
+		if host == "api.gold-api.com" {
+			hostAllowed = true
+		}
+	}
+	return hostAllowed && permissions["collect"] && permissions["store"] && permissions["own_app_transport"]
+}
+
 func send(client *http.Client, cfg config, body []byte) error {
+	var contents ingest
+	if json.Unmarshal(body, &contents) != nil {
+		return errors.New("invalid ingest payload")
+	}
+	current := feed{Version: 3, Source: "own-app-market-feed", Audience: "nerkhbaan-own-app", UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano), Quotes: contents.Quotes, Attributions: []credit{{Label: "Gold API", URL: "https://gold-api.com/"}}}
+	if err := validateFeed(&current, time.Now().UTC()); err != nil {
+		return err
+	}
+	if len(current.Quotes) != len(contents.Quotes) {
+		return errors.New("ingest contains expired observations")
+	}
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
 	mac := hmac.New(sha256.New, []byte(cfg.secret))
 	mac.Write([]byte(timestamp))
@@ -247,13 +346,22 @@ func send(client *http.Client, cfg config, body []byte) error {
 	request.Header.Set("X-Pricing-Worker-Timestamp", timestamp)
 	request.Header.Set("X-Pricing-Worker-Signature", signature)
 	request.Host = "nerkhbaan.ir"
-	response, err := client.Do(request)
+	boundedClient := *client
+	boundedClient.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return errors.New("ingest redirect refused") }
+	response, err := boundedClient.Do(request)
 	if err != nil {
 		return fmt.Errorf("send ingest request: %w", err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusAccepted {
 		return fmt.Errorf("ingest returned status %d", response.StatusCode)
+	}
+	var result struct {
+		Accepted  int `json:"accepted"`
+		Published int `json:"published"`
+	}
+	if json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&result) != nil || result.Accepted != len(contents.Quotes) || result.Published != len(contents.Quotes) {
+		return errors.New("ingest did not acknowledge every published observation")
 	}
 	return nil
 }

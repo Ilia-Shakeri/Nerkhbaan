@@ -1,14 +1,6 @@
 name: Public price feed
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/price-feed.yml
-      - scripts/build-price-feed.py
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -21,6 +13,8 @@ concurrency:
 jobs:
   publish:
     name: Validate and publish
+    # Public redistribution needs separate permission; own-application use is insufficient.
+    if: ${{ vars.PRICING_PUBLIC_RELAY_APPROVED == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:

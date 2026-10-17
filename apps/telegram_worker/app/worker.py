@@ -13,10 +13,20 @@ from psycopg.rows import dict_row
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
+from . import source_rights
 from .parser import ParsedTelegramQuote, message_hash, normalize_channel_id, normalize_text, parse_message
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("telegram_worker")
+
+
+class SourceRightsRevoked(RuntimeError):
+    pass
+
+
+def _require_source_rights(source: dict[str, Any]) -> None:
+    if not source_rights.source_allowed(source.get("id")):
+        raise SourceRightsRevoked("Source collection or storage permission is absent")
 
 
 def require_env(name: str) -> str:
@@ -34,24 +44,26 @@ def _source_for(cursor: psycopg.Cursor, channel_id: str, username: str | None) -
     cursor.execute(
         """
         SELECT * FROM telegram_sources
-        WHERE enabled = TRUE
-          AND (channel_id = %s OR (%s IS NOT NULL AND lower(username) = lower(%s)))
+        WHERE enabled = TRUE AND channel_id = %s
         LIMIT 1
         """,
-        (channel_id, username, username),
+        (channel_id,),
     )
     return cursor.fetchone()
 
 
-def _record_unknown_source(cursor: psycopg.Cursor, channel_id: str) -> None:
-    cursor.execute(
-        """
-        INSERT INTO provider_runtime_events (
-            provider_id, instrument_id, event_type, status, sanitized_error, detail
-        ) VALUES (%s, NULL, 'telegram_message', 'rejected', 'source_not_whitelisted', %s::jsonb)
-        """,
-        ("telegram:unknown", json.dumps({"channel_hash": message_hash(channel_id)})),
-    )
+def _eligible_sources() -> list[dict[str, Any]]:
+    source_ids = source_rights.allowed_source_ids()
+    if not source_ids:
+        return []
+    with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, channel_id, username FROM telegram_sources "
+                "WHERE enabled = TRUE AND id = ANY(%s)",
+                (list(source_ids),),
+            )
+            return [row for row in cursor.fetchall() if source_rights.source_allowed(row["id"])]
 
 
 def _store_parse_result(
@@ -61,6 +73,7 @@ def _store_parse_result(
     quote: ParsedTelegramQuote,
     identity_key: str,
 ) -> None:
+    _require_source_rights(source)
     provider_quote_id: int | None = None
     if quote.validation_status == "accepted" and quote.instrument_id and quote.price is not None:
         cursor.execute(
@@ -104,6 +117,7 @@ def _store_parse_result(
         inserted = cursor.fetchone()
         provider_quote_id = inserted["id"] if inserted else None
 
+    _require_source_rights(source)
     cursor.execute(
         """
         INSERT INTO telegram_parse_results (
@@ -125,9 +139,10 @@ def _store_parse_result(
             provider_quote_id,
         ),
     )
+    _require_source_rights(source)
 
 
-def store_message(
+def _store_message(
     *,
     channel_id: str,
     username: str | None,
@@ -138,13 +153,13 @@ def store_message(
     text: str,
 ) -> str:
     channel_id = normalize_channel_id(channel_id)
-    digest = message_hash(text)
     with psycopg.connect(_database_url(), row_factory=dict_row) as connection:
         with connection.cursor() as cursor:
             source = _source_for(cursor, channel_id, username)
             if not source:
-                _record_unknown_source(cursor, channel_id)
                 return "rejected_source"
+            _require_source_rights(source)
+            digest = message_hash(text)
 
             now = datetime.now(UTC)
             maximum_age = int(source["maximum_message_age_seconds"])
@@ -160,9 +175,11 @@ def store_message(
             if existing and existing["message_hash"] == digest:
                 return "duplicate"
 
+            _require_source_rights(source)
             keep_text = os.getenv("TELEGRAM_STORE_SANITIZED_TEXT", "false").lower() == "true"
             sanitized = normalize_text(text)[:4000] if keep_text else None
             if existing:
+                _require_source_rights(source)
                 cursor.execute(
                     """
                     UPDATE provider_quotes SET validation_status = 'superseded_edit'
@@ -173,7 +190,9 @@ def store_message(
                     """,
                     (existing["id"],),
                 )
+                _require_source_rights(source)
                 cursor.execute("DELETE FROM telegram_parse_results WHERE telegram_message_id = %s", (existing["id"],))
+                _require_source_rights(source)
                 cursor.execute(
                     """
                     UPDATE telegram_messages
@@ -185,6 +204,7 @@ def store_message(
                     (source["id"], chat_id, message_date, edited_at or now, digest, sanitized, existing["id"]),
                 )
             else:
+                _require_source_rights(source)
                 cursor.execute(
                     """
                     INSERT INTO telegram_messages (
@@ -198,6 +218,7 @@ def store_message(
             stored = cursor.fetchone()
             row_id = stored["id"]
 
+            _require_source_rights(source)
             allowed = set(source["allowed_instruments"] or [])
             if message_date > now + timedelta(minutes=5):
                 results = [ParsedTelegramQuote(None, None, None, None, None, Decimal("0"), "rejected", "message_in_future")]
@@ -218,10 +239,50 @@ def store_message(
             for index, result in enumerate(results):
                 identity_key = f"telegram:{source['id']}:{telegram_message_id}:{digest}:{index}"
                 _store_parse_result(cursor, source, row_id, result, identity_key)
+            _require_source_rights(source)
             return "accepted" if any(item.validation_status == "accepted" for item in results) else "rejected"
 
 
+def store_message(
+    *,
+    channel_id: str,
+    username: str | None,
+    chat_id: str,
+    telegram_message_id: str,
+    message_date: datetime,
+    edited_at: datetime | None,
+    text: str,
+) -> str:
+    if not source_rights.allowed_source_ids():
+        return "rejected_rights"
+    try:
+        return _store_message(
+            channel_id=channel_id, username=username, chat_id=chat_id,
+            telegram_message_id=telegram_message_id, message_date=message_date,
+            edited_at=edited_at, text=text,
+        )
+    except SourceRightsRevoked:
+        # Let the connection context roll back all staged rows before returning.
+        return "rejected_rights"
+
+
+async def _watch_source_rights(client: Any, sources: list[dict[str, Any]]) -> None:
+    while any(source_rights.source_allowed(source["id"]) for source in sources):
+        await asyncio.sleep(5)
+    await client.disconnect()
+
+
 async def main() -> None:
+    sources = await asyncio.to_thread(_eligible_sources)
+    channels = {}
+    for source in sources:
+        try:
+            channels[normalize_channel_id(source["channel_id"])] = source
+        except (ValueError, TypeError):
+            logger.warning("Configured source has an invalid channel identity; skipped")
+    if not channels:
+        logger.info("Telegram collection denied: no enabled source has collection and storage permission")
+        return
     api_id = int(require_env("TELEGRAM_API_ID"))
     api_hash = require_env("TELEGRAM_API_HASH")
     session_string = require_env("TELEGRAM_SESSION_STRING")
@@ -230,33 +291,47 @@ async def main() -> None:
     async def handle(event: Any) -> None:
         if not event.is_channel:
             return
-        chat = await event.get_chat()
-        username = getattr(chat, "username", None)
         # event.chat_id already uses Telegram's marked channel identity.
         channel_id = normalize_channel_id(event.chat_id)
+        source = channels.get(channel_id)
+        if not source or not source_rights.source_allowed(source["id"]):
+            return
         outcome = await asyncio.to_thread(
             store_message,
             channel_id=channel_id,
-            username=username,
+            username=source.get("username"),
             chat_id=str(event.chat_id),
             telegram_message_id=str(event.message.id),
             message_date=event.message.date,
             edited_at=getattr(event.message, "edit_date", None),
             text=event.raw_text or "",
         )
-        logger.info("Telegram message handled: channel=%s result=%s", channel_id, outcome)
+        logger.info("Telegram message handled: result=%s", outcome)
 
-    @client.on(events.NewMessage())
+    selected_channels = tuple(int(channel_id) for channel_id in channels)
+
+    @client.on(events.NewMessage(chats=selected_channels))
     async def on_message(event: events.NewMessage.Event) -> None:
         await handle(event)
 
-    @client.on(events.MessageEdited())
+    @client.on(events.MessageEdited(chats=selected_channels))
     async def on_edit(event: events.MessageEdited.Event) -> None:
         await handle(event)
 
-    await client.start()
-    logger.info("Telegram worker connected; database source whitelist is active")
-    await client.run_until_disconnected()
+    if not any(source_rights.source_allowed(source["id"]) for source in channels.values()):
+        logger.info("Telegram collection denied: source permission changed before connection")
+        return
+    watcher = None
+    try:
+        await client.start()
+        watcher = asyncio.create_task(_watch_source_rights(client, list(channels.values())))
+        logger.info("Telegram worker connected; current source permissions are enforced")
+        await client.run_until_disconnected()
+    finally:
+        if watcher:
+            watcher.cancel()
+            await asyncio.gather(watcher, return_exceptions=True)
+        await client.disconnect()
 
 
 if __name__ == "__main__":

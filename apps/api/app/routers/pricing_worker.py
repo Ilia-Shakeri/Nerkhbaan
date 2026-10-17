@@ -8,6 +8,7 @@ import time
 from fastapi import APIRouter, HTTPException, Request, status
 
 from ..config import settings
+from ..pricing import rights
 from ..pricing.cache import PricingRedisUnavailable, pricing_redis
 from ..pricing.locks import PricingLeaseLost
 from ..pricing.service import PricingRefreshSuspended, instrument_pricing_service
@@ -16,11 +17,9 @@ from ..schemas import PricingWorkerIngestRequest
 router = APIRouter(prefix="/api/internal/pricing-worker", tags=["pricing-worker"])
 _MAX_CLOCK_SKEW_SECONDS = 300
 _WORKER_ROUTES = {
-    "coingecko_btc": "BTC_USD",
-    "coingecko_usdt": "USDT_USD",
+    "gold_api_free_btc": "BTC_USD",
     "gold_api_free_xag": "XAG_USD_OZ",
     "gold_api_free_xau": "XAU_USD_OZ",
-    "xaus_xag": "XAG_USD_OZ",
 }
 
 
@@ -61,6 +60,10 @@ async def ingest(request: Request) -> dict[str, int]:
             expected = _WORKER_ROUTES.get(quote.provider_id)
             if quote.instrument_id != expected:
                 raise ValueError("Worker provider does not match instrument")
+            if not all(rights.provider_allowed(quote.provider_id, action) for action in ("collect", "store", "own_app_transport")):
+                raise ValueError("Worker source permission unavailable")
+            if quote.historical:
+                raise ValueError("Worker provider does not support historical quotes")
         outcomes = []
         for quote in payload.quotes:
             outcomes.append(await instrument_pricing_service.ingest_worker_quote(**quote.model_dump()))

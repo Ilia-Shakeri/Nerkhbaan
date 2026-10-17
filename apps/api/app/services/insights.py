@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from ..config import settings
+from ..pricing import rights
 from ..security import rate_limit_hit
 
 logger = logging.getLogger(__name__)
@@ -182,6 +183,18 @@ class MarketInsightEngine:
         user_id: str,
     ) -> str:
         """Produce a concise market read for a single asset snapshot."""
+        if rights.enforced():
+            # App display rights do not authorize sending prices to another processor.
+            summaries = [snapshot.get(f"_{leg}_rights_source_summary") for leg in ("usd", "toman")
+                         if snapshot.get(f"price_{leg}") is not None]
+            if (not summaries or snapshot.get("history")
+                    or snapshot.get("change_percent") is not None or snapshot.get("trend")
+                    or any(not isinstance(summary, dict)
+                           or not rights.canonical_allowed(summary)
+                           or not rights.canonical_allowed(summary, "external_processing")
+                           for summary in summaries)):
+                # Chart buckets and percentage baselines have no complete source proof yet.
+                raise InsightUnavailableError("Market analysis source permission is unavailable")
         lang_directive = (
             "Reply in fluent Persian (Farsi)."
             if language == "fa"

@@ -256,6 +256,10 @@ class ApplicationDeploy:
                 raise DeployStopped(f"Existing {name} baseline is ambiguous or unhealthy")
         for name in ("backend", "migrate", *self.targets):
             spec = config.get("services", {}).get(name, {})
+            if name in {"backend", "migrate"}:
+                rights_setting = spec.get("environment", {}).get("PRICING_RIGHTS_ENFORCED", "true")
+                if str(rights_setting).lower() not in {"true", "1", "yes", "on"}:
+                    raise DeployStopped("Production source-rights enforcement must remain enabled")
             image = spec.get("image", "")
             if not immutable_image(image):
                 raise DeployStopped(f"{name} needs a reviewed commit/digest image reference")

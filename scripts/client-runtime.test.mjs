@@ -121,6 +121,102 @@ test('stream quotes preserve distinct instrument units and daily changes without
   assert.equal(canonicalLegDetails({ instrument_id: 'XAU_USD_OZ', change_24h: NaN }, false).change_percent_usd, null);
 });
 
+test('snapshot removal clears historical prices and source credits too', () => {
+  const { clearSnapshotPrices } = moduleAt('apps/web/src/app/services/price-stream.ts', {}, {});
+  const current = { assets: [{ asset: 'gold', history: [{ value_usd: 2080 }],
+    usd_attributions: [{ label: 'Old source', url: 'https://old.fixture.invalid/' }],
+    toman_attributions: [{ label: 'Old local source', url: 'https://local.fixture.invalid/' }] }] };
+  const cleared = clearSnapshotPrices(current);
+  assert.equal(cleared.assets[0].history.length, 0);
+  assert.equal(cleared.assets[0].usd_attributions.length, 0);
+  assert.equal(cleared.assets[0].toman_attributions.length, 0);
+  assert.equal(current.assets[0].history.length, 1);
+});
+
+test('source credits accept safe HTTPS links only and keep distinct contributors', () => {
+  const { safeAttributions } = moduleAt('apps/web/src/app/services/price-stream.ts', {}, {});
+  const valid = { label: 'Gold API', url: 'https://gold-api.com/' };
+  const credits = safeAttributions([valid, valid,
+    { label: 'Script', url: 'javascript:alert(1)' },
+    { label: 'Plain', url: 'http://source.fixture.invalid/' },
+    { label: 'Secret', url: 'https://name:secret@source.fixture.invalid/' },
+    { label: '', url: 'https://source.fixture.invalid/' },
+    { label: 'Local market', url: 'https://local.fixture.invalid/' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(credits)), [valid, { label: 'Local market', url: 'https://local.fixture.invalid/' }]);
+});
+
+test('stream source credits remain bound to the correct currency leg', () => {
+  const { canonicalLegDetails } = moduleAt('apps/web/src/app/services/price-stream.ts', {}, {});
+  const credit = { label: 'Gold API', url: 'https://gold-api.com/' };
+  const result = canonicalLegDetails({ instrument_id: 'XAU_USD_OZ', attribution: [credit] }, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.usd_attributions)), [credit]);
+  assert.equal(result.toman_attributions, undefined);
+});
+
+test('source-rights revision retires old socket frames and old HTTP requests', () => {
+  const target = new EventTarget(); const events = [];
+  target.addEventListener('pricing-rights-changed', event => events.push(event.detail.revision));
+  const stream = moduleAt('apps/web/src/app/services/price-stream.ts', { window: target }, {});
+  assert.equal(stream.acceptRightsRevision('first', 'http', 0), true);
+  const oldEpoch = stream.currentRightsEpoch();
+  assert.equal(stream.acceptRightsRevision('second', 'socket'), false);
+  assert.equal(stream.currentRightsRevision(), 'first');
+  assert.equal(stream.rightsArePending(), true);
+  assert.equal(stream.acceptRightsRevision('second', 'http', stream.currentRightsEpoch()), true);
+  assert.equal(stream.acceptRightsRevision('first', 'socket'), false);
+  assert.equal(stream.acceptRightsRevision('first', 'http', oldEpoch), false);
+  assert.equal(stream.currentRightsRevision(), 'second');
+  assert.equal(stream.acceptRightsRevision(undefined, 'socket'), false);
+  assert.deepEqual(events, ['first', 'first', 'second']);
+  // A fresh authoritative read can confirm an intentional permission rollback.
+  assert.equal(stream.acceptRightsRevision('first', 'http', stream.currentRightsEpoch()), true);
+});
+
+function pricingHarness() {
+  const window = new EventTarget();
+  const stream = moduleAt('apps/web/src/app/services/price-stream.ts', { window }, {});
+  const calls = [];
+  const instance = { interceptors: { request: { use() {} }, response: { use() {} } },
+    get: (url, config) => new Promise(resolve => calls.push({ url, config, resolve })) };
+  const exported = moduleAt('apps/web/src/app/services/api.ts', {
+    __env: {}, navigator: {}, window, document: { documentElement: { lang: 'en' } },
+  }, { axios: { create: () => instance }, './price-stream': stream });
+  return { stream, calls, exported };
+}
+
+test('late pricing response cannot restore a retired source-rights revision', async () => {
+  const { stream, calls, exported } = pricingHarness();
+  const pending = exported.getPrices();
+  stream.acceptRightsRevision('new-rights', 'socket');
+  stream.acceptRightsRevision('new-rights', 'http', stream.currentRightsEpoch());
+  calls[0].resolve({ data: { rights_revision: 'old-rights', assets: [{ price_usd: 2080 }] } });
+  await assert.rejects(pending, /permission|rights|source/i);
+  assert.equal(stream.currentRightsRevision(), 'new-rights');
+});
+
+test('an unseen older socket revision stays hidden until a fresh HTTP read confirms current rights', () => {
+  const stream = moduleAt('apps/web/src/app/services/price-stream.ts', { window: new EventTarget() }, {});
+  stream.acceptRightsRevision('current', 'http', 0);
+  const oldEpoch = stream.currentRightsEpoch();
+  assert.equal(stream.acceptRightsRevision('unseen-older-frame', 'socket'), false);
+  assert.equal(stream.currentRightsRevision(), 'current');
+  assert.equal(stream.rightsArePending(), true);
+  assert.equal(stream.acceptRightsRevision('current', 'socket'), false);
+  assert.equal(stream.acceptRightsRevision('current', 'http', oldEpoch), false);
+  assert.equal(stream.acceptRightsRevision('current', 'http', stream.currentRightsEpoch()), true);
+  assert.equal(stream.rightsArePending(), false);
+});
+
+test('history request carries current rights revision and rejects an older in-flight result', async () => {
+  const { stream, calls, exported } = pricingHarness();
+  stream.acceptRightsRevision('first', 'http', 0);
+  const pending = exported.getPriceHistory('gold', '30d');
+  assert.equal(calls[0].config.params.rights_revision, 'first');
+  stream.acceptRightsRevision('second', 'socket');
+  calls[0].resolve({ data: { asset: 'gold', points: [{ value_usd: 2080 }] } });
+  await assert.rejects(pending, /permission|rights|source/i);
+});
+
 test('sign-in waits for push teardown and remote signout before storing new credentials', async () => {
   const shared = sharedSession();
   const client = clientHarness(shared);

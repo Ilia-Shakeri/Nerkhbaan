@@ -39,6 +39,7 @@ from .parsers.history import build_history_parser
 from .persistence import PricingPersistence, pricing_persistence
 from .providers import ProviderQuoteCollector
 from .registry import PROVIDERS_BY_INSTRUMENT, ProviderDefinition
+from . import rights
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +54,21 @@ class HistoryBudgetDeferred(RuntimeError):
     """A subsequent history page needs quota; the original range stays pending."""
 
 
+def _history_rights_allowed(provider: ProviderDefinition) -> bool:
+    return (all(rights.provider_allowed(provider.provider_id, action)
+                for action in ("collect", "store", "history"))
+            and bool(provider.history_url)
+            and rights.endpoint_allowed(provider.provider_id, provider.history_url))
+
+
 def _history_request_options(
     provider: ProviderDefinition,
     parser: Any,
     range_start: datetime,
     range_end: datetime,
 ) -> tuple[dict[str, str | int], dict[str, str]]:
+    if not _history_rights_allowed(provider):
+        raise RuntimeError("history_provider_rights_denied")
     if not provider.history_url:
         raise RuntimeError("history_provider_url_missing")
     if parser.parser_version.startswith("coingecko-market-chart/"):
@@ -347,6 +357,8 @@ class PricingBackfillQueue:
     ) -> int:
         if not provider.history_url or not provider.history_parser_id:
             return 0
+        if not _history_rights_allowed(provider):
+            return 0
         parser = build_history_parser(provider.history_parser_id)
         params, headers = _history_request_options(
             provider, parser, job["range_start"], job["range_end"]
@@ -366,6 +378,8 @@ class PricingBackfillQueue:
             timeout=httpx.Timeout(10.0, connect=3.0), follow_redirects=False, trust_env=False
         ) as client:
             while True:
+                if not _history_rights_allowed(provider):
+                    raise RuntimeError("history_provider_rights_revoked")
                 if page > 1:
                     # Each page is a real request. Preserve the provider reserve,
                     # live refresh interval and the database claim while waiting.
@@ -379,6 +393,8 @@ class PricingBackfillQueue:
                 if windowed_udf:
                     request_params = {**params, "from": int(window_start.timestamp()), "to": int(window_end.timestamp())}
                 async with asyncio.timeout(15):
+                    if not _history_rights_allowed(provider):
+                        raise RuntimeError("history_provider_rights_revoked")
                     response = await client.get(provider.history_url, params=request_params, headers=headers)
                 if response.status_code == 429:
                     await self.budgets.record_rate_limit(provider)
@@ -423,11 +439,15 @@ class PricingBackfillQueue:
         # Process the whole requested range; the batch bound controls yielding.
         last_renewed = time.monotonic()
         for index, point in enumerate(points):
+            if not _history_rights_allowed(provider):
+                raise RuntimeError("history_provider_rights_revoked")
             if index and (index % max(1, self.batch_size) == 0 or time.monotonic()-last_renewed >= 60):
                 if not await asyncio.to_thread(self._renew_job, job["id"], job.get("attempt_count")):
                     raise RuntimeError("backfill_job_no_longer_owned")
                 last_renewed = time.monotonic()
                 await asyncio.sleep(0)
+            if not _history_rights_allowed(provider):
+                raise RuntimeError("history_provider_rights_revoked")
             quote = ProviderQuote.create(
                 instrument_id=instrument.instrument_id,
                 provider_id=provider.provider_id,
@@ -532,6 +552,7 @@ class PricingBackfillQueue:
                     key=lambda item: (item.history_priority, item.priority, item.provider_id),
                 )
                 if provider.enabled
+                and _history_rights_allowed(provider)
                 and provider.configured(settings)
                 and provider.history_url
                 and provider.history_parser_id

@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Sparkles, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { useAppContext } from '../context/AppContext';
 import { api, getPrices, type PriceAsset } from '../services/api';
+import { currentRightsEpoch, PRICING_RIGHTS_EVENT } from '../services/price-stream';
 import { toast } from 'sonner';
 
 export function ChartAnalysisView() {
@@ -18,6 +19,23 @@ export function ChartAnalysisView() {
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const analysisGeneration = useRef(0);
+  const analysisRequest = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const changed = () => {
+      analysisGeneration.current += 1;
+      analysisRequest.current?.abort();
+      setAnalysis(''); setSelectedAsset(null); setIsAnalyzing(false); setAssets([]);
+      setLoadAttempt(value => value + 1);
+    };
+    window.addEventListener(PRICING_RIGHTS_EVENT, changed);
+    return () => {
+      window.removeEventListener(PRICING_RIGHTS_EVENT, changed);
+      analysisGeneration.current += 1;
+      analysisRequest.current?.abort();
+    };
+  }, []);
 
   const t = {
     title: { fa: 'تحلیل هوشمند', en: 'Smart Analysis' },
@@ -37,9 +55,14 @@ export function ChartAnalysisView() {
 
   useEffect(() => {
     let cancelled = false;
+    let pending = false;
+    const controller = new AbortController();
     setIsLoadingAssets(true);
     setAssetsLoadFailed(false);
-    getPrices()
+    const load = () => {
+      if (pending || cancelled) return;
+      pending = true;
+      getPrices(controller.signal)
       .then((data) => {
         if (!cancelled) setAssets(data?.assets ?? []);
       })
@@ -50,26 +73,38 @@ export function ChartAnalysisView() {
         }
       })
       .finally(() => {
+        pending = false;
         if (!cancelled) setIsLoadingAssets(false);
       });
+    };
+    load();
+    const timer = setInterval(load, 15_000);
     return () => {
       cancelled = true;
+      controller.abort();
+      clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadAttempt]);
 
   const handleAnalyze = async (asset: string) => {
+    const generation = ++analysisGeneration.current;
+    const epoch = currentRightsEpoch();
+    analysisRequest.current?.abort();
+    const controller = new AbortController();
+    analysisRequest.current = controller;
+    const current = () => generation === analysisGeneration.current && epoch === currentRightsEpoch();
     setSelectedAsset(asset);
     setIsAnalyzing(true);
     setAnalysis('');
     try {
-      const result = await api.insights.analyze(asset, language);
-      setAnalysis(result.analysis);
+      const result = await api.insights.analyze(asset, language, controller.signal);
+      if (current()) setAnalysis(result.analysis);
     } catch (error) {
       const message = error instanceof Error ? error.message : t.analyzeFail[language];
-      toast.error(message);
+      if (current()) toast.error(message);
     } finally {
-      setIsAnalyzing(false);
+      if (current()) setIsAnalyzing(false);
     }
   };
 

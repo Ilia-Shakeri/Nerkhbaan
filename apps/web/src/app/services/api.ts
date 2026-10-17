@@ -1,6 +1,7 @@
 ﻿import axios from 'axios';
 
 import { beginLogout, finishLogout, logoutGeneration, logoutIsPending } from './logout-state';
+import { acceptRightsRevision, currentRightsEpoch, currentRightsRevision, rightsArePending } from './price-stream';
 
 const envApiUrl = import.meta.env.VITE_API_URL;
 const isDesktop = Boolean(window.electronAPI?.auth);
@@ -289,8 +290,11 @@ export const api = {
     },
   },
   insights: {
-    async analyze(asset: string, language: 'fa' | 'en'): Promise<AnalyzeResponse> {
-      const { data } = await apiInstance.post<AnalyzeResponse>('insights/analyze', { asset, language });
+    async analyze(asset: string, language: 'fa' | 'en', signal?: AbortSignal): Promise<AnalyzeResponse> {
+      if (rightsArePending()) throw new Error('Source permission is being checked; retry shortly');
+      const epoch = currentRightsEpoch();
+      const { data } = await apiInstance.post<AnalyzeResponse>('insights/analyze', { asset, language }, { signal });
+      if (epoch !== currentRightsEpoch()) throw new Error('Source permission changed; request fresh analysis');
       return data;
     },
     async chat(messages: ChatMessage[], language: 'fa' | 'en', session_id: number | null | undefined, consent: { processing_consent: boolean; policy_version: string }): Promise<ChatResponse> {
@@ -314,13 +318,18 @@ export const api = {
     },
   },
   notifications: {
-    async list(): Promise<NotificationItem[]> {
-      const { data } = await apiInstance.get<NotificationItem[] | { items?: NotificationItem[]; notifications?: NotificationItem[] }>('notifications');
+    async list(signal?: AbortSignal): Promise<NotificationItem[]> {
+      const epoch = currentRightsEpoch();
+      if (rightsArePending()) throw new Error('Source permission is being checked; retry shortly');
+      const { data } = await apiInstance.get<NotificationItem[] | { items?: NotificationItem[]; notifications?: NotificationItem[] }>('notifications', { signal });
+      if (epoch !== currentRightsEpoch()) throw new Error('Source permission changed; request fresh notices');
       if (Array.isArray(data)) return data;
       return data.notifications ?? data.items ?? [];
     },
     async markRead(id: number | string): Promise<NotificationItem> {
+      const epoch = currentRightsEpoch();
       const { data } = await apiInstance.patch<NotificationItem>(`notifications/${encodeURIComponent(String(id))}/read`);
+      if (epoch !== currentRightsEpoch()) throw new Error('Source permission changed; request fresh notices');
       return data;
     },
     async readAll(): Promise<void> {
@@ -370,7 +379,10 @@ export const api = {
       return data;
     },
     async sources(instrumentId: string): Promise<InstrumentSourcesResponse> {
+      if (rightsArePending()) throw new Error('Source permission is being checked; retry shortly');
+      const epoch = currentRightsEpoch();
       const { data } = await apiInstance.get<InstrumentSourcesResponse | InstrumentSourceQuote[] | { data?: InstrumentSourcesResponse }>(`instruments/${encodeURIComponent(instrumentId)}/sources`);
+      if (epoch !== currentRightsEpoch()) throw new Error('Source permission changed; request fresh source data');
       if (Array.isArray(data)) return { instrument_id: instrumentId, sources: data };
       const payload = 'data' in data && data.data ? data.data : data as InstrumentSourcesResponse;
       return { ...payload, instrument_id: payload.instrument_id ?? instrumentId, sources: Array.isArray(payload.sources) ? payload.sources : [] };
@@ -649,6 +661,8 @@ export type PriceAsset = {
   history: PricePoint[];
   source_usd: string;
   source_toman: string;
+  usd_attributions?: SourceAttribution[];
+  toman_attributions?: SourceAttribution[];
   usd_status: OperationalPriceStatus;
   toman_status: OperationalPriceStatus;
   stale_minutes: number | null;
@@ -680,10 +694,16 @@ export type PricePoint = {
 export type PriceHistoryResponse = {
   asset: string;
   points: PricePoint[];
+  rights_revision?: string;
+  usd_attributions?: SourceAttribution[];
+  toman_attributions?: SourceAttribution[];
 };
+
+export type SourceAttribution = { label: string; url: string };
 
 export type PricesResponse = {
   refreshed_at: string;
+  rights_revision?: string;
   source: { usd?: string; toman?: string };
   assets: PriceAsset[];
 };
@@ -692,7 +712,7 @@ export type PriceTimeframe = '1h' | '24h' | '7d' | '30d' | '1y';
 
 export const queryKeys = {
   prices: ['prices'] as const,
-  priceHistory: (asset: string, timeframe: PriceTimeframe) => ['prices', asset, 'history', timeframe] as const,
+  priceHistory: (asset: string, timeframe: PriceTimeframe, revision = currentRightsRevision()) => ['prices', asset, 'history', timeframe, revision] as const,
   alerts: ['alerts'] as const,
   profile: ['profile'] as const,
   analysis: (asset: string, language: 'fa' | 'en') => ['insights', 'analysis', asset, language] as const,
@@ -701,7 +721,9 @@ export const queryKeys = {
 };
 
 export const getPrices = async (signal?: AbortSignal): Promise<PricesResponse> => {
+  const epoch = currentRightsEpoch();
   const { data } = await apiInstance.get<PricesResponse>('prices', { signal });
+  if (!acceptRightsRevision(data.rights_revision, 'http', epoch)) throw new Error('Source permission changed; request fresh prices');
   return data;
 };
 
@@ -709,12 +731,20 @@ export const getPriceHistory = async (
   asset: string,
   timeframe: PriceTimeframe = '24h',
   signal?: AbortSignal,
+  revision = currentRightsRevision(),
 ): Promise<PriceHistoryResponse> => {
+  const epoch = currentRightsEpoch();
+  if (rightsArePending() || revision !== currentRightsRevision()) throw new Error('Source permission changed; request fresh history');
   const { data } = await apiInstance.get<PriceHistoryResponse>(`prices/${asset}/history`, {
-    params: { timeframe },
+    params: { timeframe, ...(revision ? { rights_revision: revision } : {}) },
     signal,
   });
-  return data;
+  if (epoch !== currentRightsEpoch()) throw new Error('Source permission changed; request fresh history');
+  if (data.rights_revision && data.rights_revision !== revision) {
+    acceptRightsRevision(data.rights_revision, 'http', epoch);
+    throw new Error('Source permission changed; request fresh history');
+  }
+  return { ...data, rights_revision: data.rights_revision ?? revision };
 };
 
 export const getPricesWebSocketUrl = (): string => {

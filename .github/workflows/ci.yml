@@ -113,6 +113,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+psycopg://test:test@127.0.0.1:5432/test
       JWT_SECRET_KEY: ci-unit-key-not-for-runtime-0000000000000000
+      PRICING_RIGHTS_ENFORCED: "false" # Legacy synthetic fixtures; strict source-rights tests enable it explicitly.
       PRICING_REQUIRE_PROVIDER_KEYS: "false"
       REDIS_URL: ""
     steps:
@@ -149,6 +150,8 @@ jobs:
           python ../../scripts/test_load_test.py
           python ../../scripts/test_deploy_application.py
           python -m pyflakes ../../scripts/deploy_application.py ../../scripts/test_deploy_application.py
+          python ../telegram_worker/tests/test_source_rights.py -v
+          python -m pyflakes ../telegram_worker/app/source_rights.py ../telegram_worker/app/worker.py ../telegram_worker/tests/test_source_rights.py
 
       - name: Run backend unit tests
         run: python -m unittest discover -s tests -v
@@ -206,6 +209,7 @@ jobs:
       DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5432/nerkhbaan_ci
       REDIS_URL: redis://127.0.0.1:6379/0
       JWT_SECRET_KEY: ci-integration-key-not-for-runtime-000000000000
+      PRICING_RIGHTS_ENFORCED: "false" # Legacy synthetic fixtures; production defaults to enforcement.
       MIGRATIONS_DIR: ${{ github.workspace }}/apps/api/db/migrations
       PRICING_REQUIRE_PROVIDER_KEYS: "false"
       PYTHONPATH: .
@@ -259,6 +263,18 @@ jobs:
           TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5433/nerkhbaan_history_ci
           TEST_HISTORY_BACKEND: plain
         run: python -m unittest tests.test_history_backend_aggregation -v
+
+      - name: Prove strict source permissions on ordinary PostgreSQL
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5433/nerkhbaan_history_ci
+          PRICING_RIGHTS_ENFORCED: "true"
+        run: python -m unittest tests.test_pricing_rights_postgres -v
+
+      - name: Prove strict source permissions with Timescale aggregates
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5432/nerkhbaan_ci
+          PRICING_RIGHTS_ENFORCED: "true"
+        run: python -m unittest tests.test_pricing_rights_postgres -v
 
       - name: Prove history aggregation on Timescale
         env:
@@ -356,11 +372,7 @@ jobs:
           # Syntax validation uses local fixture addresses; provider DNS and
           # reachability belong to the separate live canary checks.
           docker run --rm \
-            --add-host api.exchange.coinbase.com:127.0.0.1 \
-            --add-host api.coingecko.com:127.0.0.1 \
-            --add-host www.goldapi.io:127.0.0.1 \
             --add-host api.gold-api.com:127.0.0.1 \
-            --add-host api.metals.dev:127.0.0.1 \
             -e CORE_IP_CIDR=203.0.113.10/32 \
             -e RELAY_SHARED_TOKEN=ci-relay-token-not-for-runtime-000000000000 \
             -e 'NGINX_ENVSUBST_FILTER=^(CORE_IP_CIDR|RELAY_SHARED_TOKEN)$' \
@@ -400,6 +412,7 @@ jobs:
       DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-browser-password@127.0.0.1:5432/nerkhbaan_e2e
       REDIS_URL: redis://127.0.0.1:6379/1
       JWT_SECRET_KEY: ci-browser-key-not-for-runtime-0000000000000000
+      PRICING_RIGHTS_ENFORCED: "false" # Synthetic browser market fixtures have no provider licence.
       MIGRATIONS_DIR: ${{ github.workspace }}/apps/api/db/migrations
       PRICING_REQUIRE_PROVIDER_KEYS: "false"
       PYTHONPATH: .

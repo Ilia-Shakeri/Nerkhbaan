@@ -128,8 +128,9 @@ class _StreamClient:
 class ProviderRetryTests(unittest.IsolatedAsyncioTestCase):
     async def test_relay_request_gets_shared_header(self) -> None:
         provider = SimpleNamespace(
+            provider_id="gold_api_free_xau",
             static_headers=(),
-            url="https://relay.example.com/coinbase/products/BTC-USD/ticker",
+            url="https://relay.example.com/gold-api/price/XAU",
             requires_https=False,
             api_key_setting=None,
         )

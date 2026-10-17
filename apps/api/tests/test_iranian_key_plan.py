@@ -44,7 +44,7 @@ class IranianKeyPlanTests(unittest.TestCase):
         self.assertEqual(result["budget_scope"], "catalogue_only")
         self.assertEqual(result["effective_runtime_budget"], "unknown_not_read")
         self.assertFalse(result["account_quota_verified"])
-        self.assertEqual(result["servix_budget"]["catalogue_daily_sum"], 42)
+        self.assertEqual(result["servix_budget"]["catalogue_daily_sum"], 48)
         self.assertIsNone(result["servix_budget"]["runtime_daily_sum"])
 
 
