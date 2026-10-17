@@ -588,7 +588,7 @@ _PROVIDERS = (
     _provider(
         "servix_usd_toman", "Servix Free-Market USD", "USD_TOMAN",
         ProviderRole.FALLBACK, 10, "0.70", _setting_url("servix_api_base_url", "/api/v1/assets"),
-        "servix_usd_rls_v1", "servix-assets/1.0.0", 300,
+        "servix_usd_rls_v1", "servix-assets/1.1.0", 300,
         rpm=2, rph=2, rpd=16, interval=5400,
         api_key_setting="servix_api_key", api_key_header="X-API-Key",
         history_url=_setting_url("servix_api_base_url", "/api/v1/assets/USD_RLS/history"),
@@ -642,7 +642,7 @@ _PROVIDERS = (
     _provider(
         "servix_btc_usd", "Servix BTC-USD", "BTC_USD", ProviderRole.FALLBACK, 30,
         "0.74", _setting_url("servix_api_base_url", "/api/v1/assets"), "servix_btc_usd_v1",
-        "servix-assets/1.0.0", 120, rpm=2, rph=2, rpd=16, interval=5400,
+        "servix-assets/1.1.0", 120, rpm=2, rph=2, rpd=16, interval=5400,
         api_key_setting="servix_api_key", api_key_header="X-API-Key",
         history_url=_setting_url("servix_api_base_url", "/api/v1/assets/BTC_USD/history"),
         history_parser_id="servix_btc_usd_history_v1",
@@ -657,7 +657,7 @@ _PROVIDERS = (
     _provider(
         "servix_usdt_usd", "Servix USDT-USD", "USDT_USD", ProviderRole.FALLBACK, 30,
         "0.74", _setting_url("servix_api_base_url", "/api/v1/assets"),
-        "servix_usdt_usd_v1", "servix-assets/1.0.0", 120,
+        "servix_usdt_usd_v1", "servix-assets/1.1.0", 120,
         rpm=2, rph=2, rpd=16, interval=5400,
         api_key_setting="servix_api_key", api_key_header="X-API-Key",
         history_url=_setting_url("servix_api_base_url", "/api/v1/assets/USDT_USD/history"),

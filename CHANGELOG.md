@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.8.3] - 2026-10-17
+
+### Changed
+
+- Started step two with strict Servix current-price contract handling: explicit quote currency and source time, official array/single-object shapes, duplicate-symbol rejection and matching parser provenance. Fourteen contract cases and the complete local 464-case backend suite pass with zero skips. These fixtures do not prove authenticated prices, source rights or operational coverage; provider activation is unchanged.
+- Recorded the October 16 Iranian-source canaries and current documentation, including separate direct-gold/cash-dollar and history acceptance gates.
+
 ## [2.8.2] - 2026-10-16
 
 ### Fixed
@@ -19,7 +26,8 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - 450 backend tests passed with zero skips, including owned PostgreSQL 17.11 and Redis 7.4.11 cases; the suite also contains unit, SQLite and mocked checks.
 - 65 frontend tests, 26 Edge cases, 10 Go feed checks, 14 deployment CLI fixtures and 31 infrastructure/helper checks passed. Browser coverage includes one real disposable HTTP/PostgreSQL flow and 25 mocked HTTP flows. The deployment checks use fake containers and HTTPS responses.
 - Web, admin and desktop renderer builds passed. Applied SQL and dependency versions remain unchanged. New real alert/queue regression modules are included in hosted integration configuration.
-- This is source-code validation. No live deployment, new Timescale restore, current image scan, signed installer or real notification receipt is claimed for 2.8.2. Earlier 2.8.1 target evidence retains its original date and scope.
+- Hosted [run 38972610806](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38972610806) passed all 15 jobs at release commit `1af7521a2c1c6edf4a41c9db293ad7c021ee8587`, tagged `v2.8.2`. This includes image scans and a disposable Timescale/PostgreSQL restore. The preceding run failed because the bare Go test container lacked Git; the corrected job installs that test dependency and retains the real Git integration case.
+- This is source and disposable-environment validation. No live deployment, production-data restore, trusted publisher signature or real notification receipt is claimed for 2.8.2. Earlier 2.8.1 target evidence retains its original date and scope.
 
 ## [2.8.1] - 2026-10-11
 

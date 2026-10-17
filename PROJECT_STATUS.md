@@ -1,6 +1,6 @@
 # Project Status
 
-Code release: **2.8.2**. Record updated: 2026-10-16.
+Code release: **2.8.3**. Record updated: 2026-10-17. This release contains the step-two Servix contract repair; operational provider coverage remains incomplete.
 
 ## Step-one code acceptance — 2026-10-16
 
@@ -15,10 +15,33 @@ SQLite and mocked fixtures. Ten Go feed cases, fourteen fake deployment CLI test
 checks passed. Public/admin/desktop renderer builds passed. The scoped code correction loop reached
 9/10. These counts are separate suites; they do not represent a complete target acceptance run.
 
+Release tag `v2.8.2` and its branch were pushed and remotely verified at
+`1af7521a2c1c6edf4a41c9db293ad7c021ee8587`.
+Hosted [run 38972610806](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38972610806)
+passed all 15 jobs, including real database/Redis cases, disposable restore and image scans.
+The earlier [run 38949985484](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38949985484)
+remains failed: the Go test container lacked Git. The one-line environment repair passed the same
+image locally and in the final hosted run; the real Git case was retained.
+
 Provider coverage is the next roadmap step. Source rights, direct 24K/cash-dollar inputs, continuous
 collection, real notification receipt, trusted signing and target acceptance retain their own gates.
-No live service or customer data was changed. Hosted results for older commits below are historical;
-they do not certify this source release.
+No live service or customer data was changed. Hosted results for older commits below are historical.
+
+## Step two — 2.8.3 source validation
+
+The Servix current-price parser now requires explicit `quoteUnit` and timezone-bearing
+`businessTime`, accepts the documented array/single-object shapes and rejects duplicate selected
+codes. Parser/registry provenance is `servix-assets/1.1.0`. The preceding local run passed all 464
+backend tests with zero skips, including 14 new contract cases. The suite uses owned PostgreSQL/Redis
+and unit, SQLite/mocked cases; no authenticated provider payload was obtained. The repair is included
+in 2.8.3. Its release checks are separate from the historical `v2.8.2` hosted run above.
+
+The initial empty-venv attempt failed imports. A second attempt passed with three history cases
+skipped; its receipt remains partial. The final run explicitly selected ordinary PostgreSQL history
+and passed all 464 cases. Neither earlier receipt was relabelled passed.
+
+[Step-two source report](docs/provider-step2-2026-10-17.md) records the October 16 read-only
+canaries, official source links and remaining inputs. No provider was enabled and no key was added.
 
 ## Previous release context — 2.8.1
 

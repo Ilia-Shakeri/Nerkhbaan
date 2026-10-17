@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -213,19 +214,46 @@ class WallexMarketParser:
 @dataclass(frozen=True, slots=True)
 class ServixAssetsParser:
     code: str
-    parser_version: str = "servix-assets/1.0.0"
+    parser_version: str = "servix-assets/1.1.0"
 
     def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
-        root = require_object(payload, "Servix response")
-        rows = root.get("data") or root.get("assets") or root.get("result") or payload
-        node = _node_by_key(rows, "code", self.code)
+        rows = payload
+        if isinstance(payload, dict):
+            for field in ("data", "assets", "result"):
+                if field in payload:
+                    rows = payload[field]
+                    break
+            if isinstance(rows, dict) and "code" in rows:
+                rows = [rows]
+        records = list(rows.values()) if isinstance(rows, dict) else require_list(rows, "Servix quotes")
+        matches = []
+        for record in records:
+            item = require_object(record, "Servix quote")
+            if str(item.get("code", "")).upper() == self.code.upper():
+                matches.append(item)
+        if not matches:
+            raise ParserError("unsupported_symbol", "Servix quote code does not match")
+        if len(matches) != 1:
+            raise ParserError("ambiguous_symbol", "Servix quote code is duplicated")
+        node = matches[0]
         raw = strict_decimal(exact_path(node, "value"), "value")
-        source_unit = "RIAL" if self.code.upper().endswith("_RLS") else context.instrument.quote_currency.value
-        factor = Decimal("0.1") if source_unit == "RIAL" else Decimal("1")
+        quote_unit = exact_path(node, "quoteUnit")
+        if not isinstance(quote_unit, str):
+            raise ParserError("unknown_unit", "Servix quoteUnit must be explicit text")
+        source_unit, factor = _unit_factor(quote_unit)
+        source_time = exact_path(node, "businessTime")
+        if not isinstance(source_time, str) or not source_time.strip():
+            raise ParserError("invalid_timestamp", "Servix businessTime is required")
+        try:
+            parsed_time = datetime.fromisoformat(source_time.strip().replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ParserError("invalid_timestamp", "Servix businessTime is invalid") from exc
+        if parsed_time.tzinfo is None or parsed_time.utcoffset() is None:
+            raise ParserError("invalid_timestamp", "Servix businessTime timezone is required")
         return _parsed(
             raw * factor,
             context,
-            node.get("businessTime") or node.get("updated_at"),
+            source_time.strip(),
             {
                 "source_code": self.code,
                 "source_currency": source_unit,

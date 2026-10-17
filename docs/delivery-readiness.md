@@ -1,11 +1,11 @@
-# Delivery Readiness — 2.8.2
+# Delivery Readiness — 2.8.3
 
-Updated: 2026-10-16. Code delivery and production acceptance are separate facts.
+Updated: 2026-10-17. Code delivery and production acceptance are separate facts.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
 | --- | --- | --- | --- |
-| Release consistency | `npm run check:release` | version 2.8.2, no drift | Local |
+| Release consistency | `npm run check:release` | version 2.8.3, no drift | Local |
 | Python static/unit | `python -m pyflakes app tests scripts`; `python -m unittest discover -s tests -v` from apps/api | zero static errors; all required tests pass | Local |
 | Infra fixture behavior | `python scripts/test_infra_contracts.py` | OK | Local, mocked network/data |
 | Browser fixture safety | `TEST_DATABASE_URL=... python scripts/test_browser_fixture.py` | five cases pass, none skipped | Explicit loopback test PostgreSQL, run-owned schema |
@@ -48,11 +48,21 @@ builds and Python static checks passed. These suites overlap and must not be com
 
 The scoped code correction loop reached 9/10 after the remaining failures were reproduced and fixed.
 Original applied SQL is unchanged. The new alert-race and persistence-queue modules are wired into
-hosted integration with disposable PostgreSQL/Redis. A fresh hosted result is required for this
-release; the older results below are historical. No live service was changed by this work.
+hosted integration with disposable PostgreSQL/Redis.
+
+Final hosted [run 38972610806](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38972610806)
+passed all 15 jobs at `1af7521a2c1c6edf4a41c9db293ad7c021ee8587`; branch and annotated tag
+`v2.8.2` were pushed and remotely verified. It includes image scans, migrations, Redis, ordinary
+PostgreSQL and Timescale history checks and a disposable database restore. The preceding run
+38949985484 remains failed because the Go test container lacked Git; installing that test dependency
+passed the same Linux image locally and in the final hosted run without skipping the real Git test.
+No live service was changed by this work.
 
 Provider coverage is step two. Continuous source operation, actual notification receipt, publisher
-signing, new runtime image scans and target release acceptance remain separate gates.
+signing and target release acceptance remain separate gates. The 2.8.3 Servix contract repair
+passed 464 backend cases with zero skips before its metadata bump; fresh release checks are required.
+It is outside the historical `v2.8.2` tag and hosted result.
+[The step-two report](provider-step2-2026-10-17.md) retains the remaining input and coverage limits.
 
 ## Previously executed evidence — 2026-10-12
 

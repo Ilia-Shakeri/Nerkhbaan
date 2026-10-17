@@ -1,7 +1,11 @@
 # Remaining Acceptance and Optional Work
 
-Code baseline: **2.8.1**. Updated: 2026-10-12.
+Code baseline: **2.8.3**. Updated: 2026-10-17. The target checks below remain dated 2.8.1 evidence.
 A task here is external acceptance or optional product work; it is not a substitute for fixing a known code defect.
+
+Step one was released as 2.8.2. The 2.8.3 Servix contract repair rejects ambiguous units and source
+times; it does not supply credentials or prove live coverage. Current source inputs are tracked in
+[the step-two report](docs/provider-step2-2026-10-17.md).
 
 ## Completed target checks — 2026-10-11–12
 

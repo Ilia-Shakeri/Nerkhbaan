@@ -1,8 +1,8 @@
-# Release Operations — 2.8.2
+# Release Operations — 2.8.3
 
-Updated: 2026-10-16. Execute against the intended host only after review of the concrete release.
+Updated: 2026-10-17. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
-Release 2.8.2 has local source validation only. This change does not deploy it; 2.8.1 target receipts below remain historical.
+Release 2.8.3 includes the Servix source-contract repair. It does not enable a provider or deploy services. Fresh release evidence is separate from the successful 2.8.2 hosted run; 2.8.1 target receipts below remain historical.
 
 ## 1. Final code gates
 

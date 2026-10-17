@@ -1,6 +1,8 @@
-# Pricing Operations Runbook — 2.8.1
+# Pricing Operations Runbook — 2.8.3
 
-Updated: 2026-10-12. Dated target evidence is recorded separately in the delivery matrix.
+Updated: 2026-10-17. Dated target evidence is recorded separately in the delivery matrix.
+The 2.8.3 Servix parser requires explicit quoteUnit and timezone-bearing businessTime. Contract
+fixtures do not replace authenticated source proof; unknown data remains rejected.
 
 ## Provider onboarding
 
@@ -13,12 +15,13 @@ make a canary pass. Use the actual configured Settings object for endpoint and p
 Run a provider canary from `apps/api` with private runtime settings already injected:
 
 ```bash
-python scripts/provider_canary.py
-python scripts/provider_canary.py coinbase_btc_usd
+python scripts/provider_canary.py wallgold_gold18
 ```
 
 A sanitized successful result proves that exact route at that time. It does not prove every route,
 long-term uptime, redistribution rights or production alert delivery. Keep credential values out of reports.
+Use an explicit provider ID to bound requests. Disabled or unconfigured providers return skipped;
+that result is not price proof. Supplying a Servix key alone does not enable its disabled routes.
 
 ## Instrument and canonical rules
 

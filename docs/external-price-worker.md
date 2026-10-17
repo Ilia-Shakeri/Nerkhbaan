@@ -1,6 +1,7 @@
-# External Pricing Transports — 2.8.1
+# External Pricing Transports — 2.8.3
 
-Updated: 2026-10-11. Choose a transport based on a fresh test from the intended host.
+Updated: 2026-10-17. Choose a transport based on a fresh test from the intended host.
+The transport behavior below is unchanged by the 2.8.3 Servix contract repair; dated receipts retain their original scope.
 Neither a relay nor a worker grants provider usage or redistribution rights.
 
 ## Public Git feed
