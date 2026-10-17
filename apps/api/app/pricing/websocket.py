@@ -9,6 +9,7 @@ import uuid
 from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 from ..config import settings
 from . import rights
@@ -26,6 +27,11 @@ _CLIENT_QUEUE_SIZE = 64
 
 #: Client frames accepted per connection per minute.
 _CLIENT_MESSAGE_LIMIT = 30
+
+_CLOSED_SEND_ERRORS = frozenset({
+    "Unexpected ASGI message 'websocket.send', after sending 'websocket.close' or response already completed.",
+    'Cannot call "send" once a close message has been sent.',
+})
 
 
 def _quote_allowed(quote: CanonicalQuote) -> bool:
@@ -156,7 +162,7 @@ class PriceWebSocketHub:
             return
         try:
             if not await self.store.ping():
-                await websocket.send_json(
+                await self._send_json(websocket,
                     {
                         "event_type": "degraded",
                         "reason": "redis_unavailable",
@@ -169,7 +175,7 @@ class PriceWebSocketHub:
             # Capacity and Redis availability must pass before snapshot reads.
             if initial_quotes is None:
                 initial_quotes = await self._read_snapshot()
-            await websocket.send_json(
+            await self._send_json(websocket,
                 {
                     "event_type": "snapshot",
                     "type": "snapshot",
@@ -198,6 +204,19 @@ class PriceWebSocketHub:
                     queue.get_nowait()
                 queue.put_nowait({"event_type": "resync", "reason": reason})
 
+    @staticmethod
+    async def _send_json(websocket: WebSocket, payload: dict) -> None:
+        if any(getattr(websocket, name, None) is WebSocketState.DISCONNECTED
+               for name in ("client_state", "application_state")):
+            raise WebSocketDisconnect(code=1006)
+        try:
+            await websocket.send_json(payload)
+        except RuntimeError as exc:
+            # The transport can close after its state was checked. Other errors remain visible.
+            if str(exc) in _CLOSED_SEND_ERRORS:
+                raise WebSocketDisconnect(code=1006) from exc
+            raise
+
     async def _event_loop(
         self,
         websocket: WebSocket,
@@ -220,7 +239,7 @@ class PriceWebSocketHub:
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 if not done:
-                    await websocket.send_json(self._heartbeat())
+                    await self._send_json(websocket, self._heartbeat())
                     continue
 
                 if receive_task in done:
@@ -244,7 +263,7 @@ class PriceWebSocketHub:
                     queue_task = None
                     if event.get("event_type") == "resync":
                         snapshots = await self._read_snapshot()
-                        await websocket.send_json({
+                        await self._send_json(websocket, {
                             "event_type": "snapshot", "type": "snapshot", "reason": event["reason"],
                             "rights_revision": rights.revision(),
                             "prices": [self._public_event(quote) for key, quote in snapshots.items()
@@ -254,10 +273,10 @@ class PriceWebSocketHub:
                     quote = event.get("quote")
                     if isinstance(quote, CanonicalQuote) and quote.instrument_id in subscriptions:
                         if _quote_allowed(quote):
-                            await websocket.send_json(self._public_event(quote))
+                            await self._send_json(websocket, self._public_event(quote))
                         else:
                             snapshots = await self._read_snapshot()
-                            await websocket.send_json({
+                            await self._send_json(websocket, {
                                 "event_type": "snapshot", "type": "snapshot", "reason": "source_permission_changed",
                                 "rights_revision": rights.revision(),
                                 "prices": [self._public_event(item) for key, item in snapshots.items()

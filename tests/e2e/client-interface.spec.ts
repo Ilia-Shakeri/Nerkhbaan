@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { emptyMarketPrices, mockMarketStream } from './market-fixture';
 
 const ticket = { id: 71, subject: 'A support case', status: 'open', date: '2026-10-16', last_message: 'Initial case preview' };
 const firstMessage = { id: 1, content: 'First message', from_user: 'user', timestamp: '2026-10-16T09:00:00Z' };
@@ -6,10 +7,11 @@ const firstMessage = { id: 1, content: 'First message', from_user: 'user', times
 async function session(page: Page) {
   const state: { ticketFailure: boolean; messageFailure: boolean; answered: boolean; reads: number; gate?: Promise<void> } = { ticketFailure: false, messageFailure: false, answered: false, reads: 0 };
   await page.addInitScript(() => { localStorage.setItem('language', 'en'); sessionStorage.setItem('splash-shown', 'true'); });
+  await mockMarketStream(page);
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/auth/me')) await route.fulfill({ json: { id: 1, username: 'interface_test', must_change_password: false } });
-    else if (path.endsWith('/prices')) await route.fulfill({ json: { assets: [], source: {}, refreshed_at: '2026-10-16T09:00:00Z' } });
+    else if (path.endsWith('/prices')) await route.fulfill({ json: emptyMarketPrices() });
     else if (path.endsWith('/history')) await route.fulfill({ json: { points: [] } });
     else if (path.endsWith('/notifications')) await route.fulfill({ json: [{ id: 4, title: 'Price threshold reached', message: 'Gold crossed your saved threshold. Review the price before acting.', created_at: '2026-10-16T09:00:00Z', read_at: null }] });
     else if (path.endsWith('/notifications/4/read')) await route.fulfill({ json: { id: 4, title: 'Price threshold reached', message: 'Gold crossed your saved threshold. Review the price before acting.', created_at: '2026-10-16T09:00:00Z', read_at: '2026-10-16T10:00:00Z' } });

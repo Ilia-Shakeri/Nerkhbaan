@@ -13,7 +13,7 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ### Acceptance
 
-- Local final-source validation passed 668 backend cases with zero skips using owned PostgreSQL/Redis plus unit, SQLite and mocked cases; 72 frontend cases, 28 standalone channel-worker cases, three renderer builds and 11 Go cases also passed. A real local proxy fixture passed eight permission/TLS-routing checks. Initial failed adapter-fixture receipts remain separate. Hosted checks, target canaries and actual notification receipt are distinct acceptance gates.
+- Local final-source validation passed 673 backend cases with zero skips using owned PostgreSQL/Redis plus unit, SQLite and mocked cases; 72 frontend cases, 28 standalone channel-worker cases, three renderer builds and 11 Go cases also passed. A real local proxy fixture passed eight permission/TLS-routing checks. Initial failed adapter-fixture receipts remain separate. Hosted checks, target canaries and actual notification receipt are distinct acceptance gates.
 - Version 2.8.5 and its published tag remain immutable. This corrective release requires separate final-commit hosted checks and target evidence. The target remains 2.8.1 until the chosen full replacement scope passes; source rights, account quota, network reachability and fresh data are independent gates.
 
 ## [2.8.5] - 2026-10-17

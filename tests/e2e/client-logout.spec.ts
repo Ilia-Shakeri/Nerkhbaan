@@ -1,9 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
+import { emptyMarketPrices, mockMarketStream } from './market-fixture';
 
 const profile = { id: 1, username: 'logout_test', full_name: 'Logout Test', email: 'logout@example.test', is_active: true, must_change_password: false, created_at: '2026-10-13T00:00:00Z' };
 
 type SessionState = { signedOut: boolean; fail: boolean; offline: boolean; profiles: number; signouts: number; detached: number; crash: boolean; calls: string[]; signinGate?: Promise<void>; signoutCookie?: string; pushFails?: boolean };
 async function session(page: Page, shared?: SessionState) {
+  await mockMarketStream(page);
   await page.addInitScript(() => {
     localStorage.setItem('language', 'en');
     sessionStorage.setItem('splash-shown', 'true');
@@ -37,7 +39,7 @@ async function session(page: Page, shared?: SessionState) {
       state.detached++;
       state.calls.push('detach');
       await route.fulfill(state.pushFails ? { status: 503, json: { detail: 'Temporary detach failure' } } : { status: 204 });
-    } else if (path === '/api/prices') await route.fulfill({ json: { assets: [], source: {}, refreshed_at: '2026-10-13T00:00:00Z' } });
+    } else if (path === '/api/prices') await route.fulfill({ json: emptyMarketPrices() });
     else if (path.endsWith('/history')) await route.fulfill({ json: { points: [] } });
     else if (path === '/api/alerts') await route.fulfill({ json: state.crash ? null : [] });
     else await route.fulfill({ json: [] });

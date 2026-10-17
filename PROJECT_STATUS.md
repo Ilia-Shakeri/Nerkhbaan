@@ -2,7 +2,7 @@
 
 Code release: **2.8.6**. Record updated: 2026-10-17. Reviewed provider permissions now gate collection, storage and every application output. The [rights review](docs/provider-rights-2026-10-17.md) records approved own-application sources, restricted routes and remaining account/network evidence. Full operational coverage remains incomplete; the user's selected replacement scope must pass before live deployment. Final-commit hosted checks and target evidence are separate requirements.
 
-Final local code checks: 668 backend cases passed with zero skips, including owned PostgreSQL/Redis cases. Frontend 72, standalone channel-worker 28, Go 11 and three renderer builds passed; a real disposable proxy passed eight permission checks. These local results do not establish authenticated provider access, production coverage or end-user notification receipt. Failed earlier adapter-fixture runs are retained outside Git.
+Final local code checks: 673 backend cases passed with zero skips, including owned PostgreSQL/Redis cases. Frontend 72, standalone channel-worker 28, Go 11 and three renderer builds passed; a real disposable proxy passed eight permission checks. These local results do not establish authenticated provider access, production coverage or end-user notification receipt. Failed earlier adapter-fixture runs are retained outside Git.
 
 ## Deployment guard correction — 2.8.5
 
