@@ -1,6 +1,6 @@
 # Remaining Acceptance and Optional Work
 
-Code baseline: **2.8.4**. Updated: 2026-10-17. The target checks below remain dated 2.8.1 evidence.
+Code baseline: **2.8.5**. Updated: 2026-10-17. The target checks below remain dated 2.8.1 evidence.
 A task here is external acceptance or optional product work; it is not a substitute for fixing a known code defect.
 
 Step one was released as 2.8.2. The 2.8.4 Iranian price/history work adds bounded history and strict

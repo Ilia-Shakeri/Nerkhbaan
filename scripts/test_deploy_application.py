@@ -35,6 +35,26 @@ def container(name, suffix="1", *, image=None, owner="nerkhbaan", config_hash=OL
     }
 
 
+def multiple_mounts():
+    return [
+        {"Type": "bind", "Source": "/fixture/logs", "Destination": "/var/log/nginx",
+         "Mode": "rw", "RW": True, "Propagation": "rprivate"},
+        {"Type": "bind", "Source": "/fixture/nginx.conf", "Destination": "/etc/nginx/nginx.conf",
+         "Mode": "ro", "RW": False, "Propagation": "rprivate"},
+        {"Type": "tmpfs", "Source": "", "Destination": "/tmp",
+         "Mode": "", "RW": True, "Propagation": ""},
+        {"Type": "volume", "Name": "fixture-cache", "Source": "/fixture/volumes/cache/_data",
+         "Destination": "/var/cache/nginx", "Driver": "local", "Mode": "rw", "RW": True,
+         "Propagation": "", "Options": {"retained": "fixture"}},
+        {"Type": "bind", "Source": "/fixture/certificates", "Destination": "/etc/letsencrypt",
+         "Mode": "ro", "RW": False, "Propagation": "rprivate"},
+        {"Type": "volume", "Name": "fixture-edge", "Source": "/fixture/volumes/edge/_data",
+         "Destination": "/run/edge", "Driver": "local", "Mode": "rw", "RW": True, "Propagation": ""},
+        {"Type": "bind", "Source": "/fixture/conf.d", "Destination": "/etc/nginx/conf.d",
+         "Mode": "ro", "RW": False, "Propagation": "rprivate"},
+    ]
+
+
 def fixture():
     names = ("backend", "migrate", "frontend", "admin-frontend", "price-feed-pull")
     images = {name: "sha256:" + hashlib.sha256(name.encode()).hexdigest() for name in names}
@@ -84,7 +104,15 @@ def fake_cli(kind: str, args: list[str]) -> int:
         if any(value not in current for value in args[1:]):
             code = 1
         else:
-            output = json.dumps([current[value] for value in args[1:]])
+            inspected = copy.deepcopy([current[value] for value in args[1:]])
+            if state.get("reorder_inspected_mounts"):
+                state["inspect_reads"] = state.get("inspect_reads", 0) + 1
+                for item in inspected:
+                    mounts = item["Mounts"]
+                    if mounts:
+                        offset = state["inspect_reads"] % len(mounts)
+                        item["Mounts"] = mounts[offset:] + mounts[:offset]
+            output = json.dumps(inspected)
     elif args[:2] == ["image", "inspect"]:
         image = state["images"].get(args[2])
         if image is None:
@@ -172,6 +200,87 @@ def fake_cli(kind: str, args: list[str]) -> int:
     if output:
         print(output)
     return code
+
+
+class MountIdentityTests(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        from deploy_application import ApplicationDeploy, DeployStopped, identity
+
+        self.patch = patch
+        self.deploy_class = ApplicationDeploy
+        self.deploy_stopped = DeployStopped
+        self.identity = identity
+        self.baseline = container("edge", owner="shared-edge")
+        self.baseline["Mounts"] = multiple_mounts()
+
+    def test_reordered_mounts_preserve_identity_all_fields_and_original_payloads(self):
+        changed = copy.deepcopy(self.baseline)
+        changed["Mounts"] = list(reversed(changed["Mounts"]))
+        before, changed_before = copy.deepcopy(self.baseline), copy.deepcopy(changed)
+        actual = self.identity(self.baseline)
+        self.assertEqual(actual, self.identity(changed))
+        by_destination = {mount["Destination"]: mount for mount in before["Mounts"]}
+        self.assertEqual(actual["Mounts"], [by_destination[destination] for destination in (
+            "/etc/letsencrypt", "/etc/nginx/conf.d", "/etc/nginx/nginx.conf", "/run/edge",
+            "/tmp", "/var/cache/nginx", "/var/log/nginx",
+        )])
+        self.assertIsNot(actual["Mounts"], self.baseline["Mounts"])
+        self.assertEqual(self.baseline, before)
+        self.assertEqual(changed, changed_before)
+
+    def test_protected_guard_rejects_changed_mount_fields_after_reordering(self):
+        for field, value in (("Source", "/changed"), ("Destination", "/elsewhere"),
+                             ("RW", False), ("Propagation", "rshared"), ("Type", "volume"),
+                             ("Mode", "ro"), ("ExtraField", {"new": True})):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(self.baseline)
+                changed["Mounts"][0][field] = value
+                changed["Mounts"].reverse()
+                deploy = object.__new__(self.deploy_class)
+                deploy.project_name, deploy.targets = "nerkhbaan", []
+                deploy.protected = {self.baseline["Id"]: self.baseline}
+                with self.patch.object(deploy, "containers", return_value=[changed]):
+                    with self.assertRaisesRegex(self.deploy_stopped, "Protected container identity"):
+                        deploy.check_protected()
+
+    def test_missing_mounts_do_not_become_an_empty_array(self):
+        missing = copy.deepcopy(self.baseline)
+        del missing["Mounts"]
+        empty = copy.deepcopy(missing)
+        empty["Mounts"] = []
+        self.assertIsNone(self.identity(missing)["Mounts"])
+        self.assertEqual(self.identity(empty)["Mounts"], [])
+        self.assertNotEqual(self.identity(missing), self.identity(empty))
+
+    def test_restart_and_config_changes_still_reject_after_mount_reordering(self):
+        for field in ("StartedAt", "Config"):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(self.baseline)
+                changed["Mounts"].reverse()
+                if field == "StartedAt":
+                    changed["State"]["StartedAt"] = "2026-10-17T00:00:00Z"
+                else:
+                    changed["Config"]["Labels"]["changed"] = "fixture"
+                deploy = object.__new__(self.deploy_class)
+                deploy.project_name, deploy.targets = "nerkhbaan", []
+                deploy.protected = {self.baseline["Id"]: self.baseline}
+                with self.patch.object(deploy, "containers", return_value=[changed]):
+                    with self.assertRaisesRegex(self.deploy_stopped, "Protected container identity"):
+                        deploy.check_protected()
+
+    def test_old_backend_guard_accepts_only_reordering_and_rejects_mount_drift(self):
+        baseline = container("backend")
+        baseline["Mounts"] = multiple_mounts()
+        changed = copy.deepcopy(baseline)
+        changed["Mounts"].reverse()
+        deploy = object.__new__(self.deploy_class)
+        deploy.project_name = "nerkhbaan"
+        with self.patch.object(deploy, "inspect", return_value=[changed]):
+            deploy.guard_old(baseline, running=True)
+            changed["Mounts"][0]["Source"] = "/changed"
+            with self.assertRaisesRegex(self.deploy_stopped, "Recorded backend identity"):
+                deploy.guard_old(baseline, running=True)
 
 
 class ApplicationDeployTests(unittest.TestCase):
@@ -312,6 +421,17 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertEqual(len(up), 3)
         self.assertEqual(up[-1][-3:], ["frontend", "admin-frontend", "price-feed-pull"])
         self.assertGreaterEqual(final["readiness_checks"], 9)
+
+    def test_changing_inspect_mount_order_keeps_reviewed_preflight_and_rollout_valid(self):
+        for selected in ("shared-edge-edge-1", "nerkhbaan-backend-1"):
+            with self.subTest(container_id=selected):
+                state = fixture() | {"reorder_inspected_mounts": True}
+                target = next(item for item in state["containers"] if item["Id"] == selected)
+                target["Mounts"] = multiple_mounts()
+                result, final, initial = self.run_deploy(state)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertGreater(final["inspect_reads"], 2)
+                self.assert_protected_unchanged(initial, final)
 
     def test_schema_addition_change_unknown_or_image_mismatch_refused_before_migration(self):
         for case in ("addition", "changed", "unknown", "image"):

@@ -2,6 +2,13 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.8.5] - 2026-10-17
+
+### Fixed
+
+- Made deployment mount identity independent of Docker inspection array order while retaining every mount field and strict rejection of actual mount/configuration changes. Read-only target inspection reproduced the false difference. Required operator evidence and every other deployment gate remain intact.
+- Preserved release 2.8.4 and its successful 15-job hosted run; this corrective release needs its own final-commit validation and target evidence.
+
 ## [2.8.4] - 2026-10-17
 
 ### Changed

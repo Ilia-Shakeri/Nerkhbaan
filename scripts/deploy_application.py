@@ -59,10 +59,16 @@ def network_identity(container: dict) -> dict:
 
 
 def identity(container: dict) -> dict:
+    mounts = container.get("Mounts")
+    if isinstance(mounts, list):
+        mounts = sorted(mounts, key=lambda mount: (
+            mount.get("Destination", ""), mount.get("Type", ""), mount.get("Source", ""),
+        ))
     return {
         key: container.get(key)
-        for key in ("Id", "Image", "Config", "HostConfig", "Mounts", "Created")
+        for key in ("Id", "Image", "Config", "HostConfig", "Created")
     } | {
+        "Mounts": mounts,
         "StartedAt": container["State"].get("StartedAt"),
         "Networks": network_identity(container),
     }

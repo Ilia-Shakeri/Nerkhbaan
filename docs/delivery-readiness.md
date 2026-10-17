@@ -1,4 +1,4 @@
-# Delivery Readiness — 2.8.4
+# Delivery Readiness — 2.8.5
 
 Updated: 2026-10-17. Code delivery and production acceptance are separate facts.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.

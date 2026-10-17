@@ -1,4 +1,4 @@
-# Production Acceptance — 2.8.4
+# Production Acceptance — 2.8.5
 
 Updated: 2026-10-17. The current delivery matrix is [delivery-readiness.md](delivery-readiness.md).
 The operational sequence is [release-operations.md](release-operations.md).

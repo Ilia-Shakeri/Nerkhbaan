@@ -1,6 +1,6 @@
 # Nerkhbaan API Reference
 
-Code release: **2.8.4**. Updated: 2026-10-17.
+Code release: **2.8.5**. Updated: 2026-10-17.
 The complete generated contract is [docs/api-contracts.json](docs/api-contracts.json).
 The [route index](docs/api-route-index.md) lists all HTTP methods, paths and request schemas.
 Regenerate both with `python scripts/export_api_contracts.py` after route or model changes.

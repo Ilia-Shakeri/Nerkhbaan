@@ -1,6 +1,16 @@
 # Project Status
 
-Code release: **2.8.4**. Record updated: 2026-10-17. This source release contains the step-two Iranian price/history work; operational provider coverage remains incomplete. Push, final-commit hosted checks and target deployment are pending for this release.
+Code release: **2.8.5**. Record updated: 2026-10-17. This source release contains the step-two Iranian price/history work; operational provider coverage remains incomplete. Push, final-commit hosted checks and target deployment are pending for this release.
+
+## Deployment guard correction — 2.8.5
+
+Consecutive read-only Docker inspections can return the same mounts in a different array order.
+The deployment guard compares every mount field after deterministic ordering; real source, target,
+type and access changes still fail. This patch retains the required operator-evidence gate.
+Release 2.8.4 at `91934abb5ca2324132c5b250e600e4114afeeed1` was pushed and passed all 15 jobs in
+[run 39013450991](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39013450991).
+Its guarded target attempt stopped before service replacement because the private operator-evidence
+file was absent. The live baseline remained 2.8.1. These are distinct from pending 2.8.5 checks.
 
 ## Step two — 2.8.4 source release, target pending
 
