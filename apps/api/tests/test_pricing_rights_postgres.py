@@ -11,15 +11,16 @@ from unittest.mock import patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "rights-test-key-not-for-runtime-000000000000000")
 
-from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy import MetaData, create_engine, event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.admin.routers import pricing as admin_pricing
 from app.config import settings
 from app.pricing import rights
-from app.pricing.db_models import CanonicalQuoteRecord, ProviderQuoteRecord
+from app.pricing.db_models import CanonicalQuoteRecord, ProviderQuoteRecord, InstrumentRecord
 from app.pricing.history import InternalPriceHistory
+from app.pricing.instruments import get_instrument
 
 
 TEST_URL = os.getenv("TEST_DATABASE_URL")
@@ -31,8 +32,95 @@ def _summary(provider="approved"):
     return {"provider_ids": [provider], "primary_provider_id": provider, "derived": False}
 
 
+class _OwnedPostgresFixture:
+    """Guard every test connection against falling through to public tables."""
+
+    @classmethod
+    def _public_fingerprint(cls):
+        result = {}
+        with cls.admin_engine.connect() as connection:
+            for name in cls.owned_table_names:
+                qualified = "public." + name
+                if connection.execute(text("SELECT to_regclass(:name)"), {"name": qualified}).scalar_one() is None:
+                    result[name] = None
+                    continue
+                # Identifiers come only from a fixed test-table allowlist. Read
+                # existing public rows without copying their values into output.
+                quoted = cls.admin_engine.dialect.identifier_preparer.quote(name)
+                rows = tuple(connection.execute(text(f"""SELECT COUNT(*),
+                    md5(COALESCE(string_agg(md5(to_jsonb(row_value)::text), ''
+                        ORDER BY md5(to_jsonb(row_value)::text)), ''))
+                    FROM public.{quoted} AS row_value""")).one())
+                columns = connection.execute(text("""SELECT attribute.attname,
+                    format_type(attribute.atttypid, attribute.atttypmod), attribute.attnotnull,
+                    attribute.attidentity, pg_get_expr(default_value.adbin, default_value.adrelid)
+                    FROM pg_attribute attribute
+                    LEFT JOIN pg_attrdef default_value ON default_value.adrelid = attribute.attrelid
+                        AND default_value.adnum = attribute.attnum
+                    WHERE attribute.attrelid = to_regclass(:name)
+                      AND attribute.attnum > 0 AND NOT attribute.attisdropped
+                    ORDER BY attribute.attnum"""), {"name": qualified}).all()
+                sequence_last_value = None
+                if any(column[0] == "id" for column in columns):
+                    sequence_last_value = connection.execute(text("""SELECT
+                        pg_sequence_last_value(pg_get_serial_sequence(:name, 'id')::regclass)"""),
+                        {"name": qualified}).scalar_one()
+                result[name] = (rows, tuple(tuple(column) for column in columns), sequence_last_value)
+        return result
+
+    @classmethod
+    def _assert_owned_tables(cls, connection):
+        # A direct, separate DBAPI cursor avoids recursing through the SQL event
+        # guard and does not replace the statement's own result cursor.
+        cursor = connection.connection.cursor()
+        try:
+            cursor.execute("""SELECT current_schema(), table_name, namespace.nspname
+                FROM unnest(%s::text[]) AS expected(table_name)
+                LEFT JOIN pg_class relation ON relation.oid = to_regclass(table_name)
+                LEFT JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace""",
+                           (list(cls.owned_table_names),))
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+        if (len(rows) != len(cls.owned_table_names)
+                or {row[1] for row in rows} != set(cls.owned_table_names)
+                or any(row[0] != cls.schema or row[2] != cls.schema for row in rows)):
+            raise AssertionError("Refusing SQL outside the explicitly owned test schema")
+
+    @classmethod
+    def _install_ownership_guard(cls):
+        with cls.engine.connect() as connection:
+            cls._assert_owned_tables(connection)
+
+        def guard(connection, cursor, statement, parameters, context, executemany):
+            cls._assert_owned_tables(connection)
+            if re.search(r'\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?)\s+(?:ONLY\s+)?"?public"?\.', statement, re.IGNORECASE):
+                raise AssertionError("Refusing explicitly public mutation in an owned test")
+
+        cls.ownership_guard = guard
+        event.listen(cls.engine, "before_cursor_execute", guard)
+
+    def _assert_public_unchanged(self):
+        self.assertEqual(self._public_fingerprint(), self.public_fingerprint,
+                         "Existing public data changed during an isolated test")
+
+    def test_owned_tables_shadow_public_and_dml_guard_blocks_fallthrough(self):
+        with self.engine.begin() as connection:
+            self._assert_owned_tables(connection)
+            with self.assertRaisesRegex(AssertionError, "explicitly public mutation"):
+                connection.exec_driver_sql("DELETE FROM public.canonical_quotes")
+            # The SET itself is checked while the connection is still owned.
+            # The next mutation must be rejected before PostgreSQL sees it.
+            connection.exec_driver_sql("SET LOCAL search_path = public")
+            with self.assertRaisesRegex(AssertionError, "explicitly owned test schema"):
+                connection.exec_driver_sql("DELETE FROM canonical_quotes")
+        self.assertEqual(self._public_fingerprint(), self.public_fingerprint)
+
+
 @unittest.skipUnless(TEST_URL, "Requires an explicitly owned test PostgreSQL database")
-class RightsPostgresTests(unittest.TestCase):
+class RightsPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
+    owned_table_names = ("instruments", "canonical_quotes", "provider_quotes", "pricing_anomalies", "pricing_verifications")
+
     @classmethod
     def setUpClass(cls):
         url = make_url(TEST_URL)
@@ -41,34 +129,41 @@ class RightsPostgresTests(unittest.TestCase):
             raise unittest.SkipTest("Only a named test/CI PostgreSQL database is permitted")
         cls.schema = "pricing_rights_" + uuid.uuid4().hex
         cls.admin_engine = create_engine(url, hide_parameters=True)
+        cls.public_fingerprint = cls._public_fingerprint()
         cls.quoted_schema = cls.admin_engine.dialect.identifier_preparer.quote(cls.schema)
         with cls.admin_engine.begin() as connection:
             connection.execute(text(f"CREATE SCHEMA {cls.quoted_schema}"))
         try:
             cls.engine = create_engine(url, hide_parameters=True, connect_args={"options": f"-csearch_path={cls.schema},public"})
             cls.sessions = sessionmaker(bind=cls.engine)
-            metadata = MetaData()
-            for model in (CanonicalQuoteRecord, ProviderQuoteRecord):
-                model.__table__.to_metadata(metadata)
+            metadata = MetaData(schema=cls.schema)
+            for model in (InstrumentRecord, CanonicalQuoteRecord, ProviderQuoteRecord):
+                model.__table__.to_metadata(metadata, schema=cls.schema)
             metadata.create_all(cls.engine)
             with cls.engine.begin() as connection:
-                connection.execute(text("""CREATE TABLE pricing_anomalies (
+                if connection.execute(text("SELECT current_schema()" )).scalar_one() != cls.schema:
+                    raise AssertionError("Refusing DDL outside the owned test schema")
+                connection.execute(text(f"""CREATE TABLE {cls.quoted_schema}.pricing_anomalies (
                     id BIGINT PRIMARY KEY, instrument_id TEXT, candidate_quote_id BIGINT,
                     previous_canonical_quote_id BIGINT, deviation_percent NUMERIC,
                     dynamic_threshold_percent NUMERIC, severity TEXT, status TEXT,
                     reason TEXT, reviewed_at TIMESTAMPTZ, review_note TEXT,
                     reviewed_by_admin_id INTEGER, created_at TIMESTAMPTZ)"""))
-                connection.execute(text("""CREATE TABLE pricing_verifications (
+                connection.execute(text(f"""CREATE TABLE {cls.quoted_schema}.pricing_verifications (
                     id BIGINT PRIMARY KEY, instrument_id TEXT, anomaly_id BIGINT,
                     candidate_quote_id BIGINT, verifier_quote_ids JSONB,
                     decision TEXT, tolerance_percent NUMERIC, decision_reason TEXT,
                     created_at TIMESTAMPTZ)"""))
+            cls._install_ownership_guard()
         except Exception:
             cls._cleanup()
             raise
 
     @classmethod
     def _cleanup(cls):
+        if hasattr(cls, "public_fingerprint"):
+            if cls._public_fingerprint() != cls.public_fingerprint:
+                raise AssertionError("Existing public data changed during the isolated fixture")
         if hasattr(cls, "engine"):
             cls.engine.dispose()
         try:
@@ -84,6 +179,7 @@ class RightsPostgresTests(unittest.TestCase):
         cls._cleanup()
 
     def setUp(self):
+        self.addCleanup(self._assert_public_unchanged)
         self.enterContext(patch.object(settings, "pricing_rights_enforced", True))
         now = datetime.now(UTC)
         grant = {"permissions": ["collect", "store", "display", "history", "derive"], "checked_at": (now-timedelta(days=1)).isoformat(), "expires_at": (now+timedelta(days=1)).isoformat(), "evidence_ref": "https://fixture.example.invalid/terms"}
@@ -91,8 +187,25 @@ class RightsPostgresTests(unittest.TestCase):
         self.enterContext(patch.object(rights, "grants", side_effect=lambda: self.grants))
         self.enterContext(patch("app.pricing.history.SessionLocal", self.sessions))
         with self.engine.begin() as connection:
-            for table in ("pricing_verifications", "pricing_anomalies", "canonical_quotes", "provider_quotes"):
+            for table in ("pricing_verifications", "pricing_anomalies", "canonical_quotes", "provider_quotes", "instruments"):
                 connection.execute(text(f"DELETE FROM {table}"))
+            instrument = get_instrument("BTC_USD")
+            connection.execute(InstrumentRecord.__table__.insert(), {
+                "instrument_id": instrument.instrument_id, "base_asset": instrument.base_asset,
+                "quote_currency": instrument.quote_currency.value, "market": instrument.market.value,
+                "region": instrument.region.value, "weight_unit": instrument.weight_unit.value,
+                "purity": str(instrument.purity) if instrument.purity is not None else None,
+                "display_decimals": instrument.display_decimals,
+                "operational_ttl_seconds": instrument.operational_ttl_seconds,
+                "stale_after_seconds": instrument.stale_after_seconds,
+                "expire_after_seconds": instrument.expire_after_seconds,
+                "base_anomaly_threshold_percent": instrument.base_anomaly_threshold_percent,
+                "maximum_dynamic_threshold_percent": instrument.maximum_dynamic_threshold_percent,
+                "minimum_sanity_price": instrument.minimum_price,
+                "maximum_sanity_price": instrument.maximum_price,
+                "importance": instrument.importance, "enabled": instrument.enabled,
+                "allow_derived_fallback": instrument.allow_derived_fallback,
+            })
 
     def canonical(self, identifier, price, minute, *, summary=None, candidate=None, status="live"):
         stamp = START + timedelta(minutes=minute)

@@ -18,7 +18,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-only-source-window-secret-long-eno
 
 import httpx
 
-from sqlalchemy import Integer, MetaData, create_engine, event, select, text
+from sqlalchemy import Integer, MetaData, create_engine, create_mock_engine, event, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
@@ -34,6 +34,67 @@ from app.pricing.registry import PROVIDERS
 
 
 NOW = datetime(2026, 10, 17, 12, 30, tzinfo=UTC)
+_SERVIX_FIXTURE_TABLES = ("instruments", "pricing_backfill_jobs")
+_SERVIX_SCHEMA = re.compile(r"servix_windows_test_[0-9a-f]{32}\Z")
+
+
+def _servix_fixture_metadata(schema=None):
+    metadata = MetaData()
+    for table in (InstrumentRecord.__table__, PricingBackfillJobRecord.__table__):
+        table.to_metadata(metadata, schema=schema)
+    return metadata
+
+
+def _assert_servix_fixture_boundary(connection, schema):
+    if not isinstance(schema, str) or not _SERVIX_SCHEMA.fullmatch(schema):
+        raise AssertionError("Refusing a fixture outside its owned schema")
+    rows = connection.execute(text("""
+        SELECT current_schema() AS active_schema, target.name AS table_name,
+               namespace.nspname AS resolved_schema
+        FROM unnest(CAST(:table_names AS TEXT[])) AS target(name)
+        LEFT JOIN pg_class AS relation ON relation.oid = to_regclass(target.name)
+        LEFT JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace
+    """), {"table_names": list(_SERVIX_FIXTURE_TABLES)}).mappings().all()
+    if (len(rows) != len(_SERVIX_FIXTURE_TABLES)
+            or {row["table_name"] for row in rows} != set(_SERVIX_FIXTURE_TABLES)
+            or any(row["active_schema"] != schema or row["resolved_schema"] != schema for row in rows)):
+        raise AssertionError("Fixture tables must resolve only inside their owned schema")
+
+
+def _assert_servix_fixture_write_target(statement, schema):
+    if not re.match(r"\s*(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|COPY)\b", statement, re.I):
+        if re.match(r"\s*WITH\b", statement, re.I) and re.search(
+            r"\b(INSERT\s+INTO|DELETE\s+FROM|UPDATE\s+\S+\s+SET|MERGE\s+INTO|TRUNCATE|COPY)\b",
+            statement, re.I,
+        ):
+            raise AssertionError("Fixture does not permit an unverified CTE write target")
+        return
+    target = re.match(
+        r'\s*(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|MERGE\s+INTO|TRUNCATE(?:\s+TABLE)?)\s+'
+        r'((?:"[^"]+"|[A-Za-z_][A-Za-z_0-9]*)(?:\.(?:"[^"]+"|[A-Za-z_][A-Za-z_0-9]*))?)',
+        statement, re.I,
+    )
+    parts = target.group(1).split(".") if target else []
+    if (not parts or parts[-1].strip('"') not in _SERVIX_FIXTURE_TABLES
+            or len(parts) == 2 and parts[0].strip('"') != schema):
+        raise AssertionError("Fixture write target is outside its owned tables")
+
+
+def _servix_public_fingerprint(connection):
+    result = {}
+    for name in _SERVIX_FIXTURE_TABLES:
+        exists = connection.scalar(text("SELECT to_regclass(:name) IS NOT NULL"), {"name": "public."+name})
+        if not exists:
+            result[name] = None
+            continue
+        row = connection.execute(text(f"""
+            SELECT count(*) AS row_count,
+                   md5(COALESCE(string_agg(to_jsonb(target)::text, chr(10)
+                       ORDER BY to_jsonb(target)::text), '')) AS row_fingerprint
+            FROM public.{name} AS target
+        """)).mappings().one()
+        result[name] = dict(row)
+    return result
 
 
 class _Locks:
@@ -53,12 +114,26 @@ class ServixDurableBackfillTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.engine = self.database_engine()
         self.addCleanup(self.engine.dispose)
-        metadata = MetaData()
-        for table in (InstrumentRecord.__table__, PricingBackfillJobRecord.__table__):
-            table.to_metadata(metadata)
+        metadata = _servix_fixture_metadata(getattr(self, "fixture_schema", None))
         if self.engine.dialect.name == "sqlite":
             metadata.tables["pricing_backfill_jobs"].c.id.type = Integer()
         metadata.create_all(self.engine)
+        if self.engine.dialect.name == "postgresql":
+            with self.engine.connect() as connection:
+                _assert_servix_fixture_boundary(connection, self.fixture_schema)
+
+            def guard(connection, _cursor, statement, _parameters, _context, _executemany):
+                if connection.info.get("servix_fixture_boundary_check"):
+                    return
+                connection.info["servix_fixture_boundary_check"] = True
+                try:
+                    _assert_servix_fixture_boundary(connection, self.fixture_schema)
+                    _assert_servix_fixture_write_target(statement, self.fixture_schema)
+                finally:
+                    connection.info.pop("servix_fixture_boundary_check", None)
+
+            event.listen(self.engine, "before_cursor_execute", guard)
+            self.addCleanup(event.remove, self.engine, "before_cursor_execute", guard)
         self.sessions = sessionmaker(bind=self.engine)
         definition = get_instrument("BTC_USD")
         with self.sessions() as db:
@@ -389,6 +464,49 @@ class ServixCalendarWindowTests(unittest.TestCase):
         self.assertEqual(quotes[0].idempotency_key, quotes[1].idempotency_key)
 
 
+class ServixFixtureBoundaryTests(unittest.TestCase):
+    def test_fixture_ddl_names_owned_schema_and_does_not_mutate_orm_tables(self):
+        schema = "servix_windows_test_" + "a"*32
+        metadata = _servix_fixture_metadata(schema)
+        self.assertEqual(set(metadata.tables), {f"{schema}.{name}" for name in _SERVIX_FIXTURE_TABLES})
+        statements = []
+        engine = create_mock_engine("postgresql://", lambda sql, *_args, **_kwargs:
+                                    statements.append(str(sql.compile(dialect=engine.dialect))))
+        metadata.create_all(engine, checkfirst=False)
+        for name in _SERVIX_FIXTURE_TABLES:
+            self.assertTrue(any(f"CREATE TABLE {schema}.{name}" in statement for statement in statements))
+        self.assertTrue(any(f"REFERENCES {schema}.instruments" in statement for statement in statements))
+        self.assertIsNone(InstrumentRecord.__table__.schema)
+        self.assertIsNone(PricingBackfillJobRecord.__table__.schema)
+
+    def test_public_fallback_or_changed_current_schema_fail_before_any_fixture_dml(self):
+        schema = "servix_windows_test_" + "b"*32
+        for active, resolved in ((schema, "public"), ("public", schema), (schema, None)):
+            connection = Mock()
+            connection.execute.return_value.mappings.return_value.all.return_value = [
+                {"active_schema": active, "table_name": name, "resolved_schema": resolved}
+                for name in _SERVIX_FIXTURE_TABLES
+            ]
+            with self.subTest(active=active, resolved=resolved), self.assertRaisesRegex(AssertionError, "owned schema"):
+                _assert_servix_fixture_boundary(connection, schema)
+            self.assertTrue(all(str(call.args[0]).lstrip().startswith("SELECT")
+                                for call in connection.execute.call_args_list))
+
+    def test_explicit_foreign_qualified_writes_are_rejected(self):
+        schema = "servix_windows_test_" + "c"*32
+        for statement in (
+            "INSERT INTO public.instruments (instrument_id) VALUES ('owned-test')",
+            'DELETE FROM "public"."pricing_backfill_jobs"',
+            "UPDATE another_schema.instruments SET importance=1",
+            "TRUNCATE TABLE public.instruments",
+            "WITH removed AS (DELETE FROM public.instruments RETURNING *) SELECT * FROM removed",
+        ):
+            with self.subTest(statement=statement), self.assertRaises(AssertionError):
+                _assert_servix_fixture_write_target(statement, schema)
+        _assert_servix_fixture_write_target("UPDATE instruments SET importance=1", schema)
+        _assert_servix_fixture_write_target(f"DELETE FROM {schema}.pricing_backfill_jobs", schema)
+
+
 @unittest.skipUnless(os.getenv("TEST_DATABASE_URL"), "Requires an explicitly owned test PostgreSQL database")
 class ServixDurableBackfillPostgresTests(ServixDurableBackfillTests):
     def database_engine(self):
@@ -397,17 +515,25 @@ class ServixDurableBackfillPostgresTests(ServixDurableBackfillTests):
         if url.get_backend_name() != "postgresql" or parts.isdisjoint({"test", "ci"}):
             raise unittest.SkipTest("Only a named test/CI PostgreSQL database is permitted")
         schema = "servix_windows_test_" + uuid.uuid4().hex
+        self.fixture_schema = schema
         admin = create_engine(url, hide_parameters=True)
+        self.fixture_admin = admin
         quoted = admin.dialect.identifier_preparer.quote(schema)
         with admin.begin() as connection:
+            public_baseline = _servix_public_fingerprint(connection)
             connection.execute(text(f"CREATE SCHEMA {quoted}"))
 
         def cleanup_schema():
             if not re.fullmatch(r"servix_windows_test_[0-9a-f]{32}", schema):
                 raise AssertionError("Refusing cleanup outside the owned schema")
             try:
-                with admin.begin() as connection:
-                    connection.execute(text(f"DROP SCHEMA {quoted} CASCADE"))
+                try:
+                    with admin.connect() as connection:
+                        self.assertEqual(_servix_public_fingerprint(connection), public_baseline,
+                                         "Foreign public fixture rows changed")
+                finally:
+                    with admin.begin() as connection:
+                        connection.execute(text(f"DROP SCHEMA {quoted} CASCADE"))
             finally:
                 admin.dispose()
 
@@ -415,6 +541,27 @@ class ServixDurableBackfillPostgresTests(ServixDurableBackfillTests):
         return create_engine(url, hide_parameters=True, connect_args={
             "options": f"-csearch_path={schema},public -cstatement_timeout=10000",
         })
+
+    async def test_full_public_tables_remain_unchanged_when_search_path_loses_owned_namespace(self):
+        with self.fixture_admin.connect() as connection:
+            before = _servix_public_fingerprint(connection)
+            for model in (InstrumentRecord, PricingBackfillJobRecord):
+                name = model.__table__.name
+                if before[name] is None:
+                    self.skipTest("Needs existing full public fixture tables; never creates or writes them")
+                columns = connection.scalars(text("""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_schema='public' AND table_name=:name
+                """), {"name": name}).all()
+                self.assertTrue(set(model.__table__.columns.keys()) <= set(columns),
+                                "Public isolation fixture must use full table metadata")
+        with self.engine.begin() as connection:
+            connection.exec_driver_sql("SET LOCAL search_path = public")
+            with self.assertRaisesRegex(AssertionError, "owned schema"):
+                connection.execute(InstrumentRecord.__table__.insert(),
+                                   {"instrument_id": "SERVIX_BOUNDARY_MUST_NOT_BE_WRITTEN"})
+        with self.fixture_admin.connect() as connection:
+            self.assertEqual(_servix_public_fingerprint(connection), before)
 
     async def test_simultaneous_parent_schedulers_create_exactly_one_child_set(self):
         identifier = self.job()

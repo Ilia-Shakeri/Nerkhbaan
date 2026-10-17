@@ -12,7 +12,9 @@ Servix now reports its actual `EMAIL_VERIFICATION_REQUIRED` denial without stori
 
 The target backend successfully downloaded the public archive with verified TLS; the downloaded source's most recent year parsed to 281 daily observations locally. This is not production ingestion. Full current-price coverage, silver 925 history and a permitted USDT/USD replacement remain unproved. Live deployment and step-three delivery receipt remain pending under the selected full-replacement scope.
 
-Local recovery checks passed 764 backend cases with zero skips using owned PostgreSQL/Redis plus unit, SQLite and mocks. Frontend 75 and 22 mocked Edge browser cases passed; full web-source strict type checks and web/desktop renderer builds passed. New database cases cover durable queue races and daily/instant bucket collisions. Source payload validation, target connectivity, final-commit hosted checks and actual deployment remain distinct evidence.
+Local recovery checks passed 770 backend cases with zero skips using owned PostgreSQL/Redis plus unit, SQLite and mocks. Frontend 75 and 22 mocked Edge browser cases passed; full web-source strict type checks and web/desktop renderer builds passed. New database cases cover durable queue races and daily/instant bucket collisions. Source payload validation, target connectivity, final-commit hosted checks and actual deployment remain distinct evidence.
+
+Hosted recovery run [39025426151](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39025426151) passed 14 jobs and exposed a database-fixture ownership defect in integration. That failed receipt remains retained. The corrective fixtures explicitly create their own schemas, check relation resolution before SQL and reject public writes. Local ordinary PostgreSQL and migrated Timescale checks retained existing public row, column and sequence fingerprints; test schemas were removed. Both discovery and package-qualified test entry points are covered. These are test-fixture corrections, not changes to live data or schema.
 
 ## Deployment guard correction — 2.8.5
 

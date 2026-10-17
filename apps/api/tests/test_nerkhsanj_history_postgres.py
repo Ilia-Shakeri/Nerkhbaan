@@ -29,12 +29,18 @@ from app.pricing.instruments import get_instrument
 from app.pricing.persistence import PricingPersistence
 from app.pricing.registry import PROVIDERS
 from app.pricing.models import CanonicalQuote, CanonicalStatus
+if __package__:
+    from .test_pricing_rights_postgres import _OwnedPostgresFixture
+else:
+    from test_pricing_rights_postgres import _OwnedPostgresFixture
 
 TEST_URL = os.getenv("TEST_DATABASE_URL")
 
 
 @unittest.skipUnless(TEST_URL, "Requires an explicitly owned test PostgreSQL database")
-class NerkhsanjHistoryPostgresTests(unittest.TestCase):
+class NerkhsanjHistoryPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
+    owned_table_names = ("instruments", "canonical_quotes", "provider_quotes", "pricing_backfill_jobs")
+
     @classmethod
     def setUpClass(cls):
         url = make_url(TEST_URL)
@@ -43,6 +49,7 @@ class NerkhsanjHistoryPostgresTests(unittest.TestCase):
             raise unittest.SkipTest("Only a named test/CI PostgreSQL database is permitted")
         cls.schema = "nerkhsanj_history_test_" + uuid.uuid4().hex
         cls.admin_engine = create_engine(url, hide_parameters=True)
+        cls.public_fingerprint = cls._public_fingerprint()
         cls.quoted_schema = cls.admin_engine.dialect.identifier_preparer.quote(cls.schema)
         with cls.admin_engine.begin() as connection:
             connection.execute(text(f"CREATE SCHEMA {cls.quoted_schema}"))
@@ -50,17 +57,21 @@ class NerkhsanjHistoryPostgresTests(unittest.TestCase):
             cls.engine = create_engine(url, hide_parameters=True,
                                        connect_args={"options": f"-csearch_path={cls.schema},public"})
             cls.sessions = sessionmaker(bind=cls.engine)
-            metadata = MetaData()
-            Table("instruments", metadata, Column("instrument_id", String(64), primary_key=True))
+            metadata = MetaData(schema=cls.schema)
+            Table("instruments", metadata, Column("instrument_id", String(64), primary_key=True), schema=cls.schema)
             for model in (CanonicalQuoteRecord, ProviderQuoteRecord, PricingBackfillJobRecord):
-                model.__table__.to_metadata(metadata)
+                model.__table__.to_metadata(metadata, schema=cls.schema)
             metadata.create_all(cls.engine)
+            cls._install_ownership_guard()
         except Exception:
             cls.cleanup()
             raise
 
     @classmethod
     def cleanup(cls):
+        if hasattr(cls, "public_fingerprint"):
+            if cls._public_fingerprint() != cls.public_fingerprint:
+                raise AssertionError("Existing public data changed during the isolated fixture")
         if hasattr(cls, "engine"):
             cls.engine.dispose()
         try:
@@ -76,6 +87,7 @@ class NerkhsanjHistoryPostgresTests(unittest.TestCase):
         cls.cleanup()
 
     def setUp(self):
+        self.addCleanup(self._assert_public_unchanged)
         self.enterContext(patch.object(settings, "pricing_rights_enforced", True))
         self.enterContext(patch.object(settings, "pricing_rights_manifest_path", None))
         self.enterContext(patch("app.pricing.history.SessionLocal", self.sessions))
