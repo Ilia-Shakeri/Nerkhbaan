@@ -2,6 +2,19 @@
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
+## [2.8.4] - 2026-10-17
+
+### Changed
+
+- Added keyless Iranian Wallex hourly history for USDT/Toman and BTC/Toman, with bounded seven-day requests, closed-candle checks, preserved gaps and complete-range validation before persistence. Stored samples are hourly closing observations, not original OHLC bars. Internal boundaries preserve candles for ranges starting between hours.
+- Added four disabled Servix price/daily-history routes for gold/silver ounces and 18K/24K grams. Exact weight/purity declarations and a key are required; registration does not establish verified coverage. The seven catalogue budgets total 42 requests/day before operator overrides; effective account budgets still require review.
+- Corrected TALA price endpoints and explicit symbol, status, unit and timezone validation. Required confirmed RIAL/TOMAN units and Unix source time for Navasan. Source contracts and parser provenance reflect these requirements.
+- Added a read-only key/contract plan that reveals credential presence only, reports runtime budgets as unknown and identifies the two uncovered physical-silver history instruments. No new provider was activated and no live server was changed. See the step-two source report for actual public-response evidence, test scope and remaining keys.
+
+### Validation
+
+- All 518 backend tests passed with zero skips, including owned PostgreSQL 17.11/Redis 7.4.11 cases and unit, SQLite/mocked fixtures. Static name/import checks passed. A separate replay of two captured actual public Wallex responses preserved and read back 24 hourly closing observations per pair in owned PostgreSQL. No authenticated provider response, full source archive or live deployment is claimed.
+
 ## [2.8.3] - 2026-10-17
 
 ### Changed

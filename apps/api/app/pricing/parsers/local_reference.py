@@ -214,9 +214,16 @@ class WallexMarketParser:
 @dataclass(frozen=True, slots=True)
 class ServixAssetsParser:
     code: str
-    parser_version: str = "servix-assets/1.1.0"
+    parser_version: str = "servix-assets/1.2.0"
 
     def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
+        expected = {
+            "USD_RLS": "USD_TOMAN", "BTC_USD": "BTC_USD", "USDT_USD": "USDT_USD",
+            "GOLD_OUNCE_USD": "XAU_USD_OZ", "SILVER_OUNCE_USD": "XAG_USD_OZ",
+            "GOLD_18_RLS": "GOLD_18K_TOMAN_GRAM", "GOLD_24_RLS": "GOLD_24K_TOMAN_GRAM",
+        }
+        if expected.get(self.code) != context.instrument.instrument_id:
+            raise ParserError("unsupported_symbol", "Servix code does not match instrument")
         rows = payload
         if isinstance(payload, dict):
             for field in ("data", "assets", "result"):
@@ -267,20 +274,50 @@ class ServixAssetsParser:
 @dataclass(frozen=True, slots=True)
 class TalaRatesParser:
     key: str
-    parser_version: str = "tala-rates/1.0.0"
+    parser_version: str = "tala-rates/1.1.0"
 
     def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
         root = require_object(payload, "TALA response")
-        rows = root.get("data") or root.get("rates") or root.get("result") or payload
-        node = _node_by_key(rows, "key", self.key)
-        if str(node.get("status", "active")).lower() not in {"active", "ok", "live"}:
+        if "success" in root and root["success"] is not True:
+            raise ParserError("provider_disabled", "TALA response did not succeed")
+        rows = root
+        for field in ("rates", "data", "result"):
+            if field in root:
+                rows = root[field]
+                break
+        if isinstance(rows, dict):
+            records = [(None, rows)] if "key" in rows else list(rows.items())
+        else:
+            records = [(None, row) for row in require_list(rows, "TALA rates")]
+        matches = []
+        for dictionary_key, record in records:
+            item = require_object(record, "TALA rate")
+            if str(item.get("key", "")).upper() == self.key.upper():
+                matches.append((dictionary_key, item))
+        if not matches:
+            raise ParserError("unsupported_symbol", "TALA rate key is not present")
+        if len(matches) != 1:
+            raise ParserError("ambiguous_symbol", "TALA rate key is duplicated")
+        dictionary_key, node = matches[0]
+        if dictionary_key is not None and str(dictionary_key).upper() != self.key.upper():
+            raise ParserError("unsupported_symbol", "TALA dictionary key does not match rate key")
+        if str(node.get("status", "")).strip().lower() not in {"active", "ok", "live"}:
             raise ParserError("provider_disabled", "TALA key is not active")
         source_unit, factor = _unit_factor(node.get("unit"))
         raw = strict_decimal(exact_path(node, "value"), "value")
+        source_time = node.get("updated_at")
+        if not isinstance(source_time, str) or not source_time.strip():
+            raise ParserError("invalid_timestamp", "TALA updated_at is required")
+        try:
+            parsed_time = datetime.fromisoformat(source_time.strip().replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ParserError("invalid_timestamp", "TALA updated_at is invalid") from exc
+        if parsed_time.tzinfo is None or parsed_time.utcoffset() is None:
+            raise ParserError("invalid_timestamp", "TALA updated_at timezone is required")
         return _parsed(
             raw * factor,
             context,
-            node.get("updated_at"),
+            source_time.strip(),
             {
                 "source_key": self.key,
                 "source_currency": source_unit,
@@ -360,22 +397,31 @@ class ArzbinMarketParser:
 @dataclass(frozen=True, slots=True)
 class NavasanLatestParser:
     item: str
-    parser_version: str = "navasan-latest/1.0.0"
+    source_unit: str = ""
+    parser_version: str = "navasan-latest/1.1.0"
 
     def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
+        if self.source_unit not in {"RIAL", "TOMAN"}:
+            raise ParserError("missing_unit_configuration", "Navasan local currency unit must be confirmed")
         root = require_object(payload, "Navasan response")
         node = require_object(root.get(self.item), self.item)
+        source_unit, factor = _unit_factor(self.source_unit)
+        if "unit" in node and _unit_factor(node["unit"])[0] != source_unit:
+            raise ParserError("currency_mismatch", "Navasan response unit differs from configured contract")
+        timestamp = exact_path(node, "timestamp")
+        if isinstance(timestamp, bool) or not isinstance(timestamp, (int, str)) or not str(timestamp).isdigit():
+            raise ParserError("invalid_timestamp", "Navasan source Unix timestamp is required")
         raw = strict_decimal(exact_path(node, "value"), "value")
         return _parsed(
-            raw * Decimal("0.1"),
+            raw * factor,
             context,
-            node.get("timestamp"),
+            timestamp,
             {
                 "item": self.item,
-                "source_currency": "RIAL",
+                "source_currency": source_unit,
                 "original_value": str(raw),
-                "conversion_factor": "0.1",
-                "normalization": "rial_to_toman",
+                "conversion_factor": str(factor),
+                "normalization": "rial_to_toman" if source_unit == "RIAL" else "none",
             },
         )
 

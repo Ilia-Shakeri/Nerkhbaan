@@ -1,8 +1,9 @@
-# Pricing Operations Runbook — 2.8.3
+# Pricing Operations Runbook — 2.8.4
 
 Updated: 2026-10-17. Dated target evidence is recorded separately in the delivery matrix.
-The 2.8.3 Servix parser requires explicit quoteUnit and timezone-bearing businessTime. Contract
-fixtures do not replace authenticated source proof; unknown data remains rejected.
+The 2.8.4 source contracts require explicit currency and source time; new Servix metal routes also
+require confirmed weight/purity declarations. Contract fixtures do not replace authenticated source
+proof; unknown data remains rejected. Effective account budgets must be read before activation.
 
 ## Provider onboarding
 

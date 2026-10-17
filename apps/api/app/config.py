@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     goldapi_api_key: str | None = None
     servix_api_base_url: str = "https://servix.cc"
     servix_api_key: str | None = None
+    servix_metals_unit: Literal["", "USD_PER_TROY_OUNCE"] = ""
+    servix_gold18_unit: Literal["", "RIAL_PER_GRAM_750"] = ""
+    servix_gold24_unit: Literal["", "RIAL_PER_GRAM_9999"] = ""
     persian_toolbox_api_base_url: str = "https://persiantoolbox.ir"
     tala_api_base_url: str = "https://api.tala.ir"
     tala_api_key: str | None = None
@@ -104,9 +107,10 @@ class Settings(BaseSettings):
     tala_gold18_toman_key: str = "geram18k"
     tala_gold24_toman_key: str = "geram24k"
     tala_silver999_toman_key: str | None = None
-    navasan_api_base_url: str = "http://api.navasan.tech"
+    navasan_api_base_url: str = "https://api.navasan.tech"
     navasan_https_proxy_base_url: str | None = None
     navasan_api_key: str | None = None
+    navasan_local_unit: Literal["", "RIAL", "TOMAN"] = ""
     # Tripwire, not a feature: a model validator rejects startup if this is
     # ever turned on. Kept so an old .env fails loudly instead of silently
     # sending an API key over plaintext HTTP.

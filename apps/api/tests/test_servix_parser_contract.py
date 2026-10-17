@@ -39,7 +39,7 @@ class ServixCurrentPriceContractTests(unittest.TestCase):
             with self.subTest(provider=provider_id):
                 provider = PROVIDERS[provider_id]
                 parser = build_parser(provider.parser_id)
-                self.assertEqual(parser.parser_version, "servix-assets/1.1.0")
+                self.assertEqual(parser.parser_version, "servix-assets/1.2.0")
                 self.assertEqual(provider.parser_version, parser.parser_version)
 
     def test_documented_array_and_single_quote_shapes(self) -> None:

@@ -131,7 +131,7 @@ class ExplicitCurrencyTests(unittest.TestCase):
         context = ParserContext(get_instrument('USD_TOMAN'), now, 60)
         for currency in ('USD', 'USDT'):
             cases = [
-                (TalaRatesParser('USD'), {'data': [{'key': 'USD', 'unit': currency, 'value': '100000', 'updated_at': now.isoformat()}]}),
+                (TalaRatesParser('USD'), {'data': [{'key': 'USD', 'unit': currency, 'value': '100000', 'status': 'ok', 'updated_at': now.isoformat()}]}),
                 (TicaroPricesParser('USD'), {'data': [{'pair': 'USD', 'quote_currency': currency, 'price': '100000', 'fetched_at': now.isoformat()}]}),
                 (NerkhIoLiteParser('USD', currency), {'data': [{'symbol': 'USD', 'price': '100000', 'timestamp': now.isoformat()}]}),
                 (ArzbinMarketParser('USD', 'sell', currency), {'data': [{'code': 'USD', 'sell': '100000', 'updated_at': now.isoformat()}]}),
@@ -146,7 +146,7 @@ class ExplicitCurrencyTests(unittest.TestCase):
         now = utc_now()
         context = ParserContext(get_instrument('USD_TOMAN'), now, 60)
         for unit, value in (('IRR', '1000000'), ('TOMAN', '100000')):
-            parsed = TalaRatesParser('USD').parse({'data': [{'key': 'USD', 'unit': unit, 'value': value}]}, context)
+            parsed = TalaRatesParser('USD').parse({'data': [{'key': 'USD', 'unit': unit, 'value': value, 'status': 'ok', 'updated_at': now.isoformat()}]}, context)
             self.assertEqual(parsed.price, Decimal('100000'))
             self.assertEqual(parsed.currency, context.instrument.quote_currency)
             self.assertEqual(parsed.metadata['original_value'], value)

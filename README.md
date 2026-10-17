@@ -1,7 +1,7 @@
 # Nerkhbaan
 
-Current code release: **2.8.3**. `VERSION` is the source of release truth.
-Step-one fixes, the step-two Servix contract repair and validation are recorded in the [changelog](CHANGELOG.md) and
+Current code release: **2.8.4**. `VERSION` is the source of release truth.
+Step-one fixes and the step-two Iranian price/history work are recorded in the [changelog](CHANGELOG.md) and
 [delivery matrix](docs/delivery-readiness.md). This source release has not been deployed by this change.
 Target checked on 2026-10-12: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.1.
 See the [server handoff](docs/production-handoff-fa.md) and [saved proof](docs/delivery-readiness.md).
@@ -110,7 +110,7 @@ Dated vendor/legal reports and historical audits remain dated records. They do n
 ## Source delivery
 
 ```powershell
-python scripts/build_delivery_archive.py C:/path/outside/repository/nerkhbaan-2.8.3-source.zip
+python scripts/build_delivery_archive.py C:/path/outside/repository/nerkhbaan-2.8.4-source.zip
 ```
 
 The builder excludes private environments, keys, databases, logs, dependencies and generated artifacts.

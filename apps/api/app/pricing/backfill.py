@@ -68,6 +68,8 @@ def _history_request_options(
         )
         params: dict[str, str | int] = {"vs_currency": "usd", "days": str(days)}
     elif parser.parser_version.startswith("servix-history/"):
+        if (range_end.date() - range_start.date()).days > 30:
+            raise ValueError("servix_history_maximum_31_calendar_days")
         params = {
             "from": range_start.date().isoformat(),
             "to": range_end.date().isoformat(),
@@ -352,6 +354,12 @@ class PricingBackfillQueue:
         instrument = await self.operational.instrument(job["instrument_id"])
         points = []
         paginated_udf = parser.parser_version.startswith("nobitex-udf-history/")
+        windowed_udf = parser.parser_version.startswith("wallex-udf-history/")
+        window_start = job["range_start"]
+        # Internal boundaries must coincide with complete hourly candle edges.
+        window_end = min((window_start + timedelta(days=7)).replace(minute=0, second=0, microsecond=0), job["range_end"])
+        if windowed_udf and job["range_end"] - window_start > timedelta(days=366):
+            raise ValueError("history_range_exceeds_one_year")
         page = 1
         seen = {}
         async with httpx.AsyncClient(
@@ -368,6 +376,8 @@ class PricingBackfillQueue:
                     if not budget.allowed:
                         raise HistoryBudgetDeferred("history_page_budget_deferred")
                 request_params = {**params, "page": page} if paginated_udf else params
+                if windowed_udf:
+                    request_params = {**params, "from": int(window_start.timestamp()), "to": int(window_end.timestamp())}
                 async with asyncio.timeout(15):
                     response = await client.get(provider.history_url, params=request_params, headers=headers)
                 if response.status_code == 429:
@@ -377,8 +387,10 @@ class PricingBackfillQueue:
                 if len(response.content) > min(provider.maximum_payload_bytes * 4, 4_194_304):
                     raise ValueError("history_payload_too_large")
                 payload = response.json()
-                page_points = parser.parse(payload, instrument, job["range_start"], job["range_end"])
-                if not paginated_udf:
+                parse_start = window_start if windowed_udf else job["range_start"]
+                parse_end = window_end if windowed_udf else job["range_end"]
+                page_points = parser.parse(payload, instrument, parse_start, parse_end)
+                if not paginated_udf and not windowed_udf:
                     points = page_points
                     break
                 added = 0
@@ -389,6 +401,16 @@ class PricingBackfillQueue:
                     if previous is None:
                         seen[point.observed_at] = point
                         added += 1
+                if windowed_udf:
+                    if window_end >= job["range_end"]:
+                        points = sorted(seen.values(), key=lambda point: point.observed_at)
+                        break
+                    window_start = window_end
+                    window_end = min(window_start + timedelta(days=7), job["range_end"])
+                    page += 1
+                    if page > 54 or len(seen) > 20_000:
+                        raise ValueError("history_window_limit_exceeded")
+                    continue
                 raw_count = len(payload.get("t", []))
                 if raw_count < 500:
                     points = sorted(seen.values(), key=lambda point: point.observed_at)
@@ -439,6 +461,7 @@ class PricingBackfillQueue:
                     "quote_role": "backfill",
                     "provider_role": provider.role.value,
                     "history_symbol": getattr(parser, "symbol", getattr(parser, "asset_id", "unknown")),
+                    "history_point_kind": "hourly_candle_close" if windowed_udf else "provider_observation",
                 },
                 persistence_status=PersistenceStatus.UNPERSISTED,
             )
@@ -504,7 +527,10 @@ class PricingBackfillQueue:
         return next(
             (
                 provider
-                for provider in await self.operational.providers_for(instrument_id)
+                for provider in sorted(
+                    await self.operational.providers_for(instrument_id),
+                    key=lambda item: (item.history_priority, item.priority, item.provider_id),
+                )
                 if provider.enabled
                 and provider.configured(settings)
                 and provider.history_url

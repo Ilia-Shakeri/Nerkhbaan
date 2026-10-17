@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from types import MappingProxyType
@@ -54,6 +54,7 @@ class ProviderDefinition:
     history_url: str | None = None
     history_parser_id: str | None = None
     history_requires_live_quote: bool = True
+    history_priority: int = 100
     maximum_source_age_seconds: int | None = None
     anchor_live_window_at_receive_time: bool = False
     source_semantic: SourceSemantic = SourceSemantic.REFERENCE_RATE
@@ -79,8 +80,8 @@ class ProviderDefinition:
             if not getattr(settings, name, None):
                 return False
         if self.provider_id.startswith("navasan_"):
-            proxy = getattr(settings, "navasan_https_proxy_base_url", None)
-            if not proxy:
+            base = getattr(settings, "navasan_https_proxy_base_url", None) or getattr(settings, "navasan_api_base_url", "")
+            if not str(base).startswith("https://") or not getattr(settings, "navasan_local_unit", ""):
                 return False
         if self.provider_id.startswith("nerkh_io_"):
             category = self.unit_source or ""
@@ -130,12 +131,17 @@ def _setting_url(base_setting: str, path: str) -> str:
 
 
 def _navasan_base() -> str:
-    """Prefer the HTTPS proxy; the direct base is plain HTTP and carries a key."""
+    """Prefer an operator proxy while requiring HTTPS for either transport."""
     return (
         "navasan_https_proxy_base_url"
         if settings.navasan_https_proxy_base_url
         else "navasan_api_base_url"
     )
+
+
+def _tala_rate_url(setting_name: str) -> str:
+    key = str(getattr(settings, setting_name, None) or "")
+    return _setting_url("tala_api_base_url", "/v1/rates/" + quote(key, safe=""))
 
 
 def _env(name: str, default: str) -> str:
@@ -189,6 +195,7 @@ def _provider(
     history_url: str | None = None,
     history_parser_id: str | None = None,
     history_requires_live_quote: bool = True,
+    history_priority: int = 100,
     maximum_source_age_seconds: int | None = None,
     anchor_live_window_at_receive_time: bool = False,
     source_semantic: SourceSemantic = SourceSemantic.REFERENCE_RATE,
@@ -228,6 +235,7 @@ def _provider(
         history_url=history_url,
         history_parser_id=history_parser_id,
         history_requires_live_quote=history_requires_live_quote,
+        history_priority=history_priority,
         maximum_source_age_seconds=maximum_source_age_seconds,
         anchor_live_window_at_receive_time=anchor_live_window_at_receive_time,
         source_semantic=source_semantic,
@@ -500,6 +508,9 @@ _PROVIDERS = (
         "0.90", _setting_url("wallex_api_base_url", "/v1/markets"), "wallex_usdt_toman_v1",
         "wallex-market/1.0.0", 20, rpm=12, rph=360, rpd=5000, interval=20,
         maximum_payload_bytes=1_048_576,
+        history_url=_setting_url("wallex_api_base_url", "/v1/udf/history"),
+        history_parser_id="wallex_udf_usdt_toman_v1",
+        history_requires_live_quote=False, history_priority=1,
         enabled_default=True,
         source_semantic=SourceSemantic.EXCHANGE_TRADE,
         source_family="wallex", venue="wallex",
@@ -511,6 +522,9 @@ _PROVIDERS = (
         "0.90", _setting_url("wallex_api_base_url", "/v1/markets"), "wallex_btc_toman_v1",
         "wallex-market/1.0.0", 20, rpm=12, rph=360, rpd=5000, interval=20,
         maximum_payload_bytes=1_048_576,
+        history_url=_setting_url("wallex_api_base_url", "/v1/udf/history"),
+        history_parser_id="wallex_udf_btc_toman_v1",
+        history_requires_live_quote=False, history_priority=1,
         enabled_default=True,
         source_semantic=SourceSemantic.EXCHANGE_TRADE,
         source_family="wallex", venue="wallex",
@@ -519,21 +533,21 @@ _PROVIDERS = (
     ),
     _provider(
         "tala_gold24_toman", "TALA 24K Gold", "GOLD_24K_TOMAN_GRAM", ProviderRole.PRIMARY, 1,
-        "0.78", _setting_url("tala_api_base_url", "/v1/rates"), "tala_gold24_toman_v1",
-        "tala-rates/1.0.0", 60, rpm=4, rph=80, rpd=1000, interval=60,
+        "0.78", _tala_rate_url("tala_gold24_toman_key"), "tala_gold24_toman_v1",
+        "tala-rates/1.1.0", 60, rpm=4, rph=80, rpd=1000, interval=60,
         api_key_setting="tala_api_key", api_key_header="x-api-key",
         enabled_default=False,
         source_semantic=SourceSemantic.AGGREGATOR,
         source_family="tala", venue="opaque_aggregator",
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
-        symbol_or_pair=_env("TALA_GOLD24_TOMAN_KEY", "geram24k"),
+        symbol_or_pair=str(getattr(settings, "tala_gold24_toman_key", None) or ""),
         required_settings=("tala_gold24_toman_key",),
     ),
     _provider(
         "tala_silver999_toman", "TALA 999 Silver", "SILVER_999_TOMAN_GRAM",
-        ProviderRole.PRIMARY, 1, "0.78", _setting_url("tala_api_base_url", "/v1/rates"),
-        "tala_silver999_toman_v1", "tala-rates/1.0.0", 120,
+        ProviderRole.PRIMARY, 1, "0.78", _tala_rate_url("tala_silver999_toman_key"),
+        "tala_silver999_toman_v1", "tala-rates/1.1.0", 120,
         rpm=4, rph=80, rpd=1000, interval=120,
         api_key_setting="tala_api_key", api_key_header="x-api-key",
         enabled_default=False,
@@ -541,40 +555,40 @@ _PROVIDERS = (
         source_family="tala", venue="opaque_aggregator",
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
-        symbol_or_pair=_env("TALA_SILVER999_TOMAN_KEY", ""),
+        symbol_or_pair=str(getattr(settings, "tala_silver999_toman_key", None) or ""),
         required_settings=("tala_silver999_toman_key",),
     ),
     _provider(
         "tala_gold18_toman", "TALA 18K Gold", "GOLD_18K_TOMAN_GRAM", ProviderRole.VERIFIER, 10,
-        "0.78", _setting_url("tala_api_base_url", "/v1/rates"), "tala_gold18_toman_v1",
-        "tala-rates/1.0.0", 60, rpm=4, rph=80, rpd=1000, interval=60,
+        "0.78", _tala_rate_url("tala_gold18_toman_key"), "tala_gold18_toman_v1",
+        "tala-rates/1.1.0", 60, rpm=4, rph=80, rpd=1000, interval=60,
         api_key_setting="tala_api_key", api_key_header="x-api-key",
         enabled_default=False,
         source_semantic=SourceSemantic.AGGREGATOR,
         source_family="tala", venue="opaque_aggregator",
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
-        symbol_or_pair=_env("TALA_GOLD18_TOMAN_KEY", "geram18k"),
+        symbol_or_pair=str(getattr(settings, "tala_gold18_toman_key", None) or ""),
         required_settings=("tala_gold18_toman_key",),
     ),
     _provider(
         "tala_usdt_toman", "TALA USDT-Toman", "USDT_TOMAN", ProviderRole.FALLBACK, 10,
-        "0.78", _setting_url("tala_api_base_url", "/v1/rates"), "tala_usdt_toman_v1",
-        "tala-rates/1.0.0", 60, rpm=4, rph=80, rpd=1000, interval=60,
+        "0.78", _tala_rate_url("tala_usdt_toman_key"), "tala_usdt_toman_v1",
+        "tala-rates/1.1.0", 60, rpm=4, rph=80, rpd=1000, interval=60,
         api_key_setting="tala_api_key", api_key_header="x-api-key",
         enabled_default=False,
         source_semantic=SourceSemantic.AGGREGATOR,
         source_family="tala", venue="opaque_aggregator",
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
-        symbol_or_pair=_env("TALA_USDT_TOMAN_KEY", "usdt_irt"),
+        symbol_or_pair=str(getattr(settings, "tala_usdt_toman_key", None) or ""),
         required_settings=("tala_usdt_toman_key",),
     ),
     _provider(
         "navasan_usd_toman", "Navasan Free-Market USD", "USD_TOMAN",
         ProviderRole.PRIMARY, 1, "0.72",
         _setting_url(_navasan_base(), "/latest/"),
-        "navasan_usd_v1", "navasan-latest/1.0.0", 300,
+        "navasan_usd_v1", "navasan-latest/1.1.0", 300,
         rpm=2, rph=60, rpd=500, interval=300,
         api_key_setting="navasan_api_key", api_key_query_parameter="api_key",
         enabled_default=False,
@@ -588,8 +602,8 @@ _PROVIDERS = (
     _provider(
         "servix_usd_toman", "Servix Free-Market USD", "USD_TOMAN",
         ProviderRole.FALLBACK, 10, "0.70", _setting_url("servix_api_base_url", "/api/v1/assets"),
-        "servix_usd_rls_v1", "servix-assets/1.1.0", 300,
-        rpm=2, rph=2, rpd=16, interval=5400,
+        "servix_usd_rls_v1", "servix-assets/1.2.0", 300,
+        rpm=1, rph=1, rpd=6, interval=14400,
         api_key_setting="servix_api_key", api_key_header="X-API-Key",
         history_url=_setting_url("servix_api_base_url", "/api/v1/assets/USD_RLS/history"),
         history_parser_id="servix_usd_rls_history_v1",
@@ -616,7 +630,7 @@ _PROVIDERS = (
     _provider(
         "navasan_usdt", "Navasan USDT", "USDT_TOMAN", ProviderRole.FALLBACK, 20,
         "0.72", _setting_url(_navasan_base(), "/latest/"), "navasan_usdt_v1",
-        "navasan-latest/1.0.0", 120, rpm=2, rph=60, rpd=500, interval=120,
+        "navasan-latest/1.1.0", 120, rpm=2, rph=60, rpd=500, interval=120,
         api_key_setting="navasan_api_key", api_key_query_parameter="api_key",
         enabled_default=False,
         source_semantic=SourceSemantic.AGGREGATOR,
@@ -642,7 +656,7 @@ _PROVIDERS = (
     _provider(
         "servix_btc_usd", "Servix BTC-USD", "BTC_USD", ProviderRole.FALLBACK, 30,
         "0.74", _setting_url("servix_api_base_url", "/api/v1/assets"), "servix_btc_usd_v1",
-        "servix-assets/1.1.0", 120, rpm=2, rph=2, rpd=16, interval=5400,
+        "servix-assets/1.2.0", 120, rpm=1, rph=1, rpd=6, interval=14400,
         api_key_setting="servix_api_key", api_key_header="X-API-Key",
         history_url=_setting_url("servix_api_base_url", "/api/v1/assets/BTC_USD/history"),
         history_parser_id="servix_btc_usd_history_v1",
@@ -657,8 +671,8 @@ _PROVIDERS = (
     _provider(
         "servix_usdt_usd", "Servix USDT-USD", "USDT_USD", ProviderRole.FALLBACK, 30,
         "0.74", _setting_url("servix_api_base_url", "/api/v1/assets"),
-        "servix_usdt_usd_v1", "servix-assets/1.1.0", 120,
-        rpm=2, rph=2, rpd=16, interval=5400,
+        "servix_usdt_usd_v1", "servix-assets/1.2.0", 120,
+        rpm=1, rph=1, rpd=6, interval=14400,
         api_key_setting="servix_api_key", api_key_header="X-API-Key",
         history_url=_setting_url("servix_api_base_url", "/api/v1/assets/USDT_USD/history"),
         history_parser_id="servix_usdt_usd_history_v1",
@@ -669,6 +683,70 @@ _PROVIDERS = (
         selected_price_semantic=PriceSemantic.REFERENCE,
         credential_placement="header",
         symbol_or_pair="USDT_USD",
+    ),
+    _provider(
+        "servix_xau_usd", "Servix GOLD_OUNCE_USD", "XAU_USD_OZ",
+        ProviderRole.FALLBACK, 40, "0.70",
+        _setting_url("servix_api_base_url", "/api/v1/assets/GOLD_OUNCE_USD"),
+        "servix_xau_usd_v1", "servix-assets/1.2.0", 300,
+        rpm=1, rph=1, rpd=6, interval=14400,
+        api_key_setting="servix_api_key", api_key_header="X-API-Key",
+        history_url=_setting_url("servix_api_base_url", "/api/v1/assets/GOLD_OUNCE_USD/history"),
+        history_parser_id="servix_xau_usd_history_v1", history_requires_live_quote=False,
+        enabled_default=False, requires_https=True,
+        source_semantic=SourceSemantic.AGGREGATOR,
+        source_family="servix", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        credential_placement="header", symbol_or_pair="GOLD_OUNCE_USD",
+        required_settings=("servix_metals_unit",),
+    ),
+    _provider(
+        "servix_xag_usd", "Servix SILVER_OUNCE_USD", "XAG_USD_OZ",
+        ProviderRole.FALLBACK, 40, "0.70",
+        _setting_url("servix_api_base_url", "/api/v1/assets/SILVER_OUNCE_USD"),
+        "servix_xag_usd_v1", "servix-assets/1.2.0", 300,
+        rpm=1, rph=1, rpd=6, interval=14400,
+        api_key_setting="servix_api_key", api_key_header="X-API-Key",
+        history_url=_setting_url("servix_api_base_url", "/api/v1/assets/SILVER_OUNCE_USD/history"),
+        history_parser_id="servix_xag_usd_history_v1", history_requires_live_quote=False,
+        enabled_default=False, requires_https=True,
+        source_semantic=SourceSemantic.AGGREGATOR,
+        source_family="servix", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        credential_placement="header", symbol_or_pair="SILVER_OUNCE_USD",
+        required_settings=("servix_metals_unit",),
+    ),
+    _provider(
+        "servix_gold18_toman", "Servix GOLD_18_RLS", "GOLD_18K_TOMAN_GRAM",
+        ProviderRole.FALLBACK, 40, "0.70",
+        _setting_url("servix_api_base_url", "/api/v1/assets/GOLD_18_RLS"),
+        "servix_gold18_toman_v1", "servix-assets/1.2.0", 300,
+        rpm=1, rph=1, rpd=6, interval=14400,
+        api_key_setting="servix_api_key", api_key_header="X-API-Key",
+        history_url=_setting_url("servix_api_base_url", "/api/v1/assets/GOLD_18_RLS/history"),
+        history_parser_id="servix_gold18_toman_history_v1", history_requires_live_quote=False,
+        enabled_default=False, requires_https=True,
+        source_semantic=SourceSemantic.AGGREGATOR,
+        source_family="servix", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        credential_placement="header", symbol_or_pair="GOLD_18_RLS",
+        required_settings=("servix_gold18_unit",),
+    ),
+    _provider(
+        "servix_gold24_toman", "Servix GOLD_24_RLS", "GOLD_24K_TOMAN_GRAM",
+        ProviderRole.FALLBACK, 40, "0.70",
+        _setting_url("servix_api_base_url", "/api/v1/assets/GOLD_24_RLS"),
+        "servix_gold24_toman_v1", "servix-assets/1.2.0", 300,
+        rpm=1, rph=1, rpd=6, interval=14400,
+        api_key_setting="servix_api_key", api_key_header="X-API-Key",
+        history_url=_setting_url("servix_api_base_url", "/api/v1/assets/GOLD_24_RLS/history"),
+        history_parser_id="servix_gold24_toman_history_v1", history_requires_live_quote=False,
+        enabled_default=False, requires_https=True,
+        source_semantic=SourceSemantic.AGGREGATOR,
+        source_family="servix", venue="opaque_aggregator",
+        selected_price_semantic=PriceSemantic.REFERENCE,
+        credential_placement="header", symbol_or_pair="GOLD_24_RLS",
+        required_settings=("servix_gold24_unit",),
     ),
 )
 

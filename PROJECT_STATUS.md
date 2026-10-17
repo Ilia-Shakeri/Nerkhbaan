@@ -1,6 +1,27 @@
 # Project Status
 
-Code release: **2.8.3**. Record updated: 2026-10-17. This release contains the step-two Servix contract repair; operational provider coverage remains incomplete.
+Code release: **2.8.4**. Record updated: 2026-10-17. This source release contains the step-two Iranian price/history work; operational provider coverage remains incomplete. Push, final-commit hosted checks and target deployment are pending for this release.
+
+## Step two — 2.8.4 source release, target pending
+
+Local changes add keyless Wallex USDT/Toman and BTC/Toman hourly closing history and four disabled
+Servix price/daily-history routes. The catalogue now contains 43 price routes and 13 history routes;
+Iranian history registration spans nine of eleven instruments. Physical silver 925/999 history still
+has no registered Iranian source. Keyed routes require real authenticated payloads, exact unit/weight/
+purity contracts, rights and effective account-budget review before activation. A catalogue route is
+not verified operational coverage.
+
+October 17 bounded workstation GETs returned 25 raw hourly bars per Wallex pair. Replaying those
+captured public responses through real persistence and an owned PostgreSQL history read preserved
+24 closed hourly observations per pair, including exact source times and Toman values. The open
+hour was excluded. Original source OHLC bars are not stored. This replay made no further external
+requests and touched no live server. Final suite evidence and key requirements are recorded in the
+[source report](docs/provider-step2-2026-10-17.md). These changes belong to 2.8.4; its final-commit hosted checks and target rollout remain pending.
+
+All 518 backend tests passed with zero skips in 162.964 seconds on the final code, using owned
+PostgreSQL 17.11/Redis 7.4.11 alongside unit, SQLite and mocked fixtures. Static name/import checks
+passed. The initial run retained one obsolete missing-gold-history fixture failure; the corrected
+fixture still tests an uncovered physical-silver route. Failed evidence remains separate.
 
 ## Step-one code acceptance — 2026-10-16
 
@@ -35,6 +56,10 @@ codes. Parser/registry provenance is `servix-assets/1.1.0`. The preceding local 
 backend tests with zero skips, including 14 new contract cases. The suite uses owned PostgreSQL/Redis
 and unit, SQLite/mocked cases; no authenticated provider payload was obtained. The repair is included
 in 2.8.3. Its release checks are separate from the historical `v2.8.2` hosted run above.
+
+The exact `v2.8.3` release commit `7f66074225dbabd93f9626800a1b622f74c12e43` passed all 15 jobs in
+[hosted run 39009626738](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39009626738).
+That run does not cover the later 2.8.4 changes described above.
 
 The initial empty-venv attempt failed imports. A second attempt passed with three history cases
 skipped; its receipt remains partial. The final run explicitly selected ordinary PostgreSQL history

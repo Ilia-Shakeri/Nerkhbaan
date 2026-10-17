@@ -359,7 +359,7 @@ class PricingProviderRepairTests(unittest.TestCase):
     def test_unknown_unit_rejected(self) -> None:
         with self.assertRaises(ParserError):
             build_parser("tala_usdt_toman_v1").parse(
-                {"data": [{"key": "usdt_irt", "value": "60000", "unit": "mystery", "status": "active"}]},
+                {"data": [{"key": "usdt_irt", "value": "60000", "unit": "mystery", "status": "active", "updated_at": "2026-08-08T12:00:00Z"}]},
                 _context("USDT_TOMAN"),
             )
 

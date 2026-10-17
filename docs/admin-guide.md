@@ -1,4 +1,4 @@
-# Administrator guide — 2.8.3
+# Administrator guide — 2.8.4
 
 The administrator console uses a separate HttpOnly session cookie under
 `/api/admin`. Public login does not grant administrator access. Permissions are

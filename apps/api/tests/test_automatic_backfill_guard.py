@@ -173,11 +173,11 @@ class AutomaticBackfillTests(unittest.IsolatedAsyncioTestCase):
     async def test_static_missing_history_route_skips_policy_and_enqueue(self):
         history = AsyncMock()
         history.canonical_history.return_value = HistoryResult(
-            "GOLD_18K_TOMAN_GRAM", "30d", "partial", NOW-timedelta(days=30), NOW, []
+            "SILVER_999_TOMAN_GRAM", "30d", "partial", NOW-timedelta(days=30), NOW, []
         )
         service = InstrumentPricingService(history=history, backfill=self.queue,
                                            operational=self.operational)
-        result = await service.canonical_history("GOLD_18K_TOMAN_GRAM", "30d")
+        result = await service.canonical_history("SILVER_999_TOMAN_GRAM", "30d")
         self.assertEqual(result.status, "partial")
         self.operational.instrument.assert_not_awaited()
         self.operational.providers_for.assert_not_awaited()

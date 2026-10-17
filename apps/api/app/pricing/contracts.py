@@ -47,7 +47,7 @@ _DOCS = {
     "gold_api_free": ("https://gold-api.com/docs", "https://gold-api.com/assets/gold", "https://gold-api.com/terms"),
     "metals_dev": ("https://metals.dev/",),
     "nobitex": ("https://apidocs.nobitex.ir/",),
-    "wallex": ("https://api-docs.wallex.ir/",),
+    "wallex": ("https://developers.wallex.ir/docs/basic-services-candles",),
     "servix": ("https://servix.cc/docs", "https://servix.cc/terms"),
     "persian_toolbox": (
         "https://persiantoolbox.ir/developers/api/market",
@@ -56,7 +56,7 @@ _DOCS = {
     "tala": ("https://api.tala.ir/document", "https://api.tala.ir/terms"),
     "ticaro": ("https://ticaro.ir/docs", "https://ticaro.ir/terms"),
     "arzbin": ("https://www.arzbin.com/developers/api",),
-    "navasan": ("https://www.navasan.tech/webserviceguide/", "https://www.navasan.tech/en/api"),
+    "navasan": ("https://www.navasan.tech/api/webserviceguide/", "https://www.navasan.tech/en/api"),
     "nerkh_io": ("https://docs.nerkh.io/openapi.yaml",),
 }
 
@@ -100,7 +100,9 @@ def provider_contract(provider: ProviderDefinition) -> ProviderContract:
         redistribution_status = "app_display_per_official_terms_no_resale_attestation"
     unit_contract = "parser_strict_allowlist"
     if family == "navasan":
-        unit_contract = "documented_rial_to_toman_0.1"
+        unit_contract = "operator_confirmed_rial_or_toman_no_unit_guess"
+    if family == "servix":
+        unit_contract = "explicit_quote_unit_and_operator_confirmed_weight_purity"
     if family == "nerkh_io":
         unit_contract = "operator_configured_category_unit"
     if family == "persian_toolbox":
@@ -115,7 +117,9 @@ def provider_contract(provider: ProviderDefinition) -> ProviderContract:
         endpoint_version=endpoint_version,
         credential_placement=provider.credential_placement,
         unit_contract=unit_contract,
-        source_timestamp="provider_timestamp_or_receive_time",
+        source_timestamp=("required_timezone_bearing_source_timestamp" if family in {"servix", "tala"}
+                          else "required_unix_source_timestamp" if family == "navasan"
+                          else "provider_timestamp_or_receive_time"),
         redistribution_status=redistribution_status,
         commercial_status=commercial_status,
         owner="pricing-ops",

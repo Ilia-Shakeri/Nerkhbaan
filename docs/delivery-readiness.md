@@ -1,11 +1,11 @@
-# Delivery Readiness — 2.8.3
+# Delivery Readiness — 2.8.4
 
 Updated: 2026-10-17. Code delivery and production acceptance are separate facts.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
 | --- | --- | --- | --- |
-| Release consistency | `npm run check:release` | version 2.8.3, no drift | Local |
+| Release consistency | `npm run check:release` | version 2.8.4, no drift | Local |
 | Python static/unit | `python -m pyflakes app tests scripts`; `python -m unittest discover -s tests -v` from apps/api | zero static errors; all required tests pass | Local |
 | Infra fixture behavior | `python scripts/test_infra_contracts.py` | OK | Local, mocked network/data |
 | Browser fixture safety | `TEST_DATABASE_URL=... python scripts/test_browser_fixture.py` | five cases pass, none skipped | Explicit loopback test PostgreSQL, run-owned schema |
@@ -30,6 +30,15 @@ Do not change a pending marker to passed without a saved successful run for the 
 - A backup archive that decompresses does not count as a restored Timescale database.
 - Existing compressed chunks and market-price duplicates need target database checks before uniqueness changes.
 - Keep production evidence outside source control and exclude secrets and customer payloads.
+
+## Current source release — 2026-10-17
+
+Release 2.8.4 contains the Iranian price/history work in the [step-two report](provider-step2-2026-10-17.md).
+The local source suite passed 518 backend cases with zero skips, including owned PostgreSQL/Redis
+and unit, SQLite/mocked cases. Replaying two captured actual Wallex responses preserved and read
+back 24 hourly closing observations per pair in owned PostgreSQL. These proofs do not establish
+authenticated provider coverage, source rights or complete archives. Push, final-commit hosted checks
+and target deployment for 2.8.4 are pending; earlier target receipts retain their date and release.
 
 ## Step-one source validation — 2026-10-16
 

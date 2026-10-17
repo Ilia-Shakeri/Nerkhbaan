@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import os
 import unittest
 from decimal import Decimal
@@ -62,7 +63,7 @@ class ProviderContractInventoryTests(unittest.TestCase):
             ProviderQuoteCollector._validate_destination(bad_provider)
 
     def test_cleartext_key_transport_is_always_blocked(self) -> None:
-        provider = PROVIDERS["navasan_usdt"]
+        provider = replace(PROVIDERS["navasan_usdt"], url="http://api.navasan.tech/latest/")
 
         with patch.object(
             __import__("app.pricing.providers", fromlist=["settings"]).settings,
