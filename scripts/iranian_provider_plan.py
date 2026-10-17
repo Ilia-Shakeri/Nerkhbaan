@@ -18,20 +18,25 @@ from app.pricing.registry import PROVIDERS
 
 def plan(config: object) -> dict:
     prefixes = ("wallgold_", "bitpin_", "nobitex_", "wallex_", "tetherland_", "persian_toolbox_",
-                "servix_", "navasan_", "tala_", "nerkh_io_", "alanchand_")
+                "nerkhsanj_", "gta_silver", "navasan_", "tala_", "nerkh_io_", "alanchand_")
     routes = [provider for provider in PROVIDERS.values() if provider.provider_id.startswith(prefixes)]
     rows = []
     for provider in routes:
         key_names = [provider.api_key_setting] if provider.api_key_setting else []
+        contract_names = list(provider.required_settings)
         if provider.provider_id.startswith("nerkh_io_"):
             key_names = ["nerkh_io_bearer_token", "nerkh_io_api_key"]
+            if provider.unit_source:
+                contract_names.append(provider.unit_source)
+        if provider.provider_id.startswith("navasan_"):
+            contract_names.append("navasan_local_unit")
         rows.append({
             "provider_id": provider.provider_id, "instrument_id": provider.instrument_id,
             "enabled_by_default_catalogue": provider.enabled,
             "configuration_present": provider.configured(config),
             "key_variables": [name.upper() for name in key_names],
             "key_present": any(bool(getattr(config, name, None)) for name in key_names) if key_names else None,
-            "missing_contract_variables": [name.upper() for name in provider.required_settings if not getattr(config, name, None)],
+            "missing_contract_variables": [name.upper() for name in contract_names if not getattr(config, name, None)],
             "history_registered": bool(provider.history_url and provider.history_parser_id),
             "catalogue_budget": {"requests_per_day": provider.budget.requests_per_day,
                                  "minimum_interval_seconds": provider.budget.minimum_interval_seconds},
@@ -43,13 +48,9 @@ def plan(config: object) -> dict:
         "network_requests": 0, "database_or_redis_connections": 0, "production_changed": False,
         "budget_scope": "catalogue_only", "effective_runtime_budget": "unknown_not_read",
         "account_quota_verified": False,
-        "servix_budget": {"catalogue_daily_sum": sum(p.budget.requests_per_day for p in routes if p.source_family == "servix"),
-                          "runtime_daily_sum": None,
-                          "activation_gate": "read_effective_database_and_operational_budgets_before_activation"},
         "routes": rows, "instruments_without_iranian_history_route": sorted(set(INSTRUMENTS)-covered),
         "candidate_not_integrated": {"BRSAPI_API_KEY": "Commodity plan candidate; troy-ounce and account usage proof still required"},
         "notes": ["Registration is not verified coverage", "TALA and Alanchand trial keys are not permanent free production plans",
-                  "Servix catalogue defaults total 48 calls/day; stored budgets and overrides may differ and must be read before activation",
                   "Source freshness limits stay unchanged; no account-level quota or rights verification was performed"],
     }
 

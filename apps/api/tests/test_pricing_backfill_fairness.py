@@ -22,7 +22,7 @@ from app.pricing.backfill import PricingBackfillQueue
 from app.pricing.db_models import InstrumentRecord, PricingBackfillJobRecord
 from app.pricing.instruments import get_instrument
 from app.pricing.operational import OperationalPricingSettings
-from app.pricing.registry import PROVIDERS
+from app.pricing.registry import PROVIDERS, RETIRED_PROVIDERS
 
 
 NOW = datetime(2026, 10, 11, 12, tzinfo=UTC)
@@ -50,7 +50,7 @@ class BackfillFairnessTests(unittest.IsolatedAsyncioTestCase):
         self.sessions = sessionmaker(bind=self.engine)
         self.providers = {
             "BTC_USD": (PROVIDERS["coingecko_btc"],),
-            "USD_TOMAN": (replace(PROVIDERS["servix_usd_toman"], enabled=True, api_key_setting=None),),
+            "USD_TOMAN": (replace(RETIRED_PROVIDERS["servix_usd_toman"], enabled=True, api_key_setting=None),),
         }
         for target, value in (
             ("app.pricing.backfill.SessionLocal", self.sessions),

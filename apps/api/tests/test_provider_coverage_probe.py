@@ -99,12 +99,13 @@ class ProviderCoverageNetworkTests(unittest.IsolatedAsyncioTestCase):
 
     async def run_live_with_archive(self, failure=False):
         archive = PROVIDERS["nerkhsanj_silver999_history"]
-        live = PROVIDERS["nobitex_stats_usdt"]
+        live = replace(PROVIDERS["gold_api_free_xau"], enabled=True)
 
         async def providers(iid):
             return (archive,) if iid == archive.instrument_id else (live,)
 
-        payload = {"stats": {"usdt-rls": {"latest": "1000000"}}}
+        payload = {"symbol": "XAU", "currency": "USD", "price": 4000,
+                   "updatedAt": utc_now().isoformat()}
         request = AsyncMock(return_value=(payload, "application/json", 200))
         if failure:
             request.side_effect = ProviderCallFailure("http_error", "owned transport failure", http_status=503)
@@ -141,10 +142,13 @@ class ProviderCoverageNetworkTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["rights_confirmed_by_probe"])
 
     async def test_aggregate_route_has_single_request_and_common_receive_time(self):
-        first = PROVIDERS["nobitex_stats_usdt"]
-        second = PROVIDERS["nobitex_stats_btc"]
-        payload = {"stats": {"usdt-rls": {"latest": "1000000"},
-                             "btc-rls": {"latest": "500000000000"}}}
+        # Exercise shared transport with an explicitly active synthetic source;
+        # deployed stats routes remain archival because their real clock is absent.
+        first = replace(PROVIDERS["nobitex_stats_usdt"], enabled=True, history_only=False)
+        second = replace(PROVIDERS["nobitex_stats_btc"], enabled=True, history_only=False)
+        stamp = utc_now().isoformat()
+        payload = {"stats": {"usdt-rls": {"latest": "1000000", "updated_at": stamp},
+                             "btc-rls": {"latest": "500000000000", "updated_at": stamp}}}
         async def instrument(iid):
             return get_instrument(iid)
         async def providers(iid):

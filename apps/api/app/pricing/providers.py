@@ -39,6 +39,7 @@ from .parsers import ParserContext, ParserError, build_parser
 from .parsers.base import sanitize_raw_payload
 from .persistence import PricingPersistence, pricing_persistence
 from .registry import ProviderDefinition
+from .source_snapshots import SharedSourceSnapshots, SourceSnapshot, SourceSnapshotUnavailable
 from . import rights
 
 
@@ -114,6 +115,7 @@ class ProviderQuoteCollector:
         self.budgets = budgets
         self.locks = locks
         self.persistence = persistence
+        self.source_snapshots = SharedSourceSnapshots(store=store, budgets=budgets)
 
     async def quote(
         self,
@@ -261,6 +263,7 @@ class ProviderQuoteCollector:
         payload: object | None = None
         content_type: str | None = None
         http_status: int | None = None
+        external_called = provider.source_family != "nerkhsanj"
         owns_client = client is None
         request_client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(
@@ -270,15 +273,21 @@ class ProviderQuoteCollector:
             follow_redirects=False,
         )
         try:
-            payload, content_type, http_status = await self._request_payload(
-                request_client, provider, purpose=purpose
-            )
+            if provider.source_family == "nerkhsanj":
+                snapshot = await self._source_snapshot(request_client, provider, purpose)
+                payload, content_type, http_status = snapshot.payload, snapshot.content_type, snapshot.http_status
+                received_at = snapshot.fetched_at
+                external_called = snapshot.network_called
+            else:
+                payload, content_type, http_status = await self._request_payload(
+                    request_client, provider, purpose=purpose
+                )
+                received_at = utc_now()
             if (not rights.provider_allowed(provider.provider_id, "collect")
                     or not rights.provider_allowed(provider.provider_id, "store")
                     or not rights.endpoint_allowed(provider.provider_id, provider.url)):
-                return QuoteFetchOutcome(None, False, False, True, "provider_rights_denied")
+                return QuoteFetchOutcome(None, False, False, external_called, "provider_rights_denied")
             parser = build_parser(provider.parser_id)
-            received_at = utc_now()
             parsed = parser.parse(
                 payload,
                 ParserContext(
@@ -355,11 +364,15 @@ class ProviderQuoteCollector:
             if (not rights.provider_allowed(provider.provider_id, "collect")
                     or not rights.provider_allowed(provider.provider_id, "store")
                     or getattr(persistence_result, "sanitized_error", None) == "provider_rights_denied"):
-                return QuoteFetchOutcome(None, False, False, True, "provider_rights_denied")
+                return QuoteFetchOutcome(None, False, False, external_called, "provider_rights_denied")
             await self.store.set_provider_quote(
                 quote, provider.operational_ttl_seconds
             )
-            await self._record_success(provider, runtime, latency_ms, http_status)
+            await self._record_success(
+                provider, runtime, latency_ms, http_status,
+                received_at=received_at if provider.source_family == "nerkhsanj" else None,
+                external_called=external_called,
+            )
             sanitized = sanitize_raw_payload(payload, _raw_payload_bound(provider))
             failure_reason = None
             if freshness is not FreshnessStatus.LIVE:
@@ -369,16 +382,20 @@ class ProviderQuoteCollector:
             return QuoteFetchOutcome(
                 quote,
                 persistence_result.persisted and freshness is FreshnessStatus.LIVE,
-                False,
-                True,
+                not external_called,
+                external_called,
                 failure_reason,
                 sanitized_payload=sanitized,
                 content_type=content_type,
                 cache_status=freshness,
             )
         except ProviderCallFailure as exc:
+            external_called = getattr(exc, "network_called", external_called)
             if exc.http_status == 429:
-                await self.budgets.record_rate_limit(provider)
+                await self.budgets.record_rate_limit(
+                    provider, source_url=provider.url,
+                    retry_after_seconds=exc.retry_after_seconds,
+                )
             rejected = await self._rejected_quote(
                 provider,
                 purpose,
@@ -396,12 +413,13 @@ class ProviderQuoteCollector:
                 exc.http_status,
                 started,
                 retry_after_seconds=exc.retry_after_seconds,
+                external_called=external_called,
             )
             return QuoteFetchOutcome(
                 rejected,
                 False,
                 False,
-                True,
+                external_called,
                 exc.code,
                 sanitized_payload=(
                     sanitize_raw_payload(exc.payload, _raw_payload_bound(provider))
@@ -423,13 +441,13 @@ class ProviderQuoteCollector:
                 instrument,
             )
             await self._record_failure(
-                provider, runtime, exc.code, http_status, started
+                provider, runtime, exc.code, http_status, started, external_called=external_called
             )
             return QuoteFetchOutcome(
                 rejected,
                 False,
                 False,
-                True,
+                external_called,
                 exc.code,
                 sanitized_payload=(
                     sanitize_raw_payload(payload, provider.maximum_payload_bytes)
@@ -450,11 +468,35 @@ class ProviderQuoteCollector:
                 started,
                 instrument,
             )
-            await self._record_failure(provider, runtime, code, http_status, started)
-            return QuoteFetchOutcome(rejected, False, False, True, code)
+            await self._record_failure(provider, runtime, code, http_status, started, external_called=external_called)
+            return QuoteFetchOutcome(rejected, False, False, external_called, code)
         finally:
             if owns_client:
                 await request_client.aclose()
+
+    async def _source_snapshot(
+        self, client: httpx.AsyncClient, provider: ProviderDefinition,
+        purpose: RequestPurpose | None,
+    ) -> SourceSnapshot:
+        self._validate_destination(provider)
+
+        async def load():
+            return await self._request_once(client, provider, dict(provider.static_headers), {})
+
+        try:
+            return await self.source_snapshots.get(provider, provider.url, load, purpose or RequestPurpose.NORMAL)
+        except SourceSnapshotUnavailable as exc:
+            if not exc.network_called and (exc.code.startswith("budget_limit_") or exc.code in {
+                "provider_budget_disabled", "provider_cooldown", "snapshot_locked", "snapshot_cache_unavailable",
+            }):
+                raise ProviderBudgetUnavailable(exc.code) from exc
+            if isinstance(exc.cause, ProviderCallFailure):
+                exc.cause.network_called = exc.network_called
+                raise exc.cause from exc
+            code = "transport_error" if isinstance(exc.cause, (httpx.HTTPError, OSError, TimeoutError)) else exc.code
+            failure = ProviderCallFailure(code, "Shared source snapshot unavailable")
+            failure.network_called = exc.network_called
+            raise failure from exc
 
     async def _request_payload(
         self,
@@ -465,6 +507,9 @@ class ProviderQuoteCollector:
     ) -> tuple[object, str | None, int]:
         if getattr(provider, "history_only", False):
             raise ProviderCallFailure("history_only", "This source supports historical collection only")
+        if provider.source_family == "nerkhsanj":
+            snapshot = await self._source_snapshot(client, provider, purpose)
+            return snapshot.payload, snapshot.content_type, snapshot.http_status
         if (not rights.provider_allowed(provider.provider_id, "collect")
                 or not rights.endpoint_allowed(provider.provider_id, provider.url)):
             raise ProviderCallFailure("provider_rights_denied", "Source permission unavailable")
@@ -507,15 +552,15 @@ class ProviderQuoteCollector:
                 headers[provider.api_key_header] = value
             elif provider_query_key:
                 params[provider_query_key] = str(key)
-        maximum_attempts = settings.pricing_provider_max_retries + 1
+        maximum_attempts = 1 if provider.source_family == "gta_silver" else settings.pricing_provider_max_retries + 1
         last_failure: ProviderCallFailure | None = None
         for attempt in range(maximum_attempts):
             if not rights.provider_allowed(provider.provider_id, "collect"):
                 raise ProviderCallFailure("provider_rights_denied", "Source permission unavailable")
             # Operator probes omit a purpose; managed refreshes charge every
             # actual attempt, including retries, through the shared limits.
-            if purpose is not None:
-                budget = await self.budgets.consume(provider, purpose)
+            if purpose is not None or provider.source_family == "gta_silver":
+                budget = await self.budgets.consume(provider, purpose or RequestPurpose.NORMAL)
                 if not budget.allowed:
                     if last_failure is not None:
                         raise last_failure
@@ -558,19 +603,19 @@ class ProviderQuoteCollector:
             ) as response:
                 content_type = response.headers.get("content-type", "").split(";", 1)[0]
                 body = bytearray()
-                async for chunk in response.aiter_bytes():
-                    body.extend(chunk)
+                async for chunk in response.aiter_bytes(chunk_size=65_536):
                     maximum_payload_bytes = min(
                         provider.maximum_payload_bytes,
                         settings.pricing_provider_max_response_bytes,
                     )
-                    if len(body) > maximum_payload_bytes:
+                    if len(body) + len(chunk) > maximum_payload_bytes:
                         raise ProviderCallFailure(
                             "payload_too_large",
                             "Provider payload exceeded the configured bound",
                             http_status=response.status_code,
                             content_type=content_type,
                         )
+                    body.extend(chunk)
                 payload: object | None = None
                 if body:
                     try:
@@ -708,16 +753,19 @@ class ProviderQuoteCollector:
         runtime: ProviderRuntimeState,
         latency_ms: int,
         http_status: int | None,
+        *,
+        received_at: datetime | None = None,
+        external_called: bool = True,
     ) -> None:
         now = utc_now()
         previous_total = runtime.success_count
         runtime.success_count += 1
         runtime.consecutive_failures = 0
-        runtime.last_success_at = now
+        runtime.last_success_at = received_at or now
         runtime.last_error_code = None
         runtime.circuit_state = CircuitState.CLOSED
         runtime.circuit_open_until = None
-        runtime.operational_status = "connected"
+        runtime.operational_status = "connected" if external_called else "source_snapshot"
         latency = Decimal(latency_ms)
         if runtime.average_latency_ms is None:
             runtime.average_latency_ms = latency
@@ -729,11 +777,13 @@ class ProviderQuoteCollector:
         await self.persistence.record_runtime_event(
             provider_id=provider.provider_id,
             instrument_id=provider.instrument_id,
-            event_type="request",
+            event_type="request" if external_called else "source_snapshot",
             status="success",
             latency_ms=latency_ms,
             http_status=http_status,
         )
+        if not external_called:
+            return
         provider_request_total.labels(
             provider=provider.provider_id,
             instrument=provider.instrument_id,
@@ -752,6 +802,8 @@ class ProviderQuoteCollector:
         http_status: int | None,
         started: float,
         retry_after_seconds: int | None = None,
+        *,
+        external_called: bool = True,
     ) -> None:
         now = utc_now()
         latency_ms = max(0, int((time.monotonic() - started) * 1000))
@@ -777,12 +829,14 @@ class ProviderQuoteCollector:
         await self.persistence.record_runtime_event(
             provider_id=provider.provider_id,
             instrument_id=provider.instrument_id,
-            event_type="request",
+            event_type="request" if external_called else "source_snapshot",
             status="failed",
             latency_ms=latency_ms,
             http_status=http_status,
             sanitized_error=error_code,
         )
+        if not external_called:
+            return
         provider_request_total.labels(
             provider=provider.provider_id,
             instrument=provider.instrument_id,

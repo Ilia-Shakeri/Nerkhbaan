@@ -14,7 +14,7 @@ from app.pricing.instruments import get_instrument
 from app.pricing.models import Currency, SourceSemantic, WeightUnit
 from app.pricing.parsers import ParserContext, ParserError, build_parser
 from app.pricing.parsers.history import build_history_parser
-from app.pricing.registry import PROVIDERS
+from app.pricing.registry import PROVIDERS, RETIRED_PROVIDERS
 
 
 RECEIVED = datetime(2026, 10, 17, 8, 23, 7, 347762, tzinfo=UTC)
@@ -191,7 +191,7 @@ class ReplacementRegistryTests(unittest.TestCase):
     def test_local_crypto_routes_stay_disabled_and_keyed(self):
         for name, symbol, instrument, _value in LOCAL_QUOTES:
             with self.subTest(symbol=symbol):
-                provider = PROVIDERS[f"servix_{name}_toman"]
+                provider = RETIRED_PROVIDERS[f"servix_{name}_toman"]
                 self.assertFalse(provider.enabled)
                 self.assertFalse(provider.configured(SimpleNamespace()))
                 self.assertEqual(provider.api_key_header, "X-API-Key")
@@ -204,11 +204,11 @@ class ReplacementRegistryTests(unittest.TestCase):
                 self.assertFalse(provider.history_requires_live_quote)
 
     def test_nine_default_servix_routes_fit_forty_eight_catalogue_calls(self):
-        routes = [provider for provider in PROVIDERS.values() if provider.source_family == "servix"]
+        routes = list(RETIRED_PROVIDERS.values())
         self.assertEqual(len(routes), 9)
         self.assertEqual(sum(provider.budget.requests_per_day for provider in routes), 48)
         for name, _symbol, _instrument, _value in LOCAL_QUOTES:
-            provider = PROVIDERS[f"servix_{name}_toman"]
+            provider = RETIRED_PROVIDERS[f"servix_{name}_toman"]
             self.assertEqual(provider.budget.requests_per_day, 3)
             self.assertGreaterEqual(provider.budget.minimum_interval_seconds, 28800)
 

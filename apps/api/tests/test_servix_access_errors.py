@@ -14,12 +14,12 @@ from app.pricing.instruments import get_instrument
 from app.pricing.budgets import BudgetDecision
 from app.pricing.models import ProviderRuntimeState, RequestPurpose
 from app.pricing.providers import ProviderCallFailure, ProviderQuoteCollector
-from app.pricing.registry import PROVIDERS
+from app.pricing.registry import RETIRED_PROVIDERS
 
 
 class ServixAccessErrorTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self.provider = PROVIDERS["servix_btc_usd"]
+        self.provider = RETIRED_PROVIDERS["servix_btc_usd"]
         self.payload = {"status": 403, "code": "EMAIL_VERIFICATION_REQUIRED",
                         "message": "Verify private-account@example.test using secret-value",
                         "email": "private-account@example.test", "requestId": "private-request-id"}

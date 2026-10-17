@@ -110,7 +110,7 @@ class _StreamResponse:
     async def __aexit__(self, *_args: object) -> None:
         return None
 
-    async def aiter_bytes(self):
+    async def aiter_bytes(self, chunk_size: int | None = None):
         yield self.payload
 
 
@@ -129,6 +129,7 @@ class ProviderRetryTests(unittest.IsolatedAsyncioTestCase):
     async def test_relay_request_gets_shared_header(self) -> None:
         provider = SimpleNamespace(
             provider_id="gold_api_free_xau",
+            source_family="gold_api",
             static_headers=(),
             url="https://relay.example.com/gold-api/price/XAU",
             requires_https=False,

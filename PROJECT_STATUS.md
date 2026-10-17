@@ -1,10 +1,38 @@
 # Project Status
 
-Code release: **2.8.6**. Record updated: 2026-10-17. Reviewed provider permissions now gate collection, storage and every application output. The [rights review](docs/provider-rights-2026-10-17.md) records approved own-application sources, restricted routes and remaining account/network evidence. Full operational coverage remains incomplete; the user's selected replacement scope must pass before live deployment. Final-commit hosted checks and target evidence are separate requirements.
+Code release: **2.8.7**. Record updated: 2026-10-17. Reviewed provider permissions now gate collection, storage and every application output. The [rights review](docs/provider-rights-2026-10-17.md) records approved own-application sources, restricted routes and remaining account/network evidence. Full operational coverage remains incomplete; the user's selected replacement scope must pass before live deployment. Final-commit hosted checks and target evidence are separate requirements.
 
 Tagged 2.8.6 local code checks: 673 backend cases passed with zero skips, including owned PostgreSQL/Redis cases. Frontend 72, standalone channel-worker 28, Go 11 and three renderer builds passed; a real disposable proxy passed eight permission checks. These local results do not establish authenticated provider access, production coverage or end-user notification receipt. Failed earlier adapter-fixture runs are retained outside Git.
 
-## Source recovery after tag 2.8.6 — unreleased
+## Iranian replacement — 2.8.7
+
+Servix is retired from active collection and operational enable overrides. Old
+permitted history remains stored and readable. Reviewed keyless Nerkhsanj,
+Wallgold, Nobitex and GTA routes add native prices and archives with credits;
+registered archives span eight instruments. Source snapshots share a bounded
+request budget across replicas and keep the original receive clock. Daily UTC
+and Tehran dates and per-currency publication clocks remain explicit.
+
+Target connectivity succeeds for the selected public hosts, and the configured
+Nobitex base already uses the reachable apiv2 host. No server network change was
+needed. The recorded Nerkhsanj live response was stale for all seven instruments;
+Nobitex history returned 403 and stays disabled. Physical gold 24K/9999, BTC/USD
+and USDT/USD replacements remain unproved. The live version remains 2.8.1;
+deployment and step-three real delivery receipt remain pending. See the
+[replacement evidence and limits](docs/iranian-replacement-2026-10-17.md).
+
+Final local source validation passed 937 backend cases with zero skips using
+owned PostgreSQL and Redis alongside unit, SQLite and mocked cases. Frontend
+contracts passed 78 cases; ten focused mocked Edge cases covered publication
+clocks, UTC/Tehran history and both market/reference alert forms. Three renderer
+builds and Python static checks passed. Thirteen daily-history cases passed on
+each of ordinary PostgreSQL and Timescale. A new persistent three-case real-Redis
+suite covers shared fetches, hard URL quotas and concurrent cooldowns, and is
+selected in hosted integration. Failed full-suite and selector receipts remain
+separate. These overlapping suites are not one aggregate test count; hosted
+checks on the final commit and operational acceptance retain their own receipts.
+
+## Historical source recovery after tag 2.8.6
 
 The published `v2.8.6` remains at `7460a48aec09801eee600b5cffba50998f370f46`; its [15 successful hosted jobs](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39021033677) validate that commit. New source changes need their own checks and are not the tagged installer or a live update.
 

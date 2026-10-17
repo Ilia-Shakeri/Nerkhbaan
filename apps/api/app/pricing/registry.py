@@ -11,6 +11,9 @@ from .instruments import INSTRUMENTS
 from .models import PriceSemantic, ProviderRole, RequestPurpose, SourceSemantic
 
 
+_RETIRED_SOURCE_FAMILIES = frozenset({"servix"})
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderBudgetPolicy:
     requests_per_minute: int
@@ -215,7 +218,9 @@ def _provider(
     required_settings: tuple[str, ...] = (),
     history_only: bool = False,
 ) -> ProviderDefinition:
-    enabled = _bool_env(f"PRICING_PROVIDER_{provider_id.upper()}_ENABLED", enabled_default)
+    enabled = source_family not in _RETIRED_SOURCE_FAMILIES and _bool_env(
+        f"PRICING_PROVIDER_{provider_id.upper()}_ENABLED", enabled_default
+    )
     return ProviderDefinition(
         provider_id=provider_id,
         display_name=display_name,
@@ -256,9 +261,96 @@ def _provider(
     )
 
 
-_NOBITEX_HEADERS = (("User-Agent", "Nerkhbaan-Pricing/2"),)
+_NOBITEX_HEADERS = (("User-Agent", "TraderBot/Nerkhbaan-2"),)
 
 _PROVIDERS = (
+    *(
+        _provider(
+            f"wallgold_{asset}_quote", f"Wallgold {label} Published Quote", instrument,
+            ProviderRole.PRIMARY, 0, "0.85", _setting_url("wallgold_api_base_url", "/api/v1/prices"),
+            f"wallgold_{asset}_quote_v1", "wallgold-public-quote/1.0.0",
+            INSTRUMENTS[instrument].operational_ttl_seconds,
+            rpm=1, rph=60, rpd=1440, interval=60, requires_https=True,
+            source_semantic=SourceSemantic.REFERENCE_RATE, source_family="wallex",
+            venue="wallgold", independence_group="wallex", symbol_or_pair=symbol,
+        )
+        for asset, label, instrument, symbol in (
+            ("gold18", "18K Gold", "GOLD_18K_TOMAN_GRAM", "GLD_18C_750TMN"),
+            ("silver925", "Silver 925", "SILVER_925_TOMAN_GRAM", "SLV_925TMN"),
+        )
+    ),
+    *(
+        _provider(
+            f"wallgold_silver925_{period}_history", f"Wallgold Silver 925 {period} Archive",
+            "SILVER_925_TOMAN_GRAM", ProviderRole.FALLBACK, 200, "0.82",
+            _setting_url("wallgold_api_base_url", f"/api/v1/chart?symbol=SLV_925TMN&chartType={source_period}"),
+            "historical_only_v1", "wallgold-ohlc-history/1.0.0", 120,
+            rpm=1, rph=60, rpd=1440, interval=60, requires_https=True,
+            history_url=_setting_url("wallgold_api_base_url", f"/api/v1/chart?symbol=SLV_925TMN&chartType={source_period}"),
+            history_parser_id=f"wallgold_silver925_{period}_v1",
+            history_requires_live_quote=False, history_priority=priority, history_only=True,
+            maximum_payload_bytes=1_048_576, source_semantic=SourceSemantic.EXCHANGE_TRADE,
+            source_family="wallex", venue="wallgold", independence_group="wallex", symbol_or_pair="SLV_925TMN",
+        )
+        for period, source_period, priority in (("hourly", "MONTHLY", 40), ("daily", "YEARLY", 50))
+    ),
+    *(
+        _provider(
+            f"nerkhsanj_{asset}", f"Nerkhsanj {label}", instrument,
+            ProviderRole.PRIMARY, 5, "0.72",
+            "https://nerkh.jahankhahan.shop/data/live.json",
+            f"nerkhsanj_{asset}_snapshot_v1", "nerkhsanj-snapshot/1.0.0",
+            INSTRUMENTS[instrument].operational_ttl_seconds,
+            rpm=1, rph=60, rpd=1440, interval=60,
+            maximum_source_age_seconds=INSTRUMENTS[instrument].stale_after_seconds,
+            history_url=("https://nerkh.jahankhahan.shop/data/intraday.json" if currency == "toman" else None),
+            history_parser_id=(f"nerkhsanj_{asset}_intraday_v1" if currency == "toman" else None),
+            history_requires_live_quote=False, history_priority=80,
+            source_semantic=SourceSemantic.REFERENCE_RATE, source_family="nerkhsanj",
+            venue="tehran_reference", independence_group="nerkhsanj", requires_https=True,
+            symbol_or_pair=symbol,
+        )
+        for asset, label, instrument, symbol, currency in (
+            ("usd_toman", "USD/Toman", "USD_TOMAN", "dollar", "toman"),
+            ("gold18_toman", "18K Gold", "GOLD_18K_TOMAN_GRAM", "gold", "toman"),
+            ("silver999_toman", "Silver 999", "SILVER_999_TOMAN_GRAM", "silver", "toman"),
+            ("usdt_toman", "USDT/Toman", "USDT_TOMAN", "tether", "toman"),
+            ("btc_toman", "BTC/Toman", "BTC_TOMAN", "bitcoin", "toman"),
+            ("xau_usd", "Gold Ounce USD", "XAU_USD_OZ", "ounce", "usd"),
+            ("xag_usd", "Silver Ounce USD", "XAG_USD_OZ", "silver-ounce", "usd"),
+        )
+    ),
+    *(
+        _provider(
+            f"nerkhsanj_{asset}_history", f"Nerkhsanj {asset} Daily Archive", instrument,
+            ProviderRole.FALLBACK, 200, "0.65", f"https://nerkh.jahankhahan.shop/data/{archive}",
+            "historical_only_v1", "nerkhsanj-daily-history/2.0.0", 120,
+            rpm=1, rph=60, rpd=1440, interval=60,
+            history_url=f"https://nerkh.jahankhahan.shop/data/{archive}",
+            history_parser_id=f"nerkhsanj_{asset}_daily_v1",
+            history_requires_live_quote=False, history_priority=50,
+            history_only=True, requires_https=True, maximum_payload_bytes=8_388_608,
+            source_semantic=SourceSemantic.REFERENCE_RATE, source_family="nerkhsanj",
+            venue="tehran_reference", independence_group="nerkhsanj", symbol_or_pair=symbol,
+        )
+        for asset, instrument, symbol, archive in (
+            ("usd_toman", "USD_TOMAN", "dollar", "rates.json"),
+            ("gold18_toman", "GOLD_18K_TOMAN_GRAM", "gold", "rates.json"),
+            ("usdt_toman", "USDT_TOMAN", "tether", "rates.json"),
+            ("btc_toman", "BTC_TOMAN", "bitcoin", "rates.json"),
+            ("xau_usd", "XAU_USD_OZ", "ounce", "rates-usd.json"),
+            ("xag_usd", "XAG_USD_OZ", "silver-ounce", "rates-usd.json"),
+        )
+    ),
+    _provider(
+        "gta_silver925_toman", "GTA Silver 925", "SILVER_925_TOMAN_GRAM",
+        ProviderRole.PRIMARY, 5, "0.75", "https://gtasilver.com/api/silver-price",
+        "gta_silver925_v1", "gta-silver-925/1.0.0", 120,
+        rpm=1, rph=60, rpd=1440, interval=60, requires_https=True,
+        source_semantic=SourceSemantic.REFERENCE_RATE, source_family="gta_silver",
+        venue="gta_silver", independence_group="gta_silver", symbol_or_pair="gram_925",
+        selected_price_semantic=PriceSemantic.ASK,
+    ),
     _provider(
         "nerkhsanj_silver999_history", "Nerkhsanj Silver 999 Daily Archive", "SILVER_999_TOMAN_GRAM",
         ProviderRole.FALLBACK, 200, "0.65",
@@ -332,7 +424,7 @@ _PROVIDERS = (
         "0.80", _setting_url("gold_api_base_url", "/price/XAU"), "gold_api_free_xau_v1",
         "gold-api-free/1.0.0", 3600, rpm=2, rph=30, rpd=300, interval=3600,
         source_semantic=SourceSemantic.REFERENCE_RATE,
-        source_family="gold_api_free", venue="gold_api_free",
+        source_family="gold_api_free", venue="gold_api_free", enabled_default=False,
         selected_price_semantic=PriceSemantic.REFERENCE,
     ),
     _provider(
@@ -359,7 +451,7 @@ _PROVIDERS = (
         "0.80", _setting_url("gold_api_base_url", "/price/XAG"), "gold_api_free_xag_v1",
         "gold-api-free/1.0.0", 3600, rpm=2, rph=30, rpd=300, interval=3600,
         source_semantic=SourceSemantic.REFERENCE_RATE,
-        source_family="gold_api_free", venue="gold_api_free",
+        source_family="gold_api_free", venue="gold_api_free", enabled_default=False,
         selected_price_semantic=PriceSemantic.REFERENCE,
     ),
     _provider(
@@ -385,7 +477,7 @@ _PROVIDERS = (
         "nobitex_stats_usdt", "Nobitex USDT Stats", "USDT_TOMAN", ProviderRole.PRIMARY, 1,
         "0.93", _setting_url("nobitex_api_base_url", "/market/stats"), "nobitex_stats_usdt_rls_v1",
         "nobitex-stats/1.0.0", 20, rpm=12, rph=360, rpd=5000, interval=20,
-        headers=_NOBITEX_HEADERS,
+        headers=_NOBITEX_HEADERS, history_only=True, history_requires_live_quote=False, enabled_default=False,
         history_url=_setting_url("nobitex_api_base_url", "/market/udf/history"),
         history_parser_id="nobitex_udf_usdtirt_v1",
         source_semantic=SourceSemantic.EXCHANGE_TRADE,
@@ -394,8 +486,8 @@ _PROVIDERS = (
     ),
     _provider(
         "nobitex_orderbook_usdt", "Nobitex USDT Order Book", "USDT_TOMAN",
-        ProviderRole.VERIFIER, 2, "0.91", _setting_url("nobitex_api_base_url", "/v3/orderbook/all"),
-        "nobitex_orderbook_usdtirt_v1", "nobitex-orderbook/1.0.1", 20,
+        ProviderRole.PRIMARY, 1, "0.91", _setting_url("nobitex_api_base_url", "/v3/orderbook/USDTIRT"),
+        "nobitex_orderbook_usdtirt_v1", "nobitex-orderbook/1.1.0", 20,
         maximum_payload_bytes=1_048_576,
         rpm=12, rph=360, rpd=5000, interval=20, headers=_NOBITEX_HEADERS,
         source_semantic=SourceSemantic.EXCHANGE_ORDERBOOK,
@@ -440,7 +532,7 @@ _PROVIDERS = (
         "nobitex_stats_btc", "Nobitex BTC Stats", "BTC_TOMAN", ProviderRole.PRIMARY, 1,
         "0.93", _setting_url("nobitex_api_base_url", "/market/stats"), "nobitex_stats_btc_rls_v1",
         "nobitex-stats/1.0.0", 20, rpm=12, rph=360, rpd=5000, interval=20,
-        headers=_NOBITEX_HEADERS,
+        headers=_NOBITEX_HEADERS, history_only=True, history_requires_live_quote=False, enabled_default=False,
         history_url=_setting_url("nobitex_api_base_url", "/market/udf/history"),
         history_parser_id="nobitex_udf_btcirt_v1",
         source_semantic=SourceSemantic.EXCHANGE_TRADE,
@@ -449,8 +541,8 @@ _PROVIDERS = (
     ),
     _provider(
         "nobitex_orderbook_btc", "Nobitex BTC Order Book", "BTC_TOMAN",
-        ProviderRole.VERIFIER, 2, "0.91", _setting_url("nobitex_api_base_url", "/v3/orderbook/all"),
-        "nobitex_orderbook_btcirt_v1", "nobitex-orderbook/1.0.1", 20,
+        ProviderRole.PRIMARY, 1, "0.91", _setting_url("nobitex_api_base_url", "/v3/orderbook/BTCIRT"),
+        "nobitex_orderbook_btcirt_v1", "nobitex-orderbook/1.1.0", 20,
         maximum_payload_bytes=1_048_576,
         rpm=12, rph=360, rpd=5000, interval=20, headers=_NOBITEX_HEADERS,
         source_semantic=SourceSemantic.EXCHANGE_ORDERBOOK,
@@ -502,7 +594,7 @@ _PROVIDERS = (
         "gold-api-free-btc/1.0.0", 60, rpm=2, rph=60, rpd=1440, interval=60,
         maximum_source_age_seconds=120,
         source_semantic=SourceSemantic.REFERENCE_RATE,
-        source_family="gold_api_free", venue="gold_api_free",
+        source_family="gold_api_free", venue="gold_api_free", enabled_default=False,
         selected_price_semantic=PriceSemantic.REFERENCE,
         requires_https=True, symbol_or_pair="BTC/USD",
     ),
@@ -798,12 +890,19 @@ _PROVIDERS = (
     ),
 )
 
-PROVIDERS = MappingProxyType({provider.provider_id: provider for provider in _PROVIDERS})
+RETIRED_PROVIDERS = MappingProxyType({
+    provider.provider_id: provider
+    for provider in _PROVIDERS if provider.source_family in _RETIRED_SOURCE_FAMILIES
+})
+PROVIDERS = MappingProxyType({
+    provider.provider_id: provider
+    for provider in _PROVIDERS if provider.source_family not in _RETIRED_SOURCE_FAMILIES
+})
 PROVIDERS_BY_INSTRUMENT = MappingProxyType(
     {
         instrument_id: tuple(
             sorted(
-                (p for p in _PROVIDERS if p.instrument_id == instrument_id),
+                (p for p in PROVIDERS.values() if p.instrument_id == instrument_id),
                 key=lambda p: (p.priority, p.provider_id),
             )
         )

@@ -23,6 +23,8 @@ NOW = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
 def payload(start: int, count: int):
     return {"s": "ok", "t": [int((NOW - timedelta(hours=720-index)).timestamp())
                               for index in range(start, start + count)],
+            "o": ["8000000000"] * count, "h": ["8100000000"] * count,
+            "l": ["7900000000"] * count,
             "c": ["8000000000"] * count, "v": [0] * count}
 
 
@@ -97,6 +99,7 @@ class BackfillPaginationTests(unittest.IsolatedAsyncioTestCase):
     async def test_conflicting_boundary_cannot_persist_partial_success(self):
         second = payload(220, 1)
         second["c"][0] = "9000000000"
+        second["h"][0] = "9000000000"
         with self.assertRaisesRegex(ValueError, "conflicting"):
             await self.execute([payload(220, 500), second])
         self.persistence.persist_provider_quote.assert_not_called()

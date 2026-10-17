@@ -22,17 +22,21 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enoug
 from app.config import settings
 from app.pricing import rights
 from app.pricing.backfill import PricingBackfillQueue
+from app.pricing.budgets import BudgetDecision
 from app.pricing.db_models import CanonicalQuoteRecord, ProviderQuoteRecord, PricingBackfillJobRecord
 from app.pricing.history import InternalPriceHistory
 from app.pricing.history import _history_supports_bookends
 from app.pricing.instruments import get_instrument
 from app.pricing.persistence import PricingPersistence
 from app.pricing.registry import PROVIDERS
-from app.pricing.models import CanonicalQuote, CanonicalStatus
+from app.pricing.models import CanonicalQuote, CanonicalStatus, ProviderQuote, SourceType, ValidationStatus
+from app.pricing.parsers.wallgold_history import WallgoldSilver925HistoryParser
 if __package__:
     from .test_pricing_rights_postgres import _OwnedPostgresFixture
+    from .test_source_snapshots import _Redis
 else:
     from test_pricing_rights_postgres import _OwnedPostgresFixture
+    from test_source_snapshots import _Redis
 
 TEST_URL = os.getenv("TEST_DATABASE_URL")
 
@@ -106,7 +110,11 @@ class NerkhsanjHistoryPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
                                 "days": [["1405/07/22", 502340], ["1405/07/23", 517260]]}]}
         client = httpx.AsyncClient(transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload)))
         operational = SimpleNamespace(instrument=AsyncMock(return_value=get_instrument(self.provider.instrument_id)))
-        queue = PricingBackfillQueue(store=AsyncMock(), persistence=PricingPersistence(store=AsyncMock()), operational=operational)
+        store, budgets, redis = AsyncMock(), AsyncMock(), _Redis()
+        store.client = lambda: redis
+        budgets.consume.return_value = BudgetDecision(True, "allowed", 1)
+        queue = PricingBackfillQueue(store=store, budgets=budgets,
+                                     persistence=PricingPersistence(store=store), operational=operational)
         with patch("app.pricing.backfill.httpx.AsyncClient", return_value=client):
             return await queue._execute_history_job({"id": 1, "instrument_id": self.provider.instrument_id,
                 "range_start": self.start, "range_end": self.end, "attempt_count": 1}, self.provider)
@@ -124,6 +132,110 @@ class NerkhsanjHistoryPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
         grants = deepcopy(rights.grants())
         grants["owned_instant"] = deepcopy(grants["gold_api_free_xag"])
         return grants
+
+    def daily(self, stamp, price, provider_id, metadata, instrument_id=None):
+        instrument = get_instrument(instrument_id or self.provider.instrument_id)
+        quote = ProviderQuote.create(
+            instrument_id=instrument.instrument_id, provider_id=provider_id, source_type=SourceType.HTTP,
+            price=Decimal(str(price)), currency=instrument.quote_currency, weight_unit=instrument.weight_unit,
+            purity=instrument.purity, observed_at=stamp, received_at=self.end,
+            parser_version="owned-daily-fixture/1", validation_status=ValidationStatus.ACCEPTED,
+            metadata={"quote_role": "backfill", **metadata},
+        )
+        PricingPersistence._persist_provider_quote(quote)
+        canonical = CanonicalQuote.create(
+            instrument_id=instrument.instrument_id, price=quote.price, status=CanonicalStatus.CONFIRMED,
+            primary_quote_id=quote.id, verification_quote_ids=[],
+            source_summary={"provider_ids": [provider_id], "primary_provider_id": provider_id,
+                            "derived": False, "historical_backfill": True, **metadata},
+            canonical_at=stamp, observed_at=stamp, valid_until=stamp + timedelta(minutes=1),
+            stale_at=stamp + timedelta(minutes=5), expires_at=stamp + timedelta(minutes=20),
+            is_persisted=False, decision_reason="owned_daily_fixture",
+        )
+        PricingPersistence._persist_canonical(canonical)
+        return canonical
+
+    def daily_grants(self):
+        grants = self.with_instant_grant()
+        for name in ("owned_utc_daily", "owned_other_daily"):
+            grants[name] = deepcopy(grants["gold_api_free_xag"])
+            grants[name]["attribution"] = {"label": name, "url": f"https://fixture.example.invalid/{name}"}
+        return grants
+
+    def test_utc_daily_storage_and_public_dto_preserve_gregorian_source_day(self):
+        from app.schemas import PricePoint
+
+        instrument_id = "SILVER_925_TOMAN_GRAM"
+        with self.engine.begin() as connection:
+            connection.execute(text("INSERT INTO instruments(instrument_id) VALUES (:id) ON CONFLICT DO NOTHING"),
+                               {"id": instrument_id})
+        payload = {"success": True, "result": {"chart": {"data": [{
+            "date": "2026-10-14T00:00:00Z", "open": 475000, "low": 465000,
+            "high": 480000, "close": 467000,
+        }]}}}
+        with patch("app.pricing.parsers.wallgold_history.utc_now", return_value=self.end):
+            point, = WallgoldSilver925HistoryParser().parse(payload, get_instrument(instrument_id), self.start, self.end)
+        with patch.object(rights, "grants", return_value=self.daily_grants()):
+            self.daily(point.observed_at, point.price, "owned_utc_daily", point.metadata, instrument_id)
+            with self.sessions() as db:
+                bookends = _history_supports_bookends(db)
+            for use_bookends in ((False, True) if bookends else (False,)):
+                with self.subTest(use_bookends=use_bookends):
+                    with patch("app.pricing.history._history_supports_bookends", return_value=use_bookends):
+                        row, = InternalPriceHistory._query_canonical_history(instrument_id, self.start, self.end, "4 hours")
+                    self.assertEqual(row["timestamp"], "2026-10-14T00:00:00+00:00")
+                    self.assertEqual(row["source_timezone"], "UTC")
+                    self.assertEqual(row["source_calendar"], "gregorian")
+                    self.assertEqual(row["source_date"], "2026-10-14")
+                    self.assertFalse(row["source_observation_time_known"])
+                    public = PricePoint.model_validate({**row, "value_usd": None, "value_toman": row["value"]})
+                    self.assertEqual(public.source_calendar, "gregorian")
+            provider_row, = InternalPriceHistory._query_provider_history(instrument_id, "owned_utc_daily", self.start, self.end)
+            self.assertEqual((provider_row["source_timezone"], provider_row["source_calendar"], provider_row["source_date"]),
+                             ("UTC", "gregorian", "2026-10-14"))
+            self.assertIsNone(InternalPriceHistory._query_latest_canonical(instrument_id))
+
+    def test_daily_groups_never_mix_timezone_calendar_or_source_date(self):
+        stamp = datetime(2026, 10, 14, tzinfo=UTC)
+        metadata = {"timestamp_precision": "day", "timestamp_role": "day_bucket_start",
+                    "source_observation_time_known": False, "source_timezone": "UTC",
+                    "source_calendar": "gregorian", "source_date": "2026-10-14"}
+        entries = [
+            (400000, "owned_utc_daily", metadata), (410000, "owned_utc_daily", metadata),
+            (700000, "owned_other_daily", {**metadata, "source_date": "2026-10-15"}),
+            (800000, "owned_other_daily", {**metadata, "source_calendar": "jalali"}),
+            (900000, "owned_other_daily", {**metadata, "source_timezone": "Asia/Tehran"}),
+        ]
+        with self.sessions() as db:
+            bookends = _history_supports_bookends(db)
+        with patch.object(rights, "grants", return_value=self.daily_grants()):
+            for reverse in (False, True):
+                with self.engine.begin() as connection:
+                    connection.execute(text("DELETE FROM canonical_quotes"))
+                    connection.execute(text("DELETE FROM provider_quotes"))
+                for price, provider_id, info in (reversed(entries) if reverse else entries):
+                    self.daily(stamp, price, provider_id, info)
+                for use_bookends in ((False, True) if bookends else (False,)):
+                    with self.subTest(reverse=reverse, use_bookends=use_bookends):
+                        with patch("app.pricing.history._history_supports_bookends", return_value=use_bookends):
+                            row, = InternalPriceHistory._query_canonical_history(self.provider.instrument_id, self.start, self.end, "1 day")
+                        self.assertEqual(row["sample_count"], 2)
+                        self.assertEqual((row["source_timezone"], row["source_calendar"], row["source_date"]),
+                                         ("UTC", "gregorian", "2026-10-14"))
+                        self.assertEqual((row["low"], row["high"]), (400000, 410000))
+                        self.assertIn(row["value"], (400000, 410000))
+                        self.assertEqual(row["attributions"], [self.daily_grants()["owned_utc_daily"]["attribution"]])
+
+    def test_daily_without_source_calendar_never_invents_a_jalali_label(self):
+        stamp = datetime(2026, 10, 14, tzinfo=UTC)
+        with patch.object(rights, "grants", return_value=self.daily_grants()):
+            self.daily(stamp, 400000, "owned_utc_daily", {
+                "timestamp_precision": "day", "timestamp_role": "day_bucket_start", "source_date": "2026-10-14",
+            })
+            row, = InternalPriceHistory._query_canonical_history(self.provider.instrument_id, self.start, self.end, "1 day")
+        self.assertIsNone(row["source_timezone"])
+        self.assertIsNone(row["source_calendar"])
+        self.assertEqual(row["source_date"], "2026-10-14")
 
     def test_real_storage_and_chart_preserve_daily_label_and_source_attribution(self):
         self.assertEqual(asyncio.run(self.ingest()), 2)

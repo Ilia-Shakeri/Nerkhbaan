@@ -1,8 +1,14 @@
-# Release Operations — 2.8.6
+# Release Operations — 2.8.7
 
 Updated: 2026-10-17. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
-Release 2.8.6 enforces reviewed source permissions across collection, storage and output. Keyed providers stay disabled pending account, quota, unit and fresh-payload proof. Final-commit hosted checks and target deployment need separate receipts. The target remained 2.8.1 during the October 17 review. The chosen replacement scope must pass before deployment; reduced coverage is not authorized. See [the source review](provider-rights-2026-10-17.md).
+The 2.8.7 candidate replaces Servix with free Iranian routes for eight of eleven instruments and their actual published archives. All nine Servix routes are hard retired; environment settings, keys or a rights manifest cannot reactivate them. Permitted older history remains available. No new keys are needed for the eight instruments. Physical 9999 gold/Toman, BTC/USD and USDT/USD still lack a proven free Iranian source; quote currency and purity must not be substituted. Final-commit hosted checks and target deployment need separate receipts. The target remained 2.8.1 during the October 17 review. The chosen replacement scope must pass before deployment; reduced coverage is not authorized. See [the source review](provider-rights-2026-10-17.md) and [the replacement evidence and exact archive limits](iranian-replacement-2026-10-17.md).
+
+At the October 17 12:08 UTC target receipt, four Nerkhsanj URLs returned HTTP 200, but all seven current prices were 1,321.66 seconds old and were rejected. Two Wallgold quotes and two Nobitex books passed only at their original receipt times. Wallgold quotes were about 58.79 seconds old; the final registry uses the existing instrument limits of 300 seconds for gold and 120 seconds for silver, with a 60-second request interval. Its roughly 24-hour declared quote expiry does not extend those limits. The separately sampled GTA Silver quote was about 7,757 seconds old and rejected. Nobitex UDF returned 403 from the target and remains disabled. Do not reset the source or original receipt clock, relax age limits, or treat those dated receipts as current live availability.
+
+Nerkhsanj and GTA Silver allow at most one request per minute per URL. Use the shared snapshot cache and retain its original receipt time. Keep source credit and published-time semantics in storage and output. The narrow own-product permission inference for Wallgold and Nobitex is documented in the source review; it is not a resale, derivative-data or external-processing contract. The new grants require review by January 15, 2027. The actual Nobitex runtime already used `apiv2.nobitex.ir`; failure of the obsolete hostname did not justify a DNS, firewall or TLS change.
+
+Local evidence is kept outside Git in the delivery folder `iranian-replacement-20261017`. `target-source-http-proof.json`, `target-parser-replay-proof.json` and `runtime-endpoint-cause.json` record read-only target probes. `target-owned-database-replay-proof.json` records real isolated PostgreSQL and Timescale replays of the first and last observation for each of eight archives: 16 provider and 16 canonical rows in each database, with public fingerprints unchanged. This is neither a full-year import nor a production write. Final local discovery passed 937 backend cases with zero skips; 78 frontend contracts, ten focused mocked browser cases and three renderer builds passed. Two failed earlier full-suite receipts remain separate. Hosted CI, deployment and real SMTP/device acceptance retain their own final-commit receipts.
 
 Mount identities retain every field and compare deterministic mount order; Docker response ordering alone is not a change. The private operator-evidence requirement remains mandatory.
 
@@ -13,7 +19,7 @@ Run every CI job on the final commit: clients, desktop package, Python, actual T
 HTTP/browser, migration/restore, Go/sidecars, proxy/monitoring and security scans.
 Keep logs tied to release and commit. Do not replace an executed test with test discovery.
 
-Recorded application result: [CI run 38222923015](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38222923015)
+Historical 2.8.1 application result, not a 2.8.7 receipt: [CI run 38222923015](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/38222923015)
 passed all 15 jobs at `ce22c1d0487d78c58b488aff40616f3ce0a331f1`, including real plain PostgreSQL
 and Timescale history golden cases. All seven image scans kept
 the HIGH/CRITICAL failure gate. Later changes need a new final-commit run. Actual target migration,
@@ -79,7 +85,7 @@ Keep all six old migration files and their applied checksums unchanged. Keep the
 never delete them to make migration or live-price checks pass. A timeout or failed comparison stops
 the release; review the plan before a retry.
 
-Recorded target stage: `TARGET_MIGRATION_STAGE_OK` passed with the `b9f5538` API image on the
+Historical target stage, not a 2.8.7 receipt: `TARGET_MIGRATION_STAGE_OK` passed with the `b9f5538` API image on the
 verified 47-table restore, using Timescale 2.28.3 and PostgreSQL 16.14. It retained three hypertables,
 37 chunks and four users, with seven migrations applied. Before/after fingerprints matched for
 `provider_quotes` (520,444 rows), `canonical_quotes` (325,486), `market_prices` (26,662) and `users` (4).

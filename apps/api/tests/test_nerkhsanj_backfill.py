@@ -5,7 +5,7 @@ import unittest
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 
@@ -13,11 +13,13 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enoug
 
 from app.config import settings
 from app.pricing.backfill import PricingBackfillQueue, _history_request_options
+from app.pricing.budgets import BudgetDecision
 from app.pricing.compatibility import LegacyPricingAdapter
 from app.pricing.instruments import get_instrument
 from app.pricing.parsers.history import build_history_parser
 from app.pricing.registry import PROVIDERS
 from app.schemas import PriceHistoryResponse
+from tests.test_source_snapshots import _Redis
 
 
 class NerkhsanjBackfillTests(unittest.IsolatedAsyncioTestCase):
@@ -42,6 +44,9 @@ class NerkhsanjBackfillTests(unittest.IsolatedAsyncioTestCase):
         provider = provider or self.provider
         quotes, canonicals, requests = [], [], []
         persistence, operational, store = AsyncMock(), AsyncMock(), AsyncMock()
+        store.client = Mock(return_value=_Redis())
+        budgets = AsyncMock()
+        budgets.consume.return_value = BudgetDecision(True, "allowed", 1)
         operational.instrument.return_value = get_instrument(provider.instrument_id)
 
         async def save_quote(quote):
@@ -61,7 +66,7 @@ class NerkhsanjBackfillTests(unittest.IsolatedAsyncioTestCase):
             return response or httpx.Response(200, json=self.payload)
 
         client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
-        queue = PricingBackfillQueue(store=store, persistence=persistence, operational=operational)
+        queue = PricingBackfillQueue(store=store, budgets=budgets, persistence=persistence, operational=operational)
         with patch("app.pricing.backfill.httpx.AsyncClient", return_value=client):
             count = await queue._execute_history_job(self.job, provider)
         return count, quotes, canonicals, requests, store

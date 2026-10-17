@@ -1,16 +1,24 @@
 from .models import CanonicalQuote, CanonicalStatus
 from . import rights
-from .registry import PROVIDERS
+from .registry import PROVIDERS, RETIRED_PROVIDERS
 
 
-def _has_day_bucket(summary, depth=0) -> bool:
+def _has_non_current_source(summary, depth=0) -> bool:
     if not isinstance(summary, dict) or depth > 6:
         return False
     if summary.get("timestamp_precision") == "day":
         return True
+    provider_ids = summary.get("provider_ids", [])
+    if isinstance(provider_ids, list) and any(
+        isinstance(name, str) and name in RETIRED_PROVIDERS for name in provider_ids
+    ):
+        return True
+    if any(isinstance(summary.get(field), str) and summary[field] in RETIRED_PROVIDERS
+           for field in ("primary_provider_id", "candidate_provider_id", "previous_provider_id")):
+        return True
     inputs = summary.get("inputs", [])
     return isinstance(inputs, list) and any(
-        _has_day_bucket(item.get("source_summary"), depth + 1)
+        _has_non_current_source(item.get("source_summary"), depth + 1)
         for item in inputs if isinstance(item, dict)
     )
 
@@ -18,12 +26,14 @@ def _has_day_bucket(summary, depth=0) -> bool:
 def allowed_current_quote(quote: CanonicalQuote) -> bool:
     if not rights.canonical_allowed(quote.source_summary, "display"):
         return False
-    if _has_day_bucket(quote.source_summary):
+    if _has_non_current_source(quote.source_summary):
         return False
     source_ids = rights._leaves(quote.source_summary) or set()
     if any(PROVIDERS.get(name) is not None and PROVIDERS[name].history_only for name in source_ids):
         return False
     candidate = quote.candidate_provider_id
+    if candidate in RETIRED_PROVIDERS:
+        return False
     if candidate in PROVIDERS and PROVIDERS[candidate].history_only:
         return False
     if (candidate is not None and not rights.provider_allowed(candidate, "display")) or (rights.enforced() and quote.candidate_price is not None and candidate is None):

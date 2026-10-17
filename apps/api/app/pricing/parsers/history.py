@@ -64,7 +64,7 @@ class WallexUdfHistoryParser:
 @dataclass(frozen=True, slots=True)
 class NobitexUdfHistoryParser:
     symbol: str
-    parser_version: str = "nobitex-udf-history/1.0.0"
+    parser_version: str = "nobitex-udf-history/1.1.0"
 
     def parse(
         self,
@@ -73,48 +73,68 @@ class NobitexUdfHistoryParser:
         range_start: datetime,
         range_end: datetime,
     ) -> list[HistoricalPricePoint]:
+        expected = {"BTCIRT": ("BTC_TOMAN", "BTC"), "USDTIRT": ("USDT_TOMAN", "USDT")}.get(self.symbol)
+        if expected is None or instrument.instrument_id != expected[0] or instrument.base_asset != expected[1]:
+            raise ParserError("instrument_mismatch", "Nobitex chart symbol does not match instrument")
+        if instrument.quote_currency.value != "TOMAN":
+            raise ParserError("currency_mismatch", "Nobitex IRT charts use Toman")
+        if instrument.weight_unit is not WeightUnit.UNIT or instrument.purity is not None:
+            raise ParserError("unit_mismatch", "Nobitex crypto charts require a plain asset unit")
+        if any(not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None
+               for value in (range_start, range_end)):
+            raise ParserError("invalid_history_range", "Nobitex range needs explicit timezones")
+        range_start, range_end = ensure_utc(range_start), ensure_utc(range_end)
+        if range_end < range_start or range_end - range_start > timedelta(days=366):
+            raise ParserError("invalid_history_range", "Nobitex range must be within 366 days")
         root = require_object(payload, "Nobitex history response")
+        if root.get("symbol") is not None and root["symbol"] != self.symbol:
+            raise ParserError("instrument_mismatch", "Nobitex chart response names another symbol")
         if root.get("s") == "no_data":
             # TradingView UDF explicitly distinguishes an empty range from an error.
             return []
         if root.get("s") != "ok":
             raise ParserError("history_status", "Nobitex history status is not ok")
-        timestamps = require_list(root.get("t"), "history.t")
-        closes = require_list(root.get("c"), "history.c")
-        volumes = require_list(root.get("v"), "history.v")
-        if not (len(timestamps) == len(closes) == len(volumes)):
+        arrays = {key: require_list(root.get(key), "history." + key) for key in ("t", "o", "h", "l", "c", "v")}
+        timestamps = arrays["t"]
+        if any(len(values) != len(timestamps) for values in arrays.values()):
             raise ParserError("history_shape", "History arrays have different lengths")
-        if len(timestamps) > 20_000:
-            raise ParserError("history_too_large", "History response has too many points")
+        if len(timestamps) > 500:
+            raise ParserError("history_too_large", "Nobitex page exceeds 500 candles")
+        closed_before = min(range_end, utc_now())
         points: list[HistoricalPricePoint] = []
         last_timestamp: datetime | None = None
         for index, raw_timestamp in enumerate(timestamps):
+            if (isinstance(raw_timestamp, bool) or not isinstance(raw_timestamp, (int, str))
+                    or not str(raw_timestamp).isascii() or not str(raw_timestamp).isdigit()
+                    or len(str(raw_timestamp)) > 10):
+                raise ParserError("invalid_timestamp", "Nobitex candle time must be Unix seconds")
             try:
                 timestamp_value = int(raw_timestamp)
                 observed_at = datetime.fromtimestamp(timestamp_value, UTC)
             except (OSError, OverflowError, TypeError, ValueError) as exc:
                 raise ParserError("invalid_timestamp", "History timestamp is invalid") from exc
-            if observed_at < range_start or observed_at > range_end:
-                continue
             if last_timestamp is not None and observed_at <= last_timestamp:
                 raise ParserError("history_order", "History timestamps are not strictly ordered")
-            price = strict_decimal(closes[index], "history close")
-            if not instrument.accepts(price):
+            last_timestamp = observed_at
+            prices = {key: strict_decimal(arrays[key][index], "history " + key) for key in ("o", "h", "l", "c")}
+            if not all(instrument.accepts(value) for value in prices.values()):
                 raise ParserError(
                     "outside_sanity_bounds", "History price is outside instrument bounds"
                 )
-            raw_volume = volumes[index]
-            volume = None
-            if raw_volume not in (None, ""):
-                volume = strict_decimal(raw_volume, "history volume", allow_zero=True)
+            if not (prices["l"] <= min(prices["o"], prices["c"]) <= max(prices["o"], prices["c"]) <= prices["h"]):
+                raise ParserError("history_ohlc", "Nobitex candle bounds are inconsistent")
+            volume = strict_decimal(arrays["v"][index], "history volume", allow_zero=True)
+            # UDF IRT chart prices are not order-book Rial levels. Keep the
+            # chart's Toman contract; only completed hourly bars are final.
+            if observed_at < range_start or observed_at + timedelta(hours=1) > closed_before:
+                continue
             points.append(
                 HistoricalPricePoint(
                     observed_at=observed_at,
-                    price=price,
+                    price=prices["c"],
                     volume=volume,
                 )
             )
-            last_timestamp = observed_at
         return points
 
 
@@ -232,6 +252,18 @@ def build_history_parser(
     if parser_id == "nerkhsanj_silver999_daily_v1":
         from .nerkhsanj_history import NerkhsanjDailyHistoryParser
         return NerkhsanjDailyHistoryParser()
+    if parser_id in {"wallgold_silver925_hourly_v1", "wallgold_silver925_daily_v1"}:
+        from .wallgold_history import WallgoldSilver925HistoryParser
+        return WallgoldSilver925HistoryParser("hour" if "hourly" in parser_id else "day")
+    symbols = {"usd_toman": "dollar", "gold18_toman": "gold", "silver999_toman": "silver",
+               "usdt_toman": "tether", "btc_toman": "bitcoin", "xau_usd": "ounce", "xag_usd": "silver-ounce"}
+    for asset, symbol in symbols.items():
+        if parser_id == f"nerkhsanj_{asset}_daily_v1":
+            from .nerkhsanj_markets import NerkhsanjMarketDailyHistoryParser
+            return NerkhsanjMarketDailyHistoryParser(symbol)
+        if parser_id == f"nerkhsanj_{asset}_intraday_v1" and asset not in {"xau_usd", "xag_usd"}:
+            from .nerkhsanj_markets import NerkhsanjIntradayHistoryParser
+            return NerkhsanjIntradayHistoryParser(symbol)
     parsers = {
         "nobitex_udf_usdtirt_v1": NobitexUdfHistoryParser("USDTIRT"),
         "nobitex_udf_btcirt_v1": NobitexUdfHistoryParser("BTCIRT"),

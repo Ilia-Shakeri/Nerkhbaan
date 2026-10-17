@@ -25,6 +25,9 @@ from .local_reference import (
 from .metals import GoldApiFreeBtcParser, GoldApiFreeParser, GoldApiParser, MetalsDevParser, XausSilverParser
 from .nobitex import NobitexOrderBookParser, NobitexStatsParser
 from .tickers import AlanchandGold18Parser, CoinCapParser, TetherlandParser
+from .nerkhsanj_markets import NerkhsanjSnapshotParser
+from .gta_silver import GtaSilver925Parser
+from .wallgold_quotes import WallgoldPublicQuoteParser
 
 
 class HistoricalOnlyParser:
@@ -35,7 +38,17 @@ class HistoricalOnlyParser:
 
 
 def build_parser(parser_id: str) -> ExplicitParser:
+    snapshot_symbols = {
+        "usd_toman": "dollar", "gold18_toman": "gold", "silver999_toman": "silver",
+        "usdt_toman": "tether", "btc_toman": "bitcoin", "xau_usd": "ounce", "xag_usd": "silver-ounce",
+    }
+    for asset, symbol in snapshot_symbols.items():
+        if parser_id == f"nerkhsanj_{asset}_snapshot_v1":
+            return NerkhsanjSnapshotParser(symbol)
     factories = {
+        "gta_silver925_v1": GtaSilver925Parser,
+        "wallgold_gold18_quote_v1": lambda: WallgoldPublicQuoteParser("GLD_18C_750TMN"),
+        "wallgold_silver925_quote_v1": lambda: WallgoldPublicQuoteParser("SLV_925TMN"),
         "historical_only_v1": HistoricalOnlyParser,
         "wallgold_gold18_v1": lambda: WallgoldMarketParser(symbol="GLD_18C_750TMN"),
         "wallgold_silver925_v1": lambda: WallgoldMarketParser(symbol="SLV_925TMN"),

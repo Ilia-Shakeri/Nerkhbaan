@@ -114,7 +114,7 @@ class HistoryTimeInfo(BaseModel):
     timestamp_role: Literal["day_bucket_start"] | None = None
     source_observation_time_known: bool | None = None
     source_timezone: str | None = None
-    source_calendar: Literal["jalali"] | None = None
+    source_calendar: Literal["jalali", "gregorian"] | None = None
     source_date: str | None = None
 
 
@@ -184,6 +184,10 @@ class AssetPrice(BaseModel):
     source_toman: str
     usd_attributions: list[dict[str, str]] = Field(default_factory=list)
     toman_attributions: list[dict[str, str]] = Field(default_factory=list)
+    usd_source_summary: dict = Field(default_factory=dict)
+    toman_source_summary: dict = Field(default_factory=dict)
+    usd_observed_at: str | None = None
+    toman_observed_at: str | None = None
     usd_status: str
     toman_status: str
     stale_minutes: int | None = None

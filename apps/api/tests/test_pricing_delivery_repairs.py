@@ -300,7 +300,7 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
     async def test_worker_jump_keeps_previous_when_not_independently_confirmed(self):
         operational = AsyncMock()
         operational.instrument.return_value = get_instrument("BTC_USD")
-        operational.providers_for.return_value = (PROVIDERS["gold_api_free_btc"],)
+        operational.providers_for.return_value = (replace(PROVIDERS["gold_api_free_btc"], enabled=True),)
         persistence = AsyncMock()
         async def persist(candidate):
             candidate.persistence_status = PersistenceStatus.PERSISTED
@@ -328,7 +328,7 @@ class PricingRepairTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(PROVIDERS["gold_api_free_xag"].role,ProviderRole.FALLBACK)
         operational, persistence, store = AsyncMock(), AsyncMock(), AsyncMock()
         operational.instrument.return_value = get_instrument("XAG_USD_OZ")
-        provider = replace(PROVIDERS["gold_api_free_xag"],role=ProviderRole.VERIFIER)
+        provider = replace(PROVIDERS["gold_api_free_xag"],role=ProviderRole.VERIFIER,enabled=True)
         operational.providers_for.return_value = (provider,)
         service = InstrumentPricingService(store=store,operational=operational,persistence=persistence,locks=_Locks())
         service.get_canonical = AsyncMock(return_value=None)

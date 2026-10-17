@@ -14,7 +14,7 @@ from sqlalchemy.engine import Engine
 
 from ..db import SessionLocal
 from .instruments import get_instrument
-from .registry import PROVIDERS
+from .registry import PROVIDERS, RETIRED_PROVIDERS
 from . import rights
 from .models import (
     CanonicalQuote,
@@ -145,7 +145,7 @@ def _canonical_permissions(action: str):
                OR node.summary->>'candidate_provider_id' = ANY(:history_only_sources)
                OR node.summary->>'previous_provider_id' = ANY(:history_only_sources)
         ) AND (candidate_provider_id IS NULL OR NOT (candidate_provider_id = ANY(:history_only_sources)))"""
-        parameters["history_only_sources"] = [name for name, provider in PROVIDERS.items() if provider.history_only]
+        parameters["history_only_sources"] = [name for name, provider in PROVIDERS.items() if provider.history_only] + list(RETIRED_PROVIDERS)
     if rights.enforced():
         clause = f"({clause}) AND (candidate_provider_id IS NULL OR candidate_provider_id = ANY(:rights_candidate_ids)) AND (candidate_price IS NULL OR candidate_provider_id = ANY(:rights_candidate_ids))"
         clause += " AND (status <> 'derived_fallback' OR source_summary->>'derived' = 'true' OR source_summary->>'primary_provider_id' LIKE 'derived:%')"
@@ -194,6 +194,12 @@ def _canonical_history_sql(use_bookends: bool):
                      ELSE date_bin(CAST(:bucket AS interval), canonical_at, TIMESTAMPTZ '2000-01-01') END AS bucket,
                 canonical_at,
                 COALESCE(source_summary->>'timestamp_precision' = 'day', false) AS day_precision,
+                CASE WHEN source_summary->>'timestamp_precision' = 'day'
+                     THEN source_summary->>'source_timezone' END AS source_timezone,
+                CASE WHEN source_summary->>'timestamp_precision' = 'day'
+                     THEN source_summary->>'source_calendar' END AS source_calendar,
+                CASE WHEN source_summary->>'timestamp_precision' = 'day'
+                     THEN source_summary->>'source_date' END AS source_date,
                 source_summary,
                 price{lineage}
             FROM canonical_quotes
@@ -212,11 +218,17 @@ def _canonical_history_sql(use_bookends: bool):
             MIN(price) AS low,
             COUNT(*) AS sample_count,
             day_precision,
-            MAX(source_summary->>'source_date') AS source_date{attribution}
+            source_timezone,
+            source_calendar,
+            source_date{attribution}
         FROM bucketed
-        GROUP BY bucket, day_precision
+        GROUP BY bucket, day_precision, source_timezone, source_calendar, source_date
         ), chosen AS (
-            SELECT aggregated.*, ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY day_precision ASC) AS precision_rank
+            SELECT aggregated.*, ROW_NUMBER() OVER (
+                PARTITION BY bucket ORDER BY day_precision ASC, sample_count DESC,
+                    source_timezone ASC NULLS LAST, source_calendar ASC NULLS LAST,
+                    source_date ASC NULLS LAST
+            ) AS precision_rank
             FROM aggregated
         )
         SELECT * FROM chosen WHERE precision_rank = 1
@@ -411,8 +423,9 @@ class InternalPriceHistory:
                 "value": float(row["close"]),
                 "sample_count": int(row["sample_count"]),
                 **({"timestamp_precision": "day", "timestamp_role": "day_bucket_start",
-                    "source_observation_time_known": False, "source_timezone": "Asia/Tehran",
-                    "source_calendar": "jalali", "source_date": row.get("source_date")}
+                    "source_observation_time_known": False,
+                    "source_timezone": row.get("source_timezone"),
+                    "source_calendar": row.get("source_calendar"), "source_date": row.get("source_date")}
                    if row.get("day_precision") else {}),
                 **({"attributions": _attributions_for_groups(row.get("rights_source_groups") or [])} if rights.enforced() else {}),
             }
@@ -668,7 +681,7 @@ class InternalPriceHistory:
         db = SessionLocal()
         try:
             rows = db.execute(query, {"instrument_id": instrument_id,
-                "history_only_sources": [name for name, provider in PROVIDERS.items() if provider.history_only],
+                "history_only_sources": [name for name, provider in PROVIDERS.items() if provider.history_only] + list(RETIRED_PROVIDERS),
                 **({"rights_provider_ids": list(allowed)} if allowed is not None else {})}).mappings().all()
         finally:
             db.close()

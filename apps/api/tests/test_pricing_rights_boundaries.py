@@ -73,6 +73,28 @@ class RightsReadBoundaryTests(_StrictFixture, unittest.IsolatedAsyncioTestCase):
         self.assertFalse(allowed_current_quote(_canonical(provider="unknown")))
         self.assertTrue(allowed_current_quote(_canonical(provider="approved_source")))
 
+    def test_retired_current_sources_stay_hidden_even_when_old_history_is_permitted(self):
+        retired = "servix_btc_usd"
+        self.grants[retired] = deepcopy(self.grants["approved_source"])
+        summaries = [
+            _summary(retired),
+            {**_summary("approved_source"), "previous_provider_id": retired},
+            {"provider_ids": ["derived:old"], "primary_provider_id": "derived:old", "derived": True,
+             "inputs": [{"source_summary": _summary(retired)}]},
+        ]
+        for summary in summaries:
+            with self.subTest(summary=summary):
+                self.assertTrue(rights.canonical_allowed(summary, "history"))
+                self.assertFalse(allowed_current_quote(_canonical(summary=summary)))
+        quote = _canonical(provider="approved_source")
+        quote.candidate_provider_id = retired
+        self.assertFalse(allowed_current_quote(quote))
+        self.assertTrue(allowed_current_quote(_canonical(provider="approved_source")))
+
+    def test_retired_current_source_exclusion_also_applies_to_legacy_fixture_mode(self):
+        with patch.object(settings, "pricing_rights_enforced", False):
+            self.assertFalse(allowed_current_quote(_canonical(provider="servix_btc_usd")))
+
     async def test_restricted_cached_and_stored_quotes_are_hidden_without_deleting_evidence(self):
         quote = _canonical()
         service = self.service(cached=quote, stored=quote)

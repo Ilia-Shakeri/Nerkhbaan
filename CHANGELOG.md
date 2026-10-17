@@ -4,11 +4,16 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
-- Added an attributed, keyless Nerkhsanj daily silver-999 archive with explicit calendar, time precision and unknown observation-hour metadata. Historical-only sources cannot supply live prices, verifiers, recent anomaly inputs or percentage baselines. Daily and instant samples retain separate aggregation and currency metadata.
-- Bound archive fetch memory and a shared source quota; sparse daily chart polling reuses durable jobs. Servix ranges use durable 31-date windows and quota deferral preserves error attempts.
-- Classified Servix's exact email-verification denial without retaining account details. The inaccessible account, remaining source coverage, target deployment and actual user-device notification receipt remain unresolved. The published 2.8.6 tag is unchanged.
-- Isolated recovery database fixtures from pre-existing public tables, including instrument reads and foreign keys. Added checks before SQL, public-state fingerprints and blocked-write regressions; retained the failed hosted integration receipt. Discovery and package-qualified test entry points both load the shared fixture.
-- Recovery checks passed 770 local backend cases without skips, 75 frontend cases and 22 mocked Edge browser cases. This validates code paths and isolated services, not full live-source coverage or production rollout.
+## [2.8.7] - 2026-10-17
+
+- Retired Servix from active collection, key requirements and operational overrides. Kept old records and permitted historical output; retired quotes cannot mask current prices.
+- Added attributed Iranian Nerkhsanj current and daily/intraday routes, GTA Silver 925 quotes, and Wallgold published 18K/925 quotes plus hourly/daily 925 archives. Registration covers eight instruments; complete fresh operational coverage remains unproved. No 24K purity substitution, USDT peg or manufactured currency cross was introduced.
+- Shared bounded Nerkhsanj HTTP snapshots across replicas with one request per URL per minute and the original receive clock. Budget pressure defers history work without consuming error attempts. Remote quote expiry never extends instrument freshness.
+- Kept UTC/Gregorian and Tehran/Jalali daily metadata separate through real database aggregation, API responses and charts. Publication clocks remain distinct from unknown trade times and stay attached to the selected currency.
+- Added an explicit market/reference choice to both alert forms. Ordinary alerts keep their default eligibility; edits retain the saved mode instead of silently changing the price basis.
+- Hardened Nobitex single-market order books and closed hourly candles; protected source units, OHLC consistency and pagination fixtures. The historical endpoint still returns 403 from the target, so its routes stay disabled while permitted Nerkhsanj archives remain available.
+- Includes the post-2.8.6 daily silver archive and owned-database fixture corrections. Existing release tags stay immutable. Final source checks and operational limits are recorded in the Iranian replacement report; live rollout and step-three receipt remain pending.
+- Local validation passed 937 backend cases with zero skips, 78 frontend contracts, ten focused mocked browser cases and three renderer builds. Real PostgreSQL/Timescale history and UUID-isolated Redis concurrency checks passed; the latter now run in hosted integration. Failed earlier fixtures remain retained separately. Final-commit hosted checks and target acceptance keep their own evidence.
 
 ## [2.8.6] - 2026-10-17
 

@@ -65,6 +65,9 @@ export function canonicalLegDetails(payload: Record<string, unknown>, isToman: b
     [`unit_${leg}`]: unit,
     [`change_percent_${leg}`]: typeof payload.change_24h === 'number' && Number.isFinite(payload.change_24h) ? payload.change_24h : null,
     [`${leg}_attributions`]: safeAttributions(payload.attribution),
+    [`${leg}_observed_at`]: typeof payload.observed_at === 'string' ? payload.observed_at : null,
+    [`${leg}_source_summary`]: payload.source_summary && typeof payload.source_summary === 'object'
+      && !Array.isArray(payload.source_summary) ? payload.source_summary : null,
   };
 }
 
@@ -79,6 +82,8 @@ export function clearSnapshotPrices(current: PricesResponse | undefined): Prices
     candidate_provider: null, candidate_observed_at: null, difference_percent: null,
     verification_status: null, observed_at: null, canonical_at: null, age_seconds: null,
     source_summary: null,
+    usd_source_summary: null, toman_source_summary: null,
+    usd_observed_at: null, toman_observed_at: null,
     history: [], usd_attributions: [], toman_attributions: [],
   })) };
 }

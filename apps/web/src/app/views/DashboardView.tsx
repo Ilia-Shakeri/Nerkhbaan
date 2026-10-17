@@ -13,7 +13,7 @@ import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { toast } from 'sonner';
-import { formatHistoryTimestamp, historyTimeInfoForCurrency, isDailyHistory, type HistoryTimeInfo } from '../services/history-time';
+import { formatHistoryTimestamp, historyTimeInfoForCurrency, isDailyHistory, publicationTimeDetails, type HistoryTimeInfo } from '../services/history-time';
 import { acceptRightsRevision, canonicalLegDetails, clearSnapshotPrices, currentRightsRevision, PRICING_RIGHTS_EVENT, safeAttributions } from '../services/price-stream';
 import {
   api,
@@ -28,6 +28,7 @@ import {
   type PriceAsset,
   type PricesResponse,
   type PriceTimeframe,
+  type PriceSourceMode,
   type SourceAttribution,
 } from '../services/api';
 
@@ -62,6 +63,7 @@ type AssetCard = {
   chartError: boolean;
   chartErrorMessage: { fa: string; en: string };
   observedAt: string | null;
+  sourceObservedAt: string | null;
   canonicalAt: string | null;
   ageSeconds: number | null;
   sourceSummary: string | Record<string, unknown> | null;
@@ -197,6 +199,7 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, mode: Currenc
       chartError: placeholder.chart_error,
       chartErrorMessage: placeholder.chart_error_message,
       observedAt: null,
+      sourceObservedAt: null,
       canonicalAt: null,
       ageSeconds: null,
       sourceSummary: null,
@@ -229,10 +232,11 @@ const buildLiveCard = (asset: PriceAsset | undefined, id: AssetId, mode: Currenc
     staleMinutes: asset.stale_minutes,
     chartError: asset.chart_error,
     chartErrorMessage: asset.chart_error_message,
-    observedAt: asset.observed_at ?? null,
+    observedAt: (mode === 'usd' ? asset.usd_observed_at : asset.toman_observed_at) ?? asset.observed_at ?? null,
+    sourceObservedAt: (mode === 'usd' ? asset.usd_observed_at : asset.toman_observed_at) ?? null,
     canonicalAt: asset.canonical_at ?? null,
     ageSeconds: asset.age_seconds ?? (asset.stale_minutes === null ? null : asset.stale_minutes * 60),
-    sourceSummary: asset.source_summary ?? null,
+    sourceSummary: (mode === 'usd' ? asset.usd_source_summary : asset.toman_source_summary) ?? null,
     candidatePriceUsd: asset.candidate_price_usd ?? null,
     candidatePriceToman: asset.candidate_price_toman ?? null,
     candidateProvider: asset.candidate_provider ?? null,
@@ -542,6 +546,7 @@ export function DashboardView() {
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [selectedAssetForAlert, setSelectedAssetForAlert] = useState<AssetId>('gold');
   const [alertTargetPrice, setAlertTargetPrice] = useState('');
+  const [alertPriceSourceMode, setAlertPriceSourceMode] = useState<PriceSourceMode>('ordinary');
   const [alertNotifyApp, setAlertNotifyApp] = useState(true);
   const [alertNotifyEmail, setAlertNotifyEmail] = useState(false);
   const [alertNotifyWebhook, setAlertNotifyWebhook] = useState(false);
@@ -661,9 +666,7 @@ export function DashboardView() {
         const sourceValue = payload.source_summary;
         const sourceText = typeof sourceValue === 'string'
           ? sourceValue
-          : sourceValue && typeof sourceValue === 'object'
-            ? Object.keys(sourceValue as Record<string, unknown>).join(', ')
-            : 'stored canonical';
+          : safeAttributions(payload.attribution).map(item => item.label).join(', ') || 'Stored market source';
         const status = normalizeStatus(payload.persistence_status === 'unpersisted' ? 'unpersisted' : payload.status);
         incoming = [{
           asset: compatibilityAsset,
@@ -954,6 +957,7 @@ export function DashboardView() {
         const fallbackValue = currencyMode === 'usd'
           ? asset.priceUsd : asset.priceToman;
         const activeStatus = currencyMode === 'usd' ? asset.usdStatus : asset.tomanStatus;
+        const publicationDetails = publicationTimeDetails(asset.sourceSummary, asset.sourceObservedAt, language);
         const candidatePrice = currencyMode === 'usd' ? asset.candidatePriceUsd : asset.candidatePriceToman;
         const isAnomaly = activeStatus === 'verifying' || activeStatus === 'suspicious' || activeStatus === 'suspicious_unconfirmed';
         const sourceRows = [...(sourceDetails[asset.id]?.sources ?? [])].sort((left, right) => {
@@ -1091,6 +1095,7 @@ export function DashboardView() {
                   <Button
                     onClick={() => {
                       setSelectedAssetForAlert(asset.id);
+                      setAlertPriceSourceMode('ordinary');
                       setIsAlertModalOpen(true);
                     }}
                     variant="outline"
@@ -1118,7 +1123,7 @@ export function DashboardView() {
 
                 {typeof fallbackValue === 'number' && Number.isFinite(fallbackValue) && <SourceCredits items={currencyMode === 'usd' ? asset.usdAttributions : asset.tomanAttributions} language={language} />}
 
-                <div className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs ${
+                <div data-price-details={asset.id} className={`mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2 text-xs ${
                   isDark ? 'border-white/5 bg-black/20 text-[#A89668]' : 'border-black/5 bg-white/50 text-[#7A5E24]'
                 }`}>
                   <div className="flex min-w-0 flex-wrap items-center gap-3">
@@ -1127,7 +1132,12 @@ export function DashboardView() {
                     }`}>
                       <Database size={12} /> {statusLabel(activeStatus)}
                     </span>
-                    {(asset.canonicalAt || asset.observedAt) && (
+                    {publicationDetails ? (
+                      <>
+                        <span data-publication-clock="true" dir="ltr">{publicationDetails.timestamp}</span>
+                        <span>{publicationDetails.label}</span>
+                      </>
+                    ) : (asset.canonicalAt || asset.observedAt) && (
                       <span dir="ltr">
                         {new Date(asset.canonicalAt ?? asset.observedAt ?? '').toLocaleString(language === 'fa' ? 'fa-IR' : 'en-US')}
                       </span>
@@ -1325,6 +1335,27 @@ export function DashboardView() {
             />
           </div>
 
+          <div className="space-y-2">
+            <label htmlFor="dashboard-alert-price-source" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
+              {language === 'fa' ? 'مبنای قیمت' : 'Price used'}
+            </label>
+            <select
+              id="dashboard-alert-price-source"
+              value={alertPriceSourceMode}
+              onChange={(e) => setAlertPriceSourceMode(e.target.value as PriceSourceMode)}
+              aria-describedby="dashboard-alert-price-source-help"
+              className={`w-full rounded-xl border px-3 py-2.5 text-sm font-medium ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA]' : 'border-black/10 bg-white text-[#3B2E13]'}`}
+            >
+              <option value="ordinary">{language === 'fa' ? 'قیمت بازار' : 'Market price'}</option>
+              <option value="reference">{language === 'fa' ? 'نرخ مرجع منتشرشده' : 'Published reference'}</option>
+            </select>
+            <p id="dashboard-alert-price-source-help" className={`text-xs ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>
+              {alertPriceSourceMode === 'reference'
+                ? language === 'fa' ? 'هشدار با نرخ مرجعِ تازه سنجیده می‌شود؛ این نرخ ممکن است با قیمت معامله فرق داشته باشد.' : 'Uses fresh published reference rates, which may differ from trading prices.'
+                : language === 'fa' ? 'هشدار با قیمت تازهٔ بازار سنجیده می‌شود؛ نرخ مرجع برای این گزینه به کار نمی‌رود.' : 'Uses fresh market prices. Published reference rates do not trigger this option.'}
+            </p>
+          </div>
+
           <div className="space-y-4 pt-2">
             <label className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
               {t.notifyVia[language]}
@@ -1435,6 +1466,7 @@ export function DashboardView() {
                     asset: selectedAssetForAlert,
                     target_price: price,
                     currency_mode: currencyMode,
+                    price_source_mode: alertPriceSourceMode,
                     condition: 'above',
                     notify_app: alertNotifyApp,
                     notify_email: alertNotifyEmail,

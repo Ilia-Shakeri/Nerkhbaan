@@ -18,7 +18,7 @@ from app.pricing.instruments import get_instrument
 from app.pricing.parsers import ParserContext, ParserError, build_parser
 from app.pricing.parsers.history import build_history_parser
 from app.pricing.persistence import PersistenceResult
-from app.pricing.registry import PROVIDERS
+from app.pricing.registry import PROVIDERS, RETIRED_PROVIDERS
 
 NOW = datetime(2026, 10, 16, 12, tzinfo=UTC)
 
@@ -86,15 +86,18 @@ class IranianSourceRegistryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_disabled_wallex_history_respects_operator_policy(self):
         wallex = replace(PROVIDERS["wallex_usdt_toman"], enabled=False)
-        primary = PROVIDERS["nobitex_stats_usdt"]
+        primary = replace(PROVIDERS["nobitex_stats_usdt"], enabled=False)
         operational = SimpleNamespace(providers_for=AsyncMock(return_value=(primary, wallex)))
+        self.assertIsNone(await PricingBackfillQueue(operational=operational)._history_provider("USDT_TOMAN"))
+        primary = replace(primary, enabled=True)
+        operational.providers_for.return_value = (primary, wallex)
         selected = await PricingBackfillQueue(operational=operational)._history_provider("USDT_TOMAN")
         self.assertEqual(selected.provider_id, primary.provider_id)
 
     async def test_servix_sources_require_key_and_exact_unit_contract_and_stay_disabled(self):
         for name, gate in (("xau_usd", "servix_metals_unit"), ("xag_usd", "servix_metals_unit"),
                            ("gold18_toman", "servix_gold18_unit"), ("gold24_toman", "servix_gold24_unit")):
-            provider = PROVIDERS["servix_" + name]
+            provider = RETIRED_PROVIDERS["servix_" + name]
             with self.subTest(name=name):
                 self.assertFalse(provider.enabled)
                 self.assertFalse(provider.configured(SimpleNamespace(servix_api_key="test-key")))
@@ -103,7 +106,7 @@ class IranianSourceRegistryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(provider.history_requires_live_quote)
 
     async def test_default_servix_account_total_is_below_fifty_calls(self):
-        routes = [provider for provider in PROVIDERS.values() if provider.source_family == "servix"]
+        routes = list(RETIRED_PROVIDERS.values())
         self.assertEqual(len(routes), 9)
         self.assertLessEqual(sum(provider.budget.requests_per_day for provider in routes), 48)
         self.assertTrue(all(provider.budget.minimum_interval_seconds >= 14400 for provider in routes))
@@ -127,7 +130,7 @@ class ServixHistoricalContractTests(unittest.TestCase):
             parser.parse([row], get_instrument("XAU_USD_OZ"), NOW-timedelta(days=1), NOW)
 
     def test_daily_ranges_over_thirty_one_dates_fail_before_any_request(self):
-        provider = PROVIDERS["servix_btc_usd"]
+        provider = RETIRED_PROVIDERS["servix_btc_usd"]
         parser = build_history_parser(provider.history_parser_id)
         with patch("app.pricing.backfill.settings.servix_api_key", "test-key"):
             params, headers = _history_request_options(provider, parser, NOW-timedelta(days=30), NOW)

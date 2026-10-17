@@ -688,6 +688,10 @@ class CanonicalPricePolicy:
             "spread_bps": json_number(quote.spread_bps),
             "derivation_depth": quote.derivation_depth,
             "provenance": list(quote.provenance),
+            **{key: quote.metadata[key] for key in (
+                "source_timestamp_scope", "source_timestamp_precision", "source_observation_time_known",
+                "source_trade_time_known", "source_date", "source_time", "source_timezone", "source_calendar",
+            ) if key in quote.metadata},
         }
 
 

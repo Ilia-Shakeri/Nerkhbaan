@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ...db import get_db
 from ...models import TelegramSource
 from ...config import settings
-from ...pricing.registry import PROVIDERS
+from ...pricing.registry import PROVIDERS, RETIRED_PROVIDERS
 from ..audit import add_audit_event
 from ..dbtools import reflected_table, safe_count, safe_rows
 from ..deps import (
@@ -150,6 +150,7 @@ def _db_providers(db: Session) -> list[dict[str, Any]]:
     configs_by_provider: dict[str, list[dict[str, Any]]] = {}
     for config in configs:
         configs_by_provider.setdefault(str(config.get("provider_id")), []).append(config)
+    rows = [row for row in rows if str(row.get("provider_id") or row.get("id")) not in RETIRED_PROVIDERS]
     for row in rows:
         env_name = (
             row.pop("required_env_key", None)

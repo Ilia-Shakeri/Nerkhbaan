@@ -242,6 +242,11 @@ jobs:
       - name: Prove multi-replica lease exclusion and handover
         run: python tests/ci_multi_replica_check.py
 
+      - name: Prove shared source snapshots and URL quotas on owned Redis
+        env:
+          TEST_REDIS_URL: redis://127.0.0.1:6379/0
+        run: python -m unittest tests.test_source_snapshots_redis tests.test_source_rights_policy.RightsPolicyTests -v
+
       - name: Prove refresh-token rotation under PostgreSQL race
         env:
           TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5432/nerkhbaan_ci

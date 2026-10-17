@@ -30,7 +30,7 @@ from app.pricing.budgets import BudgetDecision
 from app.pricing.db_models import InstrumentRecord, PricingBackfillJobRecord
 from app.pricing.instruments import get_instrument
 from app.pricing.persistence import PersistenceResult
-from app.pricing.registry import PROVIDERS
+from app.pricing.registry import RETIRED_PROVIDERS
 
 
 NOW = datetime(2026, 10, 17, 12, 30, tzinfo=UTC)
@@ -151,7 +151,7 @@ class ServixDurableBackfillTests(unittest.IsolatedAsyncioTestCase):
                 importance=definition.importance, enabled=True, allow_derived_fallback=False,
             ))
             db.commit()
-        self.provider = replace(PROVIDERS["servix_btc_usd"], enabled=True,
+        self.provider = replace(RETIRED_PROVIDERS["servix_btc_usd"], enabled=True,
                                 api_key_setting=None)
         self.store = AsyncMock()
         self.store.ping.return_value = True

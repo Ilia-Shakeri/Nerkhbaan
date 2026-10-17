@@ -277,6 +277,7 @@ class LegacyPricingAdapter:
                 f"{prefix}_maximum_spread_bps": None,
                 f"{prefix}_derivation_depth": 0,
                 f"{prefix}_source_summary": {},
+                f"{prefix}_observed_at": None,
             }
         now = datetime.now(UTC)
         effective = quote.effective_status(now)
@@ -293,6 +294,13 @@ class LegacyPricingAdapter:
                 "selected_price_semantic",
                 "spread_bps",
                 "derivation_depth",
+                "source_timestamp_scope",
+                "source_timestamp_precision",
+                "source_observation_time_known",
+                "source_trade_time_known",
+                "source_timezone",
+                "source_date",
+                "source_time",
             )
             if key in summary
         }
@@ -316,6 +324,7 @@ class LegacyPricingAdapter:
             f"{prefix}_maximum_spread_bps": summary.get("maximum_spread_bps"),
             f"{prefix}_derivation_depth": summary.get("derivation_depth", 0),
             f"{prefix}_source_summary": public_summary,
+            f"{prefix}_observed_at": quote.observed_at.isoformat(),
         }
 
     async def _paired_history(self, usd_id: str, toman_id: str, timeframe: str):

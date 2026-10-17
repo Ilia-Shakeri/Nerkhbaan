@@ -10,7 +10,7 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-only-secret-key-that-is-long-enoug
 from app.pricing.instruments import INSTRUMENTS
 from app.pricing.models import Currency
 from app.pricing.parsers import ParserContext, ParserError, build_parser
-from app.pricing.registry import PROVIDERS
+from app.pricing.registry import RETIRED_PROVIDERS
 
 
 # Synthetic contract cases; no authenticated provider response was obtained.
@@ -37,7 +37,7 @@ class ServixCurrentPriceContractTests(unittest.TestCase):
     def test_accepted_and_rejected_quote_sources_share_the_new_parser_version(self) -> None:
         for provider_id in ("servix_usd_toman", "servix_btc_usd", "servix_usdt_usd"):
             with self.subTest(provider=provider_id):
-                provider = PROVIDERS[provider_id]
+                provider = RETIRED_PROVIDERS[provider_id]
                 parser = build_parser(provider.parser_id)
                 self.assertEqual(parser.parser_version, "servix-assets/1.2.0")
                 self.assertEqual(provider.parser_version, parser.parser_version)

@@ -135,10 +135,15 @@ class RightsPolicyTests(StrictFixture, unittest.TestCase):
     def test_catalogue_registration_does_not_make_rights_coverage_healthy(self):
         health = LegacyPricingAdapter.startup_checks()
         self.assertFalse(health["ok"])
-        self.assertIn("USDT_USD", health["instruments_without_permitted_configured_source"])
-        self.assertIn("SILVER_999_TOMAN_GRAM", health["instruments_without_permitted_configured_source"])
-        self.assertEqual(health["source_rights"]["approved_display_sources"],
-                         ["gold_api_free_btc", "gold_api_free_xag", "gold_api_free_xau", "nerkhsanj_silver999_history"])
+        for instrument in ("BTC_USD", "USDT_USD", "GOLD_24K_TOMAN_GRAM"):
+            self.assertIn(instrument, health["instruments_without_permitted_configured_source"])
+        approved = set(health["source_rights"]["approved_display_sources"])
+        self.assertTrue({"gold_api_free_btc", "gold_api_free_xag", "gold_api_free_xau",
+                         "nerkhsanj_silver999_history", "nerkhsanj_silver999_toman",
+                         "nerkhsanj_btc_toman_history", "nobitex_orderbook_usdt",
+                         "nobitex_orderbook_btc", "wallgold_silver925_quote",
+                         "wallgold_silver925_daily_history", "gta_silver925_toman"} <= approved)
+        self.assertTrue(approved.isdisjoint({"coinbase_btc_usd", "coingecko_btc", "unlisted"}))
 
     def test_revoked_cached_outcome_cannot_still_be_usable_or_expose_raw_payload(self):
         quote = Mock(spec=ProviderQuote, provider_id="coingecko_btc")

@@ -35,6 +35,41 @@ _BUILTIN["nerkhsanj_silver999_history"] = {
 }
 
 
+for _source_name in (
+    "nerkhsanj_usd_toman", "nerkhsanj_gold18_toman", "nerkhsanj_silver999_toman",
+    "nerkhsanj_usdt_toman", "nerkhsanj_btc_toman", "nerkhsanj_xau_usd", "nerkhsanj_xag_usd",
+    "nerkhsanj_usd_toman_history", "nerkhsanj_gold18_toman_history", "nerkhsanj_usdt_toman_history",
+    "nerkhsanj_btc_toman_history", "nerkhsanj_xau_usd_history", "nerkhsanj_xag_usd_history",
+):
+    _BUILTIN[_source_name] = {**_BUILTIN["nerkhsanj_silver999_history"]}
+_BUILTIN["gta_silver925_toman"] = {
+    "permissions": ["collect", "store", "display", "history", "own_app_transport"],
+    "checked_at": _REVIEWED, "expires_at": _EXPIRES,
+    "evidence_ref": "https://gtasilver.com/silver-price/api",
+    "hosts": ["gtasilver.com"],
+    "attribution": {"label": "GTA Silver", "url": "https://gtasilver.com/silver-price/api"},
+}
+for _source_name in ("nobitex_stats_usdt", "nobitex_stats_btc", "nobitex_orderbook_usdt", "nobitex_orderbook_btc"):
+    _BUILTIN[_source_name] = {
+        "permissions": ["collect", "store", "display", "history", "own_app_transport"],
+        "checked_at": _REVIEWED, "expires_at": _EXPIRES,
+        "evidence_ref": "https://old-apidocs.nobitex.ir/terms/",
+        "evidence_refs": ["https://nobitex.ir/policies/", "https://apidocs.nobitex.ir/"],
+        "hosts": ["apiv2.nobitex.ir"],
+        "attribution": {"label": "Nobitex", "url": "https://apidocs.nobitex.ir/"},
+    }
+for _source_name in ("wallgold_gold18_quote", "wallgold_silver925_quote",
+                     "wallgold_silver925_hourly_history", "wallgold_silver925_daily_history"):
+    _BUILTIN[_source_name] = {
+        "permissions": ["collect", "store", "display", "history", "own_app_transport"],
+        "checked_at": _REVIEWED, "expires_at": _EXPIRES,
+        "evidence_ref": "https://wallgold.ir/blog/announcement/wallgold-api/",
+        "evidence_refs": ["https://wallgold.ir/terms-and-conditions"],
+        "hosts": ["api.wallgold.ir"],
+        "attribution": {"label": "Wallgold", "url": "https://wallgold.ir/blog/announcement/wallgold-api/"},
+    }
+
+
 def enforced() -> bool:
     return bool(getattr(settings, "pricing_rights_enforced", True))
 

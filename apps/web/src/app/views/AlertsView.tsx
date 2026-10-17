@@ -7,7 +7,7 @@ import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { useAppContext } from '../context/AppContext';
-import { api, type AlertResponse, type CurrencyMode } from '../services/api';
+import { api, type AlertResponse, type CurrencyMode, type PriceSourceMode } from '../services/api';
 import { toast } from 'sonner';
 
 const ASSET_LABELS: Record<string, { fa: string; en: string }> = {
@@ -34,6 +34,8 @@ export function AlertsView() {
   const [formCondition, setFormCondition] = useState<'above' | 'below'>('above');
   const [formTargetPrice, setFormTargetPrice] = useState('');
   const [formCurrencyMode, setFormCurrencyMode] = useState<CurrencyMode>(currencyMode);
+  const [formPriceSourceMode, setFormPriceSourceMode] = useState<PriceSourceMode | ''>('ordinary');
+  const [editingSourceMode, setEditingSourceMode] = useState<string | null>(null);
   const [formNotifyApp, setFormNotifyApp] = useState(true);
   const [formNotifyEmail, setFormNotifyEmail] = useState(false);
 
@@ -44,6 +46,11 @@ export function AlertsView() {
     condition:  { fa: 'شرط',                    en: 'Condition'          },
     target:     { fa: 'قیمت هدف',               en: 'Target'             },
     currency:   { fa: 'واحد',                   en: 'Currency'           },
+    priceUsed:  { fa: 'مبنای قیمت',             en: 'Price used'         },
+    marketPrice:{ fa: 'قیمت بازار',             en: 'Market price'       },
+    referencePrice:{ fa: 'نرخ مرجع منتشرشده',    en: 'Published reference' },
+    derivedPrice:{ fa: 'قیمت محاسبه‌شده',        en: 'Calculated price'   },
+    savedPrice: { fa: 'مبنای ذخیره‌شده حفظ شود', en: 'Keep saved price type' },
     status:     { fa: 'وضعیت',                  en: 'Status'             },
     above:      { fa: 'بیشتر از',               en: 'Above'              },
     below:      { fa: 'کمتر از',                en: 'Below'              },
@@ -101,6 +108,8 @@ export function AlertsView() {
     setFormCondition('above');
     setFormTargetPrice('');
     setFormCurrencyMode(currencyMode);
+    setFormPriceSourceMode('ordinary');
+    setEditingSourceMode(null);
     setFormNotifyApp(true);
     setFormNotifyEmail(false);
     setIsModalOpen(true);
@@ -112,6 +121,9 @@ export function AlertsView() {
     setFormCondition(alert.condition);
     setFormTargetPrice(alert.target_price != null ? String(alert.target_price) : '');
     setFormCurrencyMode(alert.currency_mode);
+    setEditingSourceMode(alert.price_source_mode ?? '');
+    setFormPriceSourceMode(['ordinary', 'reference', 'derived'].includes(alert.price_source_mode)
+      ? alert.price_source_mode : '');
     setFormNotifyApp(alert.notify_app);
     setFormNotifyEmail(alert.notify_email);
     setIsModalOpen(true);
@@ -129,6 +141,7 @@ export function AlertsView() {
           asset: formAsset,
           target_price: parseFloat(formTargetPrice),
           currency_mode: formCurrencyMode,
+          ...(formPriceSourceMode ? { price_source_mode: formPriceSourceMode } : {}),
           condition: formCondition,
           notify_app: formNotifyApp,
           notify_email: formNotifyEmail,
@@ -140,6 +153,7 @@ export function AlertsView() {
           asset: formAsset,
           target_price: parseFloat(formTargetPrice),
           currency_mode: formCurrencyMode,
+          price_source_mode: formPriceSourceMode || 'ordinary',
           condition: formCondition,
           notify_app: formNotifyApp,
           notify_email: formNotifyEmail,
@@ -366,6 +380,29 @@ export function AlertsView() {
                 <option value="toman">{language === 'fa' ? 'تومان' : 'Toman'}</option>
               </select>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="alert-price-source" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.priceUsed[language]}</label>
+            <select
+              id="alert-price-source"
+              value={formPriceSourceMode}
+              onChange={(e) => setFormPriceSourceMode(e.target.value as PriceSourceMode)}
+              aria-describedby="alert-price-source-help"
+              className={`w-full rounded-xl border px-3 py-2.5 text-sm font-medium ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA]' : 'border-black/10 bg-white text-[#3B2E13]'}`}
+            >
+              {formPriceSourceMode === '' && <option value="" disabled>{t.savedPrice[language]}</option>}
+              <option value="ordinary">{t.marketPrice[language]}</option>
+              <option value="reference">{t.referencePrice[language]}</option>
+              {editingSourceMode === 'derived' && <option value="derived">{t.derivedPrice[language]}</option>}
+            </select>
+            <p id="alert-price-source-help" className={`text-xs ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>
+              {formPriceSourceMode === 'reference'
+                ? language === 'fa' ? 'هشدار با نرخ مرجعِ تازه سنجیده می‌شود؛ این نرخ ممکن است با قیمت معامله فرق داشته باشد.' : 'Uses fresh published reference rates, which may differ from trading prices.'
+                : formPriceSourceMode === 'ordinary'
+                  ? language === 'fa' ? 'هشدار با قیمت تازهٔ بازار سنجیده می‌شود؛ نرخ مرجع برای این گزینه به کار نمی‌رود.' : 'Uses fresh market prices. Published reference rates do not trigger this option.'
+                  : language === 'fa' ? 'مبنای قیمتِ همین هشدار حفظ می‌شود.' : 'Keeps this alert’s saved price type.'}
+            </p>
           </div>
 
           <div className={`space-y-3 rounded-xl border p-4 ${isDark ? 'border-white/5 bg-[#0A0A0A]' : 'border-black/5 bg-slate-50'}`}>

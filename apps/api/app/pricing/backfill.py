@@ -40,6 +40,7 @@ from .parsers.history import build_history_parser
 from .persistence import PricingPersistence, pricing_persistence
 from .providers import ProviderQuoteCollector
 from .registry import PROVIDERS_BY_INSTRUMENT, ProviderDefinition
+from .source_snapshots import SharedSourceSnapshots, SourceSnapshotUnavailable
 from . import rights
 
 
@@ -83,6 +84,30 @@ def _history_rights_allowed(provider: ProviderDefinition) -> bool:
             and rights.endpoint_allowed(provider.provider_id, provider.history_url))
 
 
+def _daily_history_provider(provider: ProviderDefinition) -> bool:
+    parser_id = provider.history_parser_id or ""
+    return ((provider.source_family == "nerkhsanj" and "_daily_" in parser_id)
+            or (parser_id.startswith("wallgold_") and "_daily_" in parser_id))
+
+
+def _history_range_rank(provider: ProviderDefinition, duration: timedelta) -> int | None:
+    parser_id = provider.history_parser_id or ""
+    daily = _daily_history_provider(provider)
+    if daily and duration < timedelta(days=1):
+        return None
+    if provider.source_family == "nerkhsanj":
+        intraday = "_intraday_" in parser_id
+        if (intraday and duration >= timedelta(days=1)) or (daily and duration < timedelta(days=1)):
+            return None
+    if parser_id.startswith("wallgold_"):
+        hourly = "_hourly_" in parser_id
+        if hourly and duration >= timedelta(days=31):
+            return None
+        if daily and duration < timedelta(days=31):
+            return 1
+    return 0
+
+
 def _history_request_options(
     provider: ProviderDefinition,
     parser: Any,
@@ -99,7 +124,8 @@ def _history_request_options(
             min(365, int((range_end - range_start).total_seconds() / 86400) + 1),
         )
         params: dict[str, str | int] = {"vs_currency": "usd", "days": str(days)}
-    elif parser.parser_version.startswith("nerkhsanj-daily-history/"):
+    elif (provider.source_family == "nerkhsanj"
+          or parser.parser_version.startswith("wallgold-ohlc-history/")):
         if range_end - range_start > timedelta(days=366):
             raise ValueError("history_range_exceeds_one_year")
         params = {}
@@ -148,6 +174,7 @@ class PricingBackfillQueue:
         self.maximum_length = _positive_int_env("PRICING_BACKFILL_STREAM_MAXLEN", 10_000)
         self.maximum_attempts = _positive_int_env("PRICING_BACKFILL_MAX_ATTEMPTS", 5)
         self.automatic_locks = DistributedPricingLocks(store)
+        self.source_snapshots = SharedSourceSnapshots(store=store, budgets=budgets)
 
     async def enqueue_automatic(
         self,
@@ -170,13 +197,19 @@ class PricingBackfillQueue:
         raw = f"{instrument.instrument_id}|{int(start.timestamp()) // bucket_seconds}|{int(end.timestamp()) // bucket_seconds}|{bucket_seconds}"
         daily_history = False
         if any(provider.history_only for provider in PROVIDERS_BY_INSTRUMENT.get(instrument.instrument_id, ())):
-            history_provider = await self._history_provider(instrument.instrument_id)
-            daily_history = bool(history_provider and history_provider.history_only)
+            history_provider = await self._history_provider(
+                instrument.instrument_id, range_start=start, range_end=end,
+            )
+            daily_history = bool(history_provider and _daily_history_provider(history_provider))
+            if history_provider is None:
+                # A daily archive cannot satisfy a shorter requested range.
+                unsupported_key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+                return BackfillEnqueueResult("unsupported", unsupported_key, None, None)
         if daily_history:
-            # Sparse daily archives cannot fill intraday/holiday gaps. Repeated
-            # chart polls share one durable job per Tehran calendar range/day.
-            tehran = ZoneInfo("Asia/Tehran")
-            raw = f"daily|{instrument.instrument_id}|{start.astimezone(tehran).date()}|{end.astimezone(tehran).date()}|{bucket_seconds}"
+            # Repeated daily-chart polls share one durable source-calendar range.
+            # Wallgold labels UTC days; the Iranian archive labels Tehran days.
+            zone = ZoneInfo("UTC" if history_provider.history_parser_id.startswith("wallgold_") else "Asia/Tehran")
+            raw = f"daily|{instrument.instrument_id}|{start.astimezone(zone).date()}|{end.astimezone(zone).date()}|{bucket_seconds}"
         key = hashlib.sha256(raw.encode("utf-8")).hexdigest()
         if daily_history and end - start < timedelta(days=1):
             return BackfillEnqueueResult("unsupported", key, None, None)
@@ -227,7 +260,7 @@ class PricingBackfillQueue:
             idempotency_key = _automatic_day_key
         if not instrument.enabled or not await self.operational.feature_enabled("backfill_enabled", scope_id=instrument.instrument_id):
             return BackfillEnqueueResult("disabled", idempotency_key, None, None)
-        if await self._history_provider(instrument.instrument_id) is None:
+        if await self._history_provider(instrument.instrument_id, range_start=start, range_end=end) is None:
             return BackfillEnqueueResult("unsupported", idempotency_key, None, None)
         try:
             job_id = await asyncio.to_thread(
@@ -279,7 +312,8 @@ class PricingBackfillQueue:
                 await asyncio.to_thread(self._finish_job, job["id"], "deferred", "instrument_disabled", job["attempt_count"])
                 counts["deferred"] += 1
                 continue
-            provider = await self._history_provider(job["instrument_id"])
+            provider = await self._history_provider(job["instrument_id"],
+                range_start=job["range_start"], range_end=job["range_end"])
             if provider is None:
                 await asyncio.to_thread(
                     self._finish_job,
@@ -296,7 +330,8 @@ class PricingBackfillQueue:
                 current = None
             if current is None or utc_now() > current.valid_until:
                 provider = await self._history_provider(
-                    job["instrument_id"], independent_of_live=True
+                    job["instrument_id"], independent_of_live=True,
+                    range_start=job["range_start"], range_end=job["range_end"],
                 )
             if provider is None or (
                 provider.history_requires_live_quote
@@ -331,13 +366,16 @@ class PricingBackfillQueue:
                     )
                     counts["failed"] += 1
                     continue
-                decision = await self.budgets.consume(provider, RequestPurpose.BACKFILL)
-                if not decision.allowed:
-                    await asyncio.to_thread(
-                        self._finish_job, job["id"], "deferred", decision.reason, job["attempt_count"]
-                    )
-                    counts["deferred"] += 1
-                    continue
+                if provider.source_family != "nerkhsanj":
+                    # Shared snapshots charge only their single actual network
+                    # fetch. Cache readers must not consume the same quota twice.
+                    decision = await self.budgets.consume(provider, RequestPurpose.BACKFILL)
+                    if not decision.allowed:
+                        await asyncio.to_thread(
+                            self._finish_job, job["id"], "deferred", decision.reason, job["attempt_count"]
+                        )
+                        counts["deferred"] += 1
+                        continue
                 try:
                     point_count = await self._execute_history_job(job, provider)
                 except HistoryBudgetDeferred:
@@ -495,6 +533,7 @@ class PricingBackfillQueue:
         )
         instrument = await self.operational.instrument(job["instrument_id"])
         points = []
+        source_received_at = None
         paginated_udf = parser.parser_version.startswith("nobitex-udf-history/")
         windowed_udf = parser.parser_version.startswith("wallex-udf-history/")
         window_start = job["range_start"]
@@ -522,31 +561,67 @@ class PricingBackfillQueue:
                 request_params = {**params, "page": page} if paginated_udf else params
                 if windowed_udf:
                     request_params = {**params, "from": int(window_start.timestamp()), "to": int(window_end.timestamp())}
-                async with asyncio.timeout(15):
+                async with asyncio.timeout(20 if provider.source_family == "nerkhsanj" else 15):
                     if not _history_rights_allowed(provider):
                         raise RuntimeError("history_provider_rights_revoked")
-                    if parser.parser_version.startswith("nerkhsanj-daily-history/"):
-                        async with client.stream("GET", provider.history_url, params=request_params, headers=headers) as response:
-                            response.raise_for_status()
-                            if response.headers.get("content-type", "").split(";", 1)[0].lower() != "application/json":
-                                raise ValueError("history_response_content_type")
-                            limit = min(provider.maximum_payload_bytes, 8_388_608)
-                            length = response.headers.get("content-length", "")
-                            if length.isdigit() and int(length) > limit:
-                                raise ValueError("history_payload_too_large")
-                            body = bytearray()
-                            async for chunk in response.aiter_bytes(chunk_size=65_536):
-                                if len(body) + len(chunk) > limit:
+                    if (provider.source_family == "nerkhsanj"
+                            or parser.parser_version.startswith("wallgold-ohlc-history/")):
+                        async def load_bounded_history():
+                            async with client.stream("GET", provider.history_url, params=request_params or None, headers=headers) as response:
+                                if response.status_code == 429:
+                                    await self.budgets.record_rate_limit(
+                                        provider, source_url=provider.history_url,
+                                        retry_after_seconds=ProviderQuoteCollector._parse_retry_after(
+                                            response.headers.get("retry-after")
+                                        ),
+                                    )
+                                response.raise_for_status()
+                                content_type = response.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                                if content_type != "application/json":
+                                    raise ValueError("history_response_content_type")
+                                limit = min(provider.maximum_payload_bytes, 8_388_608)
+                                length = response.headers.get("content-length", "")
+                                if length.isdigit() and int(length) > limit:
                                     raise ValueError("history_payload_too_large")
-                                body.extend(chunk)
-                            payload = json.loads(body)
+                                body = bytearray()
+                                async for chunk in response.aiter_bytes(chunk_size=65_536):
+                                    if len(body) + len(chunk) > limit:
+                                        raise ValueError("history_payload_too_large")
+                                    body.extend(chunk)
+                                return json.loads(body), content_type, response.status_code
+
+                        if provider.source_family == "nerkhsanj":
+                            try:
+                                snapshot = await self.source_snapshots.get(
+                                    provider, provider.history_url, load_bounded_history, RequestPurpose.BACKFILL,
+                                )
+                            except SourceSnapshotUnavailable as exc:
+                                deferred = (exc.code in {"cooldown", "provider_cooldown", "provider_budget_disabled",
+                                                        "snapshot_locked", "snapshot_cache_unavailable",
+                                                        "snapshot_lease_lost", "budget_unavailable"}
+                                            or exc.code.startswith(("budget_", "limit_", "minimum_interval")))
+                                if deferred:
+                                    raise HistoryBudgetDeferred(exc.code) from exc
+                                if exc.cause is not None:
+                                    raise exc.cause from exc
+                                raise
+                            payload = snapshot.payload
+                            source_received_at = snapshot.fetched_at
+                        else:
+                            payload, _content_type, _status = await load_bounded_history()
+                            source_received_at = utc_now()
                         if not _history_rights_allowed(provider):
                             raise RuntimeError("history_provider_rights_revoked")
                         points = parser.parse(payload, instrument, job["range_start"], job["range_end"])
                         break
                     response = await client.get(provider.history_url, params=request_params, headers=headers)
                 if response.status_code == 429:
-                    await self.budgets.record_rate_limit(provider)
+                    await self.budgets.record_rate_limit(
+                        provider, source_url=provider.history_url,
+                        retry_after_seconds=ProviderQuoteCollector._parse_retry_after(
+                            response.headers.get("retry-after")
+                        ),
+                    )
                     raise RuntimeError("history_provider_rate_limited")
                 response.raise_for_status()
                 if len(response.content) > min(provider.maximum_payload_bytes * 4, 4_194_304):
@@ -607,7 +682,7 @@ class PricingBackfillQueue:
                 purity=instrument.purity,
                 volume=point.volume,
                 observed_at=point.observed_at,
-                received_at=utc_now(),
+                received_at=source_received_at or utc_now(),
                 parser_version=parser.parser_version,
                 validation_status=ValidationStatus.ACCEPTED,
                 confidence_score=provider.trust_score,
@@ -694,26 +769,24 @@ class PricingBackfillQueue:
         instrument_id: str,
         *,
         independent_of_live: bool = False,
+        range_start: datetime | None = None,
+        range_end: datetime | None = None,
     ) -> ProviderDefinition | None:
-        return next(
-            (
-                provider
-                for provider in sorted(
-                    await self.operational.providers_for(instrument_id),
-                    key=lambda item: (item.history_priority, item.priority, item.provider_id),
-                )
-                if provider.enabled
-                and _history_rights_allowed(provider)
-                and provider.configured(settings)
-                and provider.history_url
-                and provider.history_parser_id
-                and (
-                    not independent_of_live
-                    or not provider.history_requires_live_quote
-                )
-            ),
-            None,
-        )
+        if (range_start is None) != (range_end is None):
+            raise ValueError("History provider selection needs both range bounds")
+        duration = None
+        if range_start is not None and range_end is not None:
+            duration = ensure_utc(range_end) - ensure_utc(range_start)
+            if duration <= timedelta(0):
+                raise ValueError("History provider selection needs a positive range")
+        candidates = []
+        for provider in await self.operational.providers_for(instrument_id):
+            rank = _history_range_rank(provider, duration) if duration is not None else 0
+            if (rank is not None and provider.enabled and _history_rights_allowed(provider)
+                    and provider.configured(settings) and provider.history_url and provider.history_parser_id
+                    and (not independent_of_live or not provider.history_requires_live_quote)):
+                candidates.append((rank, provider.history_priority, provider.priority, provider.provider_id, provider))
+        return min(candidates, key=lambda item: item[:4])[-1] if candidates else None
 
     @staticmethod
     def _insert_job(

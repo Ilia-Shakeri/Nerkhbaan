@@ -23,7 +23,7 @@ from app.pricing.models import (
 from app.pricing.operational import OperationalPricingSettings
 from app.pricing.parsers import ParserContext, ParserError, build_parser
 from app.pricing.parsers.history import build_history_parser
-from app.pricing.registry import PROVIDERS, PROVIDERS_BY_INSTRUMENT
+from app.pricing.registry import PROVIDERS, PROVIDERS_BY_INSTRUMENT, RETIRED_PROVIDERS
 
 
 def _context(instrument_id: str) -> ParserContext:
@@ -322,7 +322,7 @@ class PricingProviderRepairTests(unittest.TestCase):
             )
 
     def test_servix_history_request_uses_bounded_dates_and_secret_header(self) -> None:
-        provider = PROVIDERS["servix_btc_usd"]
+        provider = RETIRED_PROVIDERS["servix_btc_usd"]
         parser = build_history_parser("servix_btc_usd_history_v1")
         with patch("app.pricing.backfill.settings.servix_api_key", "test-key"):
             params, headers = _history_request_options(
@@ -340,7 +340,7 @@ class PricingProviderRepairTests(unittest.TestCase):
     def test_servix_history_can_run_when_live_quote_is_missing(self) -> None:
         providers = (
             PROVIDERS["coingecko_btc"],
-            replace(PROVIDERS["servix_btc_usd"], enabled=True),
+            replace(RETIRED_PROVIDERS["servix_btc_usd"], enabled=True),
         )
         operational = AsyncMock()
         operational.providers_for.return_value = providers

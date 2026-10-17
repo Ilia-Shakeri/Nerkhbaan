@@ -17,6 +17,7 @@ if config_module is not None:
     )
     config_module.settings.redis_url = None
 
+from app.pricing.registry import RETIRED_PROVIDERS
 from app.pricing.db_models import (
     InstrumentRecord,
     InstrumentProviderConfigRecord,
@@ -168,7 +169,11 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
             rows = InternalPriceHistory._query_latest_rows(None)
 
         self.assertEqual(rows, [])
-        self.assertEqual(session.calls[0][1], {"history_only_sources": ["nerkhsanj_silver999_history"]})
+        self.assertEqual(set(session.calls[0][1]), {"history_only_sources"})
+        self.assertTrue(set(RETIRED_PROVIDERS) <= set(session.calls[0][1]["history_only_sources"]))
+        self.assertIn("nerkhsanj_silver999_history", session.calls[0][1]["history_only_sources"])
+        self.assertIn("wallgold_silver925_daily_history", session.calls[0][1]["history_only_sources"])
+        self.assertNotIn("nobitex_orderbook_usdt", session.calls[0][1]["history_only_sources"])
         self.assertNotIn(":instrument_id", session.calls[0][0])
 
     def test_latest_instrument_keeps_typed_column_comparison(self) -> None:
@@ -178,7 +183,9 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
             rows = InternalPriceHistory._query_latest_rows("BTC_USD")
 
         self.assertEqual(rows, [])
-        self.assertEqual(session.calls[0][1], {"instrument_id": "BTC_USD", "history_only_sources": ["nerkhsanj_silver999_history"]})
+        self.assertEqual(set(session.calls[0][1]), {"instrument_id", "history_only_sources"})
+        self.assertEqual(session.calls[0][1]["instrument_id"], "BTC_USD")
+        self.assertTrue(set(RETIRED_PROVIDERS) <= set(session.calls[0][1]["history_only_sources"]))
         self.assertIn("instrument_id = :instrument_id", session.calls[0][0])
 
 

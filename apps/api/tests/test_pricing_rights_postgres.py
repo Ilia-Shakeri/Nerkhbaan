@@ -218,6 +218,25 @@ class RightsPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
         with self.engine.begin() as connection:
             connection.execute(ProviderQuoteRecord.__table__.insert(), dict(id=identifier, instrument_id="BTC_USD", provider_id=provider, price=100+identifier, observed_at=stamp, received_at=stamp, source_type="http", currency="USD", parser_version="owned/1", validation_status="accepted", confidence_score=1, persistence_status="persisted", idempotency_key=f"owned-provider-{identifier}"))
 
+    def test_retired_sources_do_not_mask_older_current_quotes_or_erase_history(self):
+        retired = "servix_btc_usd"
+        self.grants[retired] = deepcopy(self.grants["approved"])
+        self.canonical(1, 100, 1)
+        self.canonical(2, 999, 2, summary=_summary(retired))
+        self.canonical(3, 888, 3, candidate=retired)
+        self.provider(10)
+        self.provider(11, retired)
+        current = InternalPriceHistory._query_latest_rows("BTC_USD")
+        self.assertEqual(len(current), 1)
+        self.assertEqual(current[0]["price"], 100)
+        sources = InternalPriceHistory._query_latest_sources("BTC_USD")
+        self.assertEqual([row["provider_id"] for row in sources], ["approved"])
+        history = InternalPriceHistory._query_canonical_history("BTC_USD", START, END, "1 hour")
+        self.assertEqual(history[0]["sample_count"], 3)
+        with self.sessions() as db:
+            self.assertEqual(db.scalar(text("SELECT count(*) FROM canonical_quotes")), 3)
+            self.assertEqual(db.scalar(text("SELECT count(*) FROM provider_quotes")), 2)
+
     def test_aggregate_and_revocation_filter_before_ohlc_without_erasing_rows(self):
         self.canonical(1, 100, 1)
         self.canonical(2, 9999, 2, summary=_summary("restricted"))

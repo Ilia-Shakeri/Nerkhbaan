@@ -84,6 +84,53 @@ test('daily chart ticks and missing dates never introduce an observation time', 
   assert.equal(history.isDailyHistory({}), false);
 });
 
+test('daily history respects the declared UTC day and handles unknown zones safely', () => {
+  const history = moduleAt('apps/web/src/app/services/history-time.ts', { Intl, Date }, {});
+  const date = new Date('2026-10-14T23:30:00Z');
+  const utc = { timestamp_precision: 'day', source_timezone: 'UTC', source_calendar: 'gregorian' };
+  assert.match(history.formatHistoryTimestamp(date, 'en', utc), /14\/10\/2026/);
+  assert.match(history.formatHistoryTimestamp(date, 'en', { ...utc, source_timezone: 'Asia/Tehran' }), /15\/10\/2026/);
+  assert.doesNotMatch(history.formatHistoryTimestamp(date, 'en', utc), /23:30|00:00/);
+  assert.doesNotThrow(() => history.formatHistoryTimestamp(date, 'fa', { ...utc, source_timezone: 'invalid zone' }));
+});
+
+test('published snapshots label unknown trade time and retain minute precision', () => {
+  const history = moduleAt('apps/web/src/app/services/history-time.ts', { Intl, Date }, {});
+  const summary = { source_timestamp_scope: 'publication_snapshot', source_timestamp_precision: 'minute', source_timezone: 'Asia/Tehran' };
+  const value = history.publicationTimeDetails(summary, '2026-10-17T11:30:37Z', 'en');
+  assert.match(value.timestamp, /15:00/);
+  assert.doesNotMatch(value.timestamp, /15:00:37|15:00:00/);
+  assert.match(value.label, /Publication time; trade time unknown/);
+  assert.match(history.publicationTimeDetails(summary, '2026-10-17T11:30:37Z', 'fa').label, /زمان انتشار؛ ساعت معامله نامعلوم/);
+  const response = history.publicationTimeDetails({ ...summary, source_timestamp_scope: 'response_quote_snapshot', source_timestamp_precision: 'second', source_timezone: 'UTC' }, '2026-10-17T11:30:37Z', 'en');
+  assert.match(response.timestamp, /11:30:37/);
+  assert.equal(history.publicationTimeDetails(summary, 'invalid', 'en'), null);
+  assert.equal(history.publicationTimeDetails(summary, null, 'en'), null);
+  assert.equal(history.publicationTimeDetails({}, '2026-10-17T11:30:37Z', 'en'), null);
+});
+
+test('currency legs keep separate publication metadata through socket updates and clearing', () => {
+  const stream = moduleAt('apps/web/src/app/services/price-stream.ts', {}, {});
+  const history = moduleAt('apps/web/src/app/services/history-time.ts', { Intl, Date }, {});
+  const tomanSummary = { source_timestamp_scope: 'publication_snapshot', source_timestamp_precision: 'minute', source_timezone: 'Asia/Tehran' };
+  const asset = {
+    ...stream.canonicalLegDetails({ instrument_id: 'XAG_USD_OZ', observed_at: '2026-10-17T10:00:31Z', source_summary: {} }, false),
+    ...stream.canonicalLegDetails({ instrument_id: 'SILVER_999_TOMAN_GRAM', observed_at: '2026-10-17T11:30:00Z', source_summary: tomanSummary }, true),
+  };
+  assert.equal(history.publicationTimeDetails(asset.usd_source_summary, asset.usd_observed_at, 'en'), null);
+  assert.match(history.publicationTimeDetails(asset.toman_source_summary, asset.toman_observed_at, 'en').timestamp, /15:00/);
+  const usdUpdate = stream.canonicalLegDetails({ instrument_id: 'XAG_USD_OZ', observed_at: '2026-10-17T11:31:33Z' }, false);
+  assert.equal(usdUpdate.usd_source_summary, null);
+  assert.equal(Object.hasOwn(usdUpdate, 'toman_source_summary'), false);
+  const updated = { ...asset, ...usdUpdate };
+  assert.equal(updated.toman_source_summary, tomanSummary);
+  const cleared = stream.clearSnapshotPrices({ assets: [updated] }).assets[0];
+  assert.equal(cleared.usd_source_summary, null);
+  assert.equal(cleared.toman_source_summary, null);
+  assert.equal(cleared.usd_observed_at, null);
+  assert.equal(cleared.toman_observed_at, null);
+});
+
 test('parallel renderer failures share one rotation before credential I/O', async () => {
   const shared = sharedSession();
   const client = clientHarness(shared);

@@ -1,11 +1,11 @@
-# Delivery Readiness — 2.8.6
+# Delivery Readiness — 2.8.7
 
 Updated: 2026-10-17. Code delivery and production acceptance are separate facts.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
 | --- | --- | --- | --- |
-| Release consistency | `npm run check:release` | version 2.8.6, no drift | Local |
+| Release consistency | `npm run check:release` | version 2.8.7, no drift | Local |
 | Python static/unit | `python -m pyflakes app tests scripts`; `python -m unittest discover -s tests -v` from apps/api | zero static errors; all required tests pass | Local |
 | Infra fixture behavior | `python scripts/test_infra_contracts.py` | OK | Local, mocked network/data |
 | Browser fixture safety | `TEST_DATABASE_URL=... python scripts/test_browser_fixture.py` | five cases pass, none skipped | Explicit loopback test PostgreSQL, run-owned schema |
@@ -32,6 +32,31 @@ Do not change a pending marker to passed without a saved successful run for the 
 - Keep production evidence outside source control and exclude secrets and customer payloads.
 
 ## Current source release — 2026-10-17
+
+Release 2.8.7 retires Servix and adds reviewed keyless Iranian quote and archive
+routes. Registered archives cover eight of eleven instruments. Full current
+coverage is not established: physical 24K/9999 gold, BTC/USD and USDT/USD still
+lack permitted free Iranian replacements. Target downloads proved connectivity,
+but all seven Nerkhsanj quotes were stale at the recorded receipt. Nobitex hourly
+history returned 403 and remains disabled. See the [replacement report](iranian-replacement-2026-10-17.md)
+for source rights, real-payload replay, database isolation and clock limits.
+
+The live baseline is 2.8.1. Full replacement was selected before deployment;
+neither registration nor passing synthetic tests satisfies that prerequisite.
+Final source tests, hosted checks and deployment receipts must retain separate
+scope. Step three requires real notification receipt after those prerequisites.
+
+Final local API discovery passed **937 cases, zero skips**, using owned loopback
+PostgreSQL and Redis alongside unit, SQLite and mocks. Frontend contracts passed
+78 cases; ten focused mocked Edge cases, strict web source type checks and all
+three renderer builds passed. Thirteen history cases passed on each ordinary
+PostgreSQL and Timescale fixture. The real-Redis shared snapshot/quota/cooldown
+suite passed three cases, followed immediately by sixteen strict rights cases;
+that sequence now runs in hosted integration. Suites overlap and must not be
+summed. Two earlier failed full-suite receipts remain preserved. Hosted final
+commit checks and target delivery still require separately scoped receipts.
+
+## Historical source release — 2.8.4
 
 Release 2.8.4 contains the Iranian price/history work in the [step-two report](provider-step2-2026-10-17.md).
 The local source suite passed 518 backend cases with zero skips, including owned PostgreSQL/Redis

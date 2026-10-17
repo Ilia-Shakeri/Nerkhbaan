@@ -111,7 +111,7 @@ class GoldFeedHttpContractTests(unittest.TestCase):
 
 class GoldFallbackIngestTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.provider = PROVIDERS["gold_api_free_xau"]
+        self.provider = replace(PROVIDERS["gold_api_free_xau"], enabled=True)
         self.operational, self.persistence, self.store = AsyncMock(), AsyncMock(), AsyncMock()
         self.operational.instrument.return_value = get_instrument("XAU_USD_OZ")
         self.operational.providers_for.return_value = (self.provider,)

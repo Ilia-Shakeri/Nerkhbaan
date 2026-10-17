@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Nerkhbaan API",
-    "version": "2.8.6"
+    "version": "2.8.7"
   },
   "paths": {
     "/api/auth/signup": {
@@ -6683,6 +6683,38 @@
             "type": "array",
             "title": "Toman Attributions"
           },
+          "usd_source_summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Usd Source Summary"
+          },
+          "toman_source_summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Toman Source Summary"
+          },
+          "usd_observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usd Observed At"
+          },
+          "toman_observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Toman Observed At"
+          },
           "usd_status": {
             "type": "string",
             "title": "Usd Status"
@@ -7101,7 +7133,10 @@
             "anyOf": [
               {
                 "type": "string",
-                "const": "jalali"
+                "enum": [
+                  "jalali",
+                  "gregorian"
+                ]
               },
               {
                 "type": "null"
@@ -7746,7 +7781,10 @@
             "anyOf": [
               {
                 "type": "string",
-                "const": "jalali"
+                "enum": [
+                  "jalali",
+                  "gregorian"
+                ]
               },
               {
                 "type": "null"

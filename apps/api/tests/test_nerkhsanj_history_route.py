@@ -16,6 +16,7 @@ from app.pricing.models import ProviderRole, RequestPurpose
 from app.pricing.providers import ProviderCallFailure, ProviderQuoteCollector
 from app.pricing.registry import PROVIDERS, instrument_source_coverage, providers_for
 from app.pricing.service import InstrumentPricingService
+from app.pricing.source_snapshots import source_url_digest
 
 
 class NerkhsanjHistoryRouteTests(unittest.IsolatedAsyncioTestCase):
@@ -73,12 +74,13 @@ class NerkhsanjHistoryRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(provider.provider_id, row["registered"])
         self.assertNotIn(provider.provider_id, [row["provider_id"] for row in PricingHealthService().provider_canaries()])
 
-    async def test_family_request_interval_is_atomic_and_cannot_be_lowered_by_route_override(self):
+    async def test_url_request_interval_is_atomic_and_cannot_be_lowered_by_route_override(self):
         provider = self.route()
         store = AsyncMock()
         store.client = lambda: redis
         redis = AsyncMock()
         redis.ttl.return_value = 0
+        redis.pttl.return_value = 0
         redis.eval.return_value = [1, 0, 0]
         budget = RedisRequestBudget(store)
         lowered = replace(provider, budget=replace(provider.budget, minimum_interval_seconds=1))
@@ -86,7 +88,7 @@ class NerkhsanjHistoryRouteTests(unittest.IsolatedAsyncioTestCase):
         args = redis.eval.await_args.args
         count = args[1]
         keys, values = args[2:2 + count], args[2 + count:]
-        key = "pricing:budget:family:nerkhsanj:minimum_interval"
+        key = f"pricing:budget:source:nerkhsanj:{source_url_digest(provider.url)}:minimum_interval"
         self.assertIn(key, keys)
         index = keys.index(key)
         self.assertEqual(values[index * 2:index * 2 + 2], (1, 60))

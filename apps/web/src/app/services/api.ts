@@ -664,6 +664,10 @@ export type PriceAsset = {
   source_toman: string;
   usd_attributions?: SourceAttribution[];
   toman_attributions?: SourceAttribution[];
+  usd_source_summary?: Record<string, unknown> | null;
+  toman_source_summary?: Record<string, unknown> | null;
+  usd_observed_at?: string | null;
+  toman_observed_at?: string | null;
   usd_status: OperationalPriceStatus;
   toman_status: OperationalPriceStatus;
   stale_minutes: number | null;
