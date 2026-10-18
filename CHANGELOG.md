@@ -4,6 +4,11 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
+## [2.8.10] - 2026-10-18
+
+- Update the existing latest-price parameter test for the explicitly typed instrument definition and correlated ordered scan. Keep the parameter, source restrictions and no-untyped-null checks.
+- Preserve tag 2.8.9 and its failed hosted unit-test receipt. Real PostgreSQL permissions and budget tests passed, but the legacy SQL-text assertion failed. This corrective release needs its own full source checks, canonical runtime images and live acceptance.
+
 ## [2.8.9] - 2026-10-18
 
 - Bound current-quote database reads in a read-only transaction. Preserve stricter database timeouts, keep settings local to the read, and let verified Redis snapshots serve through the existing failure path when the database exceeds its budget.

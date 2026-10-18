@@ -186,7 +186,8 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
         self.assertEqual(set(session.calls[0][1]), {"instrument_id", "history_only_sources"})
         self.assertEqual(session.calls[0][1]["instrument_id"], "BTC_USD")
         self.assertTrue(set(RETIRED_PROVIDERS) <= set(session.calls[0][1]["history_only_sources"]))
-        self.assertIn("instrument_id = :instrument_id", session.calls[0][0])
+        self.assertIn("CAST(:instrument_id AS text) AS instrument_id", session.calls[0][0])
+        self.assertIn("instrument_id = definitions.instrument_id", session.calls[0][0])
 
 
 class _BackfillOperational:

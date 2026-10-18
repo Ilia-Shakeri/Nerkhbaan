@@ -1,6 +1,6 @@
 # Nerkhbaan
 
-Current code candidate: **2.8.9**. `VERSION` is the source of release truth.
+Current code candidate: **2.8.10**. `VERSION` is the source of release truth.
 
 Three separately labelled Iranian reference valuations are now available for
 24K gold, BTC/USD and USDT/USD. Published/calculated values retain source age,
