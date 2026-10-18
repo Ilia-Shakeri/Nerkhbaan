@@ -1,8 +1,15 @@
-# Release Operations — 2.8.8
+# Release Operations — 2.8.11
 
 Updated: 2026-10-18. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
 
+The application tag `v2.8.11` points to `9a569550685175f3f7c2859e1474af38edb0f9d5`. Its fifteen source jobs and four hosted runtime builds and strict scans passed. The initial ordinary rollout failed after stopping its first old API; the first explicit recovery then exceeded its 30-second retirement budget because strict API probes ran serially. Both failed receipts remain immutable.
+
+Guard-only commit `25510b00eb4d9ef5fbdb68d5ce1a89c34b19f5f1` batches image inspection and runs the two strict same-ledger API probes concurrently, preserving every validation and the 30-second deadline through removal. Its 48 frozen local cases, 20 independent cases and fifteen hosted jobs in run 39137799260 passed. The actual recovery completed at 15:08:51 UTC on October 18 without rerunning migration. Postdeployment checks completed at 15:10:14, public home/admin browser checks at 15:11:06 and the atomic release pointer at 15:11:42 passed. The two APIs have the exact nine-migration ledger; all five application services use the prepared images. All 22 containers and 17 protected identities were retained through acceptance.
+
+The installed native endpoint completed in 1.683645 seconds. Six prices were present: one live, one fresh cache and four stale; five native contracts were unavailable. The three separate references persisted 887 daily records (297/295/295 days), with 67/69/69 internal missing days across 364 days. All three remain delayed. These receipts do not establish all-live or direct global-dollar/physical-9999 coverage. The original last-change clock remains 14:20 UTC. Follow [the exact recovery contract](normal-deploy-recovery.md) and keep the failed predecessors. Step-three notification source remains Unreleased and outside these application images; actual SMTP, signed Windows installation and device receipt are separate gates.
+
+The following 2.8.8 description and October 17 observations are historical.
 Release 2.8.8 adds three separately labelled reference contracts authorized by
 the user, without asserting physical 9999 gold or global USD market quotes.
 The ninth migration creates a separate reference table; the first eight files

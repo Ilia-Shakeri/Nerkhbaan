@@ -31,6 +31,8 @@ import logo from '../../logo/logo.png';
 import { BarChart3 } from 'lucide-react';
 import { api, type NotificationItem } from '../services/api';
 import { PRICING_RIGHTS_EVENT } from '../services/price-stream';
+import { DESKTOP_OPEN_INBOX } from '../services/desktop-notifications';
+import { logoutIsPending } from '../services/logout-state';
 
 const NAV_ITEMS = [
   { path: '/', label: { fa: 'داشبورد', en: 'Dashboard' }, icon: LayoutDashboard },
@@ -61,6 +63,12 @@ export function DesktopLayout() {
   const notificationGeneration = useRef(0);
   const mobileNavigationRef = useRef<HTMLElement>(null);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const openInbox = () => { if (isAuthenticated && !logoutIsPending()) setIsNotificationsOpen(true); };
+    window.addEventListener(DESKTOP_OPEN_INBOX, openInbox);
+    return () => window.removeEventListener(DESKTOP_OPEN_INBOX, openInbox);
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const showApiError = (event: Event) => {

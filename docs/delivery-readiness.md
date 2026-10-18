@@ -31,7 +31,15 @@ Do not change a pending marker to passed without a saved successful run for the 
 - Existing compressed chunks and market-price duplicates need target database checks before uniqueness changes.
 - Keep production evidence outside source control and exclude secrets and customer payloads.
 
-## Current reference release — 2.8.8
+## Current installed application — 2.8.11
+
+The immutable application source is `9a569550685175f3f7c2859e1474af38edb0f9d5`. Its fifteen source jobs and four hosted runtime builds and strict scans passed. Recovery guard `25510b00eb4d9ef5fbdb68d5ce1a89c34b19f5f1` passed 48 frozen local cases, 20 independent cases and fifteen hosted jobs in run 39137799260. The actual wrapper completed on October 18 at 15:08:51 UTC, postdeployment at 15:10:14, public home/admin browser checks at 15:11:06 and the atomic current pointer at 15:11:42. Both APIs run the exact nine-migration ledger; 22 containers remain, with 17 protected identities unchanged. The two earlier deployment failures and both older native timeout receipts remain false.
+
+One public native GET completed in 1.683645 seconds and one reference GET passed schema and durable aggregate checks. Six native prices were present: one live, one fresh cache and four stale; five contracts were unavailable. The three separately labelled references have 297/295/295 actual daily records and 67/69/69 internal missing days across 364 days. All three remain delayed at the original 14:20 UTC last-change clock. Full direct coverage and overall product acceptance remain false; source latency and history gaps are visible. See [the current roadmap](client-delivery-roadmap-fa.md).
+
+Step-three code remains Unreleased and outside the installed images. Its local backend, frontend and mocked browser receipts are separate and overlap. Real SMTP mailbox receipt, publisher signing and installed Windows device consent, notice and click remain required. No manual customer notification or mail was sent by these checks. See [step-three scope and keys](step3-notifications-2026-10-18.md).
+
+## Historical reference release — 2.8.8
 
 The user accepted explicitly labelled published/calculated references for 24K
 gold, BTC/USD and USDT/USD. Three new identities and a separate ninth migration

@@ -34,6 +34,7 @@ function contextHarness(pending = false) {
     '../services/api': { api: { auth: { me: () => { profiles++; return initial.promise; } } } },
     '../services/logout': { requestLogout: async () => { signouts++; } },
     '../services/logout-state': { logoutIsPending: () => pending, subscribeLogoutStatus: listener => { logoutListener = listener; return () => {}; } },
+    '../services/desktop-notification-session': { startDesktopNoticeSession() {}, revokeDesktopNoticeSession() {} },
     '@/pwa/push': { disablePushNotifications: async () => {}, syncPushSubscription: async () => { syncs++; } },
     '../legal/storage': { readPreference: () => null, rememberPreference() {} },
   };

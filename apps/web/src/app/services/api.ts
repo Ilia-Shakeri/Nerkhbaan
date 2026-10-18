@@ -222,8 +222,8 @@ export const api = {
     async resetPassword(payload: { email: string; code: string; new_password: string }): Promise<void> {
       await apiInstance.post('auth/reset-password', payload);
     },
-    async me(): Promise<UserProfile> {
-      const { data } = await apiInstance.get<UserProfile>('auth/me');
+    async me(signal?: AbortSignal): Promise<UserProfile> {
+      const { data } = await apiInstance.get<UserProfile>('auth/me', { signal });
       return data;
     },
     async changePassword(payload: { current_password: string; new_password: string }): Promise<void> {
@@ -321,9 +321,11 @@ export const api = {
   notifications: {
     async list(signal?: AbortSignal): Promise<NotificationItem[]> {
       const epoch = currentRightsEpoch();
+      const generation = logoutGeneration();
+      if (logoutIsPending()) throw new Error('Sign-out is in progress');
       if (rightsArePending()) throw new Error('Source permission is being checked; retry shortly');
       const { data } = await apiInstance.get<NotificationItem[] | { items?: NotificationItem[]; notifications?: NotificationItem[] }>('notifications', { signal });
-      if (epoch !== currentRightsEpoch()) throw new Error('Source permission changed; request fresh notices');
+      if (signal?.aborted || logoutIsPending() || generation !== logoutGeneration() || rightsArePending() || epoch !== currentRightsEpoch()) throw new Error('Notice request is no longer current');
       if (Array.isArray(data)) return data;
       return data.notifications ?? data.items ?? [];
     },
@@ -336,8 +338,11 @@ export const api = {
     async readAll(): Promise<void> {
       await apiInstance.post('notifications/read-all');
     },
-    async preferences(): Promise<NotificationPreferences> {
-      const { data } = await apiInstance.get<NotificationPreferences>('notifications/preferences');
+    async preferences(signal?: AbortSignal): Promise<NotificationPreferences> {
+      const generation = logoutGeneration();
+      if (logoutIsPending()) throw new Error('Sign-out is in progress');
+      const { data } = await apiInstance.get<NotificationPreferences>('notifications/preferences', { signal });
+      if (signal?.aborted || logoutIsPending() || generation !== logoutGeneration()) throw new Error('Preference request is no longer current');
       return data;
     },
     async setBasic(key: 'push_app' | 'silent_mode' | 'aggressive_alerts', enabled: boolean): Promise<NotificationPreferences> {
@@ -464,6 +469,8 @@ export type TelegramDeepLink = {
 };
 
 export type NotificationItem = {
+  resource_type?: string | null;
+  resource_id?: string | null;
   id: number | string;
   title: string;
   message: string;

@@ -1,3 +1,4 @@
+import { revokeDesktopNoticeSession } from './desktop-notification-session';
 export const LOGOUT_PENDING_KEY = 'nerkhbaan-logout-pending';
 const LOGOUT_EVENT = 'logout-state-changed';
 let pending = false;
@@ -34,6 +35,7 @@ export const logoutGeneration = () => generation;
 export const getLogoutStatus = (): 'idle' | 'pending' | 'failed' => logoutIsPending() ? attempting ? 'pending' : 'failed' : 'idle';
 
 export function beginLogout(): void {
+  revokeDesktopNoticeSession();
   pending = true;
   attempting = true;
   generation++;
@@ -60,6 +62,7 @@ export function subscribeLogoutStatus(listener: () => void): () => void {
     pending = event.newValue === '1';
     attempting = false;
     generation++;
+    revokeDesktopNoticeSession();
     listener();
   };
   window.addEventListener(LOGOUT_EVENT, listener);

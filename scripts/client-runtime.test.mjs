@@ -9,7 +9,7 @@ const root = path.resolve(import.meta.dirname, '..');
 function moduleAt(file, globals, imports) {
   const source = readFileSync(path.join(root, file), 'utf8').replaceAll('import.meta.env', '__env');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const context = { exports: {}, require: name => imports[name] ?? (name.endsWith('logout-state') ? { logoutIsPending: () => false, logoutGeneration: () => 0 } : undefined), URL, Event, CustomEvent, setTimeout, clearTimeout, console, ...globals };
+  const context = { exports: {}, require: name => imports[name] ?? (name.endsWith('logout-state') ? { logoutIsPending: () => false, logoutGeneration: () => 0 } : name.endsWith('desktop-notification-session') ? { revokeDesktopNoticeSession() {} } : undefined), URL, Event, CustomEvent, setTimeout, clearTimeout, console, ...globals };
   vm.runInNewContext(compiled, context, { filename: file });
   return context.exports;
 }

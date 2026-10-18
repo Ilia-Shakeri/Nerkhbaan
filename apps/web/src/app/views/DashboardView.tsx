@@ -13,6 +13,7 @@ import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { ReferenceRatesPanel } from '../components/ReferenceRatesPanel';
+import { subscribePricesConnection } from '../services/prices-connection';
 import { toast } from 'sonner';
 import { formatHistoryTimestamp, historyTimeInfoForCurrency, isDailyHistory, publicationTimeDetails, type HistoryTimeInfo } from '../services/history-time';
 import { acceptRightsRevision, canonicalLegDetails, clearSnapshotPrices, currentRightsRevision, PRICING_RIGHTS_EVENT, safeAttributions } from '../services/price-stream';
@@ -21,7 +22,6 @@ import {
   formatPrice,
   getPriceHistory,
   getPrices,
-  getPricesWebSocketUrl,
   queryKeys,
   type CurrencyMode,
   type InstrumentSourcesResponse,
@@ -602,13 +602,6 @@ export function DashboardView() {
   });
 
   useEffect(() => {
-    let stopped = false;
-    let socket: WebSocket | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let retryCount = 0;
-    let lastMessageAt = Date.now();
-    const heartbeatTimeout = Math.max(Number(import.meta.env.VITE_WS_HEARTBEAT_TIMEOUT_MS) || 45_000, 15_000);
-
     const mergeMessage = (message: unknown): void => {
       if (!message || typeof message !== 'object') return;
       const root = message as Record<string, unknown>;
@@ -725,61 +718,14 @@ export function DashboardView() {
       });
     };
 
-    const connect = () => {
-      if (stopped || !navigator.onLine) {
-        setSocketStatus('fallback');
-        return;
-      }
-      setSocketStatus('connecting');
-      socket = new WebSocket(getPricesWebSocketUrl());
-      socket.onopen = () => {
-        retryCount = 0;
-        lastMessageAt = Date.now();
-        lastWsEventsRef.current.clear();
-        setSocketStatus('live');
-      };
-      socket.onmessage = (event) => {
-        lastMessageAt = Date.now();
-        try {
-          mergeMessage(JSON.parse(event.data));
-        } catch {
-          // A bad event does not end a healthy socket or start duplicate polling.
-        }
-      };
-      socket.onerror = () => socket?.close();
-      socket.onclose = () => {
-        if (stopped) return;
-        setSocketStatus('fallback');
-        void queryClient.invalidateQueries({ queryKey: queryKeys.prices });
-        retryCount += 1;
-        const baseDelay = Math.min(1_000 * 2 ** Math.max(retryCount - 1, 0), 30_000);
-        const delayWithJitter = Math.round(baseDelay * (0.8 + Math.random() * 0.4));
-        retryTimer = setTimeout(connect, delayWithJitter);
-      };
-    };
-    const reconnectWhenOnline = () => {
-      if (retryTimer) clearTimeout(retryTimer);
-      if (!socket || socket.readyState === WebSocket.CLOSED) connect();
-    };
-    const switchToPolling = () => {
-      setSocketStatus('fallback');
-      socket?.close();
-    };
-
-    connect();
-    const watchdog = setInterval(() => {
-      if (socket?.readyState === WebSocket.OPEN && Date.now() - lastMessageAt > heartbeatTimeout) socket.close();
-    }, 5_000);
-    window.addEventListener('online', reconnectWhenOnline);
-    window.addEventListener('offline', switchToPolling);
-    return () => {
-      stopped = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      clearInterval(watchdog);
-      socket?.close();
-      window.removeEventListener('online', reconnectWhenOnline);
-      window.removeEventListener('offline', switchToPolling);
-    };
+    return subscribePricesConnection({
+      message: mergeMessage,
+      status: value => {
+        setSocketStatus(value);
+        if (value === 'live') lastWsEventsRef.current.clear();
+        if (value === 'fallback') void queryClient.invalidateQueries({ queryKey: queryKeys.prices });
+      },
+    });
   }, [queryClient]);
 
   const pricesData = pricesQuery.data?.assets ?? EMPTY_ASSETS;

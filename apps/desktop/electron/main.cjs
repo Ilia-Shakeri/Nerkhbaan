@@ -1,11 +1,13 @@
-const { app, BrowserWindow, ipcMain, safeStorage, session, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, session, shell, protocol, net, Notification, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
+const { CHANNELS, configureWindowsIdentity, createNotificationController, registerNotificationIpc } = require('./native-notifications.cjs');
 
 const isDev = !app.isPackaged;
 
 let mainWindow = null;
+const nativeIdentityReady = configureWindowsIdentity(app, process.platform);
 
 app.setName('Nerkhbaan');
 const profileDirectory = app.commandLine.getSwitchValue('user-data-dir');
@@ -41,6 +43,40 @@ const isTrustedRenderer = (event) => {
     return false;
   }
 };
+
+const currentFrameIsTrusted = () => Boolean(mainWindow && !mainWindow.isDestroyed()
+  && !mainWindow.webContents.isDestroyed() && isAppUrl(mainWindow.webContents.mainFrame.url));
+
+const nativeNotifications = createNotificationController({
+  platform: process.platform,
+  packaged: app.isPackaged,
+  identityReady: nativeIdentityReady,
+  isSupported: () => Notification.isSupported(),
+  isTrusted: isTrustedRenderer,
+  isCurrentFrameTrusted: currentFrameIsTrusted,
+  askConsent: async (copy, signal) => {
+    if (!currentFrameIsTrusted()) return false;
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'question', title: 'Nerkhbaan', message: copy.consent,
+      buttons: [copy.cancel, copy.enable], defaultId: 0, cancelId: 0, noLink: true, signal,
+    });
+    return result.response === 1;
+  },
+  createNotification: options => new Notification(options),
+  setActive: active => {
+    if (mainWindow && !mainWindow.webContents.isDestroyed()) mainWindow.webContents.setBackgroundThrottling(!active);
+  },
+  focusWindow: () => {
+    if (!currentFrameIsTrusted()) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  },
+  openInbox: scope => {
+    if (currentFrameIsTrusted()) mainWindow.webContents.send(CHANNELS.openInbox, scope);
+  },
+});
+registerNotificationIpc(ipcMain, nativeNotifications);
 
 const credentialsPath = () => path.join(app.getPath('userData'), 'session-credentials.bin');
 
@@ -101,6 +137,7 @@ ipcMain.handle('auth-set-credentials', async (event, value) => {
 
 ipcMain.handle('auth-clear-credentials', async (event) => {
   if (!isTrustedRenderer(event)) throw new Error('Untrusted renderer');
+  nativeNotifications.revoke();
   await fs.promises.rm(credentialsPath(), { force: true });
 });
 
@@ -169,8 +206,14 @@ function createWindow() {
     }
   });
   mainWindow.webContents.on('will-attach-webview', (event) => event.preventDefault());
+  mainWindow.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) nativeNotifications.revoke();
+  });
+  mainWindow.webContents.on('render-process-gone', () => nativeNotifications.revoke());
+  mainWindow.webContents.on('destroyed', () => nativeNotifications.revoke());
 
   mainWindow.on('closed', () => {
+    nativeNotifications.revoke();
     mainWindow = null;
   });
 
@@ -239,6 +282,8 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+app.on('before-quit', () => nativeNotifications.revoke());
 
 app.on('activate', () => {
   if (mainWindow === null) {

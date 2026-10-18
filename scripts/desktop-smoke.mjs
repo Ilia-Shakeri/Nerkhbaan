@@ -59,6 +59,28 @@ try {
   assert.match(page.url(), /^nerkhbaan:\/\/app\/index\.html#/);
   assert.equal(await page.evaluate(() => window.isSecureContext), true);
   assert.equal(await page.evaluate(() => Boolean(window.electronAPI?.auth)), true);
+  const nativeBridge = await page.evaluate(async () => {
+    const bridge = window.electronAPI?.notifications;
+    if (!bridge) return null;
+    const initial = await bridge.status();
+    const stop = bridge.onOpenInbox(() => {});
+    stop(); stop();
+    return {
+      methods: Object.keys(bridge).sort(), frozen: Object.isFrozen(bridge), initial,
+      malformedEnable: await bridge.enableSession({ version: 0 }),
+      malformedShow: await bridge.showPending({ version: 0 }),
+      malformedLease: await bridge.refreshLease({ version: 0 }),
+    };
+  });
+  assert.ok(nativeBridge);
+  assert.deepEqual(nativeBridge.methods, ['disableSession', 'enableSession', 'onOpenInbox', 'refreshLease', 'showPending', 'status']);
+  assert.equal(nativeBridge.frozen, true);
+  assert.equal(typeof nativeBridge.initial.supported, 'boolean');
+  assert.equal(nativeBridge.initial.optedIn, false);
+  assert.equal(nativeBridge.initial.leaseActive, false);
+  assert.equal(nativeBridge.malformedEnable, false);
+  assert.equal(nativeBridge.malformedShow, false);
+  assert.equal(nativeBridge.malformedLease, false);
   const assetStatus = await page.evaluate(async () => (await fetch('nerkhbaan://app/icons/logo.png')).status);
   assert.equal(assetStatus, 200);
   const blocked = await application.evaluate(async ({ net }) => {
@@ -91,8 +113,14 @@ try {
   await page.waitForFunction(async () => await window.electronAPI.auth.getCredentials() === null, null, { timeout: 15_000 });
   assert.ok(signoutCalls > signoutBefore);
   await assert.rejects(readFile(path.join(profile, 'session-credentials.bin')), { code: 'ENOENT' });
+  const nativeAfterLogout = await page.evaluate(() => window.electronAPI.notifications.status());
+  assert.equal(nativeAfterLogout.optedIn, false);
+  assert.equal(nativeAfterLogout.leaseActive, false);
+  assert.ok(nativeAfterLogout.sessionGeneration > nativeBridge.initial.sessionGeneration);
   const appUrl = new URL(page.url());
   Object.assign(receipt, { packaged: runtime.packaged, version: runtime.version, secure_context: true, local_origin: `${appUrl.protocol}//${appUrl.host}`, asset_http_status: assetStatus, blocked_paths: blocked, synthetic_ui_signin: true, synthetic_ui_signout: true, encrypted_at_rest: true, session_file_removed_on_logout: true, passed: true });
+  Object.assign(receipt, { native_bridge_methods: nativeBridge.methods, native_bridge_default_off: true,
+    native_bridge_malformed_requests_denied: true, native_session_revoked_on_logout: true, native_os_send_executed: false });
   console.log('DESKTOP_SMOKE_OK: packaged protocol, secure context, assets, path guards, isolated encrypted credentials, synthetic sign-in and UI logout');
 } finally {
   await application?.close();

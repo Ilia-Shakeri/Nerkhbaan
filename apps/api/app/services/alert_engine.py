@@ -1036,7 +1036,7 @@ class AlertEngine:
             self._prune_subscriptions(expired_endpoints)
 
         if delivered == 0:
-            if expired_endpoints:
+            if len(expired_endpoints) == len(targets):
                 raise PermanentDeliveryError("All push subscriptions expired")
             raise RuntimeError("No push subscription accepted the notification")
         logger.info("Push delivered for alert_id=%s to %s endpoint(s)", alert.id, delivered)

@@ -1,0 +1,13 @@
+import { defineConfig, devices } from '@playwright/test';
+export default defineConfig({
+  testDir: '../tests/e2e',
+  testMatch: ['desktop-native-notices.spec.ts', 'client-logout.spec.ts', 'source-rights.spec.ts', 'iranian-reference-rates.spec.ts'],
+  workers: 1, timeout: 45_000,
+  use: { baseURL: 'http://127.0.0.1:4177', trace: 'retain-on-failure' },
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'], ...(process.env.PLAYWRIGHT_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHANNEL } : {}) } }],
+  webServer: {
+    command: 'npm run dev --workspace=nerkhbaan-web -- --host 127.0.0.1 --port 4177',
+    url: 'http://127.0.0.1:4177/auth', reuseExistingServer: false,
+    env: { VITE_API_URL: '/api' },
+  },
+});

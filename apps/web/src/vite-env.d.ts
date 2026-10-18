@@ -13,6 +13,7 @@ interface ImportMeta {
 
 interface Window {
   electronAPI?: {
+    notifications?: import('./app/services/desktop-notification-types').DesktopNotificationBridge;
     minimizeWindow?: () => void;
     maximizeWindow?: () => void;
     toggleMaximizeWindow?: () => void;

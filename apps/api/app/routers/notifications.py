@@ -13,7 +13,6 @@ import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import BaseModel, EmailStr, Field, TypeAdapter
 from sqlalchemy import select, update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import settings
@@ -116,28 +115,46 @@ class NotificationItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
-def _prefs_for(db: Session, user_id: int) -> NotificationPreference:
-    prefs = db.scalar(select(NotificationPreference).where(NotificationPreference.user_id == user_id))
+def _lock_notification_owner(db: Session, user_id: int) -> None:
+    # Pending child inserts must not take a foreign-key share lock first.
+    owner = db.scalar(
+        select(User).where(User.id == user_id).with_for_update()
+        .execution_options(populate_existing=True, autoflush=False)
+    )
+    if owner is None or not owner.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is not active")
+
+
+def _prefs_for(db: Session, user_id: int, *, commit: bool = True) -> NotificationPreference:
+    statement = select(NotificationPreference).where(NotificationPreference.user_id == user_id)
+    prefs = db.scalar(statement.execution_options(populate_existing=True, autoflush=False))
+    if prefs:
+        return prefs
+    # Missing preferences use the same owner lock as challenge issuance and
+    # consumption, including callers that keep the default commit behaviour.
+    _lock_notification_owner(db, user_id)
+    prefs = db.scalar(statement.execution_options(populate_existing=True, autoflush=False))
     if prefs:
         return prefs
     prefs = NotificationPreference(user_id=user_id)
     db.add(prefs)
-    try:
+    db.flush()
+    if commit:
         db.commit()
-    except IntegrityError:
-        # Two concurrent requests can both find no row; the unique index
-        # decides, and the loser simply reads what the winner inserted.
-        db.rollback()
-        prefs = db.scalar(
-            select(NotificationPreference).where(
-                NotificationPreference.user_id == user_id
-            )
-        )
-        if prefs is None:
-            raise
-        return prefs
-    db.refresh(prefs)
+        db.refresh(prefs)
     return prefs
+
+
+def _invalidate_otp_challenges(db: Session, user_id: int, channel: str) -> None:
+    db.execute(
+        update(OtpVerification)
+        .where(
+            OtpVerification.user_id == user_id,
+            OtpVerification.channel == channel,
+            OtpVerification.used.is_(False),
+        )
+        .values(used=True)
+    )
 
 
 def _to_response(prefs: NotificationPreference) -> NotificationPreferencesResponse:
@@ -260,14 +277,7 @@ def _telegram_token_hash(token: str) -> str:
 
 
 def _prefs_for_transaction(db: Session, user_id: int) -> NotificationPreference:
-    prefs = db.scalar(
-        select(NotificationPreference).where(NotificationPreference.user_id == user_id)
-    )
-    if prefs is None:
-        prefs = NotificationPreference(user_id=user_id)
-        db.add(prefs)
-        db.flush()
-    return prefs
+    return _prefs_for(db, user_id, commit=False)
 
 
 def _send_telegram_verification(destination: str, code: str) -> None:
@@ -483,6 +493,8 @@ def start_otp(
             detail="Too many verification requests for this destination.",
             headers={"Retry-After": str(destination_state.retry_after)},
         )
+    _lock_notification_owner(db, current_user.id)
+    _invalidate_otp_challenges(db, current_user.id, payload.channel)
     code = f"{secrets.randbelow(1_000_000):06d}"
     verification = OtpVerification(
         user_id=current_user.id,
@@ -528,20 +540,28 @@ def confirm_otp(
             detail="Too many verification attempts. Please retry later.",
             headers={"Retry-After": str(rate_state.retry_after)},
         )
+    _lock_notification_owner(db, current_user.id)
     verification = db.scalar(
         select(OtpVerification)
         .where(
             OtpVerification.user_id == current_user.id,
             OtpVerification.channel == payload.channel,
-            OtpVerification.destination == destination,
-            OtpVerification.used.is_(False),
         )
-        .order_by(OtpVerification.created_at.desc())
+        .order_by(OtpVerification.id.desc())
+        .limit(1)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
-    if not verification or verification.expires_at <= datetime.now(UTC) or not verify_password(payload.code, verification.code_hash):
+    if (
+        not verification
+        or verification.used
+        or verification.destination != destination
+        or verification.expires_at <= datetime.now(UTC)
+        or not verify_password(payload.code, verification.code_hash)
+    ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
 
-    prefs = _prefs_for(db, current_user.id)
+    prefs = _prefs_for(db, current_user.id, commit=False)
     if payload.channel == "sms":
         prefs.sms_enabled = True
         prefs.sms_phone = destination
@@ -551,6 +571,7 @@ def confirm_otp(
         prefs.email_address = destination
         prefs.email_verified = True
     verification.used = True
+    _invalidate_otp_challenges(db, current_user.id, payload.channel)
     db.commit()
     rate_limit_clear("notification-otp-confirm", confirmation_identity)
     db.refresh(prefs)
@@ -768,7 +789,9 @@ def disable_channel(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationPreferencesResponse:
-    prefs = _prefs_for(db, current_user.id)
+    if channel in {"email", "sms"}:
+        _lock_notification_owner(db, current_user.id)
+    prefs = _prefs_for(db, current_user.id, commit=channel == "telegram")
     if channel == "sms":
         prefs.sms_enabled = False
         prefs.sms_verified = False
@@ -787,6 +810,8 @@ def disable_channel(
             )
             .values(used=True)
         )
+    if channel in {"email", "sms"}:
+        _invalidate_otp_challenges(db, current_user.id, channel)
     db.commit()
     db.refresh(prefs)
     return _to_response(prefs)

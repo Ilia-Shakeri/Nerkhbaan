@@ -4,6 +4,7 @@ import { AppProvider, useAppContext } from "@/app/context/AppContext";
 import { Toaster } from "sonner";
 import { useCallback, useEffect, useState, useRef } from "react";
 import { SplashScreen } from "@/app/components/SplashScreen";
+import { DesktopNotificationsBridge } from './components/DesktopNotificationsBridge';
 import { applyPendingUpdate } from "@/pwa/registerServiceWorker";
 import { logoutAuthPath } from './services/logout-state';
 import { motion, AnimatePresence, MotionConfig } from "motion/react";
@@ -112,6 +113,7 @@ export function App() {
       <MotionConfig reducedMotion="user">
         <Router>
           <AuthEventsBridge />
+          <DesktopNotificationsBridge />
           <AppContent />
           <Toaster position="top-center" richColors />
         </Router>

@@ -14,6 +14,7 @@ import { syncPushSubscription } from '@/pwa/push';
 import { requestLogout } from '../services/logout';
 import { logoutIsPending, subscribeLogoutStatus } from '../services/logout-state';
 import { readPreference, rememberPreference } from '../legal/storage';
+import { revokeDesktopNoticeSession, startDesktopNoticeSession } from '../services/desktop-notification-session';
 
 type Language = 'fa' | 'en';
 type Theme = 'dark' | 'light';
@@ -73,6 +74,7 @@ export function AppProvider({
     api.auth.me()
       .then((user) => {
         if (current()) {
+          startDesktopNoticeSession();
           setIsAuthenticated(true);
           setMustChangePassword(user.must_change_password);
           // A subscription created before sign-in is stored with no account
@@ -82,6 +84,7 @@ export function AppProvider({
       })
       .catch(() => {
         if (current()) {
+          revokeDesktopNoticeSession();
           setIsAuthenticated(false);
           setMustChangePassword(false);
         }
@@ -97,6 +100,7 @@ export function AppProvider({
   useEffect(() => subscribeLogoutStatus(() => {
     if (!logoutIsPending()) return;
     authGeneration.current++;
+    revokeDesktopNoticeSession();
     setIsAuthenticated(false);
     setMustChangePassword(false);
     setAuthReady(true);
@@ -124,6 +128,7 @@ export function AppProvider({
   const login = useCallback((user: UserProfile) => {
     if (logoutIsPending()) return;
     authGeneration.current++;
+    startDesktopNoticeSession();
     setIsAuthenticated(true);
     setMustChangePassword(user.must_change_password);
     setAuthReady(true);
@@ -131,6 +136,7 @@ export function AppProvider({
   }, []);
 
   const logout = useCallback(() => {
+    revokeDesktopNoticeSession();
     authGeneration.current++;
     setIsAuthenticated(false);
     setMustChangePassword(false);

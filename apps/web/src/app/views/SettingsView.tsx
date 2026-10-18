@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { Activity, Bell, CheckCircle2, Languages, LifeBuoy, Mail, Moon, Repeat, Send, ShieldCheck, Smartphone, Sun, VolumeX } from 'lucide-react';
@@ -10,6 +10,7 @@ import { useAppContext } from '../context/AppContext';
 import { api, type NotificationPreferences, type TelegramDeepLink, type UserSession } from '../services/api';
 import { disablePushNotifications, enablePushNotifications, hasPushSubscription, pushIsConfigured, pushIsSupported } from '@/pwa/push';
 import { toast } from 'sonner';
+import { desktopNotifications } from '../services/desktop-notifications';
 
 type OtpPanel = 'sms' | 'email' | null;
 
@@ -50,6 +51,8 @@ export function SettingsView() {
   const [isSaving, setIsSaving] = useState(false);
   const [pushActive, setPushActive] = useState(false);
   const [sessions, setSessions] = useState<UserSession[]>([]);
+  const nativeNotice = useSyncExternalStore(desktopNotifications.subscribe, desktopNotifications.snapshot);
+  const nativeDesktop = Boolean(window.electronAPI?.notifications);
 
   const t = {
     title: { fa: 'تنظیمات', en: 'Settings' },
@@ -61,6 +64,9 @@ export function SettingsView() {
     darkThemeSub: { fa: 'تغییر ظاهر برنامه به حالت شب', en: 'Switch to night appearance' },
     languageSet: { fa: 'زبان برنامه', en: 'App Language' },
     pushApp: { fa: 'اعلان درون‌برنامه‌ای', en: 'In-App Notifications' },
+    nativeNotice: { fa: 'اعلان ویندوز برای این نشست', en: 'Windows notices for this session' },
+    nativeHelp: { fa: 'فقط خبر وجود هشدار؛ جزئیات و قیمت در برنامه می‌ماند. برنامه باید باز بماند. پس از خروج یا تغییر دسترسی دوباره روشن کنید.', en: 'Only a generic alert notice; details and prices stay in the app. Keep the app open. Enable again after sign-out or a permission change.' },
+    nativeBlocked: { fa: 'اعلان متوقف شد؛ دسترسی و اتصال را بررسی و دوباره روشن کنید.', en: 'Notices stopped. Check access and connection, then enable again.' },
     sms: { fa: 'پیامک', en: 'SMS' },
     email: { fa: 'ایمیل', en: 'Email' },
     telegram: { fa: 'ربات تلگرام', en: 'Telegram Bot' },
@@ -132,14 +138,15 @@ export function SettingsView() {
   const iconWrap = (tone: string) => `flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`;
 
   const saveBasic = async (key: 'push_app' | 'silent_mode' | 'aggressive_alerts', enabled: boolean) => {
+    if ((key === 'push_app' && !enabled) || key === 'silent_mode') desktopNotifications.disable();
     const previous = prefs;
     setPrefs((prev) => ({ ...prev, [key]: enabled }));
     setIsSaving(true);
     try {
-      if (key === 'push_app' && enabled && !await enablePushNotifications()) throw new Error(language === 'fa' ? 'اجازه اعلان داده نشد یا این مرورگر آماده نیست.' : 'Notifications are not permitted or this browser is not ready.');
+      if (key === 'push_app' && enabled && !nativeDesktop && !await enablePushNotifications()) throw new Error(language === 'fa' ? 'اجازه اعلان داده نشد یا این مرورگر آماده نیست.' : 'Notifications are not permitted or this browser is not ready.');
       setPrefs(await api.notifications.setBasic(key, enabled));
       if (key === 'push_app') {
-        if (!enabled) await disablePushNotifications();
+        if (!enabled && !nativeDesktop) await disablePushNotifications();
         setPushActive(enabled);
       }
     } catch (error) {
@@ -308,8 +315,18 @@ export function SettingsView() {
         <Card className={cardCls}>
           <div className={rowCls}>
             <div className="flex items-center gap-4"><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><Bell size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.pushApp[language]}</span></div>
-            <Switch disabled={!prefs.push_available || !pushIsConfigured() || !pushIsSupported() || isSaving} checked={prefs.push_available && prefs.push_app && pushActive} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} aria-label={t.pushApp[language]} />
+            <Switch disabled={isSaving || (!nativeDesktop && (!prefs.push_available || !pushIsConfigured() || !pushIsSupported()))} checked={nativeDesktop ? prefs.push_app : prefs.push_available && prefs.push_app && pushActive} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} aria-label={t.pushApp[language]} />
           </div>
+          {nativeDesktop && <div className={rowCls}>
+            <div className="flex items-center gap-4"><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><Bell size={20} /></div>
+              <div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.nativeNotice[language]}</span>
+                <p className="mt-1 max-w-xl text-xs leading-6 text-slate-500">{t.nativeHelp[language]}</p>
+                {nativeNotice.reason === 'blocked' && <p role="status" className="text-xs text-amber-500">{t.nativeBlocked[language]}</p>}
+                {!nativeNotice.supported && <p className="text-xs text-slate-500">{t.unavailable[language]}</p>}
+              </div></div>
+            <Switch disabled={!nativeNotice.supported || !prefs.push_app || isSaving} checked={nativeNotice.optedIn || nativeNotice.pending}
+              onCheckedChange={(value: boolean) => { if (value) void desktopNotifications.enable(language); else desktopNotifications.disable(); }} aria-label={t.nativeNotice[language]} />
+          </div>}
           <div>
             <div className={rowCls}>
               <div className="flex items-center gap-4"><div className={iconWrap('bg-emerald-500/10 text-emerald-400')}><Smartphone size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.sms[language]}</span>{prefs.sms_verified && <span className="ms-2 inline-flex items-center gap-1 text-xs text-emerald-400"><CheckCircle2 size={13} />{t.verified[language]}</span>}{!prefs.sms_available && <span className="ms-2 text-xs text-slate-500">{t.unavailable[language]}</span>}</div></div>
