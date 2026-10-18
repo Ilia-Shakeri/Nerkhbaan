@@ -241,6 +241,10 @@ def verified_scan_findings(scan, item):
     return findings
 
 
+def nginx_probe_command(common, image_id):
+    return common + ["--cap-add", "CHOWN", "--tmpfs", "/var/cache/nginx:rw,nosuid,nodev,size=16m", "--tmpfs", "/var/run:rw,nosuid,nodev,size=1m", "--entrypoint", "nginx", image_id, "-t"]
+
+
 class RuntimeBuild:
     def __init__(self, args):
         self.args = args
@@ -345,7 +349,7 @@ class RuntimeBuild:
                 )
                 checks[kind] = json.loads(self.logged("runtime-api-check.log", common + ["--tmpfs", "/tmp:rw,nosuid,nodev,noexec,size=32m", "--entrypoint", "python", item["image_id"], "-c", script], timeout=120))
             elif kind in ["web", "admin-web"]:
-                self.logged("runtime-" + kind + "-nginx.log", common + ["--tmpfs", "/var/cache/nginx:rw,nosuid,nodev,size=16m", "--tmpfs", "/var/run:rw,nosuid,nodev,size=1m", "--entrypoint", "nginx", item["image_id"], "-t"], timeout=60)
+                self.logged("runtime-" + kind + "-nginx.log", nginx_probe_command(common, item["image_id"]), timeout=60)
                 for name, target in [("nginx.conf", "/etc/nginx/conf.d/default.conf"), ("security-headers.conf", "/etc/nginx/security-headers.inc")]:
                     assert run(common + ["--entrypoint", "cat", item["image_id"], target]) == (self.source / "apps" / kind / name).read_bytes()
                 raw = run(common + ["--entrypoint", "sh", item["image_id"], "-c", "tar -C /usr/share/nginx/html -cf - ."])
@@ -356,7 +360,7 @@ class RuntimeBuild:
                         if member.isfile():
                             files[member.name.removeprefix("./")] = archive.extractfile(member).read()
                 assert files.get("index.html")
-                record = {"image_id": item["image_id"], "static_files": len(files), "nginx_source_config_matched": True, "security_headers_source_matched": True, "nginx_config_passed": True, "static_sha256": {"./" + name: hashlib.sha256(raw).hexdigest() for name, raw in files.items()}}
+                record = {"image_id": item["image_id"], "static_files": len(files), "nginx_source_config_matched": True, "security_headers_source_matched": True, "nginx_config_passed": True, "probe_cap_add": ["CHOWN"], "static_sha256": {"./" + name: hashlib.sha256(raw).hexdigest() for name, raw in files.items()}}
                 scripts = {name: raw for name, raw in files.items() if name.endswith(".js")}
                 assert scripts
                 if kind == "web":
@@ -444,6 +448,17 @@ class RuntimeBuild:
 
 
 class OfflineContracts(unittest.TestCase):
+    def test_nginx_probe_adds_only_chown_with_network_readonly_and_other_caps_dropped(self):
+        common = ["docker", "run", "--rm", "--pull=never", "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--label", "org.nerkhbaan.owner=fixture"]
+        command = nginx_probe_command(common, "sha256:" + "a" * 64)
+        self.assertEqual(command[:len(common)], common)
+        self.assertEqual([command[index + 1] for index, value in enumerate(command) if value == "--cap-add"], ["CHOWN"])
+        self.assertEqual(command[-3:], ["nginx", "sha256:" + "a" * 64, "-t"])
+        self.assertNotIn("--privileged", command)
+        self.assertNotIn("--network=host", command)
+        self.assertNotIn("--cap-add=ALL", command)
+        self.assertNotIn("SYS_ADMIN", command)
+
     def test_published_client_key_requires_exact_hash_alphabet_and_public_point(self):
         self.assertEqual(validated_public_key(), EXISTING_PUBLIC_KEY)
         for value in [EXISTING_PUBLIC_KEY + "x", EXISTING_PUBLIC_KEY[:-1] + "!", "A" + EXISTING_PUBLIC_KEY[1:]]:
