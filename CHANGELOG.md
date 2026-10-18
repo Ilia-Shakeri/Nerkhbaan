@@ -4,6 +4,11 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
+## [2.8.11] - 2026-10-18
+
+- Align the generated API route index with the release and include its exact header in the release consistency gate. Preserve both failed candidate tags and their hosted receipts; publish the final tag only after all hosted checks pass.
+- Keep the bounded current-price read, full source permissions and cache fallback unchanged. Candidate 2.8.10 passed backend unit tests but failed the subsequent generated-document check.
+
 ## [2.8.10] - 2026-10-18
 
 - Update the existing latest-price parameter test for the explicitly typed instrument definition and correlated ordered scan. Keep the parameter, source restrictions and no-untyped-null checks.

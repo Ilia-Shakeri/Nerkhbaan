@@ -42,6 +42,11 @@ for (const workspace of [
 const rootManifest = JSON.parse(read('package.json'));
 assert.deepEqual(lockfile.packages[''].devDependencies, rootManifest.devDependencies, 'Root development dependencies must match the lock');
 assert.equal(JSON.parse(read('docs/api-contracts.json')).info.version, version, 'Generated API contract must match VERSION');
+assert.equal(
+  read('docs/api-route-index.md').match(/^Release: `([^`]+)`\./m)?.[1],
+  version,
+  'Generated API route index must match VERSION',
+);
 for (const document of ['README.md', 'API_DOCUMENTATION.md', 'PROJECT_STATUS.md', 'docs/admin-guide.md', 'docs/delivery-readiness.md']) {
   assert.ok(read(document).includes(version), `${document} must identify the current release`);
 }
