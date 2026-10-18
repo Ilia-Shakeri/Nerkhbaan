@@ -1,0 +1,93 @@
+name: Release runtime artifacts
+
+on:
+  push:
+    branches:
+      - codex/finish-project
+    paths:
+      - .github/workflows/release-runtime-artifacts.yml
+      - scripts/build_runtime_artifacts.py
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-runtime-2.8.11
+  cancel-in-progress: false
+
+jobs:
+  build-runtime:
+    name: Build exact 2.8.11 runtime artifacts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+      APPLICATION_COMMIT: "9a569550685175f3f7c2859e1474af38edb0f9d5"
+      TRIVY_VERSION: "v0.70.0"
+    steps:
+      - name: Check out workflow tools
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: ops
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out fixed application
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.APPLICATION_COMMIT }}
+          path: candidate
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12.13"
+
+      - name: Check build proof contracts
+        run: python ops/scripts/build_runtime_artifacts.py --self-test
+
+      - name: Install pinned scanner
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          path: ${{ runner.temp }}/trivy
+          cache: false
+          token: ${{ github.token }}
+
+      - name: Build verify scan and export exact application
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python -u ops/scripts/build_runtime_artifacts.py \
+            --source "$GITHUB_WORKSPACE/candidate" \
+            --ops-source "$GITHUB_WORKSPACE/ops" \
+            --output "$GITHUB_WORKSPACE/public-evidence-only" \
+            --work "$RUNNER_TEMP/runtime-build" \
+            --workflow-sha "$WORKFLOW_SHA" \
+            --run-id "$RUN_ID" \
+            --run-attempt "$RUN_ATTEMPT" \
+            --repository "$REPOSITORY"
+
+      - name: Keep runtime artifacts and failure receipts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-runtime-2.8.11-9a56955-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            public-evidence-only/*.json
+            public-evidence-only/*.log
+            public-evidence-only/application-images-*.tar.gz
+            public-evidence-only/source-*.bundle
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+          overwrite: false
+          include-hidden-files: false
