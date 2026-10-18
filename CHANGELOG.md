@@ -4,6 +4,13 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
+## [2.8.9] - 2026-10-18
+
+- Bound current-quote database reads in a read-only transaction. Preserve stricter database timeouts, keep settings local to the read, and let verified Redis snapshots serve through the existing failure path when the database exceeds its budget.
+- Read necessary root-source candidates in newest-first order before the unchanged full recursive permission checks. Historical, retired, daily-only and calculated-gold restrictions remain in force before current-row selection; older eligible observations retain their original clocks.
+- Passed 21 isolated real-PostgreSQL cases for local budgets, lock and query cancellation, permission equivalence, purity, older eligible rows, pool reset and permitted-cache fallback. A separate read-only target preview returned 11 instrument contracts in 2.014409 seconds through the existing cache path after its database read exceeded the budget; candidate HTTP acceptance remains separate.
+- Retain the failed 2.8.8 postdeployment inventory timeouts as failures. The corrective release requires its own source, hosted checks, runtime images and live acceptance.
+
 - [Deployment guard]: Hash the fully resolved Compose model through private stdin. Add an explicit evidence-bound resume for the interrupted 2.8.8 rollout; retain the original failed receipt, application tag and runtime images, and verify the existing ninth migration without running it again.
 
 ## [2.8.8] - 2026-10-18

@@ -40,6 +40,8 @@ logger = logging.getLogger(__name__)
 
 _BOOKEND_CAPABILITIES: WeakKeyDictionary[Engine, bool] = WeakKeyDictionary()
 _BOOKEND_CAPABILITY_LOCK = Lock()
+_LATEST_STATEMENT_TIMEOUT_MS = 1500
+_LATEST_LOCK_TIMEOUT_MS = 250
 _BOOKEND_CAPABILITY_SQL = """
     SELECT COUNT(DISTINCT p.proname) = 2
     FROM pg_extension e
@@ -151,6 +153,67 @@ def _canonical_permissions(action: str):
         clause += " AND (status <> 'derived_fallback' OR source_summary->>'derived' = 'true' OR source_summary->>'primary_provider_id' LIKE 'derived:%')"
         parameters["rights_candidate_ids"] = list(rights.allowed_provider_ids(action))
     return clause, parameters
+
+
+def _latest_read_budget(db) -> None:
+    bind_reader = getattr(db, "get_bind", None)
+    bind = bind_reader() if callable(bind_reader) else None
+    if getattr(getattr(bind, "dialect", None), "name", None) != "postgresql":
+        return
+    db.execute(text("SET TRANSACTION READ ONLY"), {})
+    configured = {row["name"]: int(row["timeout_ms"]) for row in db.execute(text("""
+        SELECT name, setting::bigint AS timeout_ms FROM pg_settings
+        WHERE name IN ('statement_timeout', 'lock_timeout')
+    """), {}).mappings().all()}
+    if set(configured) != {"statement_timeout", "lock_timeout"}:
+        raise RuntimeError("Cannot verify current quote read budgets")
+    budgets = {"statement_timeout": _LATEST_STATEMENT_TIMEOUT_MS, "lock_timeout": _LATEST_LOCK_TIMEOUT_MS}
+    selected = {name: str(min(value, configured[name]) if configured[name] > 0 else value) + "ms"
+                for name, value in budgets.items()}
+    db.execute(text("""SELECT set_config('statement_timeout', :statement_timeout, true),
+        set_config('lock_timeout', :lock_timeout, true), set_config('jit', 'off', true)"""), selected)
+
+
+def _latest_rows_sql(instrument_id: str | None):
+    permitted, parameters = _canonical_permissions("display")
+    columns = """id, instrument_id, price, status, primary_quote_id,
+        verification_quote_ids, source_summary, candidate_price,
+        candidate_provider_id, observed_at, canonical_at, valid_until,
+        stale_at, expires_at, is_persisted, decision_reason,
+        verification_status, change_1h, change_24h, change_7d,
+        change_30d, idempotency_key, sequence_number"""
+    # Reject only necessary root failures before the full recursive checks.
+    cheap = f"""{_DIRECT_GOLD_SQL}
+        AND COALESCE(source_summary->>'historical_backfill', 'false') <> 'true'
+        AND COALESCE(source_summary->>'timestamp_precision', '') <> 'day'
+        AND NOT (COALESCE(source_summary->'provider_ids', '[]'::jsonb) ?| :history_only_sources)
+        AND COALESCE(source_summary->>'primary_provider_id', '') <> ALL(:history_only_sources)
+        AND COALESCE(source_summary->>'candidate_provider_id', '') <> ALL(:history_only_sources)
+        AND COALESCE(source_summary->>'previous_provider_id', '') <> ALL(:history_only_sources)
+        AND (candidate_provider_id IS NULL OR NOT (candidate_provider_id = ANY(:history_only_sources)))"""
+    if rights.enforced():
+        cheap += """ AND (COALESCE(source_summary->>'derived', 'false') = 'true'
+            OR COALESCE(source_summary->>'primary_provider_id', '') LIKE 'derived:%'
+            OR (source_summary->'provider_ids') <@ CAST(:rights_allowed_sources AS jsonb))"""
+    if instrument_id is None:
+        definitions = "SELECT DISTINCT instrument_id FROM canonical_quotes"
+    else:
+        definitions = "SELECT CAST(:instrument_id AS text) AS instrument_id"
+        parameters["instrument_id"] = instrument_id
+    # OFFSET 0 keeps the permission subplans above the ordered cheap scan.
+    # LIMIT follows the complete permission check, so older eligible rows remain
+    # reachable and an approved newest row needs no older permission scans.
+    query = f"""SELECT selected.* FROM ({definitions}) AS definitions
+        CROSS JOIN LATERAL (
+            SELECT {columns} FROM (
+                SELECT {columns} FROM canonical_quotes
+                WHERE {cheap} AND instrument_id = definitions.instrument_id
+                ORDER BY observed_at DESC, canonical_at DESC, id DESC OFFSET 0
+            ) AS roots
+            WHERE {permitted}
+            ORDER BY observed_at DESC, canonical_at DESC, id DESC LIMIT 1
+        ) AS selected ORDER BY selected.instrument_id"""
+    return text(query), parameters
 
 
 def _canonical_history_sql(use_bookends: bool):
@@ -632,28 +695,11 @@ class InternalPriceHistory:
 
     @staticmethod
     def _query_latest_rows(instrument_id: str | None) -> list[Any]:
-        permitted, parameters = _canonical_permissions("display")
-        query_sql = f"""
-            SELECT DISTINCT ON (instrument_id)
-                id, instrument_id, price, status, primary_quote_id,
-                verification_quote_ids, source_summary, candidate_price,
-                candidate_provider_id, observed_at, canonical_at, valid_until,
-                stale_at, expires_at, is_persisted, decision_reason,
-                verification_status, change_1h, change_24h, change_7d,
-                change_30d, idempotency_key, sequence_number
-            FROM canonical_quotes
-            WHERE {_DIRECT_GOLD_SQL}
-              AND {permitted}
-              AND COALESCE(source_summary->>'historical_backfill', 'false') <> 'true'
-        """
-        if instrument_id is not None:
-            query_sql += " AND instrument_id = :instrument_id"
-            parameters["instrument_id"] = instrument_id
-        query_sql += " ORDER BY instrument_id, observed_at DESC, canonical_at DESC, id DESC"
-
+        query, parameters = _latest_rows_sql(instrument_id)
         db = SessionLocal()
         try:
-            return db.execute(text(query_sql), parameters).mappings().all()
+            _latest_read_budget(db)
+            return db.execute(query, parameters).mappings().all()
         finally:
             db.close()
 

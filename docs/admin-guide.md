@@ -1,4 +1,4 @@
-# Administrator guide — 2.8.8
+# Administrator guide — 2.8.9
 
 The dashboard reference panel has three separate Iranian reference identities.
 Gold purity is unconfirmed; BTC/USD and USDT/USD are ratios of same-source
