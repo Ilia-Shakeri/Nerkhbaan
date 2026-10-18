@@ -18,6 +18,8 @@ COMMIT = "a" * 40
 NEW_HASH = "b" * 64
 OLD_HASH = "c" * 64
 REFERENCE_MIGRATION = "20261017_001_iranian_reference_records.sql"
+GUARD_COMMIT = "d" * 40
+CANDIDATE_ID = "e" * 64
 
 
 def ready_payload(*, old=False, migrated=True):
@@ -37,6 +39,112 @@ def forward_fixture():
     state["applied_migrations"] = dict(state["current_migrations"])
     state["config"]["services"]["migrate"]["command"] = ["python", "-m", "app.migrations.runner"]
     return state
+
+
+def resume_fixture():
+    state = forward_fixture() | {"resume": True, "guard_commit": GUARD_COMMIT, "migrated": True}
+    state["original_containers"] = copy.deepcopy(state["containers"])
+    state["applied_migrations"] = copy.deepcopy(state["desired_migrations"])
+    for item in state["containers"]:
+        if item["Config"]["Labels"]["com.docker.compose.service"] == "backend":
+            item["State"]["Health"]["Status"] = "unhealthy"
+    candidate = container("backend", "recorded-candidate", image=state["manifest"]["images"]["backend"], config_hash=NEW_HASH)
+    candidate["Id"] = CANDIDATE_ID
+    state["containers"].append(candidate)
+    return state
+
+
+def prepare_resume_evidence(root, state, selected, plan_path, proof_path, transcript):
+    from deploy_application import RESUME_KIND, SEMANTIC_CHECKS, fingerprint
+    def write(name, value):
+        path = root / name
+        path.write_text(json.dumps(value) if not isinstance(value, str) else value)
+        path.chmod(0o600)
+        return path
+    def reference(path):
+        path.chmod(0o600)
+        return {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    baseline = state["original_containers"]
+    roles = lambda rows: {item["Id"]: {"project": item["Config"]["Labels"]["com.docker.compose.project"],
+                                     "service": item["Config"]["Labels"]["com.docker.compose.service"]} for item in rows}
+    migration = json.loads(plan_path.read_text())
+    original_fingerprints = {item["Id"]: fingerprint(item) for item in baseline}
+    log = write("original-failed.log", "Migration service completed; verifying pinned addition " + REFERENCE_MIGRATION +
+                ", exact ledger and old migration-only readiness.\nDeploy stopped: Unexpected backend appeared.\n")
+    stamp = datetime.now(timezone.utc).isoformat()
+    attempt = write("original-attempt.json", {"mode": "deploy", "commit": COMMIT, "started_at": stamp,
+                    "private_log": str(log), "baseline_container_fingerprints": original_fingerprints,
+                    "baseline_container_roles": roles(baseline)})
+    failed = write("original-failed.json", {"mode": "deploy", "commit": COMMIT, "started_at": stamp,
+                   "checked_at": stamp, "passed": False, "returncode": 1, "wrapper_success_marker": False,
+                   "private_log": str(log), "log_sha256": hashlib.sha256(log.read_bytes()).hexdigest()})
+    ci = {"schema_version": 1, "guard_commit": GUARD_COMMIT, "run_id": 12345,
+          "run_url": "https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/12345",
+          "status": "completed", "conclusion": "success", "jobs": [
+              {"name": "owned-hosted-job-" + str(index), "status": "completed", "conclusion": "success"}
+              for index in range(15)]}
+    binding = {"application_commit": COMMIT, "guard_commit": GUARD_COMMIT, "application_version": "2.8.8",
+               "project": "nerkhbaan", "readiness_url": "https://fixture.invalid/api/health/ready",
+               "images": state["manifest"]["images"], "baseline_backends": migration["baseline_backends"],
+               "added_backend": {"id": CANDIDATE_ID, "image": state["manifest"]["images"]["backend"], "config_hash": NEW_HASH},
+               "target_migrations": state["desired_migrations"]}
+    probes = []
+    for item in state["containers"]:
+        if item["Config"]["Labels"]["com.docker.compose.service"] != "backend":
+            continue
+        old = item["Id"] != CANDIDATE_ID
+        probes.append({"id": item["Id"], "image": item["Image"], "status": 503 if old else 200,
+                       "payload": ready_payload(old=old), "expected": state["current_migrations"] if old else state["desired_migrations"],
+                       "applied": state["desired_migrations"], "migration_state": {
+                           "current": not old, "version": REFERENCE_MIGRATION, "applied_count": 9,
+                           "expected_count": 8 if old else 9, "missing": [], "changed": [],
+                           "unknown": [REFERENCE_MIGRATION] if old else []}})
+    observation = {"schema_version": 1, "kind": RESUME_KIND, "source": "actual_target_read_only", "checked_at": stamp,
+                   "binding": copy.deepcopy(binding), "baseline_container_fingerprints": original_fingerprints,
+                   "current_container_fingerprints": {item["Id"]: fingerprint(item) for item in state["containers"]},
+                   "current_container_roles": roles(state["containers"]), "semantic_checks": {name: True for name in SEMANTIC_CHECKS},
+                   "resolved_config_sha256": hashlib.sha256(json.dumps(state["config"], sort_keys=True, separators=(",", ":")).encode()).hexdigest(),
+                   "service_hashes": {name: NEW_HASH for name in ("backend", "frontend", "admin-frontend", "price-feed-pull")},
+                   "probes": probes}
+    fault = state.get("resume_fault")
+    if fault == "ci_object_shape": ci = []
+    elif fault == "observation_object_shape": observation = []
+    elif fault == "ci_commit": ci["guard_commit"] = "f" * 40
+    elif fault == "ci_failed": ci["jobs"][0]["conclusion"] = "failure"
+    elif fault == "ci_missing_job": ci["jobs"].pop()
+    elif fault == "ci_duplicate_job": ci["jobs"][-1]["name"] = ci["jobs"][0]["name"]
+    elif fault == "old_probe_failure": observation["probes"][0]["payload"]["redis"] = "disconnected"
+    elif fault == "extra_unknown_migration": observation["probes"][0]["migration_state"]["unknown"].append("unknown.sql")
+    elif fault == "new_probe_failure": observation["probes"][-1]["status"] = 503
+    elif fault == "semantic_false": observation["semantic_checks"]["environment"] = False
+    elif fault == "semantic_integer": observation["semantic_checks"]["environment"] = 1
+    elif fault == "semantic_missing": observation["semantic_checks"].pop("mounts")
+    elif fault == "resolved_model": observation["resolved_config_sha256"] = "f" * 64
+    elif fault == "service_hash": observation["service_hashes"]["backend"] = "f" * 64
+    elif fault == "stale": observation["checked_at"] = (datetime.now(timezone.utc) - timedelta(minutes=16)).isoformat()
+    elif fault == "future": observation["checked_at"] = (datetime.now(timezone.utc) + timedelta(minutes=1)).isoformat()
+    elif fault == "naive_clock": observation["checked_at"] = "2026-10-18T10:00:00"
+    elif fault == "binding": observation["binding"]["application_commit"] = "f" * 40
+    elif fault == "candidate_id": binding["added_backend"]["id"] = "f" * 64
+    elif fault == "candidate_hash": binding["added_backend"]["config_hash"] = "f" * 64
+    elif fault == "old_identity": state["containers"][0]["State"]["StartedAt"] = "changed"
+    elif fault == "protected_identity": state["containers"][2]["Mounts"][0]["Source"] = "/changed"
+    elif fault == "candidate_unhealthy": state["containers"][-1]["State"]["Health"]["Status"] = "unhealthy"
+    elif fault == "unknown_candidate": state["containers"].append(container("backend", "unknown-added"))
+    elif fault == "wrong_ledger": state["applied_migrations"][REFERENCE_MIGRATION] = "f" * 64
+    ci_path = write("guard-ci.json", ci)
+    fresh_path = write("fresh-observation.json", observation)
+    files = {"failed_attempt": attempt, "failed_proof": failed, "failed_log": log,
+             "migration_plan": plan_path, "image_manifest": selected["image_manifest"],
+             "restore_report": proof_path, "restore_transcript": transcript, "guard_ci": ci_path,
+             "fresh_observation": fresh_path, **{name: selected[name] for name in (
+                 "operator_evidence", "compose_override", "private_environment")}}
+    resume = {"schema_version": 1, "kind": RESUME_KIND, **binding,
+              "files": {name: reference(path) for name, path in files.items()}}
+    if fault == "file_hash": resume["files"]["failed_log"]["sha256"] = "f" * 64
+    if fault == "missing_file": fresh_path.unlink()
+    if fault == "private_mode": fresh_path.chmod(0o644)
+    return write("resume-plan.json", resume)
 
 
 def container(name, suffix="1", *, image=None, owner="nerkhbaan", config_hash=OLD_HASH):
@@ -106,16 +214,21 @@ def fixture():
     }
 
 
-def fake_cli(kind: str, args: list[str]) -> int:
+def fake_cli(kind: str, args: list[str], input_text: str | None = None) -> int:
     path = Path(os.environ["FAKE_DEPLOY_STATE"])
     state = json.loads(path.read_text())
     state["commands"].append([kind, *args])
     code, output = 0, ""
     if kind == "git":
+        guard = args[:1] == ["-C"]
+        if guard:
+            args = args[2:]
         if args[0] == "status":
-            output = " M tracked.txt" if state.get("dirty") else ""
+            output = " M tracked.txt" if state.get("guard_dirty" if guard else "dirty") else ""
         elif args == ["rev-parse", "HEAD"]:
-            output = state["commit"]
+            output = state.get("guard_commit", state["commit"]) if guard else state["commit"]
+        elif args[:2] == ["diff", "--name-only"]:
+            output = "apps/api/app/changed.py" if state.get("guard_api_changed") else ""
         else:
             code = 98
     elif args[:2] == ["ps", "-aq"]:
@@ -177,6 +290,13 @@ def fake_cli(kind: str, args: list[str]) -> int:
             for details in item["NetworkSettings"]["Networks"].values():
                 details["EndpointID"] = ""
                 details["IPAddress"] = ""
+            if state.get("resume_file_drift_after_stop"):
+                resume = json.loads(Path(os.environ["DEPLOY_RESUME_PLAN"]).read_text())
+                ci_path = Path(resume["files"]["guard_ci"]["path"])
+                ci_path.write_bytes(ci_path.read_bytes() + b"\n")
+            if state.get("resume_candidate_drift_after_stop"):
+                candidate = next(item for item in state["containers"] if item["Id"] == CANDIDATE_ID)
+                candidate["HostConfig"]["RestartPolicy"]["Name"] = "always"
         else:
             state["containers"].remove(item)
     elif args[0] == "compose":
@@ -185,7 +305,14 @@ def fake_cli(kind: str, args: list[str]) -> int:
         if command[0] == "config" and "--format" in command:
             output = json.dumps(state["config"])
         elif command[:2] == ["config", "--hash"]:
-            output = f"{command[-1]} {NEW_HASH}"
+            if "-f" in args and args[args.index("-f") + 1] == "-":
+                model = json.loads(input_text if input_text is not None else sys.stdin.read())
+                assert model == state["config"], "Hash input must be the reviewed resolved configuration"
+                state["resolved_hash_reads"] = state.get("resolved_hash_reads", 0) + 1
+                output = f"{command[-1]} {NEW_HASH}"
+            else:
+                state["raw_hash_reads"] = state.get("raw_hash_reads", 0) + 1
+                output = f"{command[-1]} {state.get('raw_config_hash', NEW_HASH)}"
         elif command[0] == "ps":
             output = "\n".join(item["Id"] for item in state["containers"] if
                                item["Config"]["Labels"]["com.docker.compose.project"] == "nerkhbaan" and
@@ -222,10 +349,13 @@ def fake_cli(kind: str, args: list[str]) -> int:
                 code = 1
             if state.get("wrong_new_image"):
                 new["Image"] = "sha256:unexpected"
+            if state.get("wrong_new_hash"):
+                new["Config"]["Labels"]["com.docker.compose.config-hash"] = OLD_HASH
             if state.get("wrong_new_network"):
                 new["NetworkSettings"]["Networks"]["nerkhbaan-network"]["NetworkID"] = "other-network"
             if state.get("old_identity_drift"):
-                old = next(item for item in state["containers"] if item["Id"] == "nerkhbaan-backend-1")
+                old = next(item for item in state["containers"] if item["Config"]["Labels"].get("com.docker.compose.service") == "backend"
+                           and item["Image"] != state["manifest"]["images"]["backend"])
                 old["Mounts"][0]["Source"] = "/changed"
             if state.get("protected_drift"):
                 data = next(item for item in state["containers"] if item["Id"] == "nerkhbaan-redis-1")
@@ -263,6 +393,50 @@ def fake_cli(kind: str, args: list[str]) -> int:
     if output:
         print(output)
     return code
+
+
+class ResolvedServiceHashTests(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        from deploy_application import ApplicationDeploy, DeployStopped
+        self.patch, self.stopped = patch, DeployStopped
+        self.deploy = object.__new__(ApplicationDeploy)
+        self.deploy.root, self.deploy.project_name = ROOT, "nerkhbaan"
+        self.deploy.env_file = ROOT / "private-fixture.env"
+        self.deploy.wait, self.deploy.startup_deadline = 30, None
+        self.secret = "owned-fixture-$private-value"
+        self.deploy.config = {"name": "nerkhbaan", "services": {
+            "backend": {"environment": {"FIXTURE_SECRET": self.secret}},
+        }}
+
+    def test_resolved_model_stays_in_stdin_and_keeps_project_path_context(self):
+        before = copy.deepcopy(self.deploy.config)
+        with self.patch("deploy_application.command", return_value=f"backend {NEW_HASH}") as run:
+            self.assertEqual(self.deploy.resolved_service_hash("backend"), NEW_HASH)
+        args, kwargs = run.call_args.args[0], run.call_args.kwargs
+        self.assertEqual(args[args.index("-f") + 1], "-")
+        self.assertEqual(args[args.index("--project-directory") + 1], str(ROOT))
+        self.assertEqual(args[args.index("--env-file") + 1], str(self.deploy.env_file))
+        self.assertEqual(json.loads(kwargs["input_text"]), before)
+        self.assertNotIn(self.secret, " ".join(args))
+        self.assertEqual(self.deploy.config, before)
+
+    def test_malformed_or_wrong_service_hash_fails_closed(self):
+        for output in ("", f"frontend {NEW_HASH}", "backend invalid", f"backend {NEW_HASH}\nbackend {NEW_HASH}"):
+            with self.subTest(output=output), self.patch("deploy_application.command", return_value=output):
+                with self.assertRaises(self.stopped) as caught:
+                    self.deploy.resolved_service_hash("backend")
+                self.assertNotIn(self.secret, str(caught.exception))
+
+    def test_failed_hash_child_does_not_expose_private_input_or_output(self):
+        from deploy_application import command
+        failed = subprocess.CompletedProcess(["docker"], 1, self.secret, self.secret)
+        with self.patch("deploy_application.subprocess.run", return_value=failed) as run:
+            with self.assertRaises(self.stopped) as caught:
+                command(["docker", "compose"], cwd=ROOT, input_text=self.secret)
+        self.assertNotIn(self.secret, str(caught.exception))
+        self.assertEqual(run.call_args.kwargs["input"], self.secret)
+        self.assertNotIn(self.secret, " ".join(run.call_args.args[0]))
 
 
 class MountIdentityTests(unittest.TestCase):
@@ -344,6 +518,17 @@ class MountIdentityTests(unittest.TestCase):
             changed["Mounts"][0]["Source"] = "/changed"
             with self.assertRaisesRegex(self.deploy_stopped, "Recorded backend identity"):
                 deploy.guard_old(baseline, running=True)
+
+    def test_resume_rejects_an_unrecorded_migrator_while_default_probe_scope_stays_valid(self):
+        deploy = object.__new__(self.deploy_class)
+        deploy.project_name, deploy.targets = "nerkhbaan", ["frontend", "price-feed-pull"]
+        deploy.protected = {self.baseline["Id"]: self.baseline}
+        deploy.resume_plan = {"kind": "reviewed-resume"}
+        with self.patch.object(deploy, "containers", return_value=[self.baseline, container("migrate", "unexpected")]):
+            with self.assertRaisesRegex(self.deploy_stopped, "Unexpected protected container"):
+                deploy.check_protected()
+            deploy.resume_plan = None
+            deploy.check_protected()
 
 
 class MigrationReadinessPolicyTests(unittest.TestCase):
@@ -564,13 +749,27 @@ class ApplicationDeployTests(unittest.TestCase):
             # The validator stays real; only its owned fixture inputs are used.
             from test_verify_operator_gates import evidence as valid_evidence
             evidence.write_text(json.dumps(valid_evidence()))
+            resume_path = None
+            if initial.get("resume"):
+                resume_path = prepare_resume_evidence(root, initial, {
+                    "image_manifest": manifest, "operator_evidence": evidence,
+                    "compose_override": override, "private_environment": env_file,
+                }, plan_path, proof_path, transcript)
+                guard_scripts = root / "guard-source/scripts"
+                guard_scripts.mkdir(parents=True)
+                for name in ("deploy-nerkhbaan-prod.sh", "deploy_application.py"):
+                    shutil.copyfile(ROOT / "scripts" / name, guard_scripts / name)
+                # The selected wrapper must execute its own guard, not the application's old script.
+                (scripts / "deploy_application.py").write_text("raise SystemExit(91)\n")
+                scripts = guard_scripts
+                state_path.write_text(json.dumps(initial))
             launcher = root / "launcher.py"
             launcher.write_text('''import json, os, runpy, sys
 from pathlib import Path
 import urllib.request
 os.environ['PATH'] = os.environ['FAKE_DEPLOY_BIN'] + os.pathsep + os.environ['PATH']
 state = json.loads(Path(os.environ['FAKE_DEPLOY_STATE']).read_text())
-if state.get('forward_migration') and not state.get('external_clis'):
+if not state.get('external_clis'):
     import contextlib, importlib.util, io, subprocess
     spec = importlib.util.spec_from_file_location('owned_deploy_fixture', os.environ['FAKE_DEPLOY_FIXTURE'])
     fixture_module = importlib.util.module_from_spec(spec)
@@ -580,7 +779,7 @@ if state.get('forward_migration') and not state.get('external_clis'):
         kind = Path(args[0]).stem
         if kind not in {'docker', 'git'}: return external_run(args, **kwargs)
         output = io.StringIO()
-        with contextlib.redirect_stdout(output): code = fixture_module.fake_cli(kind, args[1:])
+        with contextlib.redirect_stdout(output): code = fixture_module.fake_cli(kind, args[1:], kwargs.get('input'))
         return subprocess.CompletedProcess(args, code, output.getvalue(), '')
     subprocess.run = fixture_run
 class Response:
@@ -647,15 +846,18 @@ runpy.run_path(sys.argv[0], run_name='__main__')
             if initial.get("new_stays_starting"):
                 env["DEPLOY_WAIT_SECONDS"] = "1"
             env.pop("DEPLOY_MIGRATION_PLAN", None)
+            env.pop("DEPLOY_RESUME_PLAN", None)
             if initial.get("forward_migration") and not initial.get("no_migration_plan"):
                 env["DEPLOY_MIGRATION_PLAN"] = str(plan_path)
+            if resume_path and not initial.get("resume_no_plan"):
+                env["DEPLOY_RESUME_PLAN"] = str(resume_path)
             if omit:
                 env.pop(omit, None)
             if missing_python:
                 (bin_dir / "python").unlink()
                 (bin_dir / "python3").unlink()
                 env["PATH"] = str(bin_dir)
-            result = subprocess.run([str(self.bash), str(scripts / "deploy-nerkhbaan-prod.sh")],
+            result = subprocess.run([str(self.bash), (scripts / "deploy-nerkhbaan-prod.sh").as_posix()],
                                     env=env, capture_output=True, text=True,
                                     timeout=180 if initial.get("external_clis") else 90)
             final = json.loads(state_path.read_text())
@@ -675,8 +877,75 @@ runpy.run_path(sys.argv[0], run_name='__main__')
                              and not (command[1] == "run" and "nerkhbaan.deploy-probe=migrations" in command)
                              for command in final["commands"]))
 
+    def test_explicit_resume_uses_recorded_candidate_then_overlap_without_migration(self):
+        result, final, initial = self.run_deploy(resume_fixture())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assert_protected_unchanged(initial, final)
+        self.assertFalse(any("run" in call and call[-1] == "migrate" for call in final["commands"]))
+        self.assertEqual(final["scale_runs"], 1)
+        mutations = [call for call in final["commands"] if call[0] == "docker" and (
+            call[1] in {"stop", "rm"} or "up" in call)]
+        self.assertEqual(mutations[0], ["docker", "stop", "--time", "20", "nerkhbaan-backend-1"])
+        self.assertEqual([call[-1] for call in mutations if call[1] == "rm"],
+                         ["nerkhbaan-backend-1", "nerkhbaan-backend-2"])
+        self.assertIn(CANDIDATE_ID, {item["Id"] for item in final["containers"]})
+        self.assertEqual(final["applied_migrations"], initial["desired_migrations"])
+        self.assertIn("without a migration run", result.stdout)
+
+    def test_resume_requires_explicit_plan_and_original_migration_evidence(self):
+        for flag in ("resume_no_plan", "no_migration_plan"):
+            with self.subTest(flag=flag):
+                result, final, _ = self.run_deploy(resume_fixture() | {flag: True})
+                self.assertNotEqual(result.returncode, 0)
+                self.assert_no_mutation(final)
+
+    def test_resume_rejects_evidence_drift_identity_clock_config_and_unproved_ci_before_mutation(self):
+        cases = ("ci_object_shape", "observation_object_shape", "ci_commit", "ci_failed", "ci_missing_job", "ci_duplicate_job", "old_probe_failure",
+                 "extra_unknown_migration", "new_probe_failure", "semantic_false", "semantic_integer",
+                 "semantic_missing", "resolved_model", "service_hash", "stale", "future", "naive_clock",
+                 "binding", "candidate_id", "candidate_hash", "old_identity", "protected_identity",
+                 "candidate_unhealthy", "unknown_candidate", "wrong_ledger", "file_hash", "missing_file")
+        if os.name != "nt":
+            cases += ("private_mode",)
+        for fault in cases:
+            with self.subTest(fault=fault):
+                result, final, _ = self.run_deploy(resume_fixture() | {"resume_fault": fault})
+                self.assertNotEqual(result.returncode, 0, fault)
+                self.assert_no_mutation(final)
+
+    def test_resume_rejects_dirty_or_changed_guard_source_and_live_candidate_failure(self):
+        for flag in ("guard_dirty", "guard_api_changed", "dirty", "new_ready_failure", "old_ready_failure",
+                     "old_other_migration_failure", "mixed_https_failure"):
+            with self.subTest(flag=flag):
+                result, final, _ = self.run_deploy(resume_fixture() | {flag: True})
+                self.assertNotEqual(result.returncode, 0, flag)
+                self.assert_no_mutation(final)
+
+    def test_resume_second_candidate_failure_retains_recorded_candidate_and_last_old(self):
+        result, final, initial = self.run_deploy(resume_fixture() | {"fail_scale": 1})
+        self.assertNotEqual(result.returncode, 0)
+        self.assert_protected_unchanged(initial, final)
+        self.assertEqual([call[-1] for call in final["commands"] if call[:2] == ["docker", "rm"]],
+                         ["nerkhbaan-backend-1"])
+        by_id = {item["Id"]: item for item in final["containers"]}
+        self.assertTrue(by_id[CANDIDATE_ID]["State"]["Running"])
+        self.assertEqual(by_id[CANDIDATE_ID]["State"]["Health"]["Status"], "healthy")
+        self.assertTrue(by_id["nerkhbaan-backend-2"]["State"]["Running"])
+        self.assertFalse(any("run" in call and call[-1] == "migrate" for call in final["commands"]))
+
+    def test_resume_rechecks_private_evidence_before_removing_stopped_old(self):
+        for flag in ("resume_file_drift_after_stop", "resume_candidate_drift_after_stop"):
+            with self.subTest(flag=flag):
+                result, final, _ = self.run_deploy(resume_fixture() | {flag: True})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(any(call[:2] == ["docker", "rm"] for call in final["commands"]))
+                by_id = {item["Id"]: item for item in final["containers"]}
+                self.assertFalse(by_id["nerkhbaan-backend-1"]["State"]["Running"])
+                self.assertTrue(by_id[CANDIDATE_ID]["State"]["Running"])
+                self.assertTrue(by_id["nerkhbaan-backend-2"]["State"]["Running"])
+
     def test_rollout_only_updates_application_with_healthy_overlap(self):
-        result, final, initial = self.run_deploy()
+        result, final, initial = self.run_deploy(fixture() | {"external_clis": True})
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_protected_unchanged(initial, final)
         calls = final["commands"]
@@ -742,6 +1011,27 @@ runpy.run_path(sys.argv[0], run_name='__main__')
         self.assertIn("migration-only readiness", result.stdout)
         self.assertEqual([call[-1] for call in final["commands"] if call[:2] == ["docker", "rm"]],
                          ["nerkhbaan-backend-1", "nerkhbaan-backend-2"])
+
+    def test_resolved_environment_hash_accepts_only_exact_new_container_identity(self):
+        for tampered in (False, True):
+            with self.subTest(tampered_actual_hash=tampered):
+                state = forward_fixture() | {"raw_config_hash": OLD_HASH, "wrong_new_hash": tampered}
+                secret = "owned-fixture-$private-value"
+                state["config"]["services"]["backend"]["environment"] = {"FIXTURE_SECRET": secret}
+                result, final, initial = self.run_deploy(state)
+                self.assertEqual(final.get("raw_hash_reads", 0), 0)
+                self.assertEqual(final.get("resolved_hash_reads"), 4)
+                self.assertNotIn(secret, result.stdout + result.stderr)
+                self.assertTrue(all(secret not in " ".join(call) for call in final["commands"]))
+                self.assert_protected_unchanged(initial, final)
+                if tampered:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("Unexpected backend", result.stderr)
+                    self.assertFalse(any(call[:2] in (["docker", "stop"], ["docker", "rm"])
+                                         for call in final["commands"]))
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(final["scale_runs"], 2)
 
     def test_migration_plan_rejects_wrong_binding_or_unproven_restore_before_mutation(self):
         for fault in ("commit", "images", "baseline", "baseline_checksum", "target_checksum", "proof_target",

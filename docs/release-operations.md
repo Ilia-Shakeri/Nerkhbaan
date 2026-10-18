@@ -166,6 +166,12 @@ The helper checks the migration/API identity, loaded IDs and resolved configurat
 It verifies backend/migrate `env_file` paths resolve to `COMPOSE_ENV_FILE`; `--env-file` alone only
 sets interpolation inputs. Keep the release `.env` as a private link to the selected runtime file,
 or use a reviewed override that replaces the service file list. Competing files cause refusal.
+Expected service hashes come from that fully resolved Compose model, passed in memory through
+stdin to the same Compose CLI with the original project name and directory. In Compose 5.1.4,
+plain `config --hash` skips service `env_file` resolution and can differ from the hash written by
+`up` even with identical files. Private resolved values never enter command arguments, logs or
+temporary files. The actual container label must still match the independently predicted hash;
+image, configuration, environment binding and all other deployment checks remain required.
 It probes SQL checksums from the exact desired image in an ephemeral read-only container with no
 network, environment file or volumes, then compares the checkout, old API's migration files and a
 read-only ledger query. By default all four must match before the migration service runs. Changed
@@ -261,6 +267,85 @@ Any failure leaves remaining containers in place. The forward ledger remains rec
 no automatic rollback onto the older schema expectation. Review actual old/new IDs and the private
 failure log before a separately reviewed recovery. Business-route compatibility on the restored
 copy does not establish zero downtime on production.
+
+### Explicit recovery after the first reference-release candidate
+
+`DEPLOY_RESUME_PLAN` is a separate, narrow continuation of a failed guarded update. It accepts
+only the recorded state after the pinned ninth migration and first candidate startup: both
+original 2.8.1 APIs remain running with unchanged identities, exactly one recorded 2.8.8 API is
+already Docker-healthy and directly ready, and every original container fingerprint is unchanged.
+The original failed attempt, failed completion receipt and private log remain immutable. A generic
+rerun, adopting an unknown extra replica, accepting an observed label as the expected configuration,
+or rerunning the migration service is refused.
+
+Keep application `RELEASE_DIR` at its original clean commit and keep its image manifest, runtime
+override, private environment and migration plan. Stage the guard-only correction in another clean
+Git checkout. Invoke that checkout's `scripts/deploy-nerkhbaan-prod.sh`; the wrapper executes its
+own adjacent Python file after changing to application `RELEASE_DIR`. This separates the tested
+`guard_commit` from `application_commit` without editing an immutable application release or
+retagging its images. The guard also rejects differences in packaged API sources, database files,
+dependency lock or API recipe between these commits. Validate the exact application's runtime
+image/source proof before preparing recovery evidence; no replacement image is selected here.
+
+The resume plan is a deploy-owned private regular file with exactly these keys:
+
+| Field | Required value |
+| --- | --- |
+| `schema_version`, `kind` | `1`, `iranian-reference-resume-after-first-candidate-v1` |
+| `application_commit`, `guard_commit` | Exact clean application and guard Git revisions |
+| `application_version`, `project`, `readiness_url` | `2.8.8`, existing project, exact HTTPS readiness URL |
+| `images`, `baseline_backends`, `target_migrations` | Original five image IDs, two recorded old API identities, exact nine-entry ledger |
+| `added_backend` | `{id, image, config_hash}` for the single recorded candidate; expected hash comes from the reviewed fully resolved model |
+| `files` | The twelve exact file/hash references below |
+
+Each `files` value is exactly `{path, sha256}`. The required names are `failed_attempt`, `failed_proof`,
+`failed_log`, `migration_plan`, `image_manifest`, `restore_report`, `restore_transcript`,
+`operator_evidence`, `compose_override`, `private_environment`, `guard_ci`, and `fresh_observation`.
+Keep original evidence at its original path. Put new recovery plans, observations, CI receipts,
+attempts and completion receipts in a separate private recovery directory. Existing migration and
+restore report/transcript bindings must agree with this additional chain. Every bound file and both
+clean source revisions are rechecked before later mutations; a changed file stops the continuation.
+
+`guard_ci` contains `schema_version: 1`, `guard_commit`, positive integer `run_id`, its exact
+`https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/<run_id>` URL as `run_url`,
+`status: "completed"`, `conclusion: "success"`, and fifteen uniquely named `jobs`, each with
+`name`, `status: "completed"`, and `conclusion: "success"`. Obtain these fields from the actual
+hosted run on the finalized guard commit. A local passing test or another commit's workflow is
+insufficient.
+
+`fresh_observation` contains `schema_version: 1`, the same `kind`, `source: "actual_target_read_only"`,
+and UTC `checked_at` no older than 900 seconds or more than 30 seconds in the future. Its `binding`
+repeats exactly the plan's nine fields from `application_commit` through `target_migrations`, without
+`schema_version`, `kind` or `files`. Its other fields are:
+
+- `baseline_container_fingerprints`: the original attempt's complete ID-to-hash map.
+- `current_container_fingerprints`: the same original identities plus only the recorded added ID.
+- `current_container_roles`: every current ID mapped to `{project, service}`.
+- `resolved_config_sha256`: SHA-256 of UTF-8 `json.dumps(config, sort_keys=True, separators=(",", ":"))`.
+- `service_hashes`: independently predicted resolved-model hashes for backend, frontend,
+  admin-frontend and price-feed-pull.
+- `probes`: three direct `backend_probe` results, each with its actual `id` and `image`.
+- `semantic_checks`: exactly `environment`, `command`, `entrypoint`, `user`, `working_dir`,
+  `stop_signal`, `custom_labels`, `exposed_ports`, `healthcheck`, `cap_drop`, `security_options`,
+  `read_only_rootfs`, `restart_policy`, `published_ports`, `mounts`, and `networks`, all Boolean true.
+
+Container fingerprints use SHA-256 of `json.dumps(identity(container) | {"Running": running},
+sort_keys=True)` with the default separators, matching the original deployment attempt. Mounts
+are ordered by destination, type and source; networks contain their actual network IDs. The semantic
+checks compare the resolved model and image defaults with the actual candidate, handling inherited
+null commands, literal dollar signs and health duration units. They expose neither environment
+values nor secret destinations. The fresh fingerprint binds those results to the still unchanged
+candidate. Live probes independently recheck exact packaged files, ledger, database/Redis and the
+known old migration-only 503 versus strict new 200 contract.
+
+After preflight, continuation first verifies the existing candidate again, then stops/removes the
+first recorded old API while retaining the candidate and second old API. It then performs the usual
+healthy overlap to replace the second old API, verifies two strict new APIs, and updates only the
+three existing application targets. The migration runner is never invoked in resume mode. Protected
+containers are derived from the original roles rather than a new baseline; data, backup and unrelated
+services retain their original fingerprints. If continuation fails, retain its separate failed receipt
+and remaining replicas, inspect the exact state, and prepare a new reviewed recovery. No automatic
+retry, rollback or broader recovery state is enabled by this plan.
 
 ### Existing stack with shared ingress
 

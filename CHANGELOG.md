@@ -4,6 +4,8 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
+- [Deployment guard]: Hash the fully resolved Compose model through private stdin. Add an explicit evidence-bound resume for the interrupted 2.8.8 rollout; retain the original failed receipt, application tag and runtime images, and verify the existing ninth migration without running it again.
+
 ## [2.8.8] - 2026-10-18
 
 - Added three separately named Iranian reference contracts after approval of published/calculated values: the publisher's 24K gram reference and same-source BTC/Toman or USDT/Toman divided by USD/Toman. Gold purity stays unconfirmed; the ratios do not claim global exchange prices or stablecoin peg measurements.

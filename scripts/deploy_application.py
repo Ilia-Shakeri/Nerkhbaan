@@ -25,6 +25,17 @@ BASELINE_MIGRATIONS = {
     "20261011_001_delivery_hardening.sql", "20261011_002_notification_sending_state.sql",
 }
 PLAN_KIND = "iranian-reference-addition-v1"
+RESUME_KIND = "iranian-reference-resume-after-first-candidate-v1"
+RESUME_FILES = {
+    "failed_attempt", "failed_proof", "failed_log", "migration_plan", "image_manifest",
+    "restore_report", "restore_transcript", "operator_evidence", "compose_override",
+    "private_environment", "guard_ci", "fresh_observation",
+}
+SEMANTIC_CHECKS = {
+    "environment", "command", "entrypoint", "user", "working_dir", "stop_signal",
+    "custom_labels", "exposed_ports", "healthcheck", "cap_drop", "security_options",
+    "read_only_rootfs", "restart_policy", "published_ports", "mounts", "networks",
+}
 MIGRATION_COMMAND = ["python", "-m", "app.migrations.runner"]
 
 
@@ -46,12 +57,12 @@ class RejectRedirect(HTTPRedirectHandler):
         return None
 
 
-def command(args: list[str], *, cwd: Path, timeout: int = 300) -> str:
+def command(args: list[str], *, cwd: Path, timeout: int = 300, input_text: str | None = None) -> str:
     executable = shutil.which(args[0]) or args[0]
     try:
         result = subprocess.run(
             [executable, *args[1:]], cwd=cwd, capture_output=True,
-            text=True, check=False, timeout=timeout,
+            text=True, check=False, timeout=timeout, input=input_text,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise DeployStopped(f"Command unavailable or timed out: {Path(args[0]).name}") from exc
@@ -107,6 +118,11 @@ def project(container: dict) -> str:
     return container.get("Config", {}).get("Labels", {}).get("com.docker.compose.project", "")
 
 
+def fingerprint(container: dict) -> str:
+    value = identity(container) | {"Running": container["State"]["Running"]}
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
 def healthy(container: dict, *, require_probe: bool = False) -> bool:
     state = container.get("State", {})
     health = state.get("Health")
@@ -131,6 +147,8 @@ class ApplicationDeploy:
         override = required_file(env, "COMPOSE_OVERRIDE_FILE")
         self.evidence = required_file(env, "OPERATOR_EVIDENCE_PATH")
         self.manifest = required_file(env, "DEPLOY_IMAGE_MANIFEST")
+        self.override = override
+        self.guard_root = Path(__file__).resolve().parents[1]
         self.compose = [
             "docker", "compose", "-p", self.project_name, "--env-file", str(env_file),
             "-f", str(self.root / "docker-compose.prod.yaml"), "-f", str(override),
@@ -155,6 +173,8 @@ class ApplicationDeploy:
         self.migrated = False
         self.baseline_backends: dict[str, dict] = {}
         self.startup_deadline: float | None = None
+        self.resume_path = Path(env["DEPLOY_RESUME_PLAN"]) if env.get("DEPLOY_RESUME_PLAN") else None
+        self.resume_plan: dict | None = None
 
     def bounded_timeout(self, timeout: float) -> float:
         if self.startup_deadline is not None:
@@ -164,11 +184,23 @@ class ApplicationDeploy:
             timeout = min(timeout, remaining)
         return timeout
 
-    def run(self, args: list[str], *, timeout: int = 300) -> str:
-        return command(args, cwd=self.root, timeout=self.bounded_timeout(timeout))
+    def run(self, args: list[str], *, timeout: int = 300, input_text: str | None = None) -> str:
+        return command(args, cwd=self.root, timeout=self.bounded_timeout(timeout), input_text=input_text)
 
     def compose_run(self, *args: str) -> str:
         return self.run([*self.compose, *args], timeout=self.wait + 60)
+
+    def resolved_service_hash(self, name: str) -> str:
+        # Compose's raw hash path skips env_file resolution; hash the reviewed resolved model.
+        args = [
+            "docker", "compose", "-p", self.project_name, "--env-file", str(self.env_file),
+            "--project-directory", str(self.root), "-f", "-", "--profile", "admin",
+            "config", "--hash", name,
+        ]
+        hashed = self.run(args, timeout=self.wait + 60, input_text=json.dumps(self.config)).split()
+        if len(hashed) != 2 or hashed[0] != name or not re.fullmatch(r"[a-f0-9]{64}", hashed[1]):
+            raise DeployStopped(f"Cannot resolve reviewed {name} configuration identity")
+        return hashed[1]
 
     def inspect(self, ids: list[str]) -> list[dict]:
         if not ids:
@@ -187,6 +219,11 @@ class ApplicationDeploy:
 
     def check_images(self) -> None:
         self.check_plan_files()
+        if self.resume_plan:
+            identifier = self.resume_plan["added_backend"]["id"]
+            current = self.inspect([identifier])
+            if len(current) != 1 or fingerprint(current[0]) != self.resume_observation["current_container_fingerprints"][identifier]:
+                raise DeployStopped("Recorded existing candidate identity changed; keep remaining replicas")
         for image, expected in self.images.values():
             actual = json.loads(self.run(["docker", "image", "inspect", image]))
             if len(actual) != 1 or actual[0].get("Id") != expected:
@@ -220,7 +257,9 @@ class ApplicationDeploy:
             if project(item) == self.project_name and service(item) in {"postgres", "redis", "db-backup"}:
                 if not healthy(item, require_probe=True):
                     raise DeployStopped("Existing data or backup service is unhealthy")
-        allowed = set(self.targets) | {"backend", "migrate"}
+        allowed = set(self.targets) | {"backend"}
+        if not getattr(self, "resume_plan", None):
+            allowed.add("migrate")
         for container_id, item in current.items():
             if container_id not in self.protected and not (
                 project(item) == self.project_name and service(item) in allowed
@@ -327,6 +366,145 @@ class ApplicationDeploy:
                 raise DeployStopped("Reviewed migration plan or restore evidence changed")
         if self.plan:
             self.check_proof_time(self.proof["checked_at"])
+        if getattr(self, "resume_plan", None):
+            self.check_resume_time(self.resume_observation["checked_at"])
+            self.check_guard_source()
+
+    def check_guard_source(self) -> None:
+        if self.run(["git", "-C", str(self.guard_root), "rev-parse", "HEAD"]) != self.resume_plan["guard_commit"] or self.run(
+            ["git", "-C", str(self.guard_root), "status", "--porcelain", "--untracked-files=no"]
+        ):
+            raise DeployStopped("Reviewed guard source changed; keep application checkout and remaining replicas")
+        if self.run(["git", "-C", str(self.guard_root), "diff", "--name-only", self.commit,
+                     self.resume_plan["guard_commit"], "--", "apps/api/app", "apps/api/db",
+                     "apps/api/requirements.lock", "apps/api/Dockerfile"]):
+            raise DeployStopped("Guard-only recovery must retain the exact packaged application source and recipe")
+
+    @staticmethod
+    def check_resume_time(value: str) -> None:
+        try:
+            stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if stamp.tzinfo is None or stamp.utcoffset().total_seconds() != 0 or not -30 <= (
+                datetime.now(timezone.utc) - stamp
+            ).total_seconds() <= 900:
+                raise ValueError("fresh UTC required")
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise DeployStopped("Resume observation must be UTC, at most fifteen minutes old") from exc
+
+    def load_resume_plan(self, current: list[dict]) -> None:
+        raw = private_bytes(self.resume_path)
+        plan = json.loads(raw)
+        binding_keys = {"application_commit", "guard_commit", "application_version", "project",
+                        "readiness_url", "images", "baseline_backends", "added_backend", "target_migrations"}
+        if not isinstance(plan, dict) or set(plan) != binding_keys | {"schema_version", "kind", "files"} or (
+            type(plan["schema_version"]) is not int or plan["schema_version"] != 1 or plan["kind"] != RESUME_KIND or
+            plan["application_commit"] != self.commit or plan["application_version"] != "2.8.8" or
+            not isinstance(plan["guard_commit"], str) or not re.fullmatch(r"[a-f0-9]{40}", plan["guard_commit"]) or
+            plan["project"] != self.project_name or plan["readiness_url"] != self.readiness_url or
+            plan["images"] != {name: value[1] for name, value in self.images.items()} or
+            not isinstance(plan["files"], dict) or set(plan["files"]) != RESUME_FILES
+        ):
+            raise DeployStopped("Unsupported or mismatched explicit resume plan")
+        self.resume_plan = plan
+        self.plan_files[self.resume_path] = hashlib.sha256(raw).hexdigest()
+        inputs = {name: self.read_bound_file(reference) for name, reference in plan["files"].items()}
+        self.check_guard_source()
+        selected = {"migration_plan": self.plan_path, "image_manifest": self.manifest,
+                    "operator_evidence": self.evidence, "compose_override": self.override,
+                    "private_environment": self.env_file}
+        if any(path is None or Path(plan["files"][name]["path"]).resolve() != path.resolve() for name, path in selected.items()):
+            raise DeployStopped("Resume evidence paths differ from selected runtime inputs")
+        attempt, failed, observation, ci = [json.loads(inputs[name]) for name in (
+            "failed_attempt", "failed_proof", "fresh_observation", "guard_ci"
+        )]
+        if any(not isinstance(value, dict) for value in (attempt, failed, observation, ci)):
+            raise DeployStopped("Resume attempt, failure, observation and hosted CI must be objects")
+        if failed.get("mode") != "deploy" or failed.get("commit") != self.commit or failed.get("passed") is not False or (
+            type(failed.get("returncode")) is not int or failed["returncode"] == 0 or
+            failed.get("wrapper_success_marker") is not False or attempt.get("commit") != self.commit or
+            attempt.get("private_log") != plan["files"]["failed_log"]["path"] or
+            failed.get("private_log") != attempt.get("private_log") or
+            failed.get("log_sha256") != plan["files"]["failed_log"]["sha256"] or
+            failed.get("started_at") != attempt.get("started_at")
+        ):
+            raise DeployStopped("Original failed deployment receipt/log binding is invalid")
+        log = inputs["failed_log"].decode("utf-8")
+        if "Migration service completed; verifying pinned addition " + REFERENCE_MIGRATION not in log or (
+            "Application deployment passed." in log or "Recorded old backend " in log
+        ):
+            raise DeployStopped("Resume requires the recorded post-migration failure before any old removal")
+        jobs = ci.get("jobs")
+        if type(ci.get("schema_version")) is not int or ci["schema_version"] != 1 or ci.get("guard_commit") != plan["guard_commit"] or (
+            type(ci.get("run_id")) is not int or ci["run_id"] <= 0 or
+            ci.get("run_url") != "https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/" + str(ci["run_id"]) or
+            ci.get("status") != "completed" or ci.get("conclusion") != "success" or
+            not isinstance(jobs, list) or len(jobs) != 15 or
+            any(not isinstance(row, dict) or not isinstance(row.get("name"), str) or not row["name"] or
+                row.get("status") != "completed" or row.get("conclusion") != "success" for row in jobs) or
+            len({row["name"] for row in jobs}) != 15
+        ):
+            raise DeployStopped("Resume requires all fifteen hosted jobs on the exact guard commit")
+        if type(observation.get("schema_version")) is not int or observation["schema_version"] != 1 or observation.get("kind") != RESUME_KIND or (
+            observation.get("source") != "actual_target_read_only" or
+            observation.get("binding") != {key: plan[key] for key in binding_keys} or
+            observation.get("semantic_checks") != {name: True for name in SEMANTIC_CHECKS} or
+            any(value is not True for value in observation.get("semantic_checks", {}).values())
+        ):
+            raise DeployStopped("Fresh resume observation lacks the exact target/semantic binding")
+        self.resume_observation = observation
+        self.check_resume_time(observation.get("checked_at"))
+        baseline, baseline_roles = attempt.get("baseline_container_fingerprints"), attempt.get("baseline_container_roles")
+        by_id = {item["Id"]: item for item in current}
+        actual = {key: fingerprint(item) for key, item in by_id.items()}
+        roles = {key: {"project": project(item), "service": service(item)} for key, item in by_id.items()}
+        added = plan["added_backend"]
+        if not isinstance(added, dict) or set(added) != {"id", "image", "config_hash"} or (
+            not isinstance(added["id"], str) or not re.fullmatch(r"[a-f0-9]{64}", added["id"]) or
+            added["image"] != self.images["backend"][1] or added["config_hash"] != self.backend_hash or
+            not isinstance(baseline, dict) or not isinstance(baseline_roles, dict) or
+            set(baseline_roles) != set(baseline) or set(actual) != set(baseline) | {added["id"]} or
+            added["id"] in baseline or any(actual.get(key) != value for key, value in baseline.items()) or
+            any(roles.get(key) != value for key, value in baseline_roles.items()) or
+            roles.get(added["id"]) != {"project": self.project_name, "service": "backend"} or
+            observation.get("baseline_container_fingerprints") != baseline or
+            observation.get("current_container_fingerprints") != actual or
+            observation.get("current_container_roles") != roles
+        ):
+            raise DeployStopped("Resume requires every original identity and exactly one recorded added backend")
+        old = plan["baseline_backends"]
+        if not isinstance(old, list) or len(old) != self.replicas or self.replicas != 2 or (
+            len({row.get("id") for row in old if isinstance(row, dict)}) != 2 or
+            any(not isinstance(row, dict) or set(row) != {"id", "image", "release_version"} or
+                row.get("release_version") != "2.8.1" or row.get("id") not in baseline or
+                baseline_roles.get(row.get("id")) != {"project": self.project_name, "service": "backend"} or
+                by_id[row["id"]]["Image"] != row.get("image") for row in old)
+        ):
+            raise DeployStopped("Resume baseline must name the same two recorded old APIs")
+        self.baseline_backends = {row["id"]: by_id[row["id"]] for row in old}
+        if not self.desired_backend(by_id[added["id"]]) or not healthy(by_id[added["id"]], require_probe=True):
+            raise DeployStopped("Recorded existing candidate must already have the reviewed image/configuration and health")
+        canonical = hashlib.sha256(json.dumps(self.config, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if observation.get("resolved_config_sha256") != canonical or observation.get("service_hashes") != self.service_hashes:
+            raise DeployStopped("Resume resolved model differs from independently predicted configuration hashes")
+        self.resume_attempt = attempt
+
+    def validate_resume_probes(self) -> None:
+        probes = self.resume_observation.get("probes")
+        expected_ids = set(self.baseline_backends) | {self.resume_plan["added_backend"]["id"]}
+        if not isinstance(probes, list) or len(probes) != 3 or any(not isinstance(row, dict) for row in probes) or {
+            row.get("id") for row in probes
+        } != expected_ids:
+            raise DeployStopped("Resume observation needs all three exact API probes")
+        for probe in probes:
+            old = probe["id"] in self.baseline_backends
+            self.validate_payload(probe.get("payload"), old=old, status=probe.get("status"))
+            expected = self.plan["baseline_migrations"] if old else self.plan["target_migrations"]
+            image = self.baseline_backends[probe["id"]]["Image"] if old else self.images["backend"][1]
+            if probe.get("image") != image or probe.get("expected") != expected or probe.get("applied") != self.plan["target_migrations"] or (
+                old and probe.get("migration_state") != self.old_migration_state() or
+                not old and probe.get("migration_state", {}).get("current") is not True
+            ):
+                raise DeployStopped("Resume recorded API files/ledger/readiness exceed the pinned transition")
 
     @staticmethod
     def check_proof_time(value: str) -> None:
@@ -369,9 +547,10 @@ class ApplicationDeploy:
         baseline = plan["baseline_migrations"]
         if not isinstance(baseline, dict) or set(baseline) != BASELINE_MIGRATIONS or len(baseline) != 8:
             raise DeployStopped("Reviewed migration plan must retain the exact eight-migration baseline")
+        applied = expected if self.resume_plan else baseline
         if expected != baseline | {REFERENCE_MIGRATION: REFERENCE_CHECKSUM} or (
             plan["target_migrations"] != expected or current.get("expected") != baseline or
-            current.get("applied") != baseline
+            current.get("applied") != applied
         ):
             raise DeployStopped("Only the pinned reference-table addition may extend the unchanged ledger")
         if plan["commit"] != self.commit or plan["project"] != self.project_name or (
@@ -440,6 +619,13 @@ class ApplicationDeploy:
         ):
             raise DeployStopped("Compatibility proof needs both read-only old-image business routes")
         self.read_bound_file(proof.get("transcript"))
+        if self.resume_plan and (
+            self.resume_plan["target_migrations"] != expected or
+            self.resume_plan["baseline_backends"] != declared or
+            self.resume_plan["files"]["restore_report"] != plan["evidence"] or
+            self.resume_plan["files"]["restore_transcript"] != proof["transcript"]
+        ):
+            raise DeployStopped("Resume proof chain differs from the original pinned migration/restore")
         self.check_plan_files()
 
     def desired_backend(self, item: dict) -> bool:
@@ -508,15 +694,16 @@ class ApplicationDeploy:
         if self.images["migrate"][1] != self.images["backend"][1]:
             raise DeployStopped("Migration and backend must use the same reviewed image")
         backends = self.backends()
-        if len(backends) != self.replicas or any(not healthy(item, require_probe=True) for item in backends):
+        if self.resume_path is None and (
+            len(backends) != self.replicas or any(not healthy(item, require_probe=True) for item in backends)
+        ):
             raise DeployStopped("Backend baseline must match healthy requested replica count")
+        if self.resume_path is not None and (len(backends) != 3 or any(not item["State"].get("Running") for item in backends)):
+            raise DeployStopped("Explicit resume requires two running old APIs and one running recorded candidate")
         self.baseline_backends = {item["Id"]: item for item in backends}
         self.service_hashes = {}
         for name in ("backend", *self.targets):
-            hashed = self.compose_run("config", "--hash", name).split()
-            if len(hashed) != 2 or hashed[0] != name or not re.fullmatch(r"[a-f0-9]{64}", hashed[1]):
-                raise DeployStopped(f"Cannot resolve reviewed {name} configuration identity")
-            self.service_hashes[name] = hashed[1]
+            self.service_hashes[name] = self.resolved_service_hash(name)
         self.backend_hash = self.service_hashes["backend"]
         self.service_networks = {}
         for name in ("backend", *self.targets):
@@ -538,13 +725,24 @@ class ApplicationDeploy:
         }
         if migration_networks != set(self.service_networks["backend"]):
             raise DeployStopped("Migration network differs from the existing backend")
-        self.check_schema(backends[0])
+        if self.resume_path is not None:
+            self.load_resume_plan(current)
+        self.check_schema(next(iter(self.baseline_backends.values())))
         excluded = {"backend", *self.targets}
         self.protected = {
             item["Id"]: item for item in current
             if not (project(item) == self.project_name and service(item) in excluded)
         }
         self.check_protected()
+        if self.resume_plan:
+            expected_protected = {key for key, row in self.resume_attempt["baseline_container_roles"].items()
+                                  if not (row["project"] == self.project_name and row["service"] in excluded)}
+            if set(self.protected) != expected_protected or self.plan is None:
+                raise DeployStopped("Resume protected set differs from the original failed attempt")
+            self.migrated = True
+            self.validate_resume_probes()
+            self.backend_health(self.replicas + 1, 1)
+            return list(self.baseline_backends.values())
         if self.plan:
             self.backend_health(self.replicas, 0)
         else:
@@ -625,14 +823,21 @@ class ApplicationDeploy:
         print("Preflight passed. Existing stack identities retained.")
         self.check_images()
         self.check_protected()
-        self.compose_run("run", "--rm", "--no-deps", "--pull", "never", "migrate")
-        if self.plan:
-            self.migrated = True
-            print(f"Migration service completed; verifying pinned addition {REFERENCE_MIGRATION}, exact ledger "
-                  "and old migration-only readiness.", flush=True)
-        self.backend_health(self.replicas, 0)
+        if not self.resume_plan:
+            self.compose_run("run", "--rm", "--no-deps", "--pull", "never", "migrate")
+            if self.plan:
+                self.migrated = True
+                print(f"Migration service completed; verifying pinned addition {REFERENCE_MIGRATION}, exact ledger "
+                      "and old migration-only readiness.", flush=True)
+            self.backend_health(self.replicas, 0)
         pending = [item for item in old if not self.desired_backend(item)]
-        new_count = self.replicas - len(pending)
+        if self.resume_plan:
+            new_count = 1
+            self.backend_health(self.replicas + 1, new_count)
+            print("Reviewed existing candidate ready; retaining the already applied pinned ledger without a migration run.", flush=True)
+            self.retire_backend(pending.pop(0), new_count)
+        else:
+            new_count = self.replicas - len(pending)
         for baseline in pending:
             self.check_images()
             self.backend_health(self.replicas, new_count)
@@ -649,21 +854,7 @@ class ApplicationDeploy:
                 print(f"Reviewed new backend ready; {new_count} replacement(s) verified.")
             else:
                 self.backend_health(self.replicas + 1, new_count)
-            self.check_images()
-            self.guard_old(baseline, running=True)
-            self.run(["docker", "stop", "--time", "20", baseline["Id"]])
-            running = [item for item in self.backends() if item["State"].get("Running")]
-            if len(running) != self.replicas or any(not self.backend_healthy(item) for item in running):
-                raise DeployStopped("Remaining backend health failed; no container removal")
-            self.check_protected()
-            self.readiness(allow_old=any(item["Id"] in self.baseline_backends for item in running))
-            self.check_images()
-            self.guard_old(baseline, running=False)
-            self.run(["docker", "rm", baseline["Id"]])
-            if self.plan:
-                print(f"Recorded old backend {baseline['Id']} removed after replacement readiness; "
-                      "remaining identities retained.", flush=True)
-            self.backend_health(self.replicas, new_count)
+            self.retire_backend(baseline, new_count)
         self.check_images()
         self.backend_health(self.replicas, self.replicas)
         self.compose_run(
@@ -683,6 +874,26 @@ class ApplicationDeploy:
             if matches[0]["Config"]["Labels"].get("com.docker.compose.config-hash") != self.service_hashes[name]:
                 raise DeployStopped(f"Updated {name} configuration identity failed")
         print(f"Application deployment passed. Commit: {self.commit}")
+
+    def retire_backend(self, baseline: dict, new_count: int) -> None:
+        self.check_images()
+        self.backend_health(self.replicas + 1, new_count)
+        self.check_plan_files()
+        self.check_protected()
+        self.guard_old(baseline, running=True)
+        self.run(["docker", "stop", "--time", "20", baseline["Id"]])
+        running = [item for item in self.backends() if item["State"].get("Running")]
+        if len(running) != self.replicas or any(not self.backend_healthy(item) for item in running):
+            raise DeployStopped("Remaining backend health failed; no container removal")
+        self.check_protected()
+        self.readiness(allow_old=any(item["Id"] in self.baseline_backends for item in running))
+        self.check_images()
+        self.guard_old(baseline, running=False)
+        self.run(["docker", "rm", baseline["Id"]])
+        if self.plan:
+            print(f"Recorded old backend {baseline['Id']} removed after replacement readiness; "
+                  "remaining identities retained.", flush=True)
+        self.backend_health(self.replicas, new_count)
 
 
 def main() -> int:
