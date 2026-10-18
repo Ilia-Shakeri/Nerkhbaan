@@ -1,5 +1,6 @@
 """Build and verify one fixed application release on an ephemeral runner."""
 import argparse
+import base64
 import gzip
 import hashlib
 import io
@@ -26,6 +27,8 @@ REPOSITORY = "Ilia-Shakeri/Nerkhbaan"
 PUBLIC_ASSET = "https://nerkhbaan.ir/assets/index-0vsgv0JA.js"
 PUBLIC_ASSET_SHA256 = "9a5b165a82a11b0d8cd7ccf642f6ae6d9e2c84998d58a7cdfd18c25d3248f3d1"
 PUBLIC_KEY_SHA256 = "0dc48003fa42c7f39424bb09461a9f872943fcc51a48fff61ae4e48ca417a2eb"
+EXISTING_PUBLIC_KEY = 'BNg6GMpk04N2Oqp_GRI2DsFRrtJA4M_svcEiNEeJiJuAvQU0U_E6ivDd7C8Z6rHpv5yBYMnXca5vC7BU5ye-vos'
+PUBLIC_KEY_OBSERVED_AT = "2026-10-18T12:38:15.612884+00:00"
 OPS_PATHS = {".github/workflows/release-runtime-artifacts.yml", "scripts/build_runtime_artifacts.py"}
 PATCH_PATHS = {
     ".github/workflows/ci.yml", "API_DOCUMENTATION.md", "CHANGELOG.md",
@@ -153,6 +156,14 @@ def recover_public_key(raw):
     matches = {value for value in re.findall(rb"[A-Za-z0-9_-]{87}", raw) if hashlib.sha256(value).hexdigest() == PUBLIC_KEY_SHA256}
     assert len(matches) == 1, "Existing public key missing or ambiguous"
     return matches.pop().decode()
+
+
+def validated_public_key(value=EXISTING_PUBLIC_KEY):
+    assert isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]{87}", value)
+    assert hashlib.sha256(value.encode()).hexdigest() == PUBLIC_KEY_SHA256, "Reviewed public key hash differs"
+    decoded = base64.b64decode(value + "=", altchars=b"-_", validate=True)
+    assert len(decoded) == 65 and decoded[0] == 4, "Uncompressed public point required"
+    return value
 
 
 def verify_application_ci(repository, token):
@@ -291,8 +302,8 @@ class RuntimeBuild:
         ci = verify_application_ci(self.args.repository, os.environ["GH_TOKEN"])
         source_proof = archive_source(self.checkout, self.source)
         write_new(self.out / "source-build-proof.json", self.proof(**source_proof, allowed_changed_paths=changed, source_archive_only=True, unreleased_notice_code_excluded=True, application_ci=ci, canonical_recipes=[{"kind": kind, "dockerfile": recipe, "context": context} for kind, recipe, context in RECIPES]))
-        self.public_key = recover_public_key(read_https(PUBLIC_ASSET))
-        write_new(self.out / "build-inputs.json", self.proof(vapid_public_key_sha256=PUBLIC_KEY_SHA256, public_asset_sha256=PUBLIC_ASSET_SHA256, admin_base_path="/admin/", platform="linux/amd64"))
+        self.public_key = validated_public_key()
+        write_new(self.out / "build-inputs.json", self.proof(vapid_public_key_sha256=PUBLIC_KEY_SHA256, public_asset_sha256=PUBLIC_ASSET_SHA256, admin_base_path="/admin/", platform="linux/amd64", public_key_source={"kind": "existing_published_web_client_key", "url": PUBLIC_ASSET, "asset_sha256": PUBLIC_ASSET_SHA256, "asset_bytes": 216486, "observed_at": PUBLIC_KEY_OBSERVED_AT, "runner_fetched_public_asset": False, "private_inputs_used": False}))
 
     def build(self):
         images = []
@@ -433,6 +444,15 @@ class RuntimeBuild:
 
 
 class OfflineContracts(unittest.TestCase):
+    def test_published_client_key_requires_exact_hash_alphabet_and_public_point(self):
+        self.assertEqual(validated_public_key(), EXISTING_PUBLIC_KEY)
+        for value in [EXISTING_PUBLIC_KEY + "x", EXISTING_PUBLIC_KEY[:-1] + "!", "A" + EXISTING_PUBLIC_KEY[1:]]:
+            with self.subTest(length=len(value)), self.assertRaises(AssertionError):
+                validated_public_key(value)
+        compressed = base64.urlsafe_b64encode(b"\x02" + b"\0" * 64).decode().rstrip("=")
+        with patch(__name__ + ".PUBLIC_KEY_SHA256", hashlib.sha256(compressed.encode()).hexdigest()), self.assertRaises(AssertionError):
+            validated_public_key(compressed)
+
     def test_authenticated_redirect_is_refused_before_any_followup_request(self):
         request = urllib.request.Request("https://api.github.com/repos/" + REPOSITORY, headers={"Authorization": "Bearer test-only"})
         for destination in ["https://other.example/blob", "https://api.github.com/redirect", "http://api.github.com/plain"]:
