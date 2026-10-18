@@ -149,7 +149,8 @@ jobs:
           python ../../scripts/test_browser_fixture.py
           python ../../scripts/test_load_test.py
           python ../../scripts/test_deploy_application.py
-          python -m pyflakes ../../scripts/deploy_application.py ../../scripts/test_deploy_application.py
+          python ../../scripts/test_deploy_normal_resume.py
+          python -m pyflakes ../../scripts/deploy_application.py ../../scripts/test_deploy_application.py ../../scripts/test_deploy_normal_resume.py
           python ../telegram_worker/tests/test_source_rights.py -v
           python -m pyflakes ../telegram_worker/app/source_rights.py ../telegram_worker/app/worker.py ../telegram_worker/tests/test_source_rights.py
 

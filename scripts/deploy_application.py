@@ -2,17 +2,22 @@
 from __future__ import annotations
 
 import hashlib
+import copy
+from contextlib import contextmanager
+import errno
 import json
 import os
 import re
 import shutil
 import stat
+import socket
+import ssl
 import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, build_opener
 
 
@@ -36,6 +41,25 @@ SEMANTIC_CHECKS = {
     "custom_labels", "exposed_ports", "healthcheck", "cap_drop", "security_options",
     "read_only_rootfs", "restart_policy", "published_ports", "mounts", "networks",
 }
+NORMAL_RESUME_KIND = "normal-same-ledger-resume-after-stopped-old-v1"
+NORMAL_RESUME_FILES = {
+    "original_preflight", "failed_attempt", "failed_proof", "failed_log", "image_manifest",
+    "operator_evidence", "compose_override", "private_environment", "guard_ci", "fresh_observation",
+}
+NORMAL_PRIVATE_NAMES = {
+    "operator-gates.json", "operator-finalization-proof.json", "operator-evidence-index.json",
+    "source-rights-reviewed.json", "source-rights-probe-attempt.json", "prepared-images.json",
+    "execution-plan.json", "stage-proof.json", "predeployment-baseline.json",
+    "reviewed-private-environment-proof.json", "ci-run.json", "ci-jobs.json",
+    "runtime-trivy-summary.json", "runtime-build-checks.json", "private_environment", "runtime_override",
+}
+NORMAL_RESUME_CI_JOBS = {
+    "Node lock and builds", "Compose configuration", "Build and scan web image",
+    "Python static and unit checks", "Desktop package", "Repository security scans",
+    "Build and scan relay image", "Build and scan telegram image", "Feed pull Go checks",
+    "Build and scan api image", "Build and scan feed-pull image", "Browser auth and alerts",
+    "Build and scan admin image", "Timescale, Redis, and migrations", "Build and scan edge image",
+}
 MIGRATION_COMMAND = ["python", "-m", "app.migrations.runner"]
 
 
@@ -50,6 +74,12 @@ def private_bytes(path: Path) -> bytes:
 
 class DeployStopped(RuntimeError):
     pass
+
+
+class TransientReadiness(DeployStopped):
+    def __init__(self, safe_type: str):
+        self.safe_type = safe_type
+        super().__init__("Transient target readiness transport failure")
 
 
 class RejectRedirect(HTTPRedirectHandler):
@@ -175,6 +205,11 @@ class ApplicationDeploy:
         self.startup_deadline: float | None = None
         self.resume_path = Path(env["DEPLOY_RESUME_PLAN"]) if env.get("DEPLOY_RESUME_PLAN") else None
         self.resume_plan: dict | None = None
+        self.normal_resume_path = Path(env["DEPLOY_NORMAL_RESUME_PLAN"]) if env.get("DEPLOY_NORMAL_RESUME_PLAN") else None
+        self.normal_resume_plan: dict | None = None
+        self.retirement_new_count: int | None = None
+        if self.normal_resume_path is not None and (self.plan_path is not None or self.resume_path is not None):
+            raise DeployStopped("Normal same-ledger resume cannot select either migration-transition plan")
 
     def bounded_timeout(self, timeout: float) -> float:
         if self.startup_deadline is not None:
@@ -219,6 +254,11 @@ class ApplicationDeploy:
 
     def check_images(self) -> None:
         self.check_plan_files()
+        if getattr(self, "normal_resume_plan", None):
+            identifier = self.normal_resume_plan["added_backend"]["id"]
+            current = self.inspect([identifier])
+            if len(current) != 1 or fingerprint(current[0]) != self.normal_resume_observation["current_container_fingerprints"][identifier]:
+                raise DeployStopped("Recorded same-ledger candidate identity changed; keep remaining replicas")
         if self.resume_plan:
             identifier = self.resume_plan["added_backend"]["id"]
             current = self.inspect([identifier])
@@ -258,7 +298,7 @@ class ApplicationDeploy:
                 if not healthy(item, require_probe=True):
                     raise DeployStopped("Existing data or backup service is unhealthy")
         allowed = set(self.targets) | {"backend"}
-        if not getattr(self, "resume_plan", None):
+        if not getattr(self, "resume_plan", None) and not getattr(self, "normal_resume_plan", None):
             allowed.add("migrate")
         for container_id, item in current.items():
             if container_id not in self.protected and not (
@@ -266,13 +306,88 @@ class ApplicationDeploy:
             ):
                 raise DeployStopped("Unexpected protected container appeared; stop and review")
 
-    def readiness(self, *, allow_old: bool = False) -> None:
+    @staticmethod
+    def transient_readiness_type(error: BaseException) -> str | None:
+        reason = error.reason if isinstance(error, URLError) else error
+        if isinstance(reason, ssl.SSLError):
+            return None
+        if isinstance(reason, (TimeoutError, socket.timeout)):
+            return "transport_timeout"
+        if isinstance(reason, OSError) and reason.errno in {
+            errno.ECONNRESET, errno.ECONNREFUSED, errno.ECONNABORTED,
+            errno.ETIMEDOUT, errno.ENETUNREACH, errno.EHOSTUNREACH, errno.EPIPE,
+        }:
+            return "transport_connect_or_reset"
+        return None
+
+    @contextmanager
+    def retirement_budget(self):
+        started = time.monotonic()
+        previous = self.startup_deadline
+        deadline = min(started + 30, previous) if previous is not None else started + 30
+        self.startup_deadline = deadline
+        try:
+            yield started, deadline
+        except DeployStopped as exc:
+            if "stage=retirement" in str(exc):
+                raise
+            elapsed = time.monotonic() - started
+            raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type=guard elapsed={elapsed:.3f}s") from exc
+        finally:
+            self.startup_deadline = previous
+
+    def readiness(self, *, allow_old: bool = False, retirement: bool = False) -> None:
+        if not retirement:
+            self.readiness_once(allow_old=allow_old)
+            return
+        with self.retirement_budget() as (started, deadline):
+            self.wait_retirement_readiness(allow_old=allow_old, started=started, deadline=deadline)
+
+    def wait_retirement_readiness(self, *, allow_old: bool, started: float, deadline: float) -> None:
+        safe_type = "deadline"
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                self.readiness_once(allow_old=allow_old, timeout=min(5, remaining), retirement=True)
+                if time.monotonic() >= deadline:
+                    safe_type = "late_success"
+                    break
+                return
+            except TransientReadiness as exc:
+                safe_type = exc.safe_type
+                self.check_images()
+                self.check_protected()
+                self.check_retirement_pair()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                time.sleep(min(2, remaining))
+            except DeployStopped as exc:
+                elapsed = time.monotonic() - started
+                raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type=validation elapsed={elapsed:.3f}s") from exc
+        elapsed = time.monotonic() - started
+        raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type={safe_type} elapsed={elapsed:.3f}s")
+
+    def check_retirement_pair(self) -> None:
+        running = [item for item in self.backends() if item["State"].get("Running")]
+        expected_new = self.retirement_new_count if self.retirement_new_count is not None else 1
+        if len(running) != self.replicas or any(not self.backend_healthy(item) for item in running) or (
+            any(network_identity(item) != self.service_networks["backend"] for item in running) or
+            sum(self.desired_backend(item) for item in running) < expected_new
+        ):
+            raise DeployStopped("Remaining backend pair changed during retirement readiness wait")
+
+    def readiness_once(self, *, allow_old: bool = False, timeout: float = 15, retirement: bool = False) -> None:
         try:
             try:
                 response = build_opener(RejectRedirect()).open(
-                    self.readiness_url, timeout=self.bounded_timeout(15),
+                    self.readiness_url, timeout=self.bounded_timeout(timeout),
                 )
             except HTTPError as exc:
+                if retirement and exc.code in {502, 504}:
+                    raise TransientReadiness("http_" + str(exc.code)) from exc
                 if exc.code != 503:
                     raise
                 response = exc
@@ -281,7 +396,7 @@ class ApplicationDeploy:
                     raise DeployStopped("Target HTTPS readiness failed")
                 payload = json.loads(response.read(65536))
                 status = response.status
-            self.bounded_timeout(15)
+            self.bounded_timeout(timeout)
             if allow_old and status == 503 and self.plan and self.migrated:
                 self.validate_payload(payload, old=True, status=status)
                 return
@@ -289,7 +404,13 @@ class ApplicationDeploy:
                 raise DeployStopped("Target HTTPS readiness payload failed")
             if self.plan:
                 self.validate_payload(payload, old=not self.migrated, status=status)
+            if getattr(self, "normal_resume_plan", None):
+                self.validate_normal_payload(payload, status=status, old=allow_old and payload.get("release_version") == "2.8.8")
         except (OSError, ValueError) as exc:
+            if retirement:
+                safe_type = self.transient_readiness_type(exc)
+                if safe_type is not None:
+                    raise TransientReadiness(safe_type) from exc
             raise DeployStopped("Target HTTPS readiness failed") from exc
 
     def backend_health(self, count: int, new_count: int) -> list[dict]:
@@ -305,6 +426,11 @@ class ApplicationDeploy:
         return current
 
     def backend_healthy(self, item: dict) -> bool:
+        if getattr(self, "normal_resume_plan", None):
+            if not healthy(item, require_probe=True):
+                return False
+            self.validate_normal_probe(self.backend_probe(item), old=item["Id"] in self.baseline_backends)
+            return True
         if not self.plan:
             return healthy(item, require_probe=True)
         old = item["Id"] in self.baseline_backends
@@ -369,6 +495,193 @@ class ApplicationDeploy:
         if getattr(self, "resume_plan", None):
             self.check_resume_time(self.resume_observation["checked_at"])
             self.check_guard_source()
+        if getattr(self, "normal_resume_plan", None):
+            self.check_resume_time(self.normal_resume_observation["checked_at"])
+            self.check_normal_guard_source()
+
+    def check_normal_guard_source(self) -> None:
+        expected = self.normal_resume_plan["guard_commit"]
+        if self.run(["git", "-C", str(self.guard_root), "rev-parse", "HEAD"]) != expected or self.run(
+            ["git", "-C", str(self.guard_root), "status", "--porcelain", "--untracked-files=no"]
+        ) or self.run(["git", "-C", str(self.guard_root), "diff", "--name-only", self.commit, expected,
+                       "--", "apps", "packages", "VERSION", "package.json", "package-lock.json",
+                       "docker-compose.prod.yaml", ".npmrc"]):
+            raise DeployStopped("Same-ledger recovery guard must retain the exact application source and runtime recipes")
+
+    def validate_normal_payload(self, payload: dict, *, status: int, old: bool) -> None:
+        expected = {"ready": True, "status": "ok", "database": "connected", "redis": "connected",
+                    "migration_current": True, "migration_version": max(self.normal_resume_plan["target_migrations"]),
+                    "release_version": "2.8.8" if old else "2.8.11"}
+        if status != 200 or not isinstance(payload, dict) or any(
+            payload.get(key) != value or isinstance(value, bool) and type(payload.get(key)) is not bool
+            for key, value in expected.items()
+        ):
+            raise DeployStopped("Same-ledger resume requires strict current old/new readiness")
+
+    def validate_normal_probe(self, probe: dict, *, old: bool) -> None:
+        if not isinstance(probe, dict):
+            raise DeployStopped("Same-ledger API probe must be an object")
+        self.validate_normal_payload(probe.get("payload"), status=probe.get("status"), old=old)
+        ledger = self.normal_resume_plan["target_migrations"]
+        state = {"current": True, "version": max(ledger), "applied_count": 9, "expected_count": 9,
+                 "missing": [], "changed": [], "unknown": []}
+        if probe.get("expected") != ledger or probe.get("applied") != ledger or probe.get("migration_state") != state:
+            raise DeployStopped("Same-ledger API files and applied nine-migration ledger differ")
+
+    def load_normal_resume_plan(self, current: list[dict]) -> None:
+        raw = private_bytes(self.normal_resume_path)
+        plan = json.loads(raw)
+        binding_keys = {"application_commit", "guard_commit", "application_version", "project", "readiness_url",
+                        "images", "baseline_backends", "stopped_backend", "added_backend", "target_migrations"}
+        if not isinstance(plan, dict) or set(plan) != binding_keys | {"schema_version", "kind", "files"} or (
+            type(plan["schema_version"]) is not int or plan["schema_version"] != 1 or plan["kind"] != NORMAL_RESUME_KIND or
+            plan["application_commit"] != self.commit or plan["application_version"] != "2.8.11" or
+            (self.root / "VERSION").read_text().strip() != "2.8.11" or
+            not isinstance(plan["guard_commit"], str) or not re.fullmatch(r"[a-f0-9]{40}", plan["guard_commit"]) or
+            plan["project"] != self.project_name or plan["readiness_url"] != self.readiness_url or
+            plan["images"] != {name: value[1] for name, value in self.images.items()} or
+            not isinstance(plan["target_migrations"], dict) or len(plan["target_migrations"]) != 9 or
+            not isinstance(plan["files"], dict) or set(plan["files"]) != NORMAL_RESUME_FILES
+        ):
+            raise DeployStopped("Unsupported explicit normal same-ledger resume plan")
+        self.normal_resume_plan = plan
+        self.plan_files[self.normal_resume_path] = hashlib.sha256(raw).hexdigest()
+        inputs = {name: self.read_bound_file(reference) for name, reference in plan["files"].items()}
+        self.check_normal_guard_source()
+        selected = {"image_manifest": self.manifest, "operator_evidence": self.evidence,
+                    "compose_override": self.override, "private_environment": self.env_file}
+        if any(Path(plan["files"][name]["path"]).resolve() != path.resolve() for name, path in selected.items()):
+            raise DeployStopped("Normal resume selected private runtime inputs differ")
+        pre, attempt, failed, observation, ci = [json.loads(inputs[name]) for name in (
+            "original_preflight", "failed_attempt", "failed_proof", "fresh_observation", "guard_ci")]
+        if any(not isinstance(value, dict) for value in [pre, attempt, failed, observation, ci]):
+            raise DeployStopped("Normal resume evidence must contain objects")
+        artifact = Path(plan["files"]["original_preflight"]["path"]).parent
+        for key, name in [("original_preflight", "preflight-proof.json"),
+                          ("failed_attempt", "deployment-wrapper-attempt.json"),
+                          ("failed_proof", "deployment-wrapper-proof.json")]:
+            if Path(plan["files"][key]["path"]) != artifact / name:
+                raise DeployStopped("Normal resume original receipt paths differ")
+        if pre.get("commit") != self.commit or pre.get("mode") != "preflight" or pre.get("passed") is not True or (
+            pre.get("same_ledger_no_transition_plan_valid") is not True or
+            any(value.get("release_version") != "2.8.11" for value in [pre, attempt, failed]) or
+            failed.get("mode") != "deploy" or failed.get("commit") != self.commit or failed.get("passed") is not False or
+            type(failed.get("returncode")) is not int or failed["returncode"] == 0 or
+            failed.get("wrapper_success_marker") is not False or failed.get("migration_plan_selected") is not False or
+            failed.get("resume_plan_selected") is not False or
+            failed.get("usual_idempotent_migrator_invoked_by_guard") is not True or
+            attempt.get("mode") != "deploy" or attempt.get("commit") != self.commit or
+            failed.get("started_at") != attempt.get("started_at") or
+            failed.get("private_log") != attempt.get("private_log") or
+            attempt.get("private_log") != plan["files"]["failed_log"]["path"] or
+            failed.get("log_sha256") != plan["files"]["failed_log"]["sha256"] or
+            attempt.get("preflight_proof_sha256") != plan["files"]["original_preflight"]["sha256"] or
+            failed.get("preflight_proof_sha256") != attempt.get("preflight_proof_sha256")
+        ):
+            raise DeployStopped("Normal resume original failed wrapper chain differs")
+        log_path = Path(plan["files"]["failed_log"]["path"])
+        lines = inputs["failed_log"].decode("utf-8").splitlines()
+        if log_path.parent != artifact or not log_path.name.startswith("deploy-") or log_path.suffix != ".log" or lines != [
+            "Preflight passed. Existing stack identities retained.",
+            "Deploy stopped: Target HTTPS readiness failed. Keep current replicas; review private logs before retry.",
+        ]:
+            raise DeployStopped("Normal resume requires the actual failed retirement log without transition markers")
+        bindings = pre.get("private_bindings")
+        if not isinstance(bindings, dict) or set(bindings) != NORMAL_PRIVATE_NAMES or (
+            bindings != attempt.get("private_bindings") or bindings != failed.get("private_bindings")
+        ):
+            raise DeployStopped("Normal resume requires all sixteen original private bindings")
+        for name, reference in bindings.items():
+            expected = self.env_file if name == "private_environment" else self.override if name == "runtime_override" else artifact / name
+            if not isinstance(reference, dict) or set(reference) != {"path", "sha256"} or Path(reference["path"]).resolve() != expected.resolve():
+                raise DeployStopped("Normal resume original private binding path differs")
+            self.read_bound_file(reference)
+        for selected_name, bound_name in {"image_manifest": "prepared-images.json", "operator_evidence": "operator-gates.json",
+                                           "compose_override": "runtime_override", "private_environment": "private_environment"}.items():
+            if plan["files"][selected_name] != bindings[bound_name]:
+                raise DeployStopped("Normal resume selected inputs differ from original preflight")
+        run, run_attempt, jobs = ci.get("run_id"), ci.get("run_attempt"), ci.get("jobs")
+        if type(ci.get("schema_version")) is not int or ci["schema_version"] != 1 or ci.get("guard_commit") != plan["guard_commit"] or (
+            type(run) is not int or run <= 0 or type(run_attempt) is not int or run_attempt <= 0 or
+            ci.get("run_url") != "https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/" + str(run) or
+            ci.get("status") != "completed" or ci.get("conclusion") != "success" or
+            not isinstance(jobs, list) or len(jobs) != 15 or any(not isinstance(row, dict) for row in jobs) or
+            {row.get("name") for row in jobs} != NORMAL_RESUME_CI_JOBS or len({row.get("id") for row in jobs}) != 15 or
+            any(type(row.get("id")) is not int or row["id"] <= 0 or type(row.get("run_id")) is not int or
+                type(row.get("run_attempt")) is not int or row["run_id"] != run or row["run_attempt"] != run_attempt or
+                row.get("head_sha") != plan["guard_commit"] or row.get("status") != "completed" or row.get("conclusion") != "success"
+                for row in jobs)
+        ):
+            raise DeployStopped("Normal resume requires fifteen exact successful hosted guard jobs")
+        if observation.get("schema_version") != 1 or type(observation.get("schema_version")) is not int or (
+            observation.get("kind") != NORMAL_RESUME_KIND or observation.get("source") != "actual_target_read_only" or
+            observation.get("binding") != {key: plan[key] for key in binding_keys} or
+            observation.get("semantic_checks") != {name: True for name in SEMANTIC_CHECKS} or
+            any(value is not True for value in observation.get("semantic_checks", {}).values())
+        ):
+            raise DeployStopped("Normal resume fresh observation binding differs")
+        self.normal_resume_observation = observation
+        self.check_resume_time(observation.get("checked_at"))
+        try:
+            clocks = [datetime.fromisoformat(value.replace("Z", "+00:00")) for value in (
+                pre["checked_at"], attempt["started_at"], failed["checked_at"], observation["checked_at"])]
+            if any(value.tzinfo is None or value.utcoffset().total_seconds() != 0 for value in clocks) or clocks != sorted(clocks):
+                raise ValueError("normal resume chronology differs")
+        except (KeyError, AttributeError, TypeError, ValueError) as exc:
+            raise DeployStopped("Normal resume needs ordered UTC preflight, failure and fresh observation") from exc
+        baseline, baseline_roles = attempt.get("baseline_container_fingerprints"), attempt.get("baseline_container_roles")
+        by_id = {item["Id"]: item for item in current}
+        actual = {key: fingerprint(item) for key, item in by_id.items()}
+        roles = {key: {"project": project(item), "service": service(item)} for key, item in by_id.items()}
+        added, stopped, old = plan["added_backend"], plan["stopped_backend"], plan["baseline_backends"]
+        if not isinstance(added, dict) or set(added) != {"id", "image", "config_hash"} or (
+            not isinstance(stopped, dict) or set(stopped) != {"id", "exit_code", "oom_killed"} or
+            type(stopped.get("exit_code")) is not int or stopped["exit_code"] != 137 or stopped.get("oom_killed") is not False or
+            not isinstance(baseline, dict) or len(baseline) != 22 or not isinstance(baseline_roles, dict) or set(baseline_roles) != set(baseline) or
+            pre.get("container_fingerprints") != baseline or observation.get("baseline_container_fingerprints") != baseline or
+            observation.get("current_container_fingerprints") != actual or observation.get("current_container_roles") != roles or
+            added.get("id") in baseline or set(actual) != set(baseline) | {added.get("id")} or len(actual) != 23 or
+            stopped.get("id") not in baseline or roles.get(added.get("id")) != {"project": self.project_name, "service": "backend"} or
+            added.get("image") != self.images["backend"][1] or added.get("config_hash") != self.backend_hash or
+            any(roles.get(key) != value for key, value in baseline_roles.items())
+        ):
+            raise DeployStopped("Normal resume requires the exact original twenty-two and one recorded candidate")
+        stopped_item = by_id[stopped["id"]]
+        restored = copy.deepcopy(stopped_item)
+        restored["State"]["Running"] = True
+        if stopped_item["State"].get("Running") is not False or stopped_item["State"].get("ExitCode") != stopped["exit_code"] or (
+            stopped_item["State"].get("OOMKilled") is not False or fingerprint(restored) != baseline[stopped["id"]] or
+            any(actual[key] != value for key, value in baseline.items() if key != stopped["id"])
+        ):
+            raise DeployStopped("Only the recorded old backend running bit may differ")
+        old_ids = {key for key, role in baseline_roles.items() if role == {"project": self.project_name, "service": "backend"}}
+        if not isinstance(old, list) or len(old) != 2 or self.replicas != 2 or any(not isinstance(row, dict) for row in old) or (
+            {row.get("id") for row in old} != old_ids or len(old_ids) != 2 or stopped["id"] not in old_ids or
+            set(pre.get("baseline_backend_ids", [])) != old_ids or
+            any(set(row) != {"id", "image", "release_version"} or row["release_version"] != "2.8.8" or by_id[row["id"]]["Image"] != row["image"] for row in old)
+        ):
+            raise DeployStopped("Normal resume old API identities differ from the original pair")
+        self.baseline_backends = {row["id"]: by_id[row["id"]] for row in old}
+        self.normal_stopped = stopped_item
+        candidate = by_id[added["id"]]
+        if not self.desired_backend(candidate) or not healthy(candidate, require_probe=True) or any(
+            not healthy(by_id[key], require_probe=True) for key in old_ids if key != stopped["id"]
+        ):
+            raise DeployStopped("Normal resume requires the recorded candidate and remaining old API healthy")
+        canonical = hashlib.sha256(json.dumps(self.config, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if observation.get("resolved_config_sha256") != canonical or observation.get("service_hashes") != self.service_hashes or (
+            observation.get("service_networks") != self.service_networks or pre.get("service_hashes") != self.service_hashes or
+            pre.get("service_networks") != self.service_networks or pre.get("resolved_configuration_sha256") != canonical
+        ):
+            raise DeployStopped("Normal resume resolved configuration differs from original reviewed model")
+        probes = observation.get("probes")
+        running_ids = (old_ids - {stopped["id"]}) | {added["id"]}
+        if not isinstance(probes, list) or len(probes) != 2 or any(not isinstance(row, dict) for row in probes) or {row.get("id") for row in probes} != running_ids:
+            raise DeployStopped("Normal resume needs the two running exact API probes")
+        for probe in probes:
+            if probe.get("image") != by_id[probe["id"]]["Image"]:
+                raise DeployStopped("Normal resume probe image differs")
+            self.validate_normal_probe(probe, old=probe["id"] in old_ids)
 
     def check_guard_source(self) -> None:
         if self.run(["git", "-C", str(self.guard_root), "rev-parse", "HEAD"]) != self.resume_plan["guard_commit"] or self.run(
@@ -694,7 +1007,7 @@ class ApplicationDeploy:
         if self.images["migrate"][1] != self.images["backend"][1]:
             raise DeployStopped("Migration and backend must use the same reviewed image")
         backends = self.backends()
-        if self.resume_path is None and (
+        if self.resume_path is None and self.normal_resume_path is None and (
             len(backends) != self.replicas or any(not healthy(item, require_probe=True) for item in backends)
         ):
             raise DeployStopped("Backend baseline must match healthy requested replica count")
@@ -727,13 +1040,27 @@ class ApplicationDeploy:
             raise DeployStopped("Migration network differs from the existing backend")
         if self.resume_path is not None:
             self.load_resume_plan(current)
-        self.check_schema(next(iter(self.baseline_backends.values())))
+        if self.normal_resume_path is not None:
+            self.load_normal_resume_plan(current)
+        schema_baseline = next(item for item in self.baseline_backends.values() if item["State"].get("Running"))
+        self.check_schema(schema_baseline)
         excluded = {"backend", *self.targets}
         self.protected = {
             item["Id"]: item for item in current
             if not (project(item) == self.project_name and service(item) in excluded)
         }
         self.check_protected()
+        if self.normal_resume_plan:
+            expected_protected = {
+                key for key, role in self.normal_resume_observation["current_container_roles"].items()
+                if not (role["project"] == self.project_name and role["service"] in excluded)
+            }
+            if len(self.protected) != 17 or set(self.protected) != expected_protected or self.plan is not None or self.resume_plan is not None:
+                raise DeployStopped("Normal resume protected set or migration mode differs")
+            self.check_images()
+            self.check_retirement_pair()
+            self.readiness(allow_old=True)
+            return list(self.baseline_backends.values())
         if self.resume_plan:
             expected_protected = {key for key, row in self.resume_attempt["baseline_container_roles"].items()
                                   if not (row["project"] == self.project_name and row["service"] in excluded)}
@@ -781,6 +1108,8 @@ class ApplicationDeploy:
         ]))
         if desired != expected:
             raise DeployStopped("Reviewed image migrations differ from the checkout")
+        if self.normal_resume_plan and self.normal_resume_plan["target_migrations"] != expected:
+            raise DeployStopped("Normal resume must retain the exact packaged nine-migration ledger")
         if current.get("expected") != desired or current.get("applied") != desired:
             self.load_migration_plan(expected, current)
         elif self.plan_path is not None:
@@ -823,14 +1152,19 @@ class ApplicationDeploy:
         print("Preflight passed. Existing stack identities retained.")
         self.check_images()
         self.check_protected()
-        if not self.resume_plan:
+        if self.normal_resume_plan:
+            self.finish_stopped_normal_retirement()
+            print("Reviewed same-ledger stopped-old retirement complete; no migration run.", flush=True)
+        elif not self.resume_plan:
             self.compose_run("run", "--rm", "--no-deps", "--pull", "never", "migrate")
             if self.plan:
                 self.migrated = True
                 print(f"Migration service completed; verifying pinned addition {REFERENCE_MIGRATION}, exact ledger "
                       "and old migration-only readiness.", flush=True)
             self.backend_health(self.replicas, 0)
-        pending = [item for item in old if not self.desired_backend(item)]
+        pending = [item for item in old if not self.desired_backend(item) and not (
+            self.normal_resume_plan and item["Id"] == self.normal_resume_plan["stopped_backend"]["id"]
+        )]
         if self.resume_plan:
             new_count = 1
             self.backend_health(self.replicas + 1, new_count)
@@ -882,18 +1216,50 @@ class ApplicationDeploy:
         self.check_protected()
         self.guard_old(baseline, running=True)
         self.run(["docker", "stop", "--time", "20", baseline["Id"]])
-        running = [item for item in self.backends() if item["State"].get("Running")]
-        if len(running) != self.replicas or any(not self.backend_healthy(item) for item in running):
-            raise DeployStopped("Remaining backend health failed; no container removal")
-        self.check_protected()
-        self.readiness(allow_old=any(item["Id"] in self.baseline_backends for item in running))
-        self.check_images()
-        self.guard_old(baseline, running=False)
-        self.run(["docker", "rm", baseline["Id"]])
-        if self.plan:
-            print(f"Recorded old backend {baseline['Id']} removed after replacement readiness; "
-                  "remaining identities retained.", flush=True)
+        self.retirement_new_count = new_count
+        try:
+            with self.retirement_budget():
+                running = [item for item in self.backends() if item["State"].get("Running")]
+                if len(running) != self.replicas or any(not self.backend_healthy(item) for item in running):
+                    raise DeployStopped("Remaining backend health failed; no container removal")
+                self.check_protected()
+                self.readiness(allow_old=any(item["Id"] in self.baseline_backends for item in running), retirement=True)
+                self.check_images()
+                self.check_retirement_pair()
+                self.guard_old(baseline, running=False)
+                self.run(["docker", "rm", baseline["Id"]])
+        finally:
+            self.retirement_new_count = None
+        print(f"Recorded old backend {baseline['Id']} removed after replacement readiness; "
+              "remaining identities retained.", flush=True)
         self.backend_health(self.replicas, new_count)
+
+    def finish_stopped_normal_retirement(self) -> None:
+        self.retirement_new_count = 1
+        try:
+            with self.retirement_budget():
+                self.check_images()
+                self.check_protected()
+                self.check_retirement_pair()
+                self.readiness(allow_old=True, retirement=True)
+                self.check_images()
+                self.check_protected()
+                self.check_retirement_pair()
+                self.guard_old(self.normal_stopped, running=False)
+                observed = self.normal_resume_observation["current_container_fingerprints"]
+                if {item["Id"]: fingerprint(item) for item in self.containers()} != observed:
+                    raise DeployStopped("Normal resume snapshot changed before stopped-old removal")
+                self.run(["docker", "rm", self.normal_stopped["Id"]])
+        finally:
+            self.retirement_new_count = None
+        print(f"Recorded old backend {self.normal_stopped['Id']} removed after replacement readiness; "
+              "remaining identities retained.", flush=True)
+        self.check_images()
+        self.check_protected()
+        remaining = {item["Id"]: fingerprint(item) for item in self.containers()}
+        if remaining != {key: value for key, value in observed.items() if key != self.normal_stopped["Id"]}:
+            raise DeployStopped("Normal resume identities changed after stopped-old removal")
+        self.backend_health(self.replicas, 1)
 
 
 def main() -> int:

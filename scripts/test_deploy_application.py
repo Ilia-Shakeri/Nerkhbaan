@@ -548,6 +548,26 @@ class MigrationReadinessPolicyTests(unittest.TestCase):
         from urllib.error import HTTPError
         return HTTPError(self.deploy.readiness_url, status, "fixture", {}, BytesIO(json.dumps(payload).encode()))
 
+    def test_normal_resume_is_exclusive_with_both_transition_inputs(self):
+        from deploy_application import ApplicationDeploy
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            files = {name: root / name for name in ["environment", "override", "operator", "manifest", "normal"]}
+            for path in files.values():
+                path.write_text("{}")
+            env = {"RELEASE_DIR": str(root), "COMPOSE_PROJECT_NAME": "nerkhbaan",
+                   "COMPOSE_ENV_FILE": str(files["environment"]), "COMPOSE_OVERRIDE_FILE": str(files["override"]),
+                   "OPERATOR_EVIDENCE_PATH": str(files["operator"]), "DEPLOY_IMAGE_MANIFEST": str(files["manifest"]),
+                   "DEPLOY_READINESS_URL": "https://fixture.invalid/api/health/ready",
+                   "DEPLOY_NORMAL_RESUME_PLAN": str(files["normal"])}
+            selected = ApplicationDeploy(env)
+            self.assertEqual(selected.normal_resume_path, files["normal"])
+            self.assertIsNone(selected.plan)
+            self.assertIsNone(selected.resume_plan)
+            for key in ["DEPLOY_MIGRATION_PLAN", "DEPLOY_RESUME_PLAN"]:
+                with self.subTest(key=key), self.assertRaisesRegex(self.stopped, "cannot select"):
+                    ApplicationDeploy(env | {key: str(files["normal"])})
+
     def test_real_http_error_body_is_accepted_only_for_exact_known_old_transition(self):
         with self.patch("deploy_application.build_opener") as opener:
             opener.return_value.open.side_effect = self.http_response(ready_payload(old=True))
@@ -629,6 +649,58 @@ class MigrationReadinessPolicyTests(unittest.TestCase):
             path.write_text("changed proof")
             with self.assertRaises(self.stopped):
                 self.deploy.check_plan_files()
+
+    def test_retirement_deadline_bounds_guard_children_and_restores_prior_budget(self):
+        from deploy_application import TransientReadiness
+        self.deploy.root = ROOT
+        for previous, expected in ((None, 40.0), (25.0, 25.0)):
+            self.deploy.startup_deadline = previous
+            def guard():
+                self.assertEqual(self.deploy.startup_deadline, expected)
+                self.deploy.run(["docker", "inspect"], timeout=300)
+                raise self.stopped("fixture guard failure")
+            with self.subTest(previous=previous), self.patch("deploy_application.time.monotonic", return_value=10.0), self.patch.object(
+                self.deploy, "readiness_once", side_effect=TransientReadiness("transport_timeout")
+            ), self.patch.object(self.deploy, "check_images", side_effect=guard), self.patch("deploy_application.command") as command:
+                with self.assertRaisesRegex(self.stopped, "stage=retirement type=guard"):
+                    self.deploy.readiness(retirement=True)
+                self.assertEqual(command.call_args.kwargs["timeout"], expected - 10.0)
+            self.assertEqual(self.deploy.startup_deadline, previous)
+
+    def test_successful_public_readiness_cannot_remove_after_postcheck_deadline(self):
+        self.deploy.root = ROOT
+        self.deploy.replicas = 2
+        self.deploy.baseline_backends = {}
+        self.deploy.normal_stopped = {"Id": "recorded-stopped"}
+        self.deploy.normal_resume_observation = {"current_container_fingerprints": {}}
+        for phase in ("normal", "already_stopped"):
+            for previous in (None, 100.0):
+                clock = [0.0]
+                checks = [0]
+                self.deploy.startup_deadline = previous
+                def postcheck():
+                    checks[0] += 1
+                    if checks[0] == 2:
+                        clock[0] = 31.0
+                running = [{"Id": name, "State": {"Running": True}} for name in ("survivor", "candidate")]
+                with self.subTest(phase=phase, previous=previous), self.patch("deploy_application.time.monotonic", side_effect=lambda: clock[0]), self.patch(
+                    "deploy_application.command", return_value=""
+                ) as command, self.patch.object(self.deploy, "check_images", side_effect=postcheck), self.patch.object(
+                    self.deploy, "backend_health"
+                ), self.patch.object(self.deploy, "check_plan_files"), self.patch.object(self.deploy, "check_protected"), self.patch.object(
+                    self.deploy, "guard_old"
+                ), self.patch.object(self.deploy, "backends", return_value=running), self.patch.object(
+                    self.deploy, "backend_healthy", return_value=True
+                ), self.patch.object(self.deploy, "readiness_once"), self.patch.object(
+                    self.deploy, "check_retirement_pair"
+                ), self.patch.object(self.deploy, "containers", return_value=[]):
+                    with self.assertRaisesRegex(self.stopped, "stage=retirement"):
+                        if phase == "normal":
+                            self.deploy.retire_backend({"Id": "old-first"}, 1)
+                        else:
+                            self.deploy.finish_stopped_normal_retirement()
+                    self.assertFalse(any(call.args[0][:2] == ["docker", "rm"] for call in command.call_args_list))
+                self.assertEqual(self.deploy.startup_deadline, previous)
 
 
 class ApplicationDeployTests(unittest.TestCase):
