@@ -248,11 +248,11 @@ def fake_cli(kind: str, args: list[str], input_text: str | None = None) -> int:
                         item["Mounts"] = mounts[offset:] + mounts[:offset]
             output = json.dumps(inspected)
     elif args[:2] == ["image", "inspect"]:
-        image = state["images"].get(args[2])
-        if image is None:
+        images = [state["images"].get(name) for name in args[2:]]
+        if not images or any(image is None for image in images):
             code = 1
         else:
-            output = json.dumps([{"Id": image}])
+            output = json.dumps([{"Id": image} for image in images])
     elif args[0] == "run":
         assert "--read-only" in args and "--network" in args and args[args.index("--network") + 1] == "none"
         assert "--rm" in args and "--pull" in args and args[args.index("--pull") + 1] == "never"
@@ -662,7 +662,7 @@ class MigrationReadinessPolicyTests(unittest.TestCase):
             with self.subTest(previous=previous), self.patch("deploy_application.time.monotonic", return_value=10.0), self.patch.object(
                 self.deploy, "readiness_once", side_effect=TransientReadiness("transport_timeout")
             ), self.patch.object(self.deploy, "check_images", side_effect=guard), self.patch("deploy_application.command") as command:
-                with self.assertRaisesRegex(self.stopped, "stage=retirement type=guard"):
+                with self.assertRaisesRegex(self.stopped, "stage=retirement type=validation operation=retry_images"):
                     self.deploy.readiness(retirement=True)
                 self.assertEqual(command.call_args.kwargs["timeout"], expected - 10.0)
             self.assertEqual(self.deploy.startup_deadline, previous)
@@ -701,6 +701,96 @@ class MigrationReadinessPolicyTests(unittest.TestCase):
                             self.deploy.finish_stopped_normal_retirement()
                     self.assertFalse(any(call.args[0][:2] == ["docker", "rm"] for call in command.call_args_list))
                 self.assertEqual(self.deploy.startup_deadline, previous)
+
+
+class GuardBatchAndParallelTests(unittest.TestCase):
+    def setUp(self):
+        import deploy_application as guard
+        from unittest.mock import patch
+        self.guard, self.patch = guard, patch
+        self.deploy = object.__new__(guard.ApplicationDeploy)
+        self.deploy.root, self.deploy.commit = ROOT, COMMIT
+        self.deploy.startup_deadline = None
+        self.deploy.plan, self.deploy.resume_plan, self.deploy.normal_resume_plan = None, None, None
+        self.deploy.config = {"owned": "fixture"}
+        self.deploy.images = {"backend": ("api:fixed", "sha256:api"), "migrate": ("api:fixed", "sha256:api"),
+                              "frontend": ("web:fixed", "sha256:web"), "admin-frontend": ("admin:fixed", "sha256:admin"),
+                              "price-feed-pull": ("feed:fixed", "sha256:feed")}
+
+    def batch(self, rows):
+        def run(args, **_kwargs):
+            return json.dumps(rows) if args[:3] == ["docker", "image", "inspect"] else COMMIT if args[-1] == "HEAD" else ""
+        with self.patch.object(self.deploy, "run", side_effect=run) as child, self.patch.object(
+            self.deploy, "check_plan_files"
+        ) as plans, self.patch.object(self.deploy, "check_env_binding") as environment, self.patch.object(
+            self.deploy, "compose_run", return_value=json.dumps(self.deploy.config)
+        ) as compose:
+            self.deploy.check_images()
+            plans.assert_called_once();environment.assert_called_once();compose.assert_called_once()
+            return child.call_args_list
+
+    def test_batch_inspects_every_unique_tag_and_keeps_all_other_guards(self):
+        calls = self.batch([{"Id": "sha256:" + value} for value in ["api", "web", "admin", "feed"]])
+        images = [call.args[0] for call in calls if call.args[0][:3] == ["docker", "image", "inspect"]]
+        self.assertEqual(images, [["docker", "image", "inspect", "api:fixed", "web:fixed", "admin:fixed", "feed:fixed"]])
+        self.assertEqual(len(calls), 3)
+
+    def test_batch_rejects_missing_extra_reordered_wrong_identity_or_conflicting_tag(self):
+        valid = [{"Id": "sha256:" + value} for value in ["api", "web", "admin", "feed"]]
+        for rows in [valid[:-1], valid + valid[:1], list(reversed(valid)), valid[:1] * 4, {}, [None] * 4]:
+            with self.subTest(rows=rows), self.assertRaises(self.guard.DeployStopped):self.batch(rows)
+        self.deploy.images["migrate"] = ("api:fixed", "sha256:tampered")
+        with self.patch.object(self.deploy, "check_plan_files"), self.patch.object(self.deploy, "run") as child:
+            with self.assertRaises(self.guard.DeployStopped):self.deploy.check_images()
+            child.assert_not_called()
+
+    def test_two_strict_normal_probes_overlap_keep_child_budget_and_join_on_mismatch(self):
+        import threading
+        for mismatch in (False, True):
+            barrier, lock = threading.Barrier(2), threading.Lock()
+            active, peak, budgets, completed = [0], [0], [], []
+            ledger = {"migration" + str(index): "a" * 64 for index in range(9)}
+            self.deploy.normal_resume_plan = {"target_migrations": ledger}
+            self.deploy.baseline_backends = {"old": {}}
+            self.deploy.startup_deadline = 15.0
+            items = [{"Id": name, "State": {"Running": True, "Health": {"Status": "healthy"}}} for name in ["old", "new"]]
+            def child(args, **kwargs):
+                name = args[2]
+                with lock:
+                    active[0] += 1;peak[0] = max(peak[0], active[0]);budgets.append(kwargs["timeout"])
+                try:
+                    barrier.wait(timeout=2)
+                    return json.dumps({"status": 200, "payload": {"ready": True, "status": "ok", "database": "connected", "redis": "connected",
+                        "migration_current": True, "migration_version": max(ledger), "release_version": "2.8.8" if name == "old" else "2.8.11"},
+                        "expected": ledger, "applied": {} if mismatch and name == "new" else ledger,
+                        "migration_state": {"current": True, "version": max(ledger), "applied_count": 9, "expected_count": 9,
+                                            "missing": [], "changed": [], "unknown": []}})
+                finally:
+                    with lock:active[0] -= 1;completed.append(name)
+            with self.subTest(mismatch=mismatch), self.patch("deploy_application.time.monotonic", return_value=10.0), self.patch("deploy_application.command", side_effect=child):
+                if mismatch:
+                    with self.assertRaisesRegex(self.guard.DeployStopped, "nine-migration ledger"):self.deploy.normal_pair_healthy(items)
+                else:self.assertTrue(self.deploy.normal_pair_healthy(items))
+            self.assertEqual(peak[0], 2);self.assertEqual(active[0], 0);self.assertCountEqual(completed, ["old", "new"])
+            self.assertEqual(budgets, [5.0, 5.0]);self.assertEqual(self.deploy.startup_deadline, 15.0)
+
+    def test_retirement_diagnostics_keep_safe_phase_command_and_timeout_reason(self):
+        self.deploy.startup_deadline = None
+        for cause, expected in [(subprocess.TimeoutExpired("private-not-for-output", 1), "command_timeout"), (None, "deadline_before_command")]:
+            clock = [0.0]
+            with self.subTest(expected=expected), self.patch("deploy_application.time.monotonic", side_effect=lambda: clock[0]), self.patch(
+                "deploy_application.subprocess.run", side_effect=cause
+            ) as child:
+                with self.assertRaises(self.guard.DeployStopped) as caught:
+                    with self.deploy.retirement_budget():
+                        with self.deploy.retirement_step("pair_after_public"):
+                            if cause is None:clock[0] = 31.0
+                            self.deploy.run(["docker", "exec", "private-not-for-output", "python"], timeout=300)
+                message = str(caught.exception)
+                self.assertIn("type=" + expected, message);self.assertIn("operation=pair_after_public command=backend_probe", message)
+                self.assertNotIn("private-not-for-output", message)
+                self.assertIsNone(self.deploy.startup_deadline)
+                if cause is None:child.assert_not_called()
 
 
 class ApplicationDeployTests(unittest.TestCase):

@@ -9,6 +9,7 @@ import json
 import os
 import ssl
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
@@ -90,11 +91,16 @@ class OwnedGuardFixture:
     def __enter__(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="nerkhbaan-normal-resume-")
         self.root = Path(self.temporary.name)
+        self.state_lock = threading.RLock()
         self.clock, self.trace, self.http_calls = Clock(), [], []
         self.faults, self.http_events = {}, []
         self.transient_seen, self.child_timeouts = False, []
+        self.active_probes, self.maximum_active_probes = 0, 0
+        self.probe_entries, self.probe_threads = 0, []
+        self.probe_gate = None
         state = existing.fixture()
         state["guard_commit"] = GUARD
+        state["config"]["services"]["migrate"]["image"] = state["config"]["services"]["backend"]["image"]
         old_image = "sha256:" + digest(b"owned-old-api")
         for row, identifier in zip(state["containers"][:2], (STOPPED, SURVIVOR)):
             row["Id"], row["Image"] = identifier, old_image
@@ -153,21 +159,47 @@ class OwnedGuardFixture:
         return {"path": str(path), "sha256": digest(path.read_bytes())}
 
     def read(self):
-        return copy.deepcopy(self._state)
+        with self.state_lock:
+            return copy.deepcopy(self._state)
 
     def save(self, state):
-        self._state = copy.deepcopy(state)
+        with self.state_lock:
+            self._state = copy.deepcopy(state)
 
     def probe(self, row):
         ledger = self.read()["desired_migrations"]
         version = VERSION if row["Image"] == self.read()["manifest"]["images"]["backend"] else OLD_VERSION
-        return {"id": row["Id"], "image": row["Image"], "status": 200,
-                "payload": normal_payload(version), "expected": ledger, "applied": ledger,
-                "migration_state": {"current": True, "version": existing.REFERENCE_MIGRATION,
-                                    "applied_count": 9, "expected_count": 9,
-                                    "missing": [], "changed": [], "unknown": []}}
+        result = {"id": row["Id"], "image": row["Image"], "status": 200,
+                  "payload": normal_payload(version), "expected": ledger, "applied": ledger,
+                  "migration_state": {"current": True, "version": existing.REFERENCE_MIGRATION,
+                                      "applied_count": 9, "expected_count": 9,
+                                      "missing": [], "changed": [], "unknown": []}}
+        if self.faults.get("failed_probe") == row["Id"]:
+            result["payload"]["redis"] = "disconnected"
+        return result
 
     def command(self, args, *, cwd, timeout=300, input_text=None):
+        probe = args[:2] == ["docker", "exec"] and "urlopen" in args[-1]
+        gate = None
+        if probe:
+            with self.state_lock:
+                self.active_probes += 1
+                self.maximum_active_probes = max(self.maximum_active_probes, self.active_probes)
+                self.probe_threads.append((args[2], threading.get_ident()))
+                self.probe_entries += 1
+                if self.probe_gate is not None and self.probe_entries <= 2:
+                    gate = self.probe_gate
+        try:
+            if gate is not None:
+                gate.wait(timeout=5)
+            with self.state_lock:
+                return self.command_serial(args, cwd=cwd, timeout=timeout, input_text=input_text)
+        finally:
+            if probe:
+                with self.state_lock:
+                    self.active_probes -= 1
+
+    def command_serial(self, args, *, cwd, timeout=300, input_text=None):
         self.clock.now += 0.001
         if timeout <= 0:
             raise AssertionError("Every child command needs a positive remaining budget")
@@ -204,11 +236,23 @@ class OwnedGuardFixture:
         ), redirect_stdout(output):
             code = existing.fake_cli(kind, args[1:], input_text)
         state = self.read()
+        if args[:3] == ["docker", "image", "inspect"] and len(args) > 4 and self.faults.get("batch_response"):
+            rows = json.loads(output.getvalue())
+            fault = self.faults["batch_response"]
+            if fault == "missing":
+                rows.pop()
+            elif fault == "reordered":
+                rows.reverse()
+            elif fault == "wrong_id":
+                rows[0]["Id"] = "sha256:" + "f" * 64
+            output = io.StringIO(json.dumps(rows))
         if args[:2] == ["docker", "exec"] and "urlopen" in args[-1]:
             row = next(row for row in state["containers"] if row["Id"] == args[2])
             if not row["State"]["Running"]:
                 raise AssertionError("A stopped API cannot execute a readiness probe")
             output = io.StringIO(json.dumps(self.probe(row)))
+            if self.faults.get("late_probe") == row["Id"] and timeout < 30:
+                self.clock.now += 31
         if args[:2] == ["docker", "stop"]:
             row = next(row for row in state["containers"] if row["Id"] == args[-1])
             row["State"].update(ExitCode=137, OOMKilled=False)
@@ -607,6 +651,114 @@ class NormalResumeTests(unittest.TestCase):
             self.assertLessEqual(fixture.clock.now - 1000, 36)
             self.assertFalse(any(call[:2] == ["docker", "rm"] for call in self.mutations(fixture)))
             self.assert_protected(fixture)
+
+    def test_image_checks_batch_four_canonical_tags_without_losing_migrator_binding(self):
+        with OwnedGuardFixture() as fixture:
+            self.prepare(fixture)
+            result, output = fixture.run()
+            self.assertEqual(result, 0, output)
+            calls = [row["args"][3:] for row in fixture.trace
+                     if row["args"][:3] == ["docker", "image", "inspect"] and len(row["args"]) > 4]
+            state = fixture.read()
+            expected = [state["config"]["services"][name]["image"]
+                        for name in ("backend", "frontend", "admin-frontend", "price-feed-pull")]
+            self.assertTrue(calls)
+            self.assertTrue(all(call == expected for call in calls))
+            self.assertEqual(state["config"]["services"]["backend"]["image"],
+                             state["config"]["services"]["migrate"]["image"])
+            self.assert_protected(fixture)
+
+    def test_missing_reordered_or_changed_batched_image_row_stops_before_removal(self):
+        for fault in ("missing", "reordered", "wrong_id"):
+            with self.subTest(fault=fault), OwnedGuardFixture() as fixture:
+                self.prepare(fixture)
+                fixture.faults["batch_response"] = fault
+                result, output = fixture.run()
+                self.assertNotEqual(result, 0, output)
+                self.assertEqual(self.mutations(fixture), [])
+                self.assert_protected(fixture)
+
+    def test_two_normal_api_probes_overlap_without_fake_state_or_history_races(self):
+        with OwnedGuardFixture() as fixture:
+            self.prepare(fixture)
+            fixture.probe_gate = threading.Barrier(2)
+            result, output = fixture.run()
+            self.assertEqual(result, 0, output)
+            self.assertEqual(fixture.maximum_active_probes, 2)
+            self.assertEqual(fixture.active_probes, 0)
+            self.assertEqual({identifier for identifier, _thread in fixture.probe_threads[:2]}, {SURVIVOR, ADDED})
+            self.assertEqual(len({thread for _identifier, thread in fixture.probe_threads[:2]}), 2)
+            trace_count = sum(row["args"][:2] == ["docker", "exec"] and "urlopen" in row["args"][-1]
+                              for row in fixture.trace)
+            state_count = sum(call[:2] == ["docker", "exec"] and "urlopen" in call[-1]
+                              for call in fixture.read()["commands"])
+            self.assertEqual(trace_count, state_count)
+            self.assertEqual(trace_count, len(fixture.probe_threads))
+            self.assert_protected(fixture)
+
+    def test_failure_of_either_concurrent_normal_probe_never_removes_any_api(self):
+        for identifier in (SURVIVOR, ADDED):
+            with self.subTest(identifier=identifier), OwnedGuardFixture() as fixture:
+                self.prepare(fixture)
+                fixture.probe_gate = threading.Barrier(2)
+                fixture.faults["failed_probe"] = identifier
+                result, output = fixture.run()
+                self.assertNotEqual(result, 0, output)
+                self.assertEqual(self.mutations(fixture), [])
+                self.assertEqual(fixture.active_probes, 0)
+                self.assertEqual(fixture.maximum_active_probes, 2)
+                self.assert_protected(fixture)
+
+    def test_late_parallel_api_probe_cannot_authorize_stopped_old_removal(self):
+        with OwnedGuardFixture() as fixture:
+            self.prepare(fixture)
+            fixture.faults["late_probe"] = ADDED
+            result, output = fixture.run()
+            self.assertNotEqual(result, 0, output)
+            self.assertEqual(self.mutations(fixture), [])
+            self.assertEqual(fixture.active_probes, 0)
+            self.assertNotIn("PRIVATE=owned-fixture-only", output)
+            self.assert_protected(fixture)
+
+    def test_old_additive_migration_pair_stays_serial_with_exact_legacy_validation(self):
+        with OwnedGuardFixture() as fixture:
+            self.prepare(fixture)
+            env = dict(fixture.env)
+            env.pop("DEPLOY_NORMAL_RESUME_PLAN")
+            deploy = guard.ApplicationDeploy(env)
+            state = fixture.read()
+            current = {row["Id"]: row for row in state["containers"]}
+            deploy.config = state["config"]
+            deploy.commit = APP
+            deploy.images = {name: (state["config"]["services"][name]["image"], value)
+                             for name, value in state["manifest"]["images"].items()}
+            deploy.backend_hash = existing.NEW_HASH
+            deploy.service_networks = {"backend": {"nerkhbaan-network": "stable-network"}}
+            deploy.baseline_backends = {identifier: current[identifier] for identifier in (STOPPED, SURVIVOR)}
+            target = state["desired_migrations"]
+            baseline = {name: value for name, value in target.items() if name != existing.REFERENCE_MIGRATION}
+            deploy.plan = {"baseline_migrations": baseline, "target_migrations": target,
+                           "baseline_backends": [{"release_version": "2.8.1"}]}
+            deploy.migrated = True
+            original_probe = fixture.probe
+
+            def legacy_probe(row):
+                result = original_probe(row)
+                old = row["Id"] == SURVIVOR
+                result["payload"] = existing.ready_payload(old=old)
+                result["status"] = 503 if old else 200
+                result["expected"] = baseline if old else target
+                if old:
+                    result["migration_state"] = deploy.old_migration_state()
+                return result
+
+            with patch.object(fixture, "probe", side_effect=legacy_probe), patch.object(
+                guard, "command", fixture.command
+            ), patch.object(guard, "ThreadPoolExecutor", side_effect=AssertionError("Legacy pair must stay serial")):
+                deploy.check_retirement_pair()
+            self.assertEqual(fixture.maximum_active_probes, 1)
+            self.assertEqual(fixture.active_probes, 0)
+            self.assertEqual(self.mutations(fixture), [])
 
 
 if __name__ == "__main__":

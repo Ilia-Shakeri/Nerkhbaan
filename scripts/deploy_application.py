@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import copy
 from contextlib import contextmanager
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 import errno
 import json
 import os
@@ -73,7 +74,9 @@ def private_bytes(path: Path) -> bytes:
 
 
 class DeployStopped(RuntimeError):
-    pass
+    def __init__(self, message: str, *, failure_type: str = "validation"):
+        self.failure_type = failure_type
+        super().__init__(message)
 
 
 class TransientReadiness(DeployStopped):
@@ -95,10 +98,11 @@ def command(args: list[str], *, cwd: Path, timeout: int = 300, input_text: str |
             text=True, check=False, timeout=timeout, input=input_text,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise DeployStopped(f"Command unavailable or timed out: {Path(args[0]).name}") from exc
+        failure_type = "command_timeout" if isinstance(exc, subprocess.TimeoutExpired) else "command_unavailable"
+        raise DeployStopped(f"Command unavailable or timed out: {Path(args[0]).name}", failure_type=failure_type) from exc
     if result.returncode:
         # Config and migration output can contain private environment values.
-        raise DeployStopped(f"Command failed: {Path(args[0]).name}; inspect private service logs")
+        raise DeployStopped(f"Command failed: {Path(args[0]).name}; inspect private service logs", failure_type="command_failed")
     return result.stdout.strip()
 
 
@@ -215,12 +219,30 @@ class ApplicationDeploy:
         if self.startup_deadline is not None:
             remaining = self.startup_deadline - time.monotonic()
             if remaining <= 0:
-                raise DeployStopped("New backend readiness timed out; keep remaining replicas")
+                raise DeployStopped("New backend readiness timed out; keep remaining replicas", failure_type="deadline_before_command")
             timeout = min(timeout, remaining)
         return timeout
 
     def run(self, args: list[str], *, timeout: int = 300, input_text: str | None = None) -> str:
-        return command(args, cwd=self.root, timeout=self.bounded_timeout(timeout), input_text=input_text)
+        try:
+            return command(args, cwd=self.root, timeout=self.bounded_timeout(timeout), input_text=input_text)
+        except DeployStopped as exc:
+            if args[:2] == ["docker", "exec"]:
+                kind = "backend_probe"
+            elif args[:3] == ["docker", "image", "inspect"]:
+                kind = "image_inspect"
+            elif args[:2] == ["docker", "compose"]:
+                kind = "compose_config" if "config" in args else "compose_inventory"
+            elif args[:2] == ["docker", "inspect"]:
+                kind = "container_inspect"
+            elif args[:2] == ["docker", "ps"]:
+                kind = "container_inventory"
+            elif args[:2] == ["docker", "rm"]:
+                kind = "old_remove"
+            else:
+                kind = "source_guard" if args[0] == "git" else "guard_command"
+            exc.command_kind = kind
+            raise
 
     def compose_run(self, *args: str) -> str:
         return self.run([*self.compose, *args], timeout=self.wait + 60)
@@ -264,10 +286,17 @@ class ApplicationDeploy:
             current = self.inspect([identifier])
             if len(current) != 1 or fingerprint(current[0]) != self.resume_observation["current_container_fingerprints"][identifier]:
                 raise DeployStopped("Recorded existing candidate identity changed; keep remaining replicas")
+        selected = {}
         for image, expected in self.images.values():
-            actual = json.loads(self.run(["docker", "image", "inspect", image]))
-            if len(actual) != 1 or actual[0].get("Id") != expected:
-                raise DeployStopped("Reviewed image identity changed; stop and review")
+            if image in selected and selected[image] != expected:
+                raise DeployStopped("Reviewed image alias has conflicting identities")
+            selected[image] = expected
+        actual = json.loads(self.run(["docker", "image", "inspect", *selected]))
+        if not isinstance(actual, list) or len(actual) != len(selected) or any(
+            not isinstance(row, dict) or row.get("Id") != expected
+            for row, expected in zip(actual, selected.values())
+        ):
+            raise DeployStopped("Reviewed image identity changed; stop and review")
         if json.loads(self.compose_run("config", "--format", "json")) != self.config:
             raise DeployStopped("Reviewed Compose configuration changed; stop and review")
         self.check_env_binding()
@@ -324,21 +353,44 @@ class ApplicationDeploy:
     def retirement_budget(self):
         started = time.monotonic()
         previous = self.startup_deadline
+        previous_started = getattr(self, "retirement_started", None)
         deadline = min(started + 30, previous) if previous is not None else started + 30
         self.startup_deadline = deadline
+        self.retirement_started = started
         try:
             yield started, deadline
         except DeployStopped as exc:
             if "stage=retirement" in str(exc):
                 raise
             elapsed = time.monotonic() - started
-            raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type=guard elapsed={elapsed:.3f}s") from exc
+            operation = getattr(exc, "retirement_operation", getattr(self, "retirement_operation", "guard"))
+            kind = getattr(exc, "command_kind", "none")
+            remaining = max(0.0, deadline - time.monotonic())
+            raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type={exc.failure_type} "
+                                f"operation={operation} command={kind} elapsed={elapsed:.3f}s remaining={remaining:.3f}s") from exc
         finally:
             self.startup_deadline = previous
+            self.retirement_started = previous_started
+
+    @contextmanager
+    def retirement_step(self, operation: str):
+        previous = getattr(self, "retirement_operation", "guard")
+        self.retirement_operation = operation
+        try:
+            yield
+        except DeployStopped as exc:
+            if not hasattr(exc, "retirement_operation"):
+                exc.retirement_operation = operation
+            raise
+        finally:
+            self.retirement_operation = previous
 
     def readiness(self, *, allow_old: bool = False, retirement: bool = False) -> None:
         if not retirement:
             self.readiness_once(allow_old=allow_old)
+            return
+        if getattr(self, "retirement_started", None) is not None:
+            self.wait_retirement_readiness(allow_old=allow_old, started=self.retirement_started, deadline=self.startup_deadline)
             return
         with self.retirement_budget() as (started, deadline):
             self.wait_retirement_readiness(allow_old=allow_old, started=started, deadline=deadline)
@@ -350,30 +402,57 @@ class ApplicationDeploy:
             if remaining <= 0:
                 break
             try:
-                self.readiness_once(allow_old=allow_old, timeout=min(5, remaining), retirement=True)
+                with self.retirement_step("public_probe"):
+                    self.readiness_once(allow_old=allow_old, timeout=min(5, remaining), retirement=True)
                 if time.monotonic() >= deadline:
                     safe_type = "late_success"
                     break
                 return
             except TransientReadiness as exc:
                 safe_type = exc.safe_type
-                self.check_images()
-                self.check_protected()
-                self.check_retirement_pair()
+                with self.retirement_step("retry_images"):
+                    self.check_images()
+                with self.retirement_step("retry_protected"):
+                    self.check_protected()
+                with self.retirement_step("retry_pair"):
+                    self.check_retirement_pair()
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     break
                 time.sleep(min(2, remaining))
             except DeployStopped as exc:
                 elapsed = time.monotonic() - started
-                raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type=validation elapsed={elapsed:.3f}s") from exc
+                raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type={exc.failure_type} "
+                                    f"operation=public_probe command=none elapsed={elapsed:.3f}s") from exc
         elapsed = time.monotonic() - started
-        raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type={safe_type} elapsed={elapsed:.3f}s")
+        raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type={safe_type} operation=public_probe "
+                            f"command=none elapsed={elapsed:.3f}s")
+
+    def normal_pair_healthy(self, items: list[dict]) -> bool:
+        executor = ThreadPoolExecutor(max_workers=2)
+        futures = []
+        try:
+            futures = [executor.submit(self.backend_healthy, item) for item in items]
+            results = [future.result(timeout=self.bounded_timeout(30)) for future in futures]
+            self.bounded_timeout(30)
+            return all(results)
+        except FutureTimeout as exc:
+            raise DeployStopped("Strict normal backend probes reached the shared deadline", failure_type="command_timeout") from exc
+        finally:
+            for future in futures:
+                future.cancel()
+            # Each real probe command shares startup_deadline; retain it until all readers exit.
+            executor.shutdown(wait=True, cancel_futures=True)
 
     def check_retirement_pair(self) -> None:
         running = [item for item in self.backends() if item["State"].get("Running")]
         expected_new = self.retirement_new_count if self.retirement_new_count is not None else 1
-        if len(running) != self.replicas or any(not self.backend_healthy(item) for item in running) or (
+        if len(running) != self.replicas:
+            raise DeployStopped("Remaining backend pair changed during retirement readiness wait")
+        pair_healthy = self.normal_pair_healthy(running) if getattr(self, "normal_resume_plan", None) else all(
+            self.backend_healthy(item) for item in running
+        )
+        if not pair_healthy or (
             any(network_identity(item) != self.service_networks["backend"] for item in running) or
             sum(self.desired_backend(item) for item in running) < expected_new
         ):
@@ -1219,15 +1298,26 @@ class ApplicationDeploy:
         self.retirement_new_count = new_count
         try:
             with self.retirement_budget():
-                running = [item for item in self.backends() if item["State"].get("Running")]
-                if len(running) != self.replicas or any(not self.backend_healthy(item) for item in running):
-                    raise DeployStopped("Remaining backend health failed; no container removal")
-                self.check_protected()
+                with self.retirement_step("pair_before_public"):
+                    running = [item for item in self.backends() if item["State"].get("Running")]
+                    if len(running) != self.replicas:
+                        raise DeployStopped("Remaining backend health failed; no container removal")
+                    pair_healthy = self.normal_pair_healthy(running) if getattr(self, "normal_resume_plan", None) else all(
+                        self.backend_healthy(item) for item in running
+                    )
+                    if not pair_healthy:
+                        raise DeployStopped("Remaining backend health failed; no container removal")
+                with self.retirement_step("protected_before_public"):
+                    self.check_protected()
                 self.readiness(allow_old=any(item["Id"] in self.baseline_backends for item in running), retirement=True)
-                self.check_images()
-                self.check_retirement_pair()
-                self.guard_old(baseline, running=False)
-                self.run(["docker", "rm", baseline["Id"]])
+                with self.retirement_step("images_after_public"):
+                    self.check_images()
+                with self.retirement_step("pair_after_public"):
+                    self.check_retirement_pair()
+                with self.retirement_step("stopped_identity"):
+                    self.guard_old(baseline, running=False)
+                with self.retirement_step("old_remove"):
+                    self.run(["docker", "rm", baseline["Id"]])
         finally:
             self.retirement_new_count = None
         print(f"Recorded old backend {baseline['Id']} removed after replacement readiness; "
@@ -1238,18 +1328,27 @@ class ApplicationDeploy:
         self.retirement_new_count = 1
         try:
             with self.retirement_budget():
-                self.check_images()
-                self.check_protected()
-                self.check_retirement_pair()
+                with self.retirement_step("images_before_public"):
+                    self.check_images()
+                with self.retirement_step("protected_before_public"):
+                    self.check_protected()
+                with self.retirement_step("pair_before_public"):
+                    self.check_retirement_pair()
                 self.readiness(allow_old=True, retirement=True)
-                self.check_images()
-                self.check_protected()
-                self.check_retirement_pair()
-                self.guard_old(self.normal_stopped, running=False)
-                observed = self.normal_resume_observation["current_container_fingerprints"]
-                if {item["Id"]: fingerprint(item) for item in self.containers()} != observed:
-                    raise DeployStopped("Normal resume snapshot changed before stopped-old removal")
-                self.run(["docker", "rm", self.normal_stopped["Id"]])
+                with self.retirement_step("images_after_public"):
+                    self.check_images()
+                with self.retirement_step("protected_after_public"):
+                    self.check_protected()
+                with self.retirement_step("pair_after_public"):
+                    self.check_retirement_pair()
+                with self.retirement_step("stopped_identity"):
+                    self.guard_old(self.normal_stopped, running=False)
+                with self.retirement_step("snapshot_before_remove"):
+                    observed = self.normal_resume_observation["current_container_fingerprints"]
+                    if {item["Id"]: fingerprint(item) for item in self.containers()} != observed:
+                        raise DeployStopped("Normal resume snapshot changed before stopped-old removal")
+                with self.retirement_step("old_remove"):
+                    self.run(["docker", "rm", self.normal_stopped["Id"]])
         finally:
             self.retirement_new_count = None
         print(f"Recorded old backend {self.normal_stopped['Id']} removed after replacement readiness; "
