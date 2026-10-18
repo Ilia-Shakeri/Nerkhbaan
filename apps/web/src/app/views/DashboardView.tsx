@@ -12,6 +12,7 @@ import { useAppContext } from '../context/AppContext';
 import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
+import { ReferenceRatesPanel } from '../components/ReferenceRatesPanel';
 import { toast } from 'sonner';
 import { formatHistoryTimestamp, historyTimeInfoForCurrency, isDailyHistory, publicationTimeDetails, type HistoryTimeInfo } from '../services/history-time';
 import { acceptRightsRevision, canonicalLegDetails, clearSnapshotPrices, currentRightsRevision, PRICING_RIGHTS_EVENT, safeAttributions } from '../services/price-stream';
@@ -1301,6 +1302,8 @@ export function DashboardView() {
           </motion.div>
         );
       })}</div>
+
+      <ReferenceRatesPanel />
 
       <Modal isOpen={isAlertModalOpen} onClose={() => setIsAlertModalOpen(false)} title={t.createAlert[language]} size="large" closeLabel={language === 'fa' ? 'بستن پنجره هشدار' : 'Close alert dialog'}>
         <div className="space-y-6 pt-4 max-h-[70vh] overflow-y-auto px-1">

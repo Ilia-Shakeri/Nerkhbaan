@@ -717,6 +717,46 @@ export type PricesResponse = {
 
 export type PriceTimeframe = '1h' | '24h' | '7d' | '30d' | '1y';
 
+export type ReferenceTimeframe = '30d' | '1y';
+export type ReferenceStatus = 'fresh_reference' | 'delayed_reference' | 'unavailable_reference';
+export type ReferenceIdentity = {
+  instrument_id: 'GOLD_24K_REFERENCE_TOMAN_GRAM' | 'BTC_USD_IRAN_REFERENCE' | 'USDT_USD_IRAN_REFERENCE';
+  label_fa: string; label_en: string; currency: 'TOMAN' | 'USD'; market: 'reference'; region: 'iran';
+  method: 'published_reference' | 'iran_fx_ratio'; physical_purity_confirmed: false; purity: null;
+  weight_unit: 'gram' | 'unit'; nominal_karat?: 24 | null; is_derived: boolean;
+  source_provider_id: 'nerkhsanj_reference_snapshot' | 'nerkhsanj_reference_history';
+  source_keys: string[]; attribution: SourceAttribution; disclaimer_fa: string;
+};
+export type ReferenceInput = {
+  source_key: string; instrument_id: string; price?: number | null; price_decimal?: string | null;
+  currency: 'TOMAN'; as_of?: string | null; source_date: string; source_timezone: 'Asia/Tehran';
+  source_calendar: 'jalali'; timestamp_precision: 'minute' | 'day';
+  timestamp_role: 'source_rates_last_change' | 'day_bucket_start'; source_observation_time_known: false;
+};
+export type ReferenceCurrent = ReferenceIdentity & {
+  status: ReferenceStatus; price: number | null; price_decimal?: string | null;
+  observed_at?: string | null; received_at?: string | null; source_date?: string | null; source_time?: string | null;
+  source_timestamp_scope?: 'source_rates_last_change' | null; source_timestamp_precision?: 'minute' | null;
+  source_timezone: 'Asia/Tehran'; source_calendar: 'jalali'; source_observation_time_known: false;
+  source_trade_time_known: false; age_seconds: number | null; freshness_limit_seconds: number;
+  maximum_reference_age_seconds: number; inputs: ReferenceInput[]; unavailable_reason?: string | null;
+  persistence_status: 'persisted' | 'unpersisted' | 'unavailable'; storage_fallback: boolean;
+};
+export type ReferenceHistoryPoint = ReferenceIdentity & HistoryTimeInfo & {
+  timestamp: string; price: number; price_decimal: string; source_date: string; source_time: null;
+  source_timestamp_scope: 'source_reported_daily_close'; timestamp_precision: 'day'; timestamp_role: 'day_bucket_start';
+  source_timezone: 'Asia/Tehran'; source_calendar: 'jalali'; source_observation_time_known: false;
+  history_point_kind: 'published_reference_daily_close' | 'same_day_iran_fx_ratio'; inputs: ReferenceInput[];
+};
+export type ReferenceRateItem = ReferenceIdentity & {
+  status: ReferenceStatus; current: ReferenceCurrent; history: ReferenceHistoryPoint[];
+  history_status: 'complete' | 'partial'; history_time_info: HistoryTimeInfo;
+};
+export type ReferenceRatesResponse = {
+  rights_revision: string; checked_at: string; timeframe: ReferenceTimeframe; references: ReferenceRateItem[];
+  attributions: SourceAttribution[]; errors: Array<Record<string, string>>;
+};
+
 export const queryKeys = {
   prices: ['prices'] as const,
   priceHistory: (asset: string, timeframe: PriceTimeframe, revision = currentRightsRevision()) => ['prices', asset, 'history', timeframe, revision] as const,
@@ -731,6 +771,22 @@ export const getPrices = async (signal?: AbortSignal): Promise<PricesResponse> =
   const epoch = currentRightsEpoch();
   const { data } = await apiInstance.get<PricesResponse>('prices', { signal });
   if (!acceptRightsRevision(data.rights_revision, 'http', epoch)) throw new Error('Source permission changed; request fresh prices');
+  return data;
+};
+
+export const getReferenceRates = async (
+  timeframe: ReferenceTimeframe = '30d', signal?: AbortSignal,
+): Promise<ReferenceRatesResponse> => {
+  const epoch = currentRightsEpoch();
+  const generation = logoutGeneration();
+  if (logoutIsPending()) throw new Error('Sign-out is in progress');
+  const { data } = await apiInstance.get<ReferenceRatesResponse>('prices/references', { params: { timeframe }, signal });
+  if (signal?.aborted || logoutIsPending() || generation !== logoutGeneration()) throw new Error('Reference request is no longer current');
+  if (!data || !Array.isArray(data.references) || data.references.length !== 3
+      || typeof data.rights_revision !== 'string' || !data.rights_revision.trim()
+      || !acceptRightsRevision(data.rights_revision, 'http', epoch)) throw new Error('Source permission changed; request fresh reference rates');
+  if (signal?.aborted || logoutIsPending() || generation !== logoutGeneration()
+      || rightsArePending() || data.rights_revision !== currentRightsRevision()) throw new Error('Reference request is no longer current');
   return data;
 };
 

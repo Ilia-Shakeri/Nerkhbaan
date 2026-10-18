@@ -46,8 +46,9 @@ export function publicationTimeDetails(
 ): { timestamp: string; label: string } | null {
   if (!summary || typeof summary !== 'object' || Array.isArray(summary) || !timestamp) return null;
   const source = summary as Record<string, unknown>;
+  const sourceRateChange = source.source_timestamp_scope === 'source_rates_last_change';
   if (source.source_timestamp_scope !== 'publication_snapshot'
-      && source.source_timestamp_scope !== 'response_quote_snapshot') return null;
+      && source.source_timestamp_scope !== 'response_quote_snapshot' && !sourceRateChange) return null;
   const date = new Date(timestamp);
   if (!Number.isFinite(date.getTime())) return null;
   const minutePrecision = source.source_timestamp_precision === 'minute';
@@ -57,6 +58,8 @@ export function publicationTimeDetails(
   }).format(date);
   return {
     timestamp: time,
-    label: language === 'fa' ? 'زمان انتشار؛ ساعت معامله نامعلوم' : 'Publication time; trade time unknown',
+    label: sourceRateChange
+      ? language === 'fa' ? 'آخرین تغییر نرخ‌های منبع؛ ساعت معامله نامعلوم' : 'Source rates last changed; trade time unknown'
+      : language === 'fa' ? 'زمان انتشار؛ ساعت معامله نامعلوم' : 'Publication time; trade time unknown',
   };
 }

@@ -7,6 +7,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Identity,
@@ -318,6 +319,29 @@ class PricingPersistenceEventRecord(Base):
     persisted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class ReferenceRateRecord(Base):
+    """Separate reference observations from physical and exchange quote archives."""
+
+    __tablename__ = "pricing_reference_records"
+    reference_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    record_kind: Mapped[str] = mapped_column(String(16), primary_key=True)
+    slot: Mapped[str] = mapped_column(String(32), primary_key=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON_DOCUMENT, nullable=False)
+    saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    __table_args__ = (
+        Index("ix_pricing_reference_history", "reference_id", "record_kind", "recorded_at"),
+        CheckConstraint("record_kind IN ('snapshot', 'history')", name="ck_pricing_reference_kind"),
+        CheckConstraint("reference_id IN ('GOLD_24K_REFERENCE_TOMAN_GRAM', 'BTC_USD_IRAN_REFERENCE', 'USDT_USD_IRAN_REFERENCE')",
+                        name="ck_pricing_reference_id"),
+        CheckConstraint("(record_kind = 'snapshot' AND slot = 'current') OR (record_kind = 'history' AND slot ~ '^[0-9]{4}/[0-9]{2}/[0-9]{2}$')",
+                        name="ck_pricing_reference_slot").ddl_if(dialect="postgresql"),
+        CheckConstraint("jsonb_typeof(payload) = 'object'", name="ck_pricing_reference_payload").ddl_if(dialect="postgresql"),
+    )
+
+
 PRICING_TABLES = (
     InstrumentRecord.__table__,
     PricingProviderRecord.__table__,
@@ -330,6 +354,7 @@ PRICING_TABLES = (
     ProviderRuntimeEventRecord.__table__,
     PricingBackfillJobRecord.__table__,
     PricingPersistenceEventRecord.__table__,
+    ReferenceRateRecord.__table__,
 )
 
 
@@ -346,4 +371,5 @@ __all__ = [
     "ProviderQuoteRecord",
     "ProviderRuntimeEventRecord",
     "RawProviderPayloadRecord",
+    "ReferenceRateRecord",
 ]

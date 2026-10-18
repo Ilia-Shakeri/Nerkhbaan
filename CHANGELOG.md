@@ -4,6 +4,16 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
+## [2.8.8] - 2026-10-18
+
+- Added three separately named Iranian reference contracts after approval of published/calculated values: the publisher's 24K gram reference and same-source BTC/Toman or USDT/Toman divided by USD/Toman. Gold purity stays unconfirmed; the ratios do not claim global exchange prices or stablecoin peg measurements.
+- Preserved source last-change time, original receipt, parent prices, daily Jalali dates and missing days. Delayed references are visibly marked and become unavailable after 24 hours; ordinary quote and alert age limits remain unchanged.
+- Added a separate durable reference table through the ninth forward migration. Bounded, idempotent imports cannot replace newer observations with older clocks. Collection, storage, display, history and calculation permissions are checked independently.
+- Added a read-only reference API and dashboard panel with source credit, day-precision history, rights-revision protection and durable-history recovery. Existing native contracts and archived prices retain their identities.
+- Corrected Nerkhsanj's documented clock label to last rate change. Fresh HTTP headers do not refresh old source values. Actual upstream update latency remains an operational limitation, with dated receipts retained separately from test fixtures.
+- Added a guarded, evidence-bound deployment plan for the pinned ninth migration. Old replicas keep serving during the explicitly checked migration-only readiness transition; replacement health and final HTTPS readiness remain strict. This path requires an actual restore and old/new image compatibility proof before any live mutation.
+- Final local API discovery passed 1,021 tests with zero skips on owned PostgreSQL/Redis plus unit, SQLite and mocked cases. Frontend contracts passed 79, six focused mocked browser cases passed, and all three renderer builds passed. Each real PostgreSQL/Timescale reference suite passed 46 cases. These suites overlap; hosted and live acceptance have separate final-commit receipts.
+
 ## [2.8.7] - 2026-10-17
 
 - Retired Servix from active collection, key requirements and operational overrides. Kept old records and permitted historical output; retired quotes cannot mask current prices.

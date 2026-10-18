@@ -1,6 +1,13 @@
 # Nerkhbaan API Reference
 
-Code release: **2.8.7**. Updated: 2026-10-17.
+Code release: **2.8.8**. Updated: 2026-10-18.
+
+`GET /api/prices/references?timeframe=30d` returns three explicitly named Iranian
+reference valuations, their original source clocks, calculation parents and
+day-precision history. Supported ranges are `1h`, `24h`, `7d`, `30d`, `1y`.
+Responses are `no-store`; clients must honor `rights_revision`. These read-only
+contracts are separate from native prices and ordinary alerts. See the
+[reference scope and freshness limits](docs/iranian-references-2026-10-17.md).
 The complete generated contract is [docs/api-contracts.json](docs/api-contracts.json).
 The [route index](docs/api-route-index.md) lists all HTTP methods, paths and request schemas.
 Regenerate both with `python scripts/export_api_contracts.py` after route or model changes.

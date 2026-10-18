@@ -42,6 +42,14 @@ for _source_name in (
     "nerkhsanj_btc_toman_history", "nerkhsanj_xau_usd_history", "nerkhsanj_xag_usd_history",
 ):
     _BUILTIN[_source_name] = {**_BUILTIN["nerkhsanj_silver999_history"]}
+
+# The publisher expressly invites local multiplication/conversion of its feed.
+# These transport grants belong only to separately labelled reference outputs.
+for _source_name in ("nerkhsanj_reference_snapshot", "nerkhsanj_reference_history"):
+    _BUILTIN[_source_name] = {
+        **_BUILTIN["nerkhsanj_silver999_history"],
+        "permissions": sorted(_APP_ACTIONS),
+    }
 _BUILTIN["gta_silver925_toman"] = {
     "permissions": ["collect", "store", "display", "history", "own_app_transport"],
     "checked_at": _REVIEWED, "expires_at": _EXPIRES,

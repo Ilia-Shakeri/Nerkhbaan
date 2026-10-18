@@ -299,7 +299,7 @@ _PROVIDERS = (
             f"nerkhsanj_{asset}", f"Nerkhsanj {label}", instrument,
             ProviderRole.PRIMARY, 5, "0.72",
             "https://nerkh.jahankhahan.shop/data/live.json",
-            f"nerkhsanj_{asset}_snapshot_v1", "nerkhsanj-snapshot/1.0.0",
+            f"nerkhsanj_{asset}_snapshot_v1", "nerkhsanj-snapshot/1.1.0",
             INSTRUMENTS[instrument].operational_ttl_seconds,
             rpm=1, rph=60, rpd=1440, interval=60,
             maximum_source_age_seconds=INSTRUMENTS[instrument].stale_after_seconds,

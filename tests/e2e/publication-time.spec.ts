@@ -1,8 +1,8 @@
 import { expect, test, type WebSocketRoute } from '@playwright/test';
 
-test('publication clocks stay on their currency leg through HTTP and socket updates', async ({ page }, testInfo) => {
+test('source rate-change and publication clocks stay on their currency leg through HTTP and socket updates', async ({ page }, testInfo) => {
   const revision = 'publication-clock-fixture-v1';
-  const summary = { source_timestamp_scope: 'publication_snapshot', source_timestamp_precision: 'minute',
+  const summary = { source_timestamp_scope: 'source_rates_last_change', source_timestamp_precision: 'minute',
     source_trade_time_known: false, source_timezone: 'Asia/Tehran' };
   const silver = { asset: 'silver', label_fa: 'نقره', label_en: 'Silver', price_usd: 55, price_toman: 500000,
     change_percent: null, trend: 'neutral', history: [], source_usd: 'canonical', source_toman: 'canonical',
@@ -28,7 +28,7 @@ test('publication clocks stay on their currency leg through HTTP and socket upda
   await page.goto('/');
   const details = page.locator('[data-price-details="silver"]');
   const clock = details.locator('[data-publication-clock="true"]');
-  await expect(details.getByText('Publication time; trade time unknown', { exact: true })).toBeVisible();
+  await expect(details.getByText('Source rates last changed; trade time unknown', { exact: true })).toBeVisible();
   await expect(clock).toContainText('15:16');
   await expect(clock).not.toContainText('15:16:00');
   await expect.poll(() => Boolean(socket)).toBe(true);
@@ -40,12 +40,23 @@ test('publication clocks stay on their currency leg through HTTP and socket upda
     source_summary: { source_timestamp_scope: 'response_quote_snapshot', source_timestamp_precision: 'second',
       source_trade_time_known: false, source_timezone: 'UTC' } }));
   await expect(clock).toContainText('11:49:37');
+  await expect(details.getByText('Publication time; trade time unknown', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'TMN', exact: true }).click();
   await expect(clock).toContainText('15:16');
   await expect(clock).not.toContainText('11:49:37');
+  await expect(details.getByText('Source rates last changed; trade time unknown', { exact: true })).toBeVisible();
   await details.screenshot({ path: testInfo.outputPath('publication-clock.png') });
   socket!.send(JSON.stringify({ event_type: 'canonical_update', rights_revision: revision,
     instrument_id: 'XAG_USD_OZ', compatibility_asset: 'silver', price: 57, status: 'live', sequence: 2,
+    observed_at: '2026-10-17T11:50:00Z', canonical_at: '2026-10-17T11:50:04Z', source_summary: summary }));
+  await page.getByRole('button', { name: 'USD', exact: true }).click();
+  await expect(clock).toContainText('15:20');
+  await expect(clock).not.toContainText('15:20:00');
+  await expect(details.getByText('Source rates last changed; trade time unknown', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'TMN', exact: true }).click();
+  await expect(clock).toContainText('15:16');
+  socket!.send(JSON.stringify({ event_type: 'canonical_update', rights_revision: revision,
+    instrument_id: 'XAG_USD_OZ', compatibility_asset: 'silver', price: 58, status: 'live', sequence: 3,
     observed_at: '2026-10-17T11:50:41Z', canonical_at: '2026-10-17T11:50:42Z' }));
   await expect(clock).toContainText('15:16');
   await page.getByRole('button', { name: 'USD', exact: true }).click();

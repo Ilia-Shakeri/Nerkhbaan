@@ -112,13 +112,14 @@ test('published snapshots label unknown trade time and retain minute precision',
 test('currency legs keep separate publication metadata through socket updates and clearing', () => {
   const stream = moduleAt('apps/web/src/app/services/price-stream.ts', {}, {});
   const history = moduleAt('apps/web/src/app/services/history-time.ts', { Intl, Date }, {});
-  const tomanSummary = { source_timestamp_scope: 'publication_snapshot', source_timestamp_precision: 'minute', source_timezone: 'Asia/Tehran' };
+  const tomanSummary = { source_timestamp_scope: 'source_rates_last_change', source_timestamp_precision: 'minute', source_timezone: 'Asia/Tehran' };
   const asset = {
     ...stream.canonicalLegDetails({ instrument_id: 'XAG_USD_OZ', observed_at: '2026-10-17T10:00:31Z', source_summary: {} }, false),
     ...stream.canonicalLegDetails({ instrument_id: 'SILVER_999_TOMAN_GRAM', observed_at: '2026-10-17T11:30:00Z', source_summary: tomanSummary }, true),
   };
   assert.equal(history.publicationTimeDetails(asset.usd_source_summary, asset.usd_observed_at, 'en'), null);
   assert.match(history.publicationTimeDetails(asset.toman_source_summary, asset.toman_observed_at, 'en').timestamp, /15:00/);
+  assert.equal(history.publicationTimeDetails(asset.toman_source_summary, asset.toman_observed_at, 'en').label, 'Source rates last changed; trade time unknown');
   const usdUpdate = stream.canonicalLegDetails({ instrument_id: 'XAG_USD_OZ', observed_at: '2026-10-17T11:31:33Z' }, false);
   assert.equal(usdUpdate.usd_source_summary, null);
   assert.equal(Object.hasOwn(usdUpdate, 'toman_source_summary'), false);
@@ -129,6 +130,23 @@ test('currency legs keep separate publication metadata through socket updates an
   assert.equal(cleared.toman_source_summary, null);
   assert.equal(cleared.usd_observed_at, null);
   assert.equal(cleared.toman_observed_at, null);
+});
+
+test('source-wide last rate change is distinct from publication time in both languages', () => {
+  const history = moduleAt('apps/web/src/app/services/history-time.ts', { Intl, Date }, {});
+  const summary = { source_timestamp_scope: 'source_rates_last_change', source_timestamp_precision: 'minute',
+    source_timezone: 'Asia/Tehran', source_trade_time_known: false };
+  const timestamp = '2026-10-17T11:46:00Z';
+  const english = history.publicationTimeDetails(summary, timestamp, 'en');
+  assert.equal(english.label, 'Source rates last changed; trade time unknown');
+  assert.match(english.timestamp, /15:16/);
+  assert.doesNotMatch(english.timestamp, /15:16:00/);
+  const persian = history.publicationTimeDetails(summary, timestamp, 'fa');
+  assert.equal(persian.label, 'آخرین تغییر نرخ‌های منبع؛ ساعت معامله نامعلوم');
+  assert.match(persian.timestamp, /۱۵:۱۶/);
+  assert.doesNotMatch(persian.timestamp, /۱۵:۱۶:۰۰/);
+  assert.equal(history.publicationTimeDetails({ ...summary, source_timestamp_scope: 'response_quote_snapshot' }, timestamp, 'en').label,
+    'Publication time; trade time unknown');
 });
 
 test('parallel renderer failures share one rotation before credential I/O', async () => {

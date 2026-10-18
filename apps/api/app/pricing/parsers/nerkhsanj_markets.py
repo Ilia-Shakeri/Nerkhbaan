@@ -90,7 +90,7 @@ def _publication_metadata(symbol: str, source_date: str, clock: str) -> dict:
 @dataclass(frozen=True, slots=True)
 class NerkhsanjSnapshotParser:
     symbol: str
-    parser_version: str = "nerkhsanj-snapshot/1.0.0"
+    parser_version: str = "nerkhsanj-snapshot/1.1.0"
 
     def parse(self, payload: object, context: ParserContext) -> ParsedProviderValue:
         market = _market(self.symbol, context.instrument)
@@ -107,6 +107,7 @@ class NerkhsanjSnapshotParser:
             price=price, currency=market.currency, weight_unit=market.unit,
             purity=market.purity, observed_at=observed_at,
             metadata={**_publication_metadata(self.symbol, source_date, clock),
+                      "source_timestamp_scope": "source_rates_last_change",
                       "original_value": str(price)},
         ), context)
 

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Nerkhbaan API",
-    "version": "2.8.7"
+    "version": "2.8.8"
   },
   "paths": {
     "/api/auth/signup": {
@@ -482,6 +482,50 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PricesHealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/prices/references": {
+      "get": {
+        "tags": [
+          "prices"
+        ],
+        "summary": "Get Reference Rates",
+        "operationId": "get_reference_rates_api_prices_references_get",
+        "parameters": [
+          {
+            "name": "timeframe",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(1h|24h|7d|30d|1y)$",
+              "default": "30d",
+              "title": "Timeframe"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReferenceRatesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -8363,6 +8407,841 @@
           "endpoint"
         ],
         "title": "PushUnsubscribeRequest"
+      },
+      "ReferenceCurrent": {
+        "properties": {
+          "instrument_id": {
+            "type": "string",
+            "enum": [
+              "GOLD_24K_REFERENCE_TOMAN_GRAM",
+              "BTC_USD_IRAN_REFERENCE",
+              "USDT_USD_IRAN_REFERENCE"
+            ],
+            "title": "Instrument Id"
+          },
+          "label_fa": {
+            "type": "string",
+            "title": "Label Fa"
+          },
+          "label_en": {
+            "type": "string",
+            "title": "Label En"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "TOMAN",
+              "USD"
+            ],
+            "title": "Currency"
+          },
+          "market": {
+            "type": "string",
+            "const": "reference",
+            "title": "Market"
+          },
+          "region": {
+            "type": "string",
+            "const": "iran",
+            "title": "Region"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "published_reference",
+              "iran_fx_ratio"
+            ],
+            "title": "Method"
+          },
+          "physical_purity_confirmed": {
+            "type": "boolean",
+            "const": false,
+            "title": "Physical Purity Confirmed"
+          },
+          "purity": {
+            "type": "null",
+            "title": "Purity"
+          },
+          "weight_unit": {
+            "type": "string",
+            "enum": [
+              "gram",
+              "unit"
+            ],
+            "title": "Weight Unit"
+          },
+          "nominal_karat": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "const": 24
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Karat"
+          },
+          "is_derived": {
+            "type": "boolean",
+            "title": "Is Derived"
+          },
+          "source_provider_id": {
+            "type": "string",
+            "enum": [
+              "nerkhsanj_reference_snapshot",
+              "nerkhsanj_reference_history"
+            ],
+            "title": "Source Provider Id"
+          },
+          "source_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Source Keys"
+          },
+          "attribution": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Attribution"
+          },
+          "disclaimer_fa": {
+            "type": "string",
+            "title": "Disclaimer Fa"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "fresh_reference",
+              "delayed_reference",
+              "unavailable_reference"
+            ],
+            "title": "Status"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "price_decimal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Decimal"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed At"
+          },
+          "received_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Received At"
+          },
+          "source_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Date"
+          },
+          "source_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Time"
+          },
+          "source_timestamp_scope": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "source_rates_last_change"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timestamp Scope"
+          },
+          "source_timestamp_precision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": "minute"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Timestamp Precision"
+          },
+          "source_timezone": {
+            "type": "string",
+            "const": "Asia/Tehran",
+            "title": "Source Timezone",
+            "default": "Asia/Tehran"
+          },
+          "source_calendar": {
+            "type": "string",
+            "const": "jalali",
+            "title": "Source Calendar",
+            "default": "jalali"
+          },
+          "source_observation_time_known": {
+            "type": "boolean",
+            "const": false,
+            "title": "Source Observation Time Known",
+            "default": false
+          },
+          "source_trade_time_known": {
+            "type": "boolean",
+            "const": false,
+            "title": "Source Trade Time Known",
+            "default": false
+          },
+          "age_seconds": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Age Seconds"
+          },
+          "freshness_limit_seconds": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Freshness Limit Seconds"
+          },
+          "maximum_reference_age_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 1.0,
+            "title": "Maximum Reference Age Seconds"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceInput"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Inputs"
+          },
+          "unavailable_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable Reason"
+          },
+          "persistence_status": {
+            "type": "string",
+            "enum": [
+              "persisted",
+              "unpersisted",
+              "unavailable"
+            ],
+            "title": "Persistence Status",
+            "default": "unavailable"
+          },
+          "storage_fallback": {
+            "type": "boolean",
+            "title": "Storage Fallback",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "instrument_id",
+          "label_fa",
+          "label_en",
+          "currency",
+          "market",
+          "region",
+          "method",
+          "physical_purity_confirmed",
+          "weight_unit",
+          "is_derived",
+          "source_provider_id",
+          "source_keys",
+          "attribution",
+          "disclaimer_fa",
+          "status",
+          "freshness_limit_seconds",
+          "maximum_reference_age_seconds"
+        ],
+        "title": "ReferenceCurrent"
+      },
+      "ReferenceHistoryPoint": {
+        "properties": {
+          "timestamp_precision": {
+            "type": "string",
+            "const": "day",
+            "title": "Timestamp Precision"
+          },
+          "timestamp_role": {
+            "type": "string",
+            "const": "day_bucket_start",
+            "title": "Timestamp Role"
+          },
+          "source_observation_time_known": {
+            "type": "boolean",
+            "const": false,
+            "title": "Source Observation Time Known"
+          },
+          "source_timezone": {
+            "type": "string",
+            "const": "Asia/Tehran",
+            "title": "Source Timezone"
+          },
+          "source_calendar": {
+            "type": "string",
+            "const": "jalali",
+            "title": "Source Calendar"
+          },
+          "source_date": {
+            "type": "string",
+            "title": "Source Date"
+          },
+          "instrument_id": {
+            "type": "string",
+            "enum": [
+              "GOLD_24K_REFERENCE_TOMAN_GRAM",
+              "BTC_USD_IRAN_REFERENCE",
+              "USDT_USD_IRAN_REFERENCE"
+            ],
+            "title": "Instrument Id"
+          },
+          "label_fa": {
+            "type": "string",
+            "title": "Label Fa"
+          },
+          "label_en": {
+            "type": "string",
+            "title": "Label En"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "TOMAN",
+              "USD"
+            ],
+            "title": "Currency"
+          },
+          "market": {
+            "type": "string",
+            "const": "reference",
+            "title": "Market"
+          },
+          "region": {
+            "type": "string",
+            "const": "iran",
+            "title": "Region"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "published_reference",
+              "iran_fx_ratio"
+            ],
+            "title": "Method"
+          },
+          "physical_purity_confirmed": {
+            "type": "boolean",
+            "const": false,
+            "title": "Physical Purity Confirmed"
+          },
+          "purity": {
+            "type": "null",
+            "title": "Purity"
+          },
+          "weight_unit": {
+            "type": "string",
+            "enum": [
+              "gram",
+              "unit"
+            ],
+            "title": "Weight Unit"
+          },
+          "nominal_karat": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "const": 24
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Karat"
+          },
+          "is_derived": {
+            "type": "boolean",
+            "title": "Is Derived"
+          },
+          "source_provider_id": {
+            "type": "string",
+            "enum": [
+              "nerkhsanj_reference_snapshot",
+              "nerkhsanj_reference_history"
+            ],
+            "title": "Source Provider Id"
+          },
+          "source_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Source Keys"
+          },
+          "attribution": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Attribution"
+          },
+          "disclaimer_fa": {
+            "type": "string",
+            "title": "Disclaimer Fa"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "price": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Price"
+          },
+          "price_decimal": {
+            "type": "string",
+            "title": "Price Decimal"
+          },
+          "source_time": {
+            "type": "null",
+            "title": "Source Time"
+          },
+          "source_timestamp_scope": {
+            "type": "string",
+            "const": "source_reported_daily_close",
+            "title": "Source Timestamp Scope"
+          },
+          "history_point_kind": {
+            "type": "string",
+            "enum": [
+              "published_reference_daily_close",
+              "same_day_iran_fx_ratio"
+            ],
+            "title": "History Point Kind"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceInput"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "title": "Inputs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timestamp_precision",
+          "timestamp_role",
+          "source_observation_time_known",
+          "source_timezone",
+          "source_calendar",
+          "source_date",
+          "instrument_id",
+          "label_fa",
+          "label_en",
+          "currency",
+          "market",
+          "region",
+          "method",
+          "physical_purity_confirmed",
+          "weight_unit",
+          "is_derived",
+          "source_provider_id",
+          "source_keys",
+          "attribution",
+          "disclaimer_fa",
+          "timestamp",
+          "price",
+          "price_decimal",
+          "source_timestamp_scope",
+          "history_point_kind",
+          "inputs"
+        ],
+        "title": "ReferenceHistoryPoint"
+      },
+      "ReferenceInput": {
+        "properties": {
+          "source_key": {
+            "type": "string",
+            "title": "Source Key"
+          },
+          "instrument_id": {
+            "type": "string",
+            "title": "Instrument Id"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "price_decimal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Decimal"
+          },
+          "currency": {
+            "type": "string",
+            "const": "TOMAN",
+            "title": "Currency"
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "source_date": {
+            "type": "string",
+            "title": "Source Date"
+          },
+          "source_timezone": {
+            "type": "string",
+            "const": "Asia/Tehran",
+            "title": "Source Timezone"
+          },
+          "source_calendar": {
+            "type": "string",
+            "const": "jalali",
+            "title": "Source Calendar"
+          },
+          "timestamp_precision": {
+            "type": "string",
+            "enum": [
+              "minute",
+              "day"
+            ],
+            "title": "Timestamp Precision"
+          },
+          "timestamp_role": {
+            "type": "string",
+            "enum": [
+              "source_rates_last_change",
+              "day_bucket_start"
+            ],
+            "title": "Timestamp Role"
+          },
+          "source_observation_time_known": {
+            "type": "boolean",
+            "const": false,
+            "title": "Source Observation Time Known"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_key",
+          "instrument_id",
+          "currency",
+          "source_date",
+          "source_timezone",
+          "source_calendar",
+          "timestamp_precision",
+          "timestamp_role",
+          "source_observation_time_known"
+        ],
+        "title": "ReferenceInput"
+      },
+      "ReferenceRateItem": {
+        "properties": {
+          "instrument_id": {
+            "type": "string",
+            "enum": [
+              "GOLD_24K_REFERENCE_TOMAN_GRAM",
+              "BTC_USD_IRAN_REFERENCE",
+              "USDT_USD_IRAN_REFERENCE"
+            ],
+            "title": "Instrument Id"
+          },
+          "label_fa": {
+            "type": "string",
+            "title": "Label Fa"
+          },
+          "label_en": {
+            "type": "string",
+            "title": "Label En"
+          },
+          "currency": {
+            "type": "string",
+            "enum": [
+              "TOMAN",
+              "USD"
+            ],
+            "title": "Currency"
+          },
+          "market": {
+            "type": "string",
+            "const": "reference",
+            "title": "Market"
+          },
+          "region": {
+            "type": "string",
+            "const": "iran",
+            "title": "Region"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "published_reference",
+              "iran_fx_ratio"
+            ],
+            "title": "Method"
+          },
+          "physical_purity_confirmed": {
+            "type": "boolean",
+            "const": false,
+            "title": "Physical Purity Confirmed"
+          },
+          "purity": {
+            "type": "null",
+            "title": "Purity"
+          },
+          "weight_unit": {
+            "type": "string",
+            "enum": [
+              "gram",
+              "unit"
+            ],
+            "title": "Weight Unit"
+          },
+          "nominal_karat": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "const": 24
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nominal Karat"
+          },
+          "is_derived": {
+            "type": "boolean",
+            "title": "Is Derived"
+          },
+          "source_provider_id": {
+            "type": "string",
+            "enum": [
+              "nerkhsanj_reference_snapshot",
+              "nerkhsanj_reference_history"
+            ],
+            "title": "Source Provider Id"
+          },
+          "source_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Source Keys"
+          },
+          "attribution": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Attribution"
+          },
+          "disclaimer_fa": {
+            "type": "string",
+            "title": "Disclaimer Fa"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "fresh_reference",
+              "delayed_reference",
+              "unavailable_reference"
+            ],
+            "title": "Status"
+          },
+          "current": {
+            "$ref": "#/components/schemas/ReferenceCurrent"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceHistoryPoint"
+            },
+            "type": "array",
+            "maxItems": 366,
+            "title": "History"
+          },
+          "history_status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "partial"
+            ],
+            "title": "History Status"
+          },
+          "history_time_info": {
+            "$ref": "#/components/schemas/HistoryTimeInfo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "instrument_id",
+          "label_fa",
+          "label_en",
+          "currency",
+          "market",
+          "region",
+          "method",
+          "physical_purity_confirmed",
+          "weight_unit",
+          "is_derived",
+          "source_provider_id",
+          "source_keys",
+          "attribution",
+          "disclaimer_fa",
+          "status",
+          "current",
+          "history_status",
+          "history_time_info"
+        ],
+        "title": "ReferenceRateItem"
+      },
+      "ReferenceRatesResponse": {
+        "properties": {
+          "rights_revision": {
+            "type": "string",
+            "title": "Rights Revision"
+          },
+          "checked_at": {
+            "type": "string",
+            "title": "Checked At"
+          },
+          "timeframe": {
+            "type": "string",
+            "enum": [
+              "1h",
+              "24h",
+              "7d",
+              "30d",
+              "1y"
+            ],
+            "title": "Timeframe"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceRateItem"
+            },
+            "type": "array",
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "References"
+          },
+          "attributions": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Attributions"
+          },
+          "errors": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rights_revision",
+          "checked_at",
+          "timeframe",
+          "references"
+        ],
+        "title": "ReferenceRatesResponse"
       },
       "ResetPasswordRequest": {
         "properties": {

@@ -1,4 +1,11 @@
-# Administrator guide — 2.8.7
+# Administrator guide — 2.8.8
+
+The dashboard reference panel has three separate Iranian reference identities.
+Gold purity is unconfirmed; BTC/USD and USDT/USD are ratios of same-source
+Iranian Toman prices. Read the source last-change clock, age and delayed status.
+Daily history has unknown observation hours and may contain gaps. These contracts
+are read-only and do not become ordinary alert instruments. See
+[reference limits](iranian-references-2026-10-17.md).
 
 The administrator console uses a separate HttpOnly session cookie under
 `/api/admin`. Public login does not grant administrator access. Permissions are

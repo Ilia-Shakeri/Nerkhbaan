@@ -1,11 +1,11 @@
-# Delivery Readiness — 2.8.7
+# Delivery Readiness — 2.8.8
 
-Updated: 2026-10-17. Code delivery and production acceptance are separate facts.
+Updated: 2026-10-18. Code delivery and production acceptance are separate facts.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
 | --- | --- | --- | --- |
-| Release consistency | `npm run check:release` | version 2.8.7, no drift | Local |
+| Release consistency | `npm run check:release` | version 2.8.8, no drift | Local |
 | Python static/unit | `python -m pyflakes app tests scripts`; `python -m unittest discover -s tests -v` from apps/api | zero static errors; all required tests pass | Local |
 | Infra fixture behavior | `python scripts/test_infra_contracts.py` | OK | Local, mocked network/data |
 | Browser fixture safety | `TEST_DATABASE_URL=... python scripts/test_browser_fixture.py` | five cases pass, none skipped | Explicit loopback test PostgreSQL, run-owned schema |
@@ -31,7 +31,31 @@ Do not change a pending marker to passed without a saved successful run for the 
 - Existing compressed chunks and market-price duplicates need target database checks before uniqueness changes.
 - Keep production evidence outside source control and exclude secrets and customer payloads.
 
-## Current source release — 2026-10-17
+## Current reference release — 2.8.8
+
+The user accepted explicitly labelled published/calculated references for 24K
+gold, BTC/USD and USDT/USD. Three new identities and a separate ninth migration
+preserve the native instruments and archives. Calculated USD values use both
+same-source Toman parents; the gold reference does not claim verified 9999
+purity. Actual source time, delayed status and missing daily observations remain
+visible. See [reference scope and acceptance limits](iranian-references-2026-10-17.md).
+Correct clock labels and a delayed-reference panel do not resolve the publisher's
+upstream update latency. Final source, hosted and deployment receipts are separate.
+
+Final local source validation on October 18 passed 1,021 backend cases with zero
+skips, using owned PostgreSQL/Redis plus unit, SQLite and mocked cases; 79 frontend
+contracts, six focused mocked browser cases and three renderer builds passed.
+The 46-case reference/strict-rights sequence passed on each PostgreSQL and
+Timescale fixture. Captured actual-source replays preserved three snapshots and
+887 daily reference records (297/295/295 days), original clocks and all 47/48
+public-table fingerprints in the respective owned fixtures. Reimports wrote zero
+rows. The real off-host production snapshot restore retained all existing data
+and eight migration checksums when the empty ninth table was added. That SQL-only
+proof is separate from the exact final-image runner and API compatibility gate.
+Earlier failed fixtures, browser runs and the host-restart interrupted test remain
+preserved; final-commit hosted checks and live deployment are not inferred here.
+
+## Historical source release — 2.8.7
 
 Release 2.8.7 retires Servix and adds reviewed keyless Iranian quote and archive
 routes. Registered archives cover eight of eleven instruments. Full current

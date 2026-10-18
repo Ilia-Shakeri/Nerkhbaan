@@ -1,7 +1,17 @@
-# Release Operations — 2.8.7
+# Release Operations — 2.8.8
 
-Updated: 2026-10-17. Execute against the intended host only after review of the concrete release.
+Updated: 2026-10-18. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
+
+Release 2.8.8 adds three separately labelled reference contracts authorized by
+the user, without asserting physical 9999 gold or global USD market quotes.
+The ninth migration creates a separate reference table; the first eight files
+remain immutable. Test the migration on an owned restored copy before the live
+application update. Preserve last-change clocks, original receipts and visible
+delayed status; source update latency remains unresolved. See the
+[reference scope and limits](iranian-references-2026-10-17.md). The previous scope
+and dated 2.8.7 results below remain historical evidence.
+
 The 2.8.7 candidate replaces Servix with free Iranian routes for eight of eleven instruments and their actual published archives. All nine Servix routes are hard retired; environment settings, keys or a rights manifest cannot reactivate them. Permitted older history remains available. No new keys are needed for the eight instruments. Physical 9999 gold/Toman, BTC/USD and USDT/USD still lack a proven free Iranian source; quote currency and purity must not be substituted. Final-commit hosted checks and target deployment need separate receipts. The target remained 2.8.1 during the October 17 review. The chosen replacement scope must pass before deployment; reduced coverage is not authorized. See [the source review](provider-rights-2026-10-17.md) and [the replacement evidence and exact archive limits](iranian-replacement-2026-10-17.md).
 
 At the October 17 12:08 UTC target receipt, four Nerkhsanj URLs returned HTTP 200, but all seven current prices were 1,321.66 seconds old and were rejected. Two Wallgold quotes and two Nobitex books passed only at their original receipt times. Wallgold quotes were about 58.79 seconds old; the final registry uses the existing instrument limits of 300 seconds for gold and 120 seconds for silver, with a 60-second request interval. Its roughly 24-hour declared quote expiry does not extend those limits. The separately sampled GTA Silver quote was about 7,757 seconds old and rejected. Nobitex UDF returned 403 from the target and remains disabled. Do not reset the source or original receipt clock, relax age limits, or treat those dated receipts as current live availability.
@@ -158,13 +168,13 @@ sets interpolation inputs. Keep the release `.env` as a private link to the sele
 or use a reviewed override that replaces the service file list. Competing files cause refusal.
 It probes SQL checksums from the exact desired image in an ephemeral read-only container with no
 network, environment file or volumes, then compares the checkout, old API's migration files and a
-read-only ledger query. All four must match before the migration service runs. A new, changed or
-unknown schema requires a separately reviewed migration/cutover plan; this automatic route only
-checks an already current schema. It runs that service explicitly with `--no-deps --pull never`,
+read-only ledger query. By default all four must match before the migration service runs. Changed
+or unknown ledger entries always stop deployment. The one reviewed additive transition below
+requires its separate private plan and restore proof. It runs the service explicitly with `--no-deps --pull never`,
 adds one backend with `--no-recreate`,
 checks all replicas and HTTPS, then stops/removes only the recorded old ID after rechecking its
 project/service labels, image, static configuration, mounts, network identity and start time.
-Each replacement keeps the requested number of healthy replicas. Same-image configuration changes
+With an unchanged ledger, each replacement keeps the requested number of healthy replicas. Same-image configuration changes
 also roll; an already current backend retains its IDs. Client/feed changes use explicit targets and
 `--no-deps --no-build --pull never`. Data, backup, ingress, monitoring and unrelated containers are
 compared against their original IDs/configuration/mounts/start times throughout the update.
@@ -172,10 +182,85 @@ compared against their original IDs/configuration/mounts/start times throughout 
 Redirect deployment output to a private release log. On any health/identity/configuration failure,
 the helper stops and keeps remaining replicas. Reconcile the actual stack before retrying; an extra
 replica from a partial attempt causes preflight refusal. No automatic rollback, volume removal,
-infrastructure recreation or replica scale-down is performed. A different schema stops the procedure
-before executing the migration service, so the old API's strict ledger readiness is retained.
+infrastructure recreation or replica scale-down is performed. Without the reviewed additive plan,
+a different schema stops before the migration service, retaining the old API's strict ledger readiness.
 Passing mocked CLI tests is not target deployment evidence. Compose must support
 [`config --no-env-resolution` and `--hash`](https://docs.docker.com/reference/cli/docker/compose/config/).
+
+### Reviewed reference-table addition: 2.8.1 to 2.8.8
+
+`DEPLOY_MIGRATION_PLAN` may name a private absolute JSON file for exactly one transition: the
+unchanged eight-migration 2.8.1 baseline plus `20261017_001_iranian_reference_records.sql`.
+The helper pins that migration's normalized SQL SHA-256 to
+`05ba325399df2b031459b6484d5cc02b4071f12dd708cdad7e65e5a8cd1e642b`.
+It creates only `public.pricing_reference_records` and its index, with a five-second lock timeout.
+Changes to old migrations, extra migrations, an already advanced live ledger, or another SQL body
+remain forbidden. This is not a general schema bypass. Do not invoke the manual migration/scale
+examples below for this transition; supply the plan to the guarded helper above.
+
+The plan has exactly these fields:
+
+| Field | Required value |
+| --- | --- |
+| `schema_version`, `kind` | `1`, `iranian-reference-addition-v1` |
+| `commit`, `project`, `readiness_url` | Exact reviewed checkout, existing project and HTTPS URL |
+| `images` | Exact service-to-loaded-image-ID mapping from the image manifest |
+| `baseline_backends` | Every current backend as `{id, image, release_version: "2.8.1"}`; one old image |
+| `baseline_migrations` | All eight exact filename-to-normalized-SQL-checksum entries |
+| `target_migrations` | The same eight entries plus the pinned ninth migration |
+| `evidence` | `{path, sha256}` for the actual isolated restore/compatibility report |
+
+The report must contain `schema_version: 1`, the same `kind`, and a UTC `checked_at` no more than
+24 hours old or five minutes in the future. Its `release` object repeats exactly `commit`, `project`,
+`readiness_url`, `images`, `baseline_backends`, `baseline_migrations` and `target_migrations` from
+the plan. Do not put `schema_version`, `kind` or `evidence` inside `release`.
+
+The report's `restore` object records `isolated: true`, the actual live PostgreSQL container ID as
+`source_database_container_id`, exact `baseline_migrations` and `target_migrations`,
+`migration_image` equal to the exact target migrate image ID,
+`migration_command: ["python", "-m", "app.migrations.runner"]`, and equal
+`existing_data_sha256_before`/`existing_data_sha256_after` fingerprints of every pre-existing table
+except the migration ledger, `new_table: "public.pricing_reference_records"` and `new_table_rows: 0`.
+Produce these facts from an owned restored copy, run the exact migration service there with the
+reviewed runtime settings (redirect database and Redis to the owned copy), and
+retain the failed receipts as well as the passing transcript. No production restore is performed.
+The full runner also reconciles the admin role/permission catalog; raw SQL-only execution cannot
+prove that existing data remains unchanged. The helper refuses a different migrate command or an
+overridden entrypoint for this additive transition.
+
+The report's `compatibility` object records exact image IDs as `old_image` and `new_image`,
+`old_release_version: "2.8.1"`,
+`old_ready_status: 503`, the actual `old_ready_payload`, `old_migration_state`,
+`new_ready_status: 200`, and actual `new_ready_payload` from the exact target image. Both payloads
+must have connected database and Redis. The old payload alone must report `ready: false`,
+`migration_current: false`, `status: "degraded"`; its exact migration state must be
+`{current: false, version: "20261017_001_iranian_reference_records.sql", applied_count: 9,
+expected_count: 8, missing: [], changed: [], unknown: ["20261017_001_iranian_reference_records.sql"]}`.
+The new payload must report release `2.8.8`, `ready: true`, `migration_current: true`, `status: "ok"`
+and the ninth migration version. `business_probes` must contain old-image read-only `/api/prices`
+and `/api/instruments` responses, each with `status: 200` and its actual `body_sha256`.
+The report's `transcript` is `{path, sha256}` for its nonempty private raw restore/probe transcript.
+These checks validate supplied evidence bindings; operators remain responsible for truthful receipts.
+
+Plan, report and transcript must be regular files owned by the deploying user, without group/other
+permissions on Linux. Their content hashes and report freshness are rechecked before further
+mutations. Finalize the reviewed commit and loaded image IDs before creating these files.
+The existing operator, environment, image, network, data-service and old-replica gates still apply.
+
+After migration the helper directly verifies every old container's files, exact nine-entry ledger,
+and readiness JSON. Old replicas remain running but their strict readiness is **503**, solely from
+the known ninth unknown migration. They are not counted as Docker-healthy. Scale-up skips Compose's
+all-container `--wait`, then polls new-image health within `DEPLOY_WAIT_SECONDS`; child commands and
+HTTPS readiness share the remaining startup deadline, and a late successful probe is rejected. Every new
+replica must pass Docker health, direct strict readiness and the exact nine-entry manifest before
+an old ID can be stopped. From migration until the last old ID retires, only the validated old migration-only HTTPS 503 or
+strict new-image HTTPS 200 is accepted; all other errors stop. Final acceptance requires only new
+replicas and strict HTTPS 200. Transition steps are recorded in the private release output.
+
+Any failure leaves remaining containers in place. The forward ledger remains recorded; there is
+no automatic rollback onto the older schema expectation. Review actual old/new IDs and the private
+failure log before a separately reviewed recovery. Business-route compatibility on the restored
+copy does not establish zero downtime on production.
 
 ### Existing stack with shared ingress
 

@@ -131,6 +131,126 @@ class PricePoint(HistoryTimeInfo):
     time_info_toman: HistoryTimeInfo | None = None
 
 
+ReferenceInstrumentId = Literal[
+    "GOLD_24K_REFERENCE_TOMAN_GRAM", "BTC_USD_IRAN_REFERENCE", "USDT_USD_IRAN_REFERENCE",
+]
+ReferenceStatus = Literal["fresh_reference", "delayed_reference", "unavailable_reference"]
+
+
+class ReferenceInput(BaseModel):
+    source_key: str
+    instrument_id: str
+    price: float | None = None
+    price_decimal: str | None = None
+    currency: Literal["TOMAN"]
+    as_of: str | None = None
+    source_date: str
+    source_timezone: Literal["Asia/Tehran"]
+    source_calendar: Literal["jalali"]
+    timestamp_precision: Literal["minute", "day"]
+    timestamp_role: Literal["source_rates_last_change", "day_bucket_start"]
+    source_observation_time_known: Literal[False]
+
+
+class ReferenceIdentity(BaseModel):
+    instrument_id: ReferenceInstrumentId
+    label_fa: str
+    label_en: str
+    currency: Literal["TOMAN", "USD"]
+    market: Literal["reference"]
+    region: Literal["iran"]
+    method: Literal["published_reference", "iran_fx_ratio"]
+    physical_purity_confirmed: Literal[False]
+    purity: None = None
+    weight_unit: Literal["gram", "unit"]
+    nominal_karat: Literal[24] | None = None
+    is_derived: bool
+    source_provider_id: Literal["nerkhsanj_reference_snapshot", "nerkhsanj_reference_history"]
+    source_keys: list[str] = Field(min_length=1, max_length=2)
+    attribution: dict[str, str]
+    disclaimer_fa: str
+
+    @model_validator(mode="after")
+    def validate_reference_identity(self) -> "ReferenceIdentity":
+        from .pricing.reference_rates import reference_definitions
+
+        definition = next(item for item in reference_definitions() if item["instrument_id"] == self.instrument_id)
+        for name in ("currency", "market", "region", "method", "physical_purity_confirmed", "purity",
+                     "weight_unit", "nominal_karat", "is_derived", "source_keys"):
+            if getattr(self, name) != definition[name]:
+                raise ValueError("Reference fields must match their named contract")
+        return self
+
+
+class ReferenceCurrent(ReferenceIdentity):
+    status: ReferenceStatus
+    price: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    price_decimal: str | None = None
+    observed_at: str | None = None
+    received_at: str | None = None
+    source_date: str | None = None
+    source_time: str | None = None
+    source_timestamp_scope: Literal["source_rates_last_change"] | None = None
+    source_timestamp_precision: Literal["minute"] | None = None
+    source_timezone: Literal["Asia/Tehran"] = "Asia/Tehran"
+    source_calendar: Literal["jalali"] = "jalali"
+    source_observation_time_known: Literal[False] = False
+    source_trade_time_known: Literal[False] = False
+    age_seconds: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    freshness_limit_seconds: int = Field(ge=1)
+    maximum_reference_age_seconds: int = Field(ge=1, le=86400)
+    inputs: list[ReferenceInput] = Field(default_factory=list, max_length=2)
+    unavailable_reason: str | None = None
+    persistence_status: Literal["persisted", "unpersisted", "unavailable"] = "unavailable"
+    storage_fallback: bool = False
+
+    @model_validator(mode="after")
+    def validate_reference_value(self) -> "ReferenceCurrent":
+        if self.price is not None:
+            from .pricing.reference_rates import validate_reference_record
+            validate_reference_record(self.model_dump(), "snapshot")
+        return self
+
+
+class ReferenceHistoryPoint(ReferenceIdentity, HistoryTimeInfo):
+    timestamp: str
+    price: float = Field(gt=0, allow_inf_nan=False)
+    price_decimal: str
+    source_date: str
+    source_time: None = None
+    source_timestamp_scope: Literal["source_reported_daily_close"]
+    timestamp_precision: Literal["day"]
+    timestamp_role: Literal["day_bucket_start"]
+    source_timezone: Literal["Asia/Tehran"]
+    source_calendar: Literal["jalali"]
+    source_observation_time_known: Literal[False]
+    history_point_kind: Literal["published_reference_daily_close", "same_day_iran_fx_ratio"]
+    inputs: list[ReferenceInput] = Field(max_length=2)
+
+    @model_validator(mode="after")
+    def validate_reference_value(self) -> "ReferenceHistoryPoint":
+        from .pricing.reference_rates import validate_reference_record
+        validate_reference_record(self.model_dump(), "history")
+        return self
+
+
+class ReferenceRateItem(ReferenceIdentity):
+    status: ReferenceStatus
+    current: ReferenceCurrent
+    history: list[ReferenceHistoryPoint] = Field(default_factory=list, max_length=366)
+    history_status: Literal["complete", "partial"]
+    history_time_info: HistoryTimeInfo
+
+
+class ReferenceRatesResponse(BaseModel):
+    rights_revision: str
+    checked_at: str
+    timeframe: Literal["1h", "24h", "7d", "30d", "1y"]
+    references: list[ReferenceRateItem] = Field(min_length=3, max_length=3)
+    attributions: list[dict[str, str]] = Field(default_factory=list)
+    errors: list[dict[str, str]] = Field(default_factory=list, max_length=16)
+
+
 class PricingWorkerQuote(BaseModel):
     instrument_id: str = Field(pattern=r"^(BTC_USD|XAG_USD_OZ|XAU_USD_OZ)$")
     provider_id: str = Field(pattern=r"^gold_api_free_(xag|xau|btc)$")

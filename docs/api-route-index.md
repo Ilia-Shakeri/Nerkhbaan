@@ -2,7 +2,7 @@
 
 Generated from the current application. Regenerate with `python scripts/export_api_contracts.py`.
 
-Release: `2.8.7`. Full schemas: [api-contracts.json](api-contracts.json).
+Release: `2.8.8`. Full schemas: [api-contracts.json](api-contracts.json).
 
 | Method | Path | Request | Success |
 | --- | --- | --- | --- |
@@ -120,6 +120,7 @@ Release: `2.8.7`. Full schemas: [api-contracts.json](api-contracts.json).
 | PATCH | `/api/notifications/{notification_id}/read` | `—` | 200 |
 | GET | `/api/prices` | `—` | 200 |
 | GET | `/api/prices/health` | `—` | 200 |
+| GET | `/api/prices/references` | `—` | 200 |
 | GET | `/api/prices/{asset}/history` | `—` | 200 |
 | GET | `/api/providers` | `—` | 200 |
 | POST | `/api/push/subscribe` | `PushSubscriptionPayload` | 201 |

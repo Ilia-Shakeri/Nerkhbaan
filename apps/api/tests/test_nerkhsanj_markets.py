@@ -17,6 +17,7 @@ from app.pricing.parsers.nerkhsanj_markets import (
     NERKHSANJ_MARKETS, NerkhsanjIntradayHistoryParser,
     NerkhsanjMarketDailyHistoryParser, NerkhsanjSnapshotParser,
 )
+from app.pricing.registry import PROVIDERS
 
 
 NOW = datetime(2026, 10, 17, 11, 47, 18, tzinfo=UTC)
@@ -45,13 +46,17 @@ class NerkhsanjSnapshotTests(unittest.TestCase):
                 self.assertEqual(parsed.currency, market.currency)
                 self.assertEqual(parsed.metadata["conversion_factor"], "1")
 
-    def test_clock_is_tehran_publication_minute_not_reception_or_trade(self):
+    def test_clock_is_tehran_source_rate_change_minute_not_reception_or_trade(self):
         parsed = self.parse()
         self.assertEqual(parsed.observed_at, datetime(2026, 10, 17, 11, 46, tzinfo=UTC))
-        self.assertEqual(parsed.metadata["source_timestamp_scope"], "publication_snapshot")
+        self.assertEqual(parsed.metadata["source_timestamp_scope"], "source_rates_last_change")
         self.assertEqual(parsed.metadata["source_timestamp_precision"], "minute")
         self.assertIs(parsed.metadata["source_observation_time_known"], False)
         self.assertIs(parsed.metadata["source_trade_time_known"], False)
+        self.assertEqual(NerkhsanjSnapshotParser("dollar").parser_version, "nerkhsanj-snapshot/1.1.0")
+        self.assertTrue(all(provider.parser_version == "nerkhsanj-snapshot/1.1.0"
+                            for provider in PROVIDERS.values()
+                            if provider.source_family == "nerkhsanj" and not provider.history_only))
 
     def test_blank_closed_market_clock_does_not_become_current(self):
         for clock in (None, "", "  "):
@@ -64,6 +69,22 @@ class NerkhsanjSnapshotTests(unittest.TestCase):
         with self.assertRaises(ParserError) as raised:
             self.parse(age=60)
         self.assertEqual(raised.exception.code, "stale_timestamp")
+
+    def test_recorded_old_source_change_stays_rejected_for_all_current_routes(self):
+        received = datetime(2026, 10, 17, 13, 23, 5, 390705, tzinfo=UTC)
+        recorded = {
+            "date": "1405/07/25", "time": "16:16",
+            "rates": {"dollar": 264010, "gold": 26237300, "silver": 511280,
+                      "tether": 263685, "bitcoin": 21497010400},
+            "usd": {"ounce": 4166.39, "silver-ounce": 56.99},
+        }
+        for symbol, market in NERKHSANJ_MARKETS.items():
+            instrument = get_instrument(market.instrument_id)
+            context = ParserContext(instrument, received,
+                                    min(instrument.stale_after_seconds, instrument.expire_after_seconds))
+            with self.subTest(symbol=symbol), self.assertRaises(ParserError) as raised:
+                NerkhsanjSnapshotParser(symbol).parse(recorded, context)
+            self.assertEqual(raised.exception.code, "stale_timestamp")
 
     def test_future_publication_rejected(self):
         with self.assertRaises(ParserError) as raised:
