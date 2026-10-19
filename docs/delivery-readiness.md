@@ -1,6 +1,6 @@
 # Delivery Readiness — 2.8.12
 
-Updated: 2026-10-19. Candidate 2.8.12 includes the notification code; final source, build and deployment receipts remain required. Installed 2.8.11 evidence below is historical. Code delivery and production acceptance are separate facts.
+Updated: 2026-10-19. Exact-source and runtime checks passed for 2.8.12; application acceptance below is tied to saved target receipts. Overall product acceptance remains false.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
@@ -31,7 +31,19 @@ Do not change a pending marker to passed without a saved successful run for the 
 - Existing compressed chunks and market-price duplicates need target database checks before uniqueness changes.
 - Keep production evidence outside source control and exclude secrets and customer payloads.
 
-## Current installed application — 2.8.11
+## Current installed application — 2.8.12
+
+Application 2.8.12 is the immutable source `fe8949aeb4c6e1c86e386ba2827ed64785fd6ebe` and tag `v2.8.12`. [Source CI 39217110287](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217110287) passed all fifteen jobs. [Hosted runtime 39217586742](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217586742), workflow source `5ecac56cdf63ce2222d0c58ea2fc1441f4328f66`, passed all four builds, source checks and strict image scans. HIGH/CRITICAL findings are zero, including unfixed findings. Notification code is included in these images.
+
+The actual wrapper completed at 08:36:12 UTC, postdeployment at 08:38:36, public home/admin browser checks at 08:39:12 and the current pointer at 08:39:44. 22 containers are present; all 17 protected identities and the private environment are unchanged; both new APIs match the exact prepared images and source. Both APIs have the exact nine-migration ledger.
+
+The native endpoint took 1.790213 seconds, with two fresh-cache, four stale, one expired and four unavailable native contracts; none live. The separate references retain 296/294/294 public records in the rolling 363-day window, separate from the full stored 297/295/295 history records, each in Gold24/BTCUSD/USDTUSD order (887 history rows, separate from three current snapshots), missing days 67/69/69 internal missing days in that 363-day public window and source/receipt clocks all three delayed_reference; original source last-change 2026-10-19 08:17 UTC and original receipt 08:37:15.618058 UTC. These actual measurements do not establish all-live prices, physical 9999 gold, direct global-dollar quotes or continuous annual history.
+
+Overall product acceptance remains false. Real SMTP/mailbox receipt, an authorized browser/device recipient, trusted publisher signing and installed Windows consent/notice/click, and continuous 24-hour feed evidence remain open. No customer mail or system notification was sent by deployment checks. The current VAPID pair passed the October 19 read-only check; no replacement key is needed; pricing needs no new key for the accepted eight native routes and three labelled references.
+
+Receipt directory: `release-2.8.12-20261019`. Read-only step-four proof: `release-2.8.12-20261019/step4-readonly-preflight-20261019.json`. The step-four inspection completed at 08:40:22 UTC with preflight_passed=false: SMTP_HOST is absent, the VAPID pair is valid and twelve limited WNS-root IPv4 attempts timed out at TCP from the host and both APIs. No delivery, SMTP connection or configuration change was attempted. Keep all earlier failed receipts false and preserve dated 2.8.11 history below.
+
+## Historical installed application — 2.8.11, before the 2.8.12 rollout
 
 The immutable application source is `9a569550685175f3f7c2859e1474af38edb0f9d5`. Its fifteen source jobs and four hosted runtime builds and strict scans passed. Recovery guard `25510b00eb4d9ef5fbdb68d5ce1a89c34b19f5f1` passed 48 frozen local cases, 20 independent cases and fifteen hosted jobs in run 39137799260. The actual wrapper completed on October 18 at 15:08:51 UTC, postdeployment at 15:10:14, public home/admin browser checks at 15:11:06 and the atomic current pointer at 15:11:42. Both APIs run the exact nine-migration ledger; 22 containers remain, with 17 protected identities unchanged. The two earlier deployment failures and both older native timeout receipts remain false.
 

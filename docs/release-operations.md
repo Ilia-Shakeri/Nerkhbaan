@@ -1,7 +1,23 @@
-# Release Operations — 2.8.11
+# Release Operations — 2.8.12
 
-Updated: 2026-10-18. Execute against the intended host only after review of the concrete release.
+Updated: 2026-10-19. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
+
+## Current application acceptance — 2.8.12
+
+Application 2.8.12 is the immutable source `fe8949aeb4c6e1c86e386ba2827ed64785fd6ebe` and tag `v2.8.12`. [Source CI 39217110287](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217110287) passed all fifteen jobs. [Hosted runtime 39217586742](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217586742), workflow source `5ecac56cdf63ce2222d0c58ea2fc1441f4328f66`, passed all four builds, source checks and strict image scans. HIGH/CRITICAL findings are zero, including unfixed findings. Notification code is included in these images.
+
+The actual wrapper completed at 08:36:12 UTC, postdeployment at 08:38:36, public home/admin browser checks at 08:39:12 and the current pointer at 08:39:44. 22 containers are present; all 17 protected identities and the private environment are unchanged; both new APIs match the exact prepared images and source. Both APIs have the exact nine-migration ledger.
+
+The native endpoint took 1.790213 seconds, with two fresh-cache, four stale, one expired and four unavailable native contracts; none live. The separate references retain 296/294/294 public records in the rolling 363-day window, separate from the full stored 297/295/295 history records, each in Gold24/BTCUSD/USDTUSD order (887 history rows, separate from three current snapshots), missing days 67/69/69 internal missing days in that 363-day public window and source/receipt clocks all three delayed_reference; original source last-change 2026-10-19 08:17 UTC and original receipt 08:37:15.618058 UTC. These actual measurements do not establish all-live prices, physical 9999 gold, direct global-dollar quotes or continuous annual history.
+
+Overall product acceptance remains false. Real SMTP/mailbox receipt, an authorized browser/device recipient, trusted publisher signing and installed Windows consent/notice/click, and continuous 24-hour feed evidence remain open. No customer mail or system notification was sent by deployment checks. The current VAPID pair passed the October 19 read-only check; no replacement key is needed; pricing needs no new key for the accepted eight native routes and three labelled references.
+
+Receipt directory: `release-2.8.12-20261019`. Read-only step-four proof: `release-2.8.12-20261019/step4-readonly-preflight-20261019.json`. The step-four inspection completed at 08:40:22 UTC with preflight_passed=false: SMTP_HOST is absent, the VAPID pair is valid and twelve limited WNS-root IPv4 attempts timed out at TCP from the host and both APIs. No delivery, SMTP connection or configuration change was attempted. Keep all earlier failed receipts false and preserve dated 2.8.11 history below.
+
+Use `scripts/deploy-nerkhbaan-prod.sh` and its guarded application deployment path. Preserve protected services, data, environment and migration checksums. Do not reuse the dated 2.8.11 recovery plan for a new release or turn an interrupted attempt into success. The application pointer advances only after fresh postdeployment and public browser acceptance.
+
+## Historical application and recovery — 2026-10-18
 
 The application tag `v2.8.11` points to `9a569550685175f3f7c2859e1474af38edb0f9d5`. Its fifteen source jobs and four hosted runtime builds and strict scans passed. The initial ordinary rollout failed after stopping its first old API; the first explicit recovery then exceeded its 30-second retirement budget because strict API probes ran serially. Both failed receipts remain immutable.
 
@@ -464,3 +480,5 @@ last backup/restore times, size and verified fingerprint result atomically. Moun
 into backend and set ADMIN_BACKUP_STATUS_FILE to the in-container path. Keep the runtime manifest out of Git.
 Do not mount the whole backup directory just to show status. Without a configured/fresh manifest the panel
 reports not-configured or stale. Evidence belongs to the source database and environment named in the manifest.
+
+- [سابقهٔ ترتیب۱۹اکتبر]: مرورگر نخست، پیش از تکمیل پس‌آزمون پاس بود و رسیدش حفظ شد؛ pointer در چک محلیِ ترتیب رد شد و تغییر نکرد. مرورگر تازهٔ08:39:12UTC پس از پس‌آزمون08:38:36UTC اجرا شد؛ فقط همین رسید برای pointer موفق08:39:44UTC مصرف شد. شکستِ چک محلی محفوظ است.
