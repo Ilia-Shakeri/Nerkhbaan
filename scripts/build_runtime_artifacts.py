@@ -19,10 +19,10 @@ import urllib.request
 import zipfile
 
 
-APPLICATION_COMMIT = "9a569550685175f3f7c2859e1474af38edb0f9d5"
-BASE_COMMIT = "75ba9bd29d550bd347623f4658ebbf0aab988ccb"
-VERSION = "2.8.11"
-APPLICATION_CI_RUN = 39125454194
+APPLICATION_COMMIT = "fe8949aeb4c6e1c86e386ba2827ed64785fd6ebe"
+BASE_COMMIT = "a30ba10bd21d55db7844132996b231f89ae8c1cf"
+VERSION = "2.8.12"
+APPLICATION_CI_RUN = 39217110287
 REPOSITORY = "Ilia-Shakeri/Nerkhbaan"
 PUBLIC_ASSET = "https://nerkhbaan.ir/assets/index-0vsgv0JA.js"
 PUBLIC_ASSET_SHA256 = "9a5b165a82a11b0d8cd7ccf642f6ae6d9e2c84998d58a7cdfd18c25d3248f3d1"
@@ -31,16 +31,15 @@ EXISTING_PUBLIC_KEY = 'BNg6GMpk04N2Oqp_GRI2DsFRrtJA4M_svcEiNEeJiJuAvQU0U_E6ivDd7
 PUBLIC_KEY_OBSERVED_AT = "2026-10-18T12:38:15.612884+00:00"
 OPS_PATHS = {".github/workflows/release-runtime-artifacts.yml", "scripts/build_runtime_artifacts.py"}
 PATCH_PATHS = {
-    ".github/workflows/ci.yml", "API_DOCUMENTATION.md", "CHANGELOG.md",
+    "API_DOCUMENTATION.md", "CHANGELOG.md",
     "PROJECT_STATUS.md", "README.md", "VERSION", "apps/admin-web/package.json",
-    "apps/api/app/pricing/history.py", "apps/api/app/release.py",
-    "apps/api/tests/test_latest_quote_availability.py",
-    "apps/api/tests/test_pricing_persistence.py", "apps/desktop/package.json",
+    "apps/api/app/release.py", "apps/api/app/services/alert_engine.py",
+    "apps/api/tests/test_push_delivery_failures.py", "apps/api/tests/test_servix_durable_backfill.py",
+    "apps/desktop/package.json",
     "apps/web/package.json", "apps/web/src/app/components/SplashScreen.tsx",
     "docs/admin-guide.md", "docs/api-contracts.json", "docs/api-route-index.md",
-    "docs/delivery-readiness.md", "docs/pricing-read-latency-2026-10-18.md",
+    "docs/delivery-readiness.md", "docs/client-delivery-roadmap-fa.md",
     "package-lock.json", "package.json", "packages/ui/package.json",
-    "scripts/check-release-version.mjs",
 }
 RECIPES = [
     ("api", "apps/api/Dockerfile", "apps/api"),
@@ -86,7 +85,7 @@ def validate_source(source, ops, workflow_sha):
         assert not git(checkout, "status", "--porcelain", "--untracked-files=all").strip()
     git(source, "merge-base", "--is-ancestor", BASE_COMMIT, APPLICATION_COMMIT)
     changed = set(git(source, "diff", "--name-only", BASE_COMMIT, APPLICATION_COMMIT).decode().splitlines())
-    assert changed == PATCH_PATHS, "Application patch differs from reviewed 23 paths"
+    assert changed == PATCH_PATHS, "Application patch differs from reviewed release paths"
     ops_changed = set(git(ops, "diff", "--name-only", APPLICATION_COMMIT, workflow_sha).decode().splitlines())
     assert ops_changed == OPS_PATHS, "Workflow commit includes unrelated application changes"
     assert git(source, "show", APPLICATION_COMMIT + ":VERSION").decode().strip() == VERSION
@@ -305,7 +304,7 @@ class RuntimeBuild:
         assert self.ops / "scripts/build_runtime_artifacts.py" == Path(__file__).resolve()
         ci = verify_application_ci(self.args.repository, os.environ["GH_TOKEN"])
         source_proof = archive_source(self.checkout, self.source)
-        write_new(self.out / "source-build-proof.json", self.proof(**source_proof, allowed_changed_paths=changed, source_archive_only=True, unreleased_notice_code_excluded=True, application_ci=ci, canonical_recipes=[{"kind": kind, "dockerfile": recipe, "context": context} for kind, recipe, context in RECIPES]))
+        write_new(self.out / "source-build-proof.json", self.proof(**source_proof, allowed_changed_paths=changed, source_archive_only=True, released_notice_code_included=True, application_ci=ci, canonical_recipes=[{"kind": kind, "dockerfile": recipe, "context": context} for kind, recipe, context in RECIPES]))
         self.public_key = validated_public_key()
         write_new(self.out / "build-inputs.json", self.proof(vapid_public_key_sha256=PUBLIC_KEY_SHA256, public_asset_sha256=PUBLIC_ASSET_SHA256, admin_base_path="/admin/", platform="linux/amd64", public_key_source={"kind": "existing_published_web_client_key", "url": PUBLIC_ASSET, "asset_sha256": PUBLIC_ASSET_SHA256, "asset_bytes": 216486, "observed_at": PUBLIC_KEY_OBSERVED_AT, "runner_fetched_public_asset": False, "private_inputs_used": False}))
 
@@ -366,10 +365,10 @@ class RuntimeBuild:
                 if kind == "web":
                     joined = b"\n".join(scripts.values())
                     assert ("v" + VERSION).encode() in joined
-                    assert b"Windows notices for this session" not in joined and b"native-notifications-" not in joined
+                    assert all(marker in joined for marker in [b"Windows notices for this session", b"desktop-open-inbox", b"Native notice deadline"])
                     public_assets = [name for name, raw in scripts.items() if any(hashlib.sha256(value).hexdigest() == PUBLIC_KEY_SHA256 for value in re.findall(rb"[A-Za-z0-9_-]{87}", raw))]
                     assert public_assets
-                    record.update(production_public_vapid_key_embedded=True, vapid_public_key_sha256=PUBLIC_KEY_SHA256, public_key_asset_files=["./" + name for name in public_assets], release_version=VERSION, unreleased_notice_code_absent=True)
+                    record.update(production_public_vapid_key_embedded=True, vapid_public_key_sha256=PUBLIC_KEY_SHA256, public_key_asset_files=["./" + name for name in public_assets], release_version=VERSION, native_notice_code_present=True)
                 else:
                     assets = re.findall(r"(?:src|href)=[\"']([^\"']+\.(?:js|css))[\"']", files["index.html"].decode())
                     assert assets and all(path.startswith("/admin/assets/") for path in assets)
@@ -381,7 +380,7 @@ class RuntimeBuild:
                 checks[kind] = {"linux_elf": True, "binary_sha256": hashlib.sha256(raw).hexdigest(), "architecture": "amd64", "image_id": item["image_id"]}
             self.unchanged()
         assert set(checks) == {kind for kind, _, _ in RECIPES}
-        write_new(self.out / "runtime-build-checks.json", self.proof(all_passed=True, checks=checks, source_archive_only=True, unreleased_notice_code_excluded=True))
+        write_new(self.out / "runtime-build-checks.json", self.proof(all_passed=True, checks=checks, source_archive_only=True, released_notice_code_included=True))
 
     def scan(self, images):
         version = run(["trivy", "--version"]).decode()
