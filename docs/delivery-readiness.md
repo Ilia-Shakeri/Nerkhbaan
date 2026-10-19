@@ -1,11 +1,11 @@
-# Delivery Readiness — 2.8.11
+# Delivery Readiness — 2.8.12
 
-Updated: 2026-10-18. Code delivery and production acceptance are separate facts.
+Updated: 2026-10-19. Candidate 2.8.12 includes the notification code; final source, build and deployment receipts remain required. Installed 2.8.11 evidence below is historical. Code delivery and production acceptance are separate facts.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
 | --- | --- | --- | --- |
-| Release consistency | `npm run check:release` | candidate 2.8.11, no drift | Local |
+| Release consistency | `npm run check:release` | candidate 2.8.12, no drift | Local |
 | Python static/unit | `python -m pyflakes app tests scripts`; `python -m unittest discover -s tests -v` from apps/api | zero static errors; all required tests pass | Local |
 | Infra fixture behavior | `python scripts/test_infra_contracts.py` | OK | Local, mocked network/data |
 | Browser fixture safety | `TEST_DATABASE_URL=... python scripts/test_browser_fixture.py` | five cases pass, none skipped | Explicit loopback test PostgreSQL, run-owned schema |
@@ -37,7 +37,7 @@ The immutable application source is `9a569550685175f3f7c2859e1474af38edb0f9d5`. 
 
 One public native GET completed in 1.683645 seconds and one reference GET passed schema and durable aggregate checks. Six native prices were present: one live, one fresh cache and four stale; five contracts were unavailable. The three separately labelled references have 297/295/295 actual daily records and 67/69/69 internal missing days across 364 days. All three remain delayed at the original 14:20 UTC last-change clock. Full direct coverage and overall product acceptance remain false; source latency and history gaps are visible. See [the current roadmap](client-delivery-roadmap-fa.md).
 
-Step-three code remains Unreleased and outside the installed images. Its local backend, frontend and mocked browser receipts are separate and overlap. Real SMTP mailbox receipt, publisher signing and installed Windows device consent, notice and click remain required. No manual customer notification or mail was sent by these checks. See [step-three scope and keys](step3-notifications-2026-10-18.md).
+At the 2.8.11 snapshot, step-three code was Unreleased and outside those installed images. Candidate 2.8.12 includes this code and still needs its own source, runtime and target acceptance. Its local backend, frontend and mocked browser receipts are separate and overlap. Real SMTP mailbox receipt, publisher signing and installed Windows device consent, notice and click remain required. No manual customer notification or mail was sent by these checks. See [step-three scope and keys](step3-notifications-2026-10-18.md).
 
 ## Historical reference release — 2.8.8
 

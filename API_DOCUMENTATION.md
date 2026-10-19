@@ -1,6 +1,6 @@
 # Nerkhbaan API Reference
 
-Code candidate: **2.8.11**. Updated: 2026-10-18.
+Code candidate: **2.8.12**. Updated: 2026-10-19.
 
 `GET /api/prices/references?timeframe=30d` returns three explicitly named Iranian
 reference valuations, their original source clocks, calculation parents and

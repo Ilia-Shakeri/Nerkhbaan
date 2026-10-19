@@ -1,6 +1,6 @@
 # Nerkhbaan
 
-Current code candidate: **2.8.11**. `VERSION` is the source of release truth.
+Current code candidate: **2.8.12**. `VERSION` is the source of release truth.
 
 Three separately labelled Iranian reference valuations are now available for
 24K gold, BTC/USD and USDT/USD. Published/calculated values retain source age,
@@ -9,7 +9,7 @@ See [the reference scope and operational limits](docs/iranian-references-2026-10
 
 Step-one fixes and the step-two Iranian price/history work are recorded in the [changelog](CHANGELOG.md) and
 [delivery matrix](docs/delivery-readiness.md). This source release has not been deployed by this change.
-Target checked on 2026-10-17: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.1.
+Target checked on 2026-10-19: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.11. The 2.8.12 candidate still needs its own successful rollout receipt.
 See the [server handoff](docs/production-handoff-fa.md) and [saved proof](docs/delivery-readiness.md).
 The [remaining acceptance report](docs/remaining-acceptance-2026-10-11.md) separates real
 in-app receipt and unsigned installation from blocked native push, publisher signing and source coverage.

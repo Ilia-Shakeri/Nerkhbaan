@@ -17,6 +17,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
+from requests.exceptions import RequestException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -1030,7 +1031,13 @@ class AlertEngine:
                 if status_code in (404, 410):
                     expired_endpoints.append(endpoint)
                 else:
-                    logger.error("Web push failed for alert_id=%s: %s", alert.id, exc)
+                    logger.error("Web push failed for alert_id=%s status=%s", alert.id, status_code)
+            except RequestException as exc:
+                logger.error(
+                    "Web push transport failed for alert_id=%s error=%s",
+                    alert.id,
+                    type(exc).__name__,
+                )
 
         if expired_endpoints:
             self._prune_subscriptions(expired_endpoints)
