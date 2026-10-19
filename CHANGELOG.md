@@ -10,6 +10,7 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Revoke notices on logout, account or rights changes, expired leases, navigation and window teardown. Share one price connection across views and notices. Accept unseen lower notice IDs that commit after newer IDs without replaying baseline inbox rows.
 - Serialize email challenge issuance, confirmation and disablement under the same user lock. Invalidate older challenges and commit preferences with consumption; keep failed sends from reviving old codes.
 - Keep transient push targets retryable when another target has expired; permanent failure requires all targets to be gone. Continue fanout after bounded transport failures and retain any successful target without retrying that successful job.
+- Freeze the durable-history fixture permission clock alongside its backfill clock. Keep expired and future grants blocked; retain the first failed hosted run without extending any production permission.
 - October 19 notification checks passed 114 real-PostgreSQL backend cases, 44 focused local backend cases, 117 frontend cases, 24 affected mocked browser cases and three renderer builds. Suites overlap. Actual SMTP receipt, installed Windows notice delivery and publisher signing remain separate.
 
 ## [2.8.11] - 2026-10-18

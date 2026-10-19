@@ -38,6 +38,12 @@ _SERVIX_FIXTURE_TABLES = ("instruments", "pricing_backfill_jobs")
 _SERVIX_SCHEMA = re.compile(r"servix_windows_test_[0-9a-f]{32}\Z")
 
 
+class _FixtureClock(datetime):
+    @classmethod
+    def now(cls, tz=None):
+        return NOW.astimezone(tz) if tz is not None else NOW.replace(tzinfo=None)
+
+
 def _servix_fixture_metadata(schema=None):
     metadata = MetaData()
     for table in (InstrumentRecord.__table__, PricingBackfillJobRecord.__table__):
@@ -180,6 +186,7 @@ class ServixDurableBackfillTests(unittest.IsolatedAsyncioTestCase):
             self.enterContext(patch(target, value))
         self.enterContext(patch.object(settings, "pricing_rights_enforced", True))
         self.enterContext(patch.object(rights, "grants", side_effect=lambda: self.grants))
+        self.enterContext(patch.object(rights, "datetime", _FixtureClock))
 
     def job(self, days=365, **overrides):
         start = NOW - timedelta(days=days)
@@ -231,6 +238,33 @@ class ServixDurableBackfillTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(child.status, "pending")
         self.assertTrue(all(left.range_end == right.range_start
                             for left, right in zip(children, children[1:])))
+
+    async def test_source_permissions_share_the_fixed_backfill_clock(self):
+        self.assertEqual(rights.datetime.now(UTC), NOW)
+        self.assertTrue(rights.provider_allowed(self.provider.provider_id, "history"))
+        identifier = self.job()
+        self.assertEqual((await self.queue.process_jobs(maximum_jobs=1))["deferred"], 1)
+        self.assertEqual(next(row.status for row in self.rows() if row.id == identifier), "deferred")
+
+    async def test_expired_or_future_source_permissions_still_block_history(self):
+        for name, values in (
+            ("expired", {"expires_at": NOW.isoformat()}),
+            ("future", {"checked_at": (NOW+timedelta(seconds=1)).isoformat()}),
+        ):
+            with self.subTest(permission=name):
+                self.grants[self.provider.provider_id].update({
+                    "checked_at": "2026-10-16T00:00:00Z",
+                    "expires_at": "2026-10-19T00:00:00Z", **values,
+                })
+                before = len(self.rows())
+                self.job(idempotency_key="owned-source-clock-"+name)
+                self.assertFalse(rights.provider_allowed(self.provider.provider_id, "history"))
+                self.assertEqual(await self.queue.process_jobs(maximum_jobs=1),
+                                 {"completed": 0, "deferred": 0, "failed": 0})
+                self.assertEqual(len(self.rows()), before+1)
+                self.assertTrue(all(row.status == "pending" for row in self.rows()))
+        self.queue._execute_history_job.assert_not_awaited()
+        self.budgets.consume.assert_not_awaited()
 
     async def test_reclaim_parent_reuses_children_and_does_not_claim_full_completion(self):
         identifier = self.job()
