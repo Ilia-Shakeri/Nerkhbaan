@@ -165,10 +165,11 @@ const query = (values: Record<string, string | number | boolean | undefined>) =>
 const columns = (...keys: string[]) =>
   keys.map((key) => ({ key, label: key.replaceAll("_", " ") }));
 
-function ActionError({ error }: { error: string }) {
+function ActionError({ error, reloadRequired = false }: { error: string; reloadRequired?: boolean }) {
   return error ? (
     <div className="error-banner" role="alert">
       {error}
+      {reloadRequired && <><p>The outcome may be unknown or the data changed. Reload current data before another action.</p><button type="button" className="button secondary small" onClick={() => window.location.reload()}>Reload current data</button></>}
     </div>
   ) : null;
 }
@@ -467,7 +468,9 @@ export function RolesPage(props: PageProps) {
   const users = useResource<JsonRecord>(
     `/users?${query({ search, limit: 50 })}`,
     { items: [] },
+    can(props, "roles.manage") && can(props, "users.read"),
   );
+  const assignableUsers = can(props, "users.read") ? users.data.items : admins.data.items;
   const [target, setTarget] = useState("");
   const [wanted, setWanted] = useState<string[]>([]);
   const [editingRole, setEditingRole] = useState<JsonRecord | null>(null);
@@ -608,13 +611,13 @@ export function RolesPage(props: PageProps) {
         <>
           <Panel title="Assign roles">
             <Filters>
-              <label>
+              {can(props, "users.read") && <label>
                 Find user
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                 />
-              </label>
+              </label>}
               <label>
                 User
                 <select
@@ -630,7 +633,7 @@ export function RolesPage(props: PageProps) {
                   }}
                 >
                   <option value="">Choose user</option>
-                  {users.data.items.map((item: JsonRecord) => (
+                  {assignableUsers.map((item: JsonRecord) => (
                     <option value={item.id} key={item.id}>
                       {item.username} · {item.full_name} · #{item.id}
                     </option>
@@ -870,7 +873,7 @@ export function SupportPage(props: PageProps) {
           busy={tickets.loading}
         />
       </Panel>
-      <ActionError error={operation.error} />
+      <ActionError error={operation.error} reloadRequired={operation.reloadRequired} />
       {selected !== null && (
         <>
           <PageState loading={detail.loading} error={detail.error} />
@@ -1181,7 +1184,7 @@ export function ProvidersPage(props: PageProps) {
   return (
     <div className="page-stack">
       <PageState loading={providers.loading} error={providers.error} />
-      <ActionError error={operation.error} />
+      <ActionError error={operation.error} reloadRequired={operation.reloadRequired} />
       <Panel title="Provider catalogue">
         <DataTable
           rows={providers.data.items}
@@ -1733,7 +1736,7 @@ function TelegramSources(props: PageProps) {
             <button className="button secondary" disabled={operation.busy}>
               Parse sample
             </button>
-            <ActionError error={operation.error} />
+            <ActionError error={operation.error} reloadRequired={operation.reloadRequired} />
           </form>
           <DataTable
             rows={preview}
@@ -1801,7 +1804,7 @@ export function PricingPage(props: PageProps) {
   return (
     <div className="page-stack">
       <PageState loading={instruments.loading} error={instruments.error} />
-      <ActionError error={operation.error} />
+      <ActionError error={operation.error} reloadRequired={operation.reloadRequired} />
       <Panel title="Instruments">
         <DataTable
           rows={instruments.data.items}
@@ -2161,7 +2164,7 @@ export function JobsPage(props: PageProps) {
         </button>
       </Filters>
       <PageState loading={jobs.loading} error={jobs.error} />
-      <ActionError error={operation.error} />
+      <ActionError error={operation.error} reloadRequired={operation.reloadRequired} />
       <Panel title="Administrator jobs">
         <DataTable
           rows={jobs.data.admin_jobs}
@@ -2263,7 +2266,7 @@ export function DlqPage(props: PageProps) {
   return (
     <div className="page-stack">
       <PageState loading={resource.loading} error={resource.error} />
-      <ActionError error={operation.error} />
+      <ActionError error={operation.error} reloadRequired={operation.reloadRequired} />
       <Panel title="Dead-letter queue">
         <DataTable
           rows={resource.data.items}
@@ -2427,7 +2430,7 @@ export function SettingsPage(props: PageProps) {
   return (
     <div className="page-stack">
       <PageState loading={resource.loading} error={resource.error} />
-      <ActionError error={operation.error} />
+      <ActionError error={operation.error} reloadRequired={operation.reloadRequired} />
       <Panel title="Deployment controls">
         <RecordDetails value={resource.data.environment} />
       </Panel>
@@ -2645,7 +2648,7 @@ export function AuditPage(props: PageProps) {
     `/audit?${query({ ...filters, offset, limit: PAGE_SIZE, refresh: props.refreshKey })}`,
     { items: [], total: 0 },
   );
-  const operation = useOperation();
+  const operation = useOperation(false);
   const filter =
     (set: (value: string) => void) =>
     (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -2719,7 +2722,7 @@ export function AuditPage(props: PageProps) {
       >
         Export filtered records (up to 500)
       </button>
-      <ActionError error={operation.error} />
+      <ActionError error={operation.error} reloadRequired={operation.reloadRequired} />
       <PageState loading={resource.loading} error={resource.error} />
       <Panel title="Audit trail">
         <DataTable

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { BellRing, BellOff, Trash2, Pencil, Search, Plus, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
@@ -7,7 +8,7 @@ import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { useAppContext } from '../context/AppContext';
-import { api, type AlertResponse, type CurrencyMode, type PriceSourceMode } from '../services/api';
+import { api, type AlertResponse, type CurrencyMode, type NotificationPreferences, type PriceSourceMode } from '../services/api';
 import { toast } from 'sonner';
 
 const ASSET_LABELS: Record<string, { fa: string; en: string }> = {
@@ -38,6 +39,14 @@ export function AlertsView() {
   const [editingSourceMode, setEditingSourceMode] = useState<string | null>(null);
   const [formNotifyApp, setFormNotifyApp] = useState(true);
   const [formNotifyEmail, setFormNotifyEmail] = useState(false);
+  const [formNotifySms, setFormNotifySms] = useState(false);
+  const [formNotifyVoip, setFormNotifyVoip] = useState(false);
+  const [formPriority, setFormPriority] = useState<'normal' | 'critical'>('normal');
+  const [preferences, setPreferences] = useState<NotificationPreferences | null>(null);
+  const [preferencesLoading, setPreferencesLoading] = useState(false);
+  const [preferencesError, setPreferencesError] = useState(false);
+  const [preferencesRefresh, setPreferencesRefresh] = useState(0);
+  const saving = useRef(false);
 
   const t = {
     search:     { fa: 'جستجوی هشدار...',        en: 'Search alerts...'   },
@@ -72,6 +81,11 @@ export function AlertsView() {
     save:       { fa: 'ذخیره',                  en: 'Save'               },
     notifyApp:  { fa: 'اعلان درون‌برنامه',       en: 'In-App Notification'},
     notifyEmail:{ fa: 'ایمیل',                  en: 'Email'              },
+    notifySms:  { fa: 'پیامک',                  en: 'SMS'                },
+    notifyVoip: { fa: 'تماس تلفنی',             en: 'Phone call'         },
+    priority:   { fa: 'شدت هشدار',              en: 'Alert severity'     },
+    normal:     { fa: 'عادی',                   en: 'Normal'             },
+    critical:   { fa: 'بحرانی',                 en: 'Critical'           },
     create:     { fa: 'ایجاد',                  en: 'Create'             },
     cancel:     { fa: 'انصراف',                 en: 'Cancel'             },
   };
@@ -90,6 +104,46 @@ export function AlertsView() {
   };
 
   useEffect(() => { loadAlerts(); }, []);
+
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const controller = new AbortController();
+    let active = true;
+    setPreferencesLoading(true);
+    setPreferencesError(false);
+    setPreferences(null);
+    api.notifications.preferences(controller.signal).then((value) => {
+      if (active) setPreferences(value);
+    }).catch(() => {
+      if (active) setPreferencesError(true);
+    }).finally(() => {
+      if (active) setPreferencesLoading(false);
+    });
+    return () => { active = false; controller.abort(); };
+  }, [isModalOpen, preferencesRefresh]);
+
+  const phoneReady = Boolean(preferences?.sms_enabled && preferences.sms_verified && preferences.sms_phone);
+  const smsReady = phoneReady && preferences?.sms_available === true;
+  const voipReady = phoneReady && preferences?.voip_available === true
+    && (preferences.voip_critical_only !== true || formPriority === 'critical');
+  const paidChannelsBlocked = (formNotifySms && !smsReady) || (formNotifyVoip && !voipReady);
+  const channelHelp = (channel: 'sms' | 'voip') => {
+    if (preferencesLoading) return language === 'fa' ? 'در حال بررسی شماره و آمادگی سرویس…' : 'Checking the alert number and service…';
+    if (preferencesError || !preferences) return language === 'fa' ? 'وضعیت سرویس دریافت نشد؛ پیش از فعال‌سازی دوباره بررسی کنید.' : 'Service status is unavailable. Check again before enabling.';
+    if (!phoneReady) return language === 'fa' ? 'شمارهٔ هشدار باید در تنظیمات تأیید و فعال شود.' : 'Verify and enable your alert number in Settings.';
+    if (channel === 'sms' && !preferences.sms_available) return language === 'fa' ? 'سرویس پیامک اکنون آماده نیست.' : 'SMS service is currently unavailable.';
+    if (channel === 'voip' && !preferences.voip_available) return language === 'fa' ? 'سرویس یا قانون تماس اکنون آماده نیست.' : 'The calling service or policy is currently unavailable.';
+    if (channel === 'voip' && preferences.voip_critical_only && formPriority !== 'critical') return language === 'fa' ? 'طبق قانون فعلی، تماس فقط برای هشدار بحرانی مجاز است.' : 'The current policy allows calls for critical alerts only.';
+    return channel === 'sms'
+      ? language === 'fa' ? 'در صورت برقرارشدن شرط، پیامک به شمارهٔ تأییدشده می‌رود.' : 'When the condition is met, SMS goes to your verified number.'
+      : language === 'fa' ? 'تماس پس از پایداری شرط و با رعایت ساعت سکوت، فاصله و سقف تماس انجام می‌شود.' : 'Calls also follow condition persistence, quiet hours, cooldown and daily limits.';
+  };
+
+  const closeModal = () => {
+    if (saving.current) return;
+    setIsModalOpen(false);
+    setEditingId(null);
+  };
 
   const handleDelete = async (id: number) => {
     if (!window.confirm(t.deleteConfirm[language])) return;
@@ -112,6 +166,12 @@ export function AlertsView() {
     setEditingSourceMode(null);
     setFormNotifyApp(true);
     setFormNotifyEmail(false);
+    setFormNotifySms(false);
+    setFormNotifyVoip(false);
+    setFormPriority('normal');
+    setPreferences(null);
+    setPreferencesLoading(true);
+    setPreferencesError(false);
     setIsModalOpen(true);
   };
 
@@ -126,12 +186,24 @@ export function AlertsView() {
       ? alert.price_source_mode : '');
     setFormNotifyApp(alert.notify_app);
     setFormNotifyEmail(alert.notify_email);
+    setFormNotifySms(alert.notify_sms === true);
+    setFormNotifyVoip(alert.notify_voip === true);
+    setFormPriority(alert.priority === 'critical' ? 'critical' : 'normal');
+    setPreferences(null);
+    setPreferencesLoading(true);
+    setPreferencesError(false);
     setIsModalOpen(true);
   };
 
   const handleSave = async () => {
+    if (saving.current) return;
     const target = Number(formTargetPrice);
     if (!Number.isFinite(target) || target <= 0) { toast.error(language === 'fa' ? 'قیمت باید عدد مثبت باشد.' : 'Price must be a positive number.'); return; }
+    if (paidChannelsBlocked) {
+      toast.error(language === 'fa' ? 'برای پیامک یا تماس، شمارهٔ هشدار باید تأیید و فعال و سرویس آماده باشد. شرایط تماس بحرانی را هم بررسی کنید.' : 'SMS and calls require an active verified alert number and an available service. Check the critical-call policy too.');
+      return;
+    }
+    saving.current = true;
     setIsSaving(true);
     try {
       if (editingId !== null) {
@@ -145,6 +217,9 @@ export function AlertsView() {
           condition: formCondition,
           notify_app: formNotifyApp,
           notify_email: formNotifyEmail,
+          notify_sms: formNotifySms,
+          notify_voip: formNotifyVoip,
+          priority: formPriority,
         });
         setAlerts((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
         toast.success(t.updateOk[language]);
@@ -157,6 +232,9 @@ export function AlertsView() {
           condition: formCondition,
           notify_app: formNotifyApp,
           notify_email: formNotifyEmail,
+          notify_sms: formNotifySms,
+          notify_voip: formNotifyVoip,
+          priority: formPriority,
           notify_webhook: false,
           webhook_url: null,
           enable_dlq: false,
@@ -171,6 +249,7 @@ export function AlertsView() {
       const fallback = editingId !== null ? t.updateFail[language] : t.createFail[language];
       toast.error(error instanceof Error ? error.message : fallback);
     } finally {
+      saving.current = false;
       setIsSaving(false);
     }
   };
@@ -256,6 +335,11 @@ export function AlertsView() {
                         <div>
                           <div className={`text-xs font-medium uppercase tracking-wider ${isDark ? 'text-[#8A7A54]' : 'text-[#765C1F]'}`}>{t.asset[language]}</div>
                           <div className={`text-base font-bold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{assetLabel}</div>
+                          {(alert.notify_sms || alert.notify_voip || alert.priority === 'critical') && <div className={`mt-1 flex flex-wrap gap-1.5 text-[11px] ${isDark ? 'text-[#C6B686]' : 'text-[#765C1F]'}`}>
+                            {alert.notify_sms && <span>{t.notifySms[language]}</span>}
+                            {alert.notify_voip && <span>{t.notifyVoip[language]}</span>}
+                            {alert.priority === 'critical' && <span className="font-semibold">{t.critical[language]}</span>}
+                          </div>}
                         </div>
 
                         <div className={`hidden sm:block h-8 w-px ${isDark ? 'bg-white/5' : 'bg-black/5'}`} />
@@ -320,16 +404,17 @@ export function AlertsView() {
 
       <Modal
         isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); setEditingId(null); }}
+        onClose={closeModal}
         title={editingId !== null ? t.editAlert[language] : t.newAlert[language]}
         closeLabel={language === 'fa' ? 'بستن پنجره هشدار' : 'Close alert dialog'}
       >
-        <div className="space-y-5 pt-2">
+        <form className="space-y-5 pt-2" onSubmit={(event) => { event.preventDefault(); void handleSave(); }}>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label htmlFor="alert-asset" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.asset[language]}</label>
               <select
                 id="alert-asset"
+                disabled={isSaving}
                 value={formAsset}
                 onChange={(e) => setFormAsset(e.target.value)}
                 className={`w-full rounded-xl border px-3 py-2.5 text-sm font-medium ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA]' : 'border-black/10 bg-white text-[#3B2E13]'}`}
@@ -343,6 +428,7 @@ export function AlertsView() {
               <label htmlFor="alert-condition" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.condition[language]}</label>
               <select
                 id="alert-condition"
+                disabled={isSaving}
                 value={formCondition}
                 onChange={(e) => setFormCondition(e.target.value as 'above' | 'below')}
                 className={`w-full rounded-xl border px-3 py-2.5 text-sm font-medium ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA]' : 'border-black/10 bg-white text-[#3B2E13]'}`}
@@ -358,6 +444,7 @@ export function AlertsView() {
               <label htmlFor="alert-target" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.target[language]}</label>
               <Input
                 id="alert-target"
+                disabled={isSaving}
                 min="0.00000001"
                 step="any"
                 type="number"
@@ -372,6 +459,7 @@ export function AlertsView() {
               <label htmlFor="alert-currency" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.currency[language]}</label>
               <select
                 id="alert-currency"
+                disabled={isSaving}
                 value={formCurrencyMode}
                 onChange={(e) => setFormCurrencyMode(e.target.value as CurrencyMode)}
                 className={`w-full rounded-xl border px-3 py-2.5 text-sm font-medium ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA]' : 'border-black/10 bg-white text-[#3B2E13]'}`}
@@ -386,6 +474,7 @@ export function AlertsView() {
             <label htmlFor="alert-price-source" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{t.priceUsed[language]}</label>
             <select
               id="alert-price-source"
+              disabled={isSaving}
               value={formPriceSourceMode}
               onChange={(e) => setFormPriceSourceMode(e.target.value as PriceSourceMode)}
               aria-describedby="alert-price-source-help"
@@ -408,25 +497,59 @@ export function AlertsView() {
           <div className={`space-y-3 rounded-xl border p-4 ${isDark ? 'border-white/5 bg-[#0A0A0A]' : 'border-black/5 bg-slate-50'}`}>
             <div className="flex items-center justify-between">
               <span className={`text-sm font-medium ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>{t.notifyApp[language]}</span>
-              <Switch checked={formNotifyApp} onCheckedChange={setFormNotifyApp} aria-label={t.notifyApp[language]} />
+              <Switch checked={formNotifyApp} onCheckedChange={setFormNotifyApp} disabled={isSaving} aria-label={t.notifyApp[language]} />
             </div>
             <div className="flex items-center justify-between">
               <span className={`text-sm font-medium ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>{t.notifyEmail[language]}</span>
-              <Switch checked={formNotifyEmail} onCheckedChange={setFormNotifyEmail} aria-label={t.notifyEmail[language]} />
+              <Switch checked={formNotifyEmail} onCheckedChange={setFormNotifyEmail} disabled={isSaving} aria-label={t.notifyEmail[language]} />
             </div>
           </div>
 
+          <section aria-labelledby="alert-paid-channels" className={`space-y-4 rounded-xl border p-4 ${isDark ? 'border-[#D4AF37]/15 bg-[#D4AF37]/5' : 'border-[#D4AF37]/25 bg-amber-50/50'}`}>
+            <div>
+              <h3 id="alert-paid-channels" className={`text-sm font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{language === 'fa' ? 'پیامک و تماس برای این هشدار' : 'SMS and calls for this alert'}</h3>
+              <p className={`mt-1 text-xs leading-6 ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>{language === 'fa' ? 'فعال‌سازی اختیاری است. ذخیرهٔ فرم، پیامک یا تماس آزمون ایجاد نمی‌کند.' : 'Optional. Saving this form does not send a test SMS or call.'}</p>
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="alert-priority" className={`text-sm font-medium ${isDark ? 'text-[#C6B686]' : 'text-[#7A5E24]'}`}>{t.priority[language]}</label>
+              <select id="alert-priority" value={formPriority} disabled={isSaving} onChange={(event) => setFormPriority(event.target.value as 'normal' | 'critical')}
+                className={`w-full rounded-xl border px-3 py-2.5 text-sm ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA]' : 'border-black/10 bg-white text-[#3B2E13]'}`}>
+                <option value="normal">{t.normal[language]}</option><option value="critical">{t.critical[language]}</option>
+              </select>
+            </div>
+            {(['sms', 'voip'] as const).map((channel) => {
+              const enabled = channel === 'sms' ? formNotifySms : formNotifyVoip;
+              const ready = channel === 'sms' ? smsReady : voipReady;
+              const label = channel === 'sms' ? t.notifySms[language] : t.notifyVoip[language];
+              return <div key={channel} className="space-y-1">
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor={`alert-notify-${channel}`} className={`text-sm font-medium ${isDark ? 'text-[#C6B686]' : 'text-[#7A5E24]'}`}>{label}</label>
+                  <Switch id={`alert-notify-${channel}`} checked={enabled} onCheckedChange={channel === 'sms' ? setFormNotifySms : setFormNotifyVoip}
+                    disabled={isSaving || (!ready && !enabled)} aria-label={label} aria-describedby={`alert-${channel}-help`} />
+                </div>
+                <p id={`alert-${channel}-help`} className={`text-xs leading-6 ${enabled && !ready ? isDark ? 'text-amber-200' : 'text-amber-900' : isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>{channelHelp(channel)}</p>
+              </div>;
+            })}
+            {paidChannelsBlocked && <p role="alert" className={`text-xs leading-6 ${isDark ? 'text-amber-200' : 'text-amber-900'}`}>{language === 'fa' ? 'انتخاب ذخیره‌شده حفظ شده است. برای ذخیره، پیش‌نیاز را فراهم کنید یا کانال انتخابی را خاموش کنید.' : 'Your saved choice is preserved. Restore its prerequisites or turn the selected channel off before saving.'}</p>}
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <Link to="/settings" onClick={(event) => { if (saving.current) { event.preventDefault(); return; } closeModal(); }} className={`rounded-md underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D4AF37] ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{language === 'fa' ? 'تأیید و فعال‌سازی شماره در تنظیمات' : 'Verify and enable your number in Settings'}</Link>
+              {preferencesError && <button type="button" disabled={isSaving || preferencesLoading} onClick={() => setPreferencesRefresh((value) => value + 1)} className={`min-h-11 rounded-md px-2 underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-[#D4AF37] ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>{language === 'fa' ? 'بررسی دوبارهٔ سرویس' : 'Check service again'}</button>}
+            </div>
+          </section>
+
           <div className="flex gap-3">
             <Button
+              type="button"
               variant="outline"
               className={`flex-1 rounded-xl ${isDark ? 'border-white/10 text-[#A89668]' : 'border-black/10 text-[#8A6A25]'}`}
-              onClick={() => { setIsModalOpen(false); setEditingId(null); }}
+              onClick={closeModal}
+              disabled={isSaving}
             >
               {t.cancel[language]}
             </Button>
             <Button
-              disabled={isSaving || !formTargetPrice}
-              onClick={handleSave}
+              type="submit"
+              disabled={isSaving || !formTargetPrice || paidChannelsBlocked}
               className="flex-1 rounded-xl bg-[#D4AF37] font-semibold text-black hover:bg-[#E8C45A] disabled:opacity-50"
             >
               {isSaving
@@ -434,7 +557,7 @@ export function AlertsView() {
                 : editingId !== null ? t.save[language] : t.create[language]}
             </Button>
           </div>
-        </div>
+        </form>
       </Modal>
     </div>
   );

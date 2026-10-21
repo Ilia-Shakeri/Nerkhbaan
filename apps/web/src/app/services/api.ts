@@ -458,6 +458,8 @@ export type NotificationPreferences = {
   push_available: boolean;
   email_available: boolean;
   sms_available: boolean;
+  voip_available?: boolean;
+  voip_critical_only?: boolean;
   telegram_available: boolean;
   telegram_deeplink_available: boolean;
 };
@@ -591,6 +593,9 @@ export type AlertCreate = {
   cooldown_seconds?: number;
   max_notifications_per_day?: number;
   notify_telegram?: boolean;
+  notify_sms?: boolean;
+  notify_voip?: boolean;
+  priority?: 'normal' | 'critical';
 };
 
 export type AlertUpdate = Partial<Omit<AlertCreate, 'alert_type'>> & { instrument_id?: string | null };
@@ -616,6 +621,8 @@ export type AlertResponse = {
   cooldown_seconds: number;
   max_notifications_per_day: number;
   notify_sms: boolean;
+  notify_voip: boolean;
+  priority: 'normal' | 'critical';
   notify_telegram: boolean;
   next_eligible_trigger_at: string | null;
   is_active: boolean;

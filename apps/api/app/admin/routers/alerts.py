@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ...db import get_db
 from ...models import Alert, AlertDeliveryJob, User
+from ...routers.alerts import cancel_pending_paid_jobs
 from ..audit import add_audit_event
 from ..deps import AdminPrincipal, require_confirmation, require_permission, require_recent_reauthentication
 from ..permissions import AdminPermissionKey
@@ -26,7 +27,7 @@ def list_alerts(user_id: int | None = Query(default=None, ge=1), active: bool | 
         statement = statement.where(Alert.instrument_id == instrument_id)
     total = int(db.scalar(select(func.count()).select_from(statement.subquery())) or 0)
     rows = db.execute(statement.order_by(Alert.created_at.desc(), Alert.id.desc()).offset(offset).limit(limit)).all()
-    fields = ("id", "user_id", "asset", "instrument_id", "target_price", "alert_type", "formula", "currency_mode", "price_source_mode", "condition", "mode", "cooldown_seconds", "max_notifications_per_day", "notify_app", "notify_email", "notify_webhook", "notify_sms", "notify_telegram", "enable_dlq", "is_active", "triggered_at", "created_at", "notifications_today", "next_eligible_trigger_at")
+    fields = ("id", "user_id", "asset", "instrument_id", "target_price", "alert_type", "formula", "currency_mode", "price_source_mode", "condition", "mode", "cooldown_seconds", "max_notifications_per_day", "notify_app", "notify_email", "notify_webhook", "notify_sms", "notify_voip", "priority", "notify_telegram", "enable_dlq", "is_active", "triggered_at", "created_at", "notifications_today", "next_eligible_trigger_at")
     return {"items": [redact({**{key: getattr(alert, key) for key in fields}, "username": username}) for alert, username in rows], "total": total, "limit": limit, "offset": offset}
 
 
@@ -48,6 +49,8 @@ def alert_state(alert_id: int, payload: UserStateUpdate, request: Request, princ
         raise HTTPException(status_code=404, detail="Alert not found")
     before = {"is_active": alert.is_active}
     alert.is_active = payload.is_active
+    if not payload.is_active:
+        cancel_pending_paid_jobs(db, alert.id)
     add_audit_event(db, request, actor_admin_id=principal.user.id, action="admin.alert.state_changed", resource_type="alert", resource_id=alert_id, before=before, after={"is_active": alert.is_active, "reason": payload.reason})
     db.commit()
     return {"alert_id": alert_id, "is_active": alert.is_active}

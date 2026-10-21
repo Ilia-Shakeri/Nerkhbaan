@@ -10,7 +10,8 @@ from pydantic import ValidationError
 from ..config import settings
 from ..db import get_db
 from ..deps import get_current_user
-from ..models import Alert, User
+from ..models import Alert, AlertDeliveryJob, NotificationPreference, User
+from ..admin.communication_storage import read_policy, read_provider
 from ..schemas import AlertCreate, AlertResponse, AlertUpdate
 from ..services.alert_engine import FormulaValidationError, validate_formula, validate_webhook_url
 from ..pricing.instruments import get_instrument
@@ -19,6 +20,30 @@ router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 
 #: Bound on live alerts per account. Each one is re-evaluated every cycle.
 MAX_ACTIVE_ALERTS_PER_USER = 50
+
+
+def _validate_paid_channels(db: Session, user_id: int, payload: AlertCreate) -> None:
+    if not (payload.notify_sms or payload.notify_voip):
+        return
+    prefs = db.scalar(select(NotificationPreference).where(NotificationPreference.user_id == user_id))
+    if not prefs or not prefs.sms_enabled or not prefs.sms_verified or not prefs.sms_phone:
+        raise HTTPException(422, "Verify an owned mobile number before enabling SMS or calls")
+    if payload.notify_sms and not read_provider(db, "sms")["ready"]:
+        raise HTTPException(422, "SMS alert delivery is not configured")
+    if payload.notify_voip:
+        policy = read_policy(db)
+        if not read_provider(db, "voip")["ready"] or not policy["enabled"]:
+            raise HTTPException(422, "VoIP alert delivery is not configured")
+        if policy.get("critical_only", True) and payload.priority != "critical":
+            raise HTTPException(422, "VoIP calls require critical alert priority")
+
+
+def cancel_pending_paid_jobs(db: Session, alert_id: int, channels: tuple[str, ...] = ("sms", "voip")) -> None:
+    jobs = db.scalars(select(AlertDeliveryJob).where(AlertDeliveryJob.alert_id == alert_id,
+        AlertDeliveryJob.channel.in_(channels), AlertDeliveryJob.status.in_(("pending", "processing", "retrying"))).with_for_update()).all()
+    for job in jobs:
+        job.status = "cancelled"
+        job.last_error = "channel_consent_withdrawn"
 
 
 def _validate_alert_payload(payload: AlertCreate) -> None:
@@ -51,11 +76,7 @@ def create_alert(
     db: Session = Depends(get_db),
 ) -> AlertResponse:
     _validate_alert_payload(payload)
-    if payload.notify_sms:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="SMS alert delivery is not configured.",
-        )
+    _validate_paid_channels(db, current_user.id, payload)
     if payload.notify_telegram and not settings.telegram_alert_delivery_enabled:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -112,11 +133,7 @@ def update_alert(
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail="Alert update violates the alert contract") from exc
     _validate_alert_payload(validated)
-    if changes.get("notify_sms"):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="SMS alert delivery is not configured.",
-        )
+    _validate_paid_channels(db, current_user.id, validated)
     if changes.get("notify_telegram") and not settings.telegram_alert_delivery_enabled:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -124,6 +141,9 @@ def update_alert(
         )
     for field in changes:
         setattr(alert, field, getattr(validated, field))
+    revoked = tuple(channel for channel in ("sms", "voip") if changes.get("notify_" + channel) is False)
+    if revoked:
+        cancel_pending_paid_jobs(db, alert.id, revoked)
     # Editing an alert re-arms it: the old trigger no longer describes it.
     alert.triggered_at = None
     alert.last_condition_state = False
@@ -170,7 +190,8 @@ def delete_alert(
     alert.is_active = False
     # A triggered one-time alert is already inactive. Explicit deletion also
     # withdraws channel consent so its pending occurrence cannot still send.
-    for flag in ("notify_app", "notify_email", "notify_webhook", "notify_telegram", "notify_sms"):
+    for flag in ("notify_app", "notify_email", "notify_webhook", "notify_telegram", "notify_sms", "notify_voip"):
         setattr(alert, flag, False)
+    cancel_pending_paid_jobs(db, alert.id)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

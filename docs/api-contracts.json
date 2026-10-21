@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Nerkhbaan API",
-    "version": "2.8.12"
+    "version": "2.8.13"
   },
   "paths": {
     "/api/auth/signup": {
@@ -5688,6 +5688,380 @@
         }
       }
     },
+    "/api/admin/communications": {
+      "get": {
+        "tags": [
+          "admin-communications"
+        ],
+        "summary": "Snapshot",
+        "operationId": "snapshot_api_admin_communications_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Snapshot Api Admin Communications Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/communications/channels/{channel}": {
+      "put": {
+        "tags": [
+          "admin-communications"
+        ],
+        "summary": "Update Channel",
+        "operationId": "update_channel_api_admin_communications_channels__channel__put",
+        "parameters": [
+          {
+            "name": "channel",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Channel"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Update Channel Api Admin Communications Channels  Channel  Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/communications/call-policy": {
+      "put": {
+        "tags": [
+          "admin-communications"
+        ],
+        "summary": "Update Call Policy",
+        "operationId": "update_call_policy_api_admin_communications_call_policy_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CallPolicyUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Update Call Policy Api Admin Communications Call Policy Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/communications/test-recipients": {
+      "get": {
+        "tags": [
+          "admin-communications"
+        ],
+        "summary": "List Recipients",
+        "operationId": "list_recipients_api_admin_communications_test_recipients_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response List Recipients Api Admin Communications Test Recipients Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin-communications"
+        ],
+        "summary": "Create Recipient",
+        "operationId": "create_recipient_api_admin_communications_test_recipients_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestRecipientCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Recipient Api Admin Communications Test Recipients Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/communications/test-recipients/{recipient_id}": {
+      "delete": {
+        "tags": [
+          "admin-communications"
+        ],
+        "summary": "Delete Recipient",
+        "operationId": "delete_recipient_api_admin_communications_test_recipients__recipient_id__delete",
+        "parameters": [
+          {
+            "name": "recipient_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Recipient Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete Recipient Api Admin Communications Test Recipients  Recipient Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/communications/test-events": {
+      "post": {
+        "tags": [
+          "admin-communications"
+        ],
+        "summary": "Create Test Event",
+        "operationId": "create_test_event_api_admin_communications_test_events_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestEventCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Test Event Api Admin Communications Test Events Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/communications/deliveries": {
+      "get": {
+        "tags": [
+          "admin-communications"
+        ],
+        "summary": "List Deliveries",
+        "operationId": "list_deliveries_api_admin_communications_deliveries_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 2147483647,
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Deliveries Api Admin Communications Deliveries Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/communications/deliveries/{delivery_id}": {
+      "get": {
+        "tags": [
+          "admin-communications"
+        ],
+        "summary": "Delivery Detail",
+        "operationId": "delivery_detail_api_admin_communications_deliveries__delivery_id__get",
+        "parameters": [
+          {
+            "name": "delivery_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Delivery Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delivery Detail Api Admin Communications Deliveries  Delivery Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health": {
       "get": {
         "tags": [
@@ -6109,6 +6483,20 @@
             "title": "Notify Sms",
             "default": false
           },
+          "notify_voip": {
+            "type": "boolean",
+            "title": "Notify Voip",
+            "default": false
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "critical"
+            ],
+            "title": "Priority",
+            "default": "normal"
+          },
           "notify_telegram": {
             "type": "boolean",
             "title": "Notify Telegram",
@@ -6220,6 +6608,14 @@
             "type": "boolean",
             "title": "Notify Sms"
           },
+          "notify_voip": {
+            "type": "boolean",
+            "title": "Notify Voip"
+          },
+          "priority": {
+            "type": "string",
+            "title": "Priority"
+          },
           "notify_telegram": {
             "type": "boolean",
             "title": "Notify Telegram"
@@ -6266,6 +6662,8 @@
           "cooldown_seconds",
           "max_notifications_per_day",
           "notify_sms",
+          "notify_voip",
+          "priority",
           "notify_telegram",
           "next_eligible_trigger_at",
           "is_active",
@@ -6493,6 +6891,32 @@
               }
             ],
             "title": "Notify Sms"
+          },
+          "notify_voip": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Voip"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "critical"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
           },
           "notify_telegram": {
             "anyOf": [
@@ -6861,6 +7285,72 @@
         ],
         "title": "BasicPreferenceRequest"
       },
+      "CallPolicyUpdate": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          },
+          "critical_only": {
+            "type": "boolean",
+            "title": "Critical Only",
+            "default": true
+          },
+          "persist_seconds": {
+            "type": "integer",
+            "maximum": 3600.0,
+            "minimum": 0.0,
+            "title": "Persist Seconds",
+            "default": 60
+          },
+          "max_attempts": {
+            "type": "integer",
+            "maximum": 1.0,
+            "minimum": 1.0,
+            "title": "Max Attempts",
+            "default": 1
+          },
+          "cooldown_seconds": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 30.0,
+            "title": "Cooldown Seconds",
+            "default": 900
+          },
+          "max_calls_per_day": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Max Calls Per Day",
+            "default": 3
+          },
+          "quiet_hours": {
+            "$ref": "#/components/schemas/QuietHours"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_version"
+        ],
+        "title": "CallPolicyUpdate"
+      },
       "ChangePasswordRequest": {
         "properties": {
           "current_password": {
@@ -6882,6 +7372,62 @@
           "new_password"
         ],
         "title": "ChangePasswordRequest"
+      },
+      "ChannelUpdate": {
+        "properties": {
+          "expected_version": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Expected Version"
+          },
+          "provider_id": {
+            "type": "string",
+            "enum": [
+              "none",
+              "kavenegar",
+              "asterisk_ari"
+            ],
+            "title": "Provider Id"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "config": {
+            "title": "Config"
+          },
+          "secret_action": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "replace",
+              "clear"
+            ],
+            "title": "Secret Action",
+            "default": "keep"
+          },
+          "secret_value": {
+            "title": "Secret Value"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "expected_version",
+          "provider_id",
+          "enabled"
+        ],
+        "title": "ChannelUpdate"
       },
       "ChatMessage": {
         "properties": {
@@ -7478,6 +8024,14 @@
             "type": "boolean",
             "title": "Sms Available"
           },
+          "voip_available": {
+            "type": "boolean",
+            "title": "Voip Available"
+          },
+          "voip_critical_only": {
+            "type": "boolean",
+            "title": "Voip Critical Only"
+          },
           "telegram_available": {
             "type": "boolean",
             "title": "Telegram Available"
@@ -7504,6 +8058,8 @@
           "push_available",
           "email_available",
           "sms_available",
+          "voip_available",
+          "voip_critical_only",
           "telegram_available",
           "telegram_deeplink_available"
         ],
@@ -8407,6 +8963,40 @@
           "endpoint"
         ],
         "title": "PushUnsubscribeRequest"
+      },
+      "QuietHours": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "start": {
+            "type": "string",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "Start",
+            "default": "22:00"
+          },
+          "end": {
+            "type": "string",
+            "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+            "title": "End",
+            "default": "08:00"
+          },
+          "timezone": {
+            "type": "string",
+            "const": "Asia/Tehran",
+            "title": "Timezone",
+            "default": "Asia/Tehran"
+          },
+          "critical_bypass": {
+            "type": "boolean",
+            "title": "Critical Bypass",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "QuietHours"
       },
       "ReferenceCurrent": {
         "properties": {
@@ -9785,6 +10375,79 @@
           "update_id"
         ],
         "title": "TelegramWebhookUpdate"
+      },
+      "TestEventCreate": {
+        "properties": {
+          "channel": {
+            "type": "string",
+            "enum": [
+              "sms",
+              "voip"
+            ],
+            "title": "Channel"
+          },
+          "recipient_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Recipient Id"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "dry_run",
+              "send"
+            ],
+            "title": "Mode",
+            "default": "dry_run"
+          },
+          "client_request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Client Request Id"
+          },
+          "confirmation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "channel",
+          "recipient_id",
+          "client_request_id"
+        ],
+        "title": "TestEventCreate"
+      },
+      "TestRecipientCreate": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "phone": {
+            "title": "Phone"
+          },
+          "consent_confirmed": {
+            "type": "boolean",
+            "title": "Consent Confirmed",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "phone"
+        ],
+        "title": "TestRecipientCreate"
       },
       "TicketCreate": {
         "properties": {

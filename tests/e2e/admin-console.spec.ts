@@ -1,6 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import { adminTestUrl } from './admin-fixture-url';
 
-const ADMIN_URL = "http://127.0.0.1:4174";
+test.beforeEach(async ({ page }) => {
+  await page.route('**/*', route => ['localhost', '127.0.0.1'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+});
 const profile = (permissions: string[]) => ({
   id: 1,
   username: "operator_test",
@@ -85,7 +88,7 @@ test("support changes keep the selected ticket and send to its own ID", async ({
       json: { message: { id: 3, from: "admin", content: "sent" } },
     });
   });
-  await page.goto(`${ADMIN_URL}/#/support`);
+  await page.goto(adminTestUrl('/#/support'));
   await page.getByRole("button", { name: "Open ticket" }).nth(0).click();
   await page.getByRole("button", { name: "Open ticket" }).nth(1).click();
   await expect(
@@ -125,7 +128,7 @@ test("read-only users see no support mutations and can page past the first batch
       json: { ticket: ticket(1), messages: [], internal_notes: [] },
     }),
   );
-  await page.goto(`${ADMIN_URL}/#/support`);
+  await page.goto(adminTestUrl('/#/support'));
   await page.getByRole("button", { name: "Open ticket" }).click();
   await expect(
     page.getByRole("heading", { name: "#1 · First ticket" }),
@@ -145,7 +148,7 @@ test("a failed signout still clears the local profile", async ({ page }) => {
   await page.route("**/api/admin/auth/signout", (route) =>
     route.fulfill({ status: 503, json: { detail: "test outage" } }),
   );
-  await page.goto(`${ADMIN_URL}/#/support`);
+  await page.goto(adminTestUrl('/#/support'));
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Sign in", exact: true }),
@@ -173,7 +176,7 @@ test("required MFA hides operational navigation until enrollment", async ({
       json: { enabled: false, pending: false, backup_codes_remaining: 0 },
     }),
   );
-  await page.goto(`${ADMIN_URL}/#/users`);
+  await page.goto(adminTestUrl('/#/users'));
   await expect(
     page.getByRole("heading", { name: "Authenticator and recovery" }),
   ).toBeVisible();
@@ -215,7 +218,7 @@ test("a Telegram-only custom role opens source policies without provider or pric
       },
     }),
   );
-  await page.goto(`${ADMIN_URL}/#/telegram`);
+  await page.goto(adminTestUrl('/#/telegram'));
   await expect(
     page.getByRole("heading", { name: "Telegram sources", exact: true }),
   ).toBeVisible();
@@ -257,7 +260,7 @@ test("a dead-letter-only custom role pages without requesting the jobs endpoint"
       },
     }),
   );
-  await page.goto(`${ADMIN_URL}/#/dlq`);
+  await page.goto(adminTestUrl('/#/dlq'));
   await expect(
     page.getByRole("heading", {
       name: "Dead-letter queue",
@@ -293,7 +296,7 @@ for (const detail of ["Password is incorrect", "Admin session expired"]) {
     await page.route("**/api/admin/auth/reauthenticate", (route) =>
       route.fulfill({ status: 401, json: { detail } }),
     );
-    await page.goto(`${ADMIN_URL}/#/security`);
+    await page.goto(adminTestUrl('/#/security'));
     await page
       .getByLabel("Current password for sensitive changes", { exact: true })
       .fill("test-only-password");

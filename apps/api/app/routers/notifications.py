@@ -8,6 +8,7 @@ import re
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal, NoReturn
+from uuid import uuid4
 
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
@@ -22,6 +23,9 @@ from ..models import Alert, AlertTriggerEvent, NotificationPreference, OtpVerifi
 from ..pricing import rights
 from ..security import hash_password, rate_limit_clear, rate_limit_hit, send_email, verify_password
 from ..services.alert_engine import source_rights_snapshot_allowed
+from ..admin.communication_storage import encryption_ready, lock_setting, mask_phone, normalize_phone, read_policy, read_provider, read_secret, setting_key
+from ..admin.models import CommunicationEvent
+from ..services.communication_transport import TransportConfigurationError, send_transport
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +44,10 @@ EMAIL_ADAPTER = TypeAdapter(EmailStr)
 _NON_MARKET_NOTICE_TYPES = frozenset({"security", "account", "support", "system"})
 
 
+def _otp_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 class NotificationPreferencesResponse(BaseModel):
     push_app: bool
     sms_enabled: bool
@@ -56,6 +64,8 @@ class NotificationPreferencesResponse(BaseModel):
     push_available: bool
     email_available: bool
     sms_available: bool
+    voip_available: bool
+    voip_critical_only: bool
     telegram_available: bool
     telegram_deeplink_available: bool
 
@@ -157,7 +167,9 @@ def _invalidate_otp_challenges(db: Session, user_id: int, channel: str) -> None:
     )
 
 
-def _to_response(prefs: NotificationPreference) -> NotificationPreferencesResponse:
+def _to_response(prefs: NotificationPreference, db: Session | None = None) -> NotificationPreferencesResponse:
+    available = db is not None and encryption_ready()
+    policy = read_policy(db) if available else {"enabled": False, "critical_only": True}
     return NotificationPreferencesResponse(
         push_app=prefs.push_app,
         sms_enabled=prefs.sms_enabled,
@@ -173,7 +185,9 @@ def _to_response(prefs: NotificationPreference) -> NotificationPreferencesRespon
         aggressive_alerts=prefs.aggressive_alerts,
         push_available=bool(settings.vapid_public_key and settings.vapid_private_key),
         email_available=bool(settings.smtp_host),
-        sms_available=False,
+        sms_available=bool(available and read_provider(db, "sms")["ready"]),
+        voip_available=bool(available and read_provider(db, "voip")["ready"] and policy.get("enabled")),
+        voip_critical_only=policy.get("critical_only") is True,
         telegram_available=bool(
             settings.telegram_alert_delivery_enabled and settings.telegram_bot_token
         ),
@@ -184,13 +198,7 @@ def _to_response(prefs: NotificationPreference) -> NotificationPreferencesRespon
 def _normalize_destination(channel: str, destination: str) -> str:
     value = destination.strip()
     if channel == "sms":
-        if value.startswith("0"):
-            value = "+98" + value[1:]
-        if not value.startswith("+98"):
-            value = "+98" + value.lstrip("+")
-        if not PHONE_RE.match(value):
-            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid phone number")
-        return value
+        return normalize_phone(value)
     try:
         return str(EMAIL_ADAPTER.validate_python(value)).lower()
     except Exception as exc:
@@ -428,7 +436,7 @@ def get_preferences(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationPreferencesResponse:
-    return _to_response(_prefs_for(db, current_user.id))
+    return _to_response(_prefs_for(db, current_user.id), db)
 
 
 @router.patch("/preferences/{key}", response_model=NotificationPreferencesResponse)
@@ -454,7 +462,7 @@ def set_basic_preference(
     setattr(prefs, key, payload.enabled)
     db.commit()
     db.refresh(prefs)
-    return _to_response(prefs)
+    return _to_response(prefs, db)
 
 
 @router.post("/otp/start")
@@ -477,10 +485,11 @@ def start_otp(
         )
     destination = _normalize_destination(payload.channel, payload.destination)
     if payload.channel == "sms":
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="SMS delivery is not configured.",
-        )
+        if not encryption_ready() or not read_provider(db, "sms")["ready"]:
+            raise HTTPException(503, "SMS delivery is not configured.")
+        budget = rate_limit_hit("notification-sms-otp-budget", "global", 100, 60 * 60)
+        if budget.blocked:
+            raise HTTPException(429, "SMS verification budget is exhausted", headers={"Retry-After": str(budget.retry_after)})
     # Without a global ceiling this endpoint will happily mail a code to any
     # address an authenticated caller names, which is a spam relay with extra
     # steps. Per-user limits alone do not stop a handful of throwaway accounts.
@@ -505,17 +514,51 @@ def start_otp(
     )
     db.add(verification)
     db.commit()
-    if not send_email(
-        destination,
-        "Nerkhbaan verification code",
-        f"Your verification code is {code}. It expires in {OTP_TTL_MINUTES} minutes.",
-    ):
+    if payload.channel == "sms":
+        accepted = False
+        receipt = None
+        try:
+            lock_setting(db, setting_key("sms"))
+            provider = read_provider(db, "sms")
+            if provider["ready"]:
+                secret = read_secret(db, "sms")
+                receipt = CommunicationEvent(owner_user_id=current_user.id, channel="sms", status="sending", dry_run=False,
+                    client_request_id=str(uuid4()), delivery_key=f"otp:{verification.id}:sms",
+                    provider_response_summary={"kind": "verification", "recipient_label": "تأیید شماره",
+                        "phone_masked": mask_phone(destination), "send_started_at": datetime.now(UTC).isoformat()})
+                db.add(receipt)
+                db.commit()
+                result = send_transport("sms", provider, secret, phone=destination,
+                    message=f"Nerkhbaan verification code: {code}",
+                    delivery_key=f"otp:{verification.id}:sms", template_token=code)
+                accepted = result.status == "accepted"
+                receipt.status, receipt.error_code, receipt.provider_reference = result.status, result.error_code, result.provider_reference
+                receipt.provider_response_summary = {**receipt.provider_response_summary, **result.summary}
+                db.commit()
+        except (TransportConfigurationError, HTTPException):
+            accepted = False
+            if receipt is not None:
+                receipt.status, receipt.error_code = "unknown", "provider_result_unknown"
+                db.commit()
+        except Exception:
+            accepted = False
+            # An interrupted paid request is not repeated, even if its result is unknown.
+            db.rollback()
+            if receipt is not None and receipt.id is not None:
+                receipt = db.get(CommunicationEvent, receipt.id)
+                if receipt is not None:
+                    receipt.status, receipt.error_code = "unknown", "provider_result_unknown"
+                    db.commit()
+    else:
+        accepted = send_email(destination, "Nerkhbaan verification code",
+            f"Your verification code is {code}. It expires in {OTP_TTL_MINUTES} minutes.")
+    if not accepted:
         db.delete(verification)
         db.commit()
-        logger.warning("Notification email delivery is unavailable")
+        logger.warning("Notification verification delivery is unavailable")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Email delivery is temporarily unavailable.",
+            detail=f"{payload.channel.upper()} delivery is temporarily unavailable.",
         )
     return {"message": "Verification code sent.", "destination": destination, "ttl_minutes": OTP_TTL_MINUTES}
 
@@ -556,10 +599,16 @@ def confirm_otp(
         not verification
         or verification.used
         or verification.destination != destination
-        or verification.expires_at <= datetime.now(UTC)
+        or _otp_utc(verification.expires_at) <= _otp_utc(datetime.now(UTC))
         or not verify_password(payload.code, verification.code_hash)
     ):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+
+    if payload.channel == "sms":
+        accepted = db.scalar(select(CommunicationEvent).where(CommunicationEvent.delivery_key == f"otp:{verification.id}:sms",
+            CommunicationEvent.owner_user_id == current_user.id, CommunicationEvent.status.in_(("accepted", "delivered"))))
+        if accepted is None:
+            raise HTTPException(400, "Invalid or expired verification code")
 
     prefs = _prefs_for(db, current_user.id, commit=False)
     if payload.channel == "sms":
@@ -575,7 +624,7 @@ def confirm_otp(
     db.commit()
     rate_limit_clear("notification-otp-confirm", confirmation_identity)
     db.refresh(prefs)
-    return _to_response(prefs)
+    return _to_response(prefs, db)
 
 
 @router.post(
@@ -733,7 +782,7 @@ def set_telegram(
     prefs.telegram_verified = False
     db.commit()
     db.refresh(prefs)
-    return _to_response(prefs)
+    return _to_response(prefs, db)
 
 
 @router.post("/telegram/confirm", response_model=NotificationPreferencesResponse)
@@ -780,7 +829,7 @@ def confirm_telegram(
     db.commit()
     rate_limit_clear("notification-telegram-confirm", identity)
     db.refresh(prefs)
-    return _to_response(prefs)
+    return _to_response(prefs, db)
 
 
 @router.delete("/{channel}", response_model=NotificationPreferencesResponse)
@@ -814,4 +863,4 @@ def disable_channel(
         _invalidate_otp_challenges(db, current_user.id, channel)
     db.commit()
     db.refresh(prefs)
-    return _to_response(prefs)
+    return _to_response(prefs, db)

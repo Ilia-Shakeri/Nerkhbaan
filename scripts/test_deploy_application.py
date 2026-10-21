@@ -22,18 +22,20 @@ GUARD_COMMIT = "d" * 40
 CANDIDATE_ID = "e" * 64
 
 
-def ready_payload(*, old=False, migrated=True):
+def ready_payload(*, old=False, migrated=True, communications=False):
+    addition = "20261021_001_communications.sql" if communications else REFERENCE_MIGRATION
+    previous = REFERENCE_MIGRATION if communications else "20261011_002_notification_sending_state.sql"
     return {"ready": not (old and migrated), "status": "degraded" if old and migrated else "ok",
             "database": "connected", "redis": "connected", "migration_current": not (old and migrated),
-            "migration_version": REFERENCE_MIGRATION if migrated else "20261011_002_notification_sending_state.sql",
-            "release_version": "2.8.1" if old else "2.8.8"}
+            "migration_version": addition if migrated else previous,
+            "release_version": ("2.8.12" if old else "2.8.13") if communications else ("2.8.1" if old else "2.8.8")}
 
 
 def forward_fixture():
     state = fixture() | {"forward_migration": True}
     migrations = {path.name: hashlib.sha256(path.read_text(encoding="utf-8").replace(
         "\r\n", "\n").replace("\r", "\n").encode()).hexdigest()
-        for path in (ROOT / "apps/api/db/migrations").glob("*.sql")}
+        for path in (ROOT / "apps/api/db/migrations").glob("*.sql") if path.name <= REFERENCE_MIGRATION}
     state["desired_migrations"] = migrations
     state["current_migrations"] = {key: value for key, value in migrations.items() if key != REFERENCE_MIGRATION}
     state["applied_migrations"] = dict(state["current_migrations"])
@@ -262,11 +264,13 @@ def fake_cli(kind: str, args: list[str], input_text: str | None = None) -> int:
             item = next(item for item in state["containers"] if item["Id"] == args[1])
             old = item["Image"] != state["manifest"]["images"]["backend"]
             migrated = state.get("migrated", False)
-            payload = ready_payload(old=old, migrated=migrated)
+            communications = state.get("communications", False)
+            addition = "20261021_001_communications.sql" if communications else REFERENCE_MIGRATION
+            payload = ready_payload(old=old, migrated=migrated, communications=communications)
             expected = state["current_migrations"] if old else state["desired_migrations"]
             migration_state = {"current": not (old and migrated), "version": payload["migration_version"],
-                               "applied_count": 9 if migrated else 8, "expected_count": 8 if old else 9,
-                               "missing": [], "changed": [], "unknown": [REFERENCE_MIGRATION] if old and migrated else []}
+                               "applied_count": len(state["applied_migrations"]), "expected_count": len(expected),
+                               "missing": [], "changed": [], "unknown": [addition] if old and migrated else []}
             status = 503 if old and migrated else 200
             if old and migrated and state.get("old_ready_failure"):
                 payload["database"] = "disconnected"
@@ -814,10 +818,14 @@ class ApplicationDeployTests(unittest.TestCase):
             migration_dir.mkdir(parents=True)
             if initial.get("forward_migration"):
                 for migration in (ROOT / "apps/api/db/migrations").glob("*.sql"):
-                    shutil.copyfile(migration, migration_dir / migration.name)
+                    if migration.name in initial["desired_migrations"]:
+                        shutil.copyfile(migration, migration_dir / migration.name)
+                if initial.get("communications"):
+                    (root / "VERSION").write_text(initial.get("source_version", "2.8.13") + "\n")
                 if initial.get("plan_fault") == "sql_changed":
-                    (migration_dir / REFERENCE_MIGRATION).write_text("DROP TABLE public.prices;\n")
-                    initial["desired_migrations"][REFERENCE_MIGRATION] = hashlib.sha256(
+                    changed = "20261021_001_communications.sql" if initial.get("communications") else REFERENCE_MIGRATION
+                    (migration_dir / changed).write_text("DROP TABLE public.prices;\n")
+                    initial["desired_migrations"][changed] = hashlib.sha256(
                         b"DROP TABLE public.prices;\n").hexdigest()
             else:
                 (migration_dir / "001_initial.sql").write_text("SELECT 1;\n")
@@ -873,6 +881,9 @@ class ApplicationDeployTests(unittest.TestCase):
                                            "business_probes": [{"path": path, "status": 200, "body_sha256": "2" * 64}
                                                                for path in ("/api/prices", "/api/instruments")],
                                            "new_ready_status": 200, "new_ready_payload": ready_payload()}}
+                if initial.get("communications"):
+                    from test_deploy_communications import communications_plan_proof
+                    plan, proof = communications_plan_proof(initial)
                 transcript = root / "restore-transcript.log"
                 transcript.write_text("Owned fixture restore transcript. Local mocked deployment only.\n")
                 proof["transcript"] = {"path": str(transcript), "sha256": hashlib.sha256(transcript.read_bytes()).hexdigest()}
@@ -953,8 +964,9 @@ class Response:
         migrated = state.get('migrated', False)
         payload = {'ready': not (old and migrated), 'status': 'degraded' if old and migrated else 'ok',
             'database': 'connected', 'redis': 'connected', 'migration_current': not (old and migrated),
-            'migration_version': '20261017_001_iranian_reference_records.sql' if migrated else '20261011_002_notification_sending_state.sql',
-            'release_version': '2.8.1' if old else '2.8.8'}
+            'migration_version': ('20261021_001_communications.sql' if migrated else '20261017_001_iranian_reference_records.sql')
+                if state.get('communications') else ('20261017_001_iranian_reference_records.sql' if migrated else '20261011_002_notification_sending_state.sql'),
+            'release_version': ('2.8.12' if old else '2.8.13') if state.get('communications') else ('2.8.1' if old else '2.8.8')}
         if migrated and old and state.get('mixed_https_failure'): payload['redis'] = 'disconnected'
         return payload
     @property
@@ -1019,7 +1031,10 @@ runpy.run_path(sys.argv[0], run_name='__main__')
                 (bin_dir / "python").unlink()
                 (bin_dir / "python3").unlink()
                 env["PATH"] = str(bin_dir)
-            result = subprocess.run([str(self.bash), (scripts / "deploy-nerkhbaan-prod.sh").as_posix()],
+            entrypoint = ([sys.executable, str(launcher), str(scripts / "deploy_application.py")]
+                          if initial.get("direct_entrypoint") else
+                          [str(self.bash), (scripts / "deploy-nerkhbaan-prod.sh").as_posix()])
+            result = subprocess.run(entrypoint,
                                     env=env, capture_output=True, text=True,
                                     timeout=180 if initial.get("external_clis") else 90)
             final = json.loads(state_path.read_text())

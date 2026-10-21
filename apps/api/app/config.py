@@ -2,7 +2,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -207,6 +207,8 @@ class Settings(BaseSettings):
     alert_delivery_max_attempts: int = 6
     alert_delivery_backoff_base_seconds: int = 30
     alert_delivery_backoff_max_seconds: int = 3600
+    communications_encryption_key: SecretStr | None = None
+    communications_private_pbx_allowlist: str = ""
 
     # Remote reasoning providers use the standard chat-completions protocol.
     insight_api_key: str | None = None

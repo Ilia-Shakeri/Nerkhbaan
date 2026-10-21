@@ -2,7 +2,7 @@ import { useState } from "react";
 
 import { adminApi } from "./api";
 import type { AdminProfile, JsonRecord } from "./types";
-import { Panel, RecordDetails, useOperation, useResource } from "./ui";
+import { PageState, Panel, RecordDetails, useOperation, useResource } from "./ui";
 
 export function SecurityPage({
   profile,
@@ -22,6 +22,7 @@ export function SecurityPage({
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const operation = useOperation();
+  const securityLocked = operation.busy || status.loading || Boolean(status.error);
   const reauthenticate = async () => {
     await adminApi.reauthenticate(reauthPassword, reauthCode);
     setReauthPassword("");
@@ -86,6 +87,7 @@ export function SecurityPage({
       {operation.error && (
         <div className="error-banner" role="alert">
           {operation.error}
+          {operation.reloadRequired && <><p>The outcome may be unknown. Reload your current security state before another action.</p><button type="button" className="button secondary" onClick={() => window.location.reload()}>Reload current data</button></>}
         </div>
       )}
       {message && <p role="status">{message}</p>}
@@ -139,6 +141,7 @@ export function SecurityPage({
         </form>
       </Panel>
       <Panel title="Authenticator and recovery">
+        <PageState loading={status.loading} error={status.error} onRetry={() => void status.reload()} />
         <RecordDetails value={status.data} />
         <div className="filter-grid">
           <label>
@@ -164,7 +167,7 @@ export function SecurityPage({
         {!status.data.enabled && !enrollment && (
           <button
             className="button secondary"
-            disabled={operation.busy || !reauthPassword}
+            disabled={securityLocked || !reauthPassword}
             onClick={() => void enroll()}
           >
             Start MFA enrollment
@@ -197,7 +200,7 @@ export function SecurityPage({
             </label>
             <button
               className="button primary"
-              disabled={operation.busy || code.length !== 6}
+              disabled={securityLocked || code.length !== 6}
             >
               Confirm enrollment
             </button>
@@ -221,7 +224,7 @@ export function SecurityPage({
               <button
                 className="button secondary"
                 disabled={
-                  operation.busy || !reauthPassword || !reauthCode || !code
+                  securityLocked || !reauthPassword || !reauthCode || !code
                 }
                 onClick={() => void maintain("recovery-codes")}
               >
@@ -231,7 +234,7 @@ export function SecurityPage({
                 <button
                   className="button danger"
                   disabled={
-                    operation.busy || !reauthPassword || !reauthCode || !code
+                    securityLocked || !reauthPassword || !reauthCode || !code
                   }
                   onClick={() => void maintain("disable")}
                 >

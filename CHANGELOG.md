@@ -4,6 +4,15 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
+## [2.8.13] - 2026-10-21
+
+- Add administrator-managed Kavenegar SMS and Asterisk ARI connections with a separate encryption key, write-only credentials, independent configuration versions, permission checks, CSRF, recent re-authentication and typed confirmations.
+- Add critical-call policy, quiet hours, cooldowns, daily caps, consented test recipients, dry-run previews and paged masked history. Real sending remains disabled until a configured provider and an explicit test confirmation exist. Provider acceptance is not device receipt or an answered call.
+- Connect SMS phone verification and critical VoIP alerts to the durable worker. Recheck consent, current settings, source rights, fresh prices and persistent conditions at dispatch. Paid unknown outcomes are not retried automatically. Complete mixed paid/nonpaid alert aggregates in either completion order.
+- Improve all fifteen administrator routes, role-limited reads, MFA failure handling, mobile navigation and sensitive-form duplicate/uncertain-result protection. Preserve configuration drafts when paginating history and discard stale responses.
+- Add an explicit fail-closed nine-to-ten migration plan with isolated restore, exact schema/data preservation and old/new image compatibility evidence. Existing recovery plans cannot authorize this transition.
+- Document SMS/PBX setup inside the console and in the Persian administrator guide. Email alarms are outside the current scope; authentication mail remains supported. Final source, hosted runtime and target receipts must identify this exact release.
+
 ## [2.8.12] - 2026-10-19
 
 - Add session-only Windows notices with explicit main-window consent, bounded generic text, current-account and source-rights leases, strict IPC records and a fixed inbox action. Keep unpackaged builds disabled; real installed-device and signing acceptance remain pending.

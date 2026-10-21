@@ -3,16 +3,18 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import re
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import or_, select, update
 
 from ..config import settings
 from ..db import SessionLocal
-from ..models import Alert, AlertDeliveryJob
+from ..models import Alert, AlertDeliveryJob, AlertTriggerEvent
 from ..observability import alert_delivery_total, background_failures_total
 from .alert_engine import PermanentDeliveryError
 from .alert_delivery_state import finalize_trigger_event, lock_trigger_event
+from .communication_delivery import PAID_CHANNELS, dispatch_manual_events
 
 logger = logging.getLogger(__name__)
 def _safe_error(exc: Exception) -> str:
@@ -30,6 +32,7 @@ class DLQWorker:
         logger.info("Durable alert delivery worker started")
         while self._running:
             try:
+                await dispatch_manual_events(10)
                 job_ids = await asyncio.to_thread(self._claim_jobs, 10)
                 if not job_ids:
                     await asyncio.sleep(settings.alert_worker_poll_seconds)
@@ -50,10 +53,26 @@ class DLQWorker:
         db = SessionLocal()
         now = datetime.now(UTC)
         try:
+            # A paid request can have been accepted before the worker died.
+            # Its outcome must be reconciled by an operator, never sent again blindly.
+            uncertain_events = list(db.scalars(
+                update(AlertDeliveryJob)
+                .where(
+                    AlertDeliveryJob.channel.in_(PAID_CHANNELS),
+                    AlertDeliveryJob.status == "sending",
+                    AlertDeliveryJob.updated_at < now - timedelta(minutes=5),
+                )
+                .values(status="unknown", last_error="worker_completion_unknown", updated_at=now)
+                .returning(AlertDeliveryJob.trigger_event_id)
+            ))
+            if uncertain_events:
+                db.execute(update(AlertTriggerEvent).where(AlertTriggerEvent.id.in_(uncertain_events))
+                           .values(status="delivery_unknown"))
             db.execute(
                 update(AlertDeliveryJob)
                 .where(
-                    AlertDeliveryJob.status.in_(("processing", "sending")),
+                    or_(AlertDeliveryJob.status == "processing",
+                        (AlertDeliveryJob.status == "sending") & ~AlertDeliveryJob.channel.in_(PAID_CHANNELS)),
                     AlertDeliveryJob.updated_at < now - timedelta(minutes=5),
                 )
                 .values(status="retrying", next_retry_at=now, updated_at=now)
@@ -93,9 +112,8 @@ class DLQWorker:
             return
         if summary.get("skipped"):
             return
-        alert_delivery_total.labels(
-            channel=str(summary.get("channel", "unknown")), status="delivered"
-        ).inc()
+        alert_delivery_total.labels(channel=str(summary.get("channel", "unknown")),
+                                    status=str(summary.get("status", "delivered"))).inc()
         await asyncio.to_thread(self._mark_delivered, job_id, summary, attempt)
 
     @staticmethod
@@ -117,10 +135,17 @@ class DLQWorker:
             # Different channels lock different jobs; the shared event serializes
             # their terminal state checks so the last one sees committed peers.
             event = lock_trigger_event(db, job.trigger_event_id)
-            job.status = "delivered"
+            paid = job.channel in PAID_CHANNELS
+            job.status = summary.get("status", "unknown") if paid else "delivered"
+            if paid and job.status not in {"accepted", "unknown", "failed"}:
+                job.status = "unknown"
             job.provider_response_summary = summary
             job.last_error = None
-            job.delivered_at = now
+            if paid and job.status in {"unknown", "failed"}:
+                code = summary.get("error_code")
+                job.last_error = code if isinstance(code, str) and re.fullmatch(r"[a-z_]{1,80}", code) else (
+                    "provider_result_unknown" if job.status == "unknown" else "provider_rejected")
+            job.delivered_at = None if paid else now
             job.updated_at = now
             finalize_trigger_event(db, event)
             db.commit()
@@ -140,7 +165,13 @@ class DLQWorker:
             permanent = isinstance(exc, PermanentDeliveryError)
             job.last_error = _safe_error(exc)
             job.updated_at = now
-            if permanent:
+            if job.channel in PAID_CHANNELS:
+                job.status = "unknown" if job.status == "sending" else "failed"
+                job.next_retry_at = None
+                job.provider_response_summary = {**(job.provider_response_summary or {}),
+                    "status": job.status, "error_code": "provider_result_unknown" if job.status == "unknown" else "delivery_preflight_failed",
+                    "accepted": False, "delivered": False, "answered": False}
+            elif permanent:
                 job.status = "dead"
                 job.dead_at = now
             elif not retry_enabled:
@@ -156,7 +187,7 @@ class DLQWorker:
                 job.status = "retrying"
                 job.next_retry_at = now + timedelta(seconds=delay + random.randint(0, max(1, delay // 5)))
             if event:
-                event.status = "delivery_failed"
+                event.status = "delivery_unknown" if job.status == "unknown" else "delivery_failed"
             db.commit()
         except Exception:
             db.rollback()

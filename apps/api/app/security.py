@@ -323,11 +323,16 @@ def send_smtp_message(message: EmailMessage, *, timeout: float = 5, smtp_setting
     """Use implicit TLS on 465 and the configured STARTTLS policy elsewhere."""
     config = smtp_settings if smtp_settings is not None else settings
     implicit_tls = config.smtp_port == 465
+    if bool(config.smtp_username) != bool(config.smtp_password):
+        raise smtplib.SMTPException("SMTP authentication requires both username and password")
+    if config.smtp_username and not (implicit_tls or config.smtp_use_tls):
+        raise smtplib.SMTPNotSupportedError("SMTP authentication requires TLS")
     transport = smtplib.SMTP_SSL if implicit_tls else smtplib.SMTP
     options: dict[str, Any] = {"timeout": timeout}
     if implicit_tls:
         options["context"] = ssl.create_default_context()
-    with transport(config.smtp_host, config.smtp_port, **options) as client:
+    client = transport(config.smtp_host, config.smtp_port, **options)
+    try:
         if not implicit_tls:
             client.ehlo()
             if config.smtp_use_tls:
@@ -336,6 +341,16 @@ def send_smtp_message(message: EmailMessage, *, timeout: float = 5, smtp_setting
         if config.smtp_username and config.smtp_password:
             client.login(config.smtp_username, config.smtp_password)
         client.send_message(message)
+    finally:
+        try:
+            client.quit()
+        except (OSError, smtplib.SMTPException):
+            logger.debug("SMTP session cleanup failed")
+        finally:
+            try:
+                client.close()
+            except OSError:
+                logger.debug("SMTP socket cleanup failed")
 
 
 def send_email(recipient: str, subject: str, body: str) -> bool:

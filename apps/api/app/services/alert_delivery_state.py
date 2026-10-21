@@ -16,5 +16,14 @@ def finalize_trigger_event(db: Session, event: AlertTriggerEvent | None) -> None
         return
     db.flush()
     statuses = list(db.scalars(select(AlertDeliveryJob.status).where(AlertDeliveryJob.trigger_event_id == event.id)))
-    if statuses and all(status in {"delivered", "cancelled"} for status in statuses):
-        event.status = "delivered" if "delivered" in statuses else "cancelled"
+    if not statuses:
+        return
+    if "unknown" in statuses:
+        event.status = "delivery_unknown"
+    elif any(status in {"failed", "dead"} for status in statuses):
+        event.status = "delivery_failed"
+    elif all(status in {"accepted", "delivered", "cancelled"} for status in statuses):
+        if "accepted" in statuses:
+            event.status = "accepted"
+        else:
+            event.status = "delivered" if "delivered" in statuses else "cancelled"

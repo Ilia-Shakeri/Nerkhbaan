@@ -38,7 +38,7 @@ class EmailTransportRegressionTests(unittest.TestCase):
                 context = encrypted.call_args.kwargs["context"]
                 self.assertTrue(context.check_hostname)
                 self.assertEqual(context.verify_mode, ssl.CERT_REQUIRED)
-                client = encrypted.return_value.__enter__.return_value
+                client = encrypted.return_value
                 client.starttls.assert_not_called()
                 client.login.assert_called_once_with("fixture-user", "fixture-password")
                 client.send_message.assert_called_once()
@@ -49,9 +49,9 @@ class EmailTransportRegressionTests(unittest.TestCase):
                 patch.object(security.smtplib, "SMTP_SSL") as encrypted:
             self.assertTrue(security.send_email("user@fixture.invalid", "Reset", "Code: fixture"))
         encrypted.assert_not_called()
-        client = plain.return_value.__enter__.return_value
+        client = plain.return_value
         self.assertEqual([call[0] for call in client.mock_calls],
-                         ["ehlo", "starttls", "ehlo", "login", "send_message"])
+                         ["ehlo", "starttls", "ehlo", "login", "send_message", "quit", "close"])
         self.assertEqual(client.starttls.call_args.kwargs["context"].verify_mode, ssl.CERT_REQUIRED)
 
     def test_transport_failure_is_reported_without_sending(self):
@@ -64,7 +64,7 @@ class EmailTransportRegressionTests(unittest.TestCase):
     def test_starttls_certificate_failure_never_logs_in_or_sends(self):
         with patch.object(security, "settings", self.settings(port=587)), \
                 patch.object(security.smtplib, "SMTP") as plain:
-            client = plain.return_value.__enter__.return_value
+            client = plain.return_value
             client.starttls.side_effect = ssl.SSLCertVerificationError("fixture bad certificate")
             self.assertFalse(security.send_email("user@fixture.invalid", "Reset", "Code: fixture"))
         client.login.assert_not_called()

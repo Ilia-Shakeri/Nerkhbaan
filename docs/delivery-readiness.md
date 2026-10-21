@@ -1,11 +1,21 @@
-# Delivery Readiness — 2.8.12
+# Delivery Readiness — 2.8.13
 
-Updated: 2026-10-19. Exact-source and runtime checks passed for 2.8.12; application acceptance below is tied to saved target receipts. Overall product acceptance remains false.
+Updated: 2026-10-21. Candidate 2.8.13 adds administrator SMS and VoIP connections.
+Its acceptance requires its own exact-source CI, four immutable runtime images,
+strict scans, isolated restored-data migration proof and guarded target rollout.
+Installed 2.8.12 was observed read-only at 11:17 UTC. Earlier release receipts
+below remain dated history. Overall product acceptance remains false.
+
+SMS and call adapters, policy, consent, credentials, pagination and test controls
+have local unit, PostgreSQL and browser coverage. See the
+[operator guide](admin-guide.md#راهنمای-اتصال-پیامک-و-تماس). Real SMS receipt and an
+answered call are separate gates after the operator connects an account/PBX.
+The requested scope no longer includes email alarms; account mail is retained.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
 | --- | --- | --- | --- |
-| Release consistency | `npm run check:release` | candidate 2.8.12, no drift | Local |
+| Release consistency | `npm run check:release` | candidate 2.8.13, no drift | Local |
 | Python static/unit | `python -m pyflakes app tests scripts`; `python -m unittest discover -s tests -v` from apps/api | zero static errors; all required tests pass | Local |
 | Infra fixture behavior | `python scripts/test_infra_contracts.py` | OK | Local, mocked network/data |
 | Browser fixture safety | `TEST_DATABASE_URL=... python scripts/test_browser_fixture.py` | five cases pass, none skipped | Explicit loopback test PostgreSQL, run-owned schema |

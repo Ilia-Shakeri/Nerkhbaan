@@ -115,6 +115,21 @@ test('admin authentication errors preserve MFA retry and expire an invalid sessi
   assert.deepEqual(client.events, ['admin-session-expired']);
 });
 
+test('admin recipient deletion carries CSRF and an explicit confirmation once', async () => {
+  const requests = [];
+  const client = harness(async (url, init) => {
+    requests.push({ url, init });
+    return new Response(null, { status: 204 });
+  });
+  const result = await client.adminApi.delete('/communications/test-recipients/7', { confirmation: 'DELETE RECIPIENT 7' });
+  assert.equal(result, null);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].init.method, 'DELETE');
+  assert.equal(requests[0].init.headers.get('X-CSRF-Token'), 'fake-csrf');
+  assert.equal(JSON.parse(requests[0].init.body).confirmation, 'DELETE RECIPIENT 7');
+  assert.equal(requests[0].init.credentials, 'include');
+});
+
 test('admin resource cancels replaced reads and unmount without surfacing cancellation', async () => {
   const states = [], refs = [], memos = [], effects = []; const calls = [];
   let stateIndex = 0, refIndex = 0, memoIndex = 0, effectIndex = 0;
@@ -143,4 +158,64 @@ test('admin resource cancels replaced reads and unmount without surfacing cancel
   for (const effect of effects) effect.cleanup?.();
   assert.equal(calls[2].signal.aborted, true, 'unmount must abort the active HTTP read');
   await flush();
+});
+
+function operationHarness(mutates = true) {
+  const states = [], refs = [];
+  let stateIndex = 0, refIndex = 0;
+  class TestApiError extends Error { constructor(status) { super(`Fixture status ${status}`); this.status = status; } }
+  const react = {
+    useState: initial => { const index = stateIndex++; if (!(index in states)) states[index] = initial; return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }]; },
+    useRef: initial => { const index = refIndex++; return refs[index] ||= { current: initial }; },
+    useEffect: () => {},
+  };
+  const { useOperation } = moduleAt('apps/admin-web/src/ui.tsx', { Error, TypeError, SyntaxError },
+    { react, 'react/jsx-runtime': {}, './api': { ApiError: TestApiError } });
+  return { error: status => new TestApiError(status), render: () => { stateIndex = refIndex = 0; return useOperation(mutates); } };
+}
+
+test('admin operation submits once while a response is pending', async () => {
+  const state = operationHarness();
+  const operation = state.render();
+  let count = 0, release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const first = operation.run(async () => { count++; await pending; });
+  await operation.run(async () => { count++; });
+  assert.equal(count, 1);
+  assert.equal(state.render().busy, true);
+  release(); await first;
+  assert.equal(state.render().busy, false);
+});
+
+test('admin unknown write and version conflict require a fresh page before another action', async () => {
+  for (const status of [0, 408, 409, 503]) {
+    const state = operationHarness();
+    const operation = state.render();
+    let count = 0;
+    await operation.run(async () => { count++; throw state.error(status); });
+    await operation.run(async () => { count++; });
+    assert.equal(count, 1, `status ${status} must not repeat a write`);
+    assert.equal(state.render().reloadRequired, true);
+    assert.equal(state.render().busy, true);
+  }
+});
+
+test('admin invalid form and definite rejection remain correctable', async () => {
+  for (const rejection of [new Error('Confirm the password'), 400, 422]) {
+    const state = operationHarness();
+    let count = 0;
+    await state.render().run(async () => { count++; throw typeof rejection === 'number' ? state.error(rejection) : rejection; });
+    await state.render().run(async () => { count++; });
+    assert.equal(count, 2);
+    assert.equal(state.render().reloadRequired, false);
+  }
+});
+
+test('admin read-only export remains retryable after timeout', async () => {
+  const state = operationHarness(false);
+  let count = 0;
+  await state.render().run(async () => { count++; throw state.error(408); });
+  await state.render().run(async () => { count++; });
+  assert.equal(count, 2);
+  assert.equal(state.render().reloadRequired, false);
 });

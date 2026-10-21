@@ -9,8 +9,13 @@ export function humanError(error: unknown): string {
   return "Operation failed";
 }
 
+function requiresReload(reason: unknown): boolean {
+  if (reason instanceof ApiError) return reason.status === 0 || reason.status === 408 || reason.status === 409 || reason.status >= 500;
+  return reason instanceof TypeError || reason instanceof SyntaxError || (reason instanceof DOMException && reason.name === "AbortError");
+}
+
 export function formatValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "â€”";
+  if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number")
     return new Intl.NumberFormat("en-US", { maximumFractionDigits: 4 }).format(
@@ -59,20 +64,23 @@ export function EmptyState({ text = "No records found" }: { text?: string }) {
 export function PageState({
   loading,
   error,
+  onRetry = () => window.location.reload(),
 }: {
   loading: boolean;
   error: string;
+  onRetry?: () => void;
 }) {
   if (loading)
     return (
       <div className="page-state">
-        <span className="spinner" /> Loading current dataâ€¦
+        <span className="spinner" /> Loading current data…
       </div>
     );
   if (error)
     return (
       <div className="error-banner" role="alert">
         {error}
+        <button type="button" className="button secondary small" onClick={onRetry}>Reload current data</button>
       </div>
     );
   return null;
@@ -163,10 +171,12 @@ export function useResource<T>(path: string, initial: T, enabled = true) {
   return { data, setData, loading, error, reload };
 }
 
-export function useOperation() {
+export function useOperation(mutates = true) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const running = useRef(false);
+  const blocked = useRef(false);
+  const [reloadRequired, setReloadRequired] = useState(false);
   const alive = useRef(true);
   useEffect(() => {
     alive.current = true;
@@ -175,20 +185,26 @@ export function useOperation() {
     };
   }, []);
   const run = async (operation: () => Promise<void>) => {
-    if (running.current) return;
+    if (running.current || blocked.current) return;
     running.current = true;
     setBusy(true);
     setError("");
     try {
       await operation();
     } catch (reason) {
-      if (alive.current) setError(humanError(reason));
+      if (alive.current) {
+        setError(humanError(reason));
+        if (mutates && requiresReload(reason)) {
+          blocked.current = true;
+          setReloadRequired(true);
+        }
+      }
     } finally {
       running.current = false;
       if (alive.current) setBusy(false);
     }
   };
-  return { busy, error, run };
+  return { busy: busy || reloadRequired, error, run, reloadRequired };
 }
 
 export function Pagination({
@@ -259,11 +275,19 @@ export function DangerousDialog({
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [reloadRequired, setReloadRequired] = useState(false);
+  const submitting = useRef(false);
+  const blocked = useRef(false);
   const matches = confirmation === action.expected;
   const dialogRef = useRef<HTMLFormElement>(null);
-  const onCloseRef = useRef(onClose);
+  const close = () => {
+    if (submitting.current) return;
+    if (blocked.current) onComplete();
+    else onClose();
+  };
+  const onCloseRef = useRef(close);
   const busyRef = useRef(busy);
-  onCloseRef.current = onClose;
+  onCloseRef.current = close;
   busyRef.current = busy;
 
   useEffect(() => {
@@ -308,17 +332,27 @@ export function DangerousDialog({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!matches || !password) return;
+    if (submitting.current || blocked.current || !matches || !password) return;
+    submitting.current = true;
     setBusy(true);
     setError("");
+    let actionStarted = false;
     try {
       await adminApi.reauthenticate(password, mfaCode);
+      actionStarted = true;
       await action.execute(confirmation);
       setPassword("");
       onComplete();
     } catch (reason) {
       setError(humanError(reason));
+      if (actionStarted && requiresReload(reason)) {
+        blocked.current = true;
+        setReloadRequired(true);
+      }
     } finally {
+      setPassword("");
+      setMfaCode("");
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -343,6 +377,7 @@ export function DangerousDialog({
           Current administrator password
           <input
             type="password"
+            disabled={busy || reloadRequired}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
@@ -352,6 +387,7 @@ export function DangerousDialog({
           Authenticator or recovery code (if enabled)
           <input
             value={mfaCode}
+            disabled={busy || reloadRequired}
             onChange={(event) => setMfaCode(event.target.value)}
             autoComplete="one-time-code"
           />
@@ -360,6 +396,7 @@ export function DangerousDialog({
           Type <code>{action.expected}</code>
           <input
             value={confirmation}
+            disabled={busy || reloadRequired}
             onChange={(event) => setConfirmation(event.target.value)}
             autoComplete="off"
             spellCheck={false}
@@ -370,21 +407,22 @@ export function DangerousDialog({
             {error}
           </div>
         )}
+        {reloadRequired && <p role="status">The action may have completed or its data changed. Close and reload current data before another action.</p>}
         <div className="modal-actions">
           <button
             type="button"
             className="button ghost"
-            onClick={onClose}
+            onClick={close}
             disabled={busy}
           >
-            Cancel
+            {reloadRequired ? "Close and reload" : "Cancel"}
           </button>
           <button
             type="submit"
             className="button danger"
-            disabled={!matches || !password || busy}
+            disabled={!matches || !password || busy || reloadRequired}
           >
-            {busy ? "Applyingâ€¦" : "Confirm action"}
+            {busy ? "Applying…" : "Confirm action"}
           </button>
         </div>
       </form>

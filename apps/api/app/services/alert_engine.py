@@ -283,6 +283,9 @@ class Alert:
         alert_type: str = "price",
         formula: str | None = None,
         price_source_mode: str = "ordinary",
+        sms_enabled: bool = False,
+        voip_enabled: bool = False,
+        priority: str = "normal",
     ):
         self.id = id
         self.user_id = user_id
@@ -298,6 +301,9 @@ class Alert:
         self.alert_type = alert_type
         self.formula = formula
         self.price_source_mode = price_source_mode
+        self.sms_enabled = sms_enabled
+        self.voip_enabled = voip_enabled
+        self.priority = priority
 
 
 class AlertEngine:
@@ -435,6 +441,9 @@ class AlertEngine:
             alert_type=row.alert_type,
             formula=row.formula,
             price_source_mode=getattr(row, "price_source_mode", "ordinary"),
+            sms_enabled=getattr(row, "notify_sms", False),
+            voip_enabled=getattr(row, "notify_voip", False),
+            priority=getattr(row, "priority", "normal"),
         )
 
     @staticmethod
@@ -665,6 +674,10 @@ class AlertEngine:
         ):
             channels.append(("telegram", f"user:{alert.user_id}:telegram"))
 
+        if getattr(alert, "notify_sms", False) or getattr(alert, "notify_voip", False):
+            from .communication_delivery import queued_channels
+            channels.extend(queued_channels(db, alert, preferences))
+
         for channel, destination in channels:
             db.add(
                 AlertDeliveryJob(
@@ -675,6 +688,10 @@ class AlertEngine:
                     status="pending",
                     next_retry_at=now,
                     idempotency_key=f"{event_key}:{channel}",
+                    provider_response_summary=(
+                        {"condition_since": now.isoformat(), "condition_last_seen": now.isoformat()}
+                        if channel == "voip" else {}
+                    ),
                 )
             )
         event.status = "queued" if channels else (
@@ -746,6 +763,10 @@ class AlertEngine:
                 raise PermanentDeliveryError("Delivery job no longer exists")
             if job.status != "processing" or (expected_attempt is not None and job.attempt_count != expected_attempt):
                 return {"skipped": True, "status": job.status, "channel": job.channel}
+            if job.channel in {"sms", "voip"}:
+                from .communication_delivery import dispatch_alert_job
+                db.rollback()
+                return await dispatch_alert_job(self, job_id, expected_attempt)
             event = db.get(AlertTriggerEvent, job.trigger_event_id)
             row = db.get(AlertModel, job.alert_id)
             if not event or not row:

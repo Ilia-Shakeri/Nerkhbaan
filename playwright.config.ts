@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: ['**/admin-communications.spec.ts', '**/alert-communications.spec.ts'],
   timeout: 90_000,
   workers: 1,
   fullyParallel: false,

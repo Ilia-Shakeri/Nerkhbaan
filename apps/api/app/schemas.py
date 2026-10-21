@@ -390,6 +390,8 @@ class AlertCreate(BaseModel):
     cooldown_seconds: int = Field(default=900, ge=60, le=604800)
     max_notifications_per_day: int = Field(default=10, ge=1, le=100)
     notify_sms: bool = False
+    notify_voip: bool = False
+    priority: Literal["normal", "critical"] = "normal"
     notify_telegram: bool = False
 
     @model_validator(mode="after")
@@ -423,6 +425,8 @@ class AlertUpdate(BaseModel):
     cooldown_seconds: int | None = Field(default=None, ge=60, le=604800)
     max_notifications_per_day: int | None = Field(default=None, ge=1, le=100)
     notify_sms: bool | None = None
+    notify_voip: bool | None = None
+    priority: Literal["normal", "critical"] | None = None
     notify_telegram: bool | None = None
 
     @model_validator(mode="after")
@@ -453,6 +457,8 @@ class AlertResponse(BaseModel):
     cooldown_seconds: int
     max_notifications_per_day: int
     notify_sms: bool
+    notify_voip: bool
+    priority: str
     notify_telegram: bool
     next_eligible_trigger_at: datetime | None
     is_active: bool

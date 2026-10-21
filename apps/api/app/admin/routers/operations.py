@@ -5,6 +5,7 @@ from .pricing import router as pricing_router
 from .providers import router as providers_router
 from .settings import router as settings_router
 from .alerts import router as alerts_router
+from .communications import router as communications_router
 
 router = APIRouter()
 router.include_router(health_jobs_router)
@@ -12,3 +13,4 @@ router.include_router(pricing_router)
 router.include_router(providers_router)
 router.include_router(settings_router)
 router.include_router(alerts_router)
+router.include_router(communications_router)

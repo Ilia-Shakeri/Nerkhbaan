@@ -68,6 +68,8 @@ class Alert(Base):
     cooldown_seconds: Mapped[int] = mapped_column(Integer, default=900, nullable=False)
     max_notifications_per_day: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     notify_sms: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    notify_voip: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    priority: Mapped[str] = mapped_column(String(16), default="normal", nullable=False)
     notify_telegram: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     last_condition_state: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     next_eligible_trigger_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -303,7 +305,7 @@ class AlertDeliveryJob(Base):
     __table_args__ = (
         UniqueConstraint("trigger_event_id", "channel", "destination_reference", name="uq_alert_delivery_target"),
         CheckConstraint(
-            "status IN ('pending','processing','sending','delivered','retrying','failed','dead','cancelled')",
+            "status IN ('pending','processing','sending','accepted','delivered','retrying','failed','dead','cancelled','unknown')",
             name="ck_alert_delivery_status",
         ),
     )

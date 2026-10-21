@@ -239,6 +239,50 @@ class OperationalSetting(Base):
     )
 
 
+class AdminSecret(Base):
+    __tablename__ = "admin_secrets"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    key_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class CommunicationRecipient(Base):
+    __tablename__ = "communication_recipients"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    label: Mapped[str] = mapped_column(String(80), nullable=False)
+    phone_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    phone_masked: Mapped[str] = mapped_column(String(32), nullable=False)
+    consented: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class CommunicationEvent(Base):
+    __tablename__ = "communication_events"
+    __table_args__ = (UniqueConstraint("owner_user_id", "client_request_id", name="uq_communication_request"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    owner_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    recipient_id: Mapped[int | None] = mapped_column(ForeignKey("communication_recipients.id", ondelete="SET NULL"), nullable=True)
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), default="queued", index=True, nullable=False)
+    dry_run: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    client_request_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    delivery_key: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    provider_reference: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider_response_summary: Mapped[dict] = mapped_column(JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 class AdminProviderConfigDraft(Base):
     __tablename__ = "provider_config_drafts"
 

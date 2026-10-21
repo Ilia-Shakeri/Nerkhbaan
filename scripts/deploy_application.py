@@ -31,6 +31,193 @@ BASELINE_MIGRATIONS = {
     "20261011_001_delivery_hardening.sql", "20261011_002_notification_sending_state.sql",
 }
 PLAN_KIND = "iranian-reference-addition-v1"
+COMMUNICATIONS_PLAN_KIND = "communications-addition-v1"
+COMMUNICATIONS_MIGRATION = "20261021_001_communications.sql"
+COMMUNICATIONS_CHECKSUM = "b11b349d3501cadbd73b299e2a99bb8eca8a9045bd01735b07823d115c3ceec2"
+COMMUNICATIONS_BASELINE = {
+    "20260705_timescale_market_prices.sql": "e8ca07d815c3cc87de094ce72f10074dea1bb85274049d238e2889ce4cdbfc1b",
+    "20260718_001_core_pricing.sql": "2e88efcff8e700c0fd03ec3de1ff372e733ce9852260818cb725c3eceb892c7b",
+    "20260718_002_auth_admin_alerts.sql": "6a0e99a68686ca51638f420f286c8de574e0f2acd55e7c115ab1fcdf3e5aec77",
+    "20260718_003_timescale_policies.sql": "f9d05c77720f16565060748e7e7db7ba8689ca13d76bba28e4855c40191b7fa8",
+    "20260802_001_alert_price_source_mode.sql": "74b6e8a32c6d60ef6a79191297287de417f88f9aaabc5f931d6013b0f3c32143",
+    "20260809_001_pricing_provider_repair.sql": "9a4c5168c8f520b63c271099e36f48c100881c72d15147e02372a2bea8630275",
+    "20261011_001_delivery_hardening.sql": "6ffaa5e4a178e237c2197cfb7ebcd2bb0d1c59e1175fce90a53a26cb863bf4bb",
+    "20261011_002_notification_sending_state.sql": "e24183c86ec9348e62976afcd1b25946e6b8e79a9468dd426f3c2af207845aa2",
+    REFERENCE_MIGRATION: REFERENCE_CHECKSUM,
+}
+COMMUNICATIONS_COLUMNS = {
+    "admin_secrets": "id key ciphertext key_version updated_by updated_at".split(),
+    "communication_recipients": "id owner_user_id label phone_ciphertext phone_masked consented created_at".split(),
+    "communication_events": ("id owner_user_id recipient_id channel status dry_run client_request_id delivery_key "
+                             "provider_reference error_code attempt_count next_retry_at provider_response_summary "
+                             "created_at updated_at").split(),
+}
+COMMUNICATIONS_CONSTRAINTS = {
+    "admin_secrets": "admin_secrets_pkey admin_secrets_key_key admin_secrets_updated_by_fkey".split(),
+    "communication_recipients": "communication_recipients_pkey communication_recipients_owner_user_id_fkey".split(),
+    "communication_events": ("communication_events_pkey communication_events_owner_user_id_fkey "
+                             "communication_events_recipient_id_fkey communication_events_delivery_key_key "
+                             "uq_communication_request").split(),
+}
+COMMUNICATIONS_INDEXES = {
+    "admin_secrets_pkey", "admin_secrets_key_key", "communication_recipients_pkey",
+    "ix_communication_recipients_owner_user_id", "communication_events_pkey",
+    "communication_events_delivery_key_key", "uq_communication_request",
+    "ix_communication_events_owner_user_id", "ix_communication_events_status",
+}
+COMMUNICATIONS_STATUS_KEY = "constraint:public.alert_delivery_jobs.ck_alert_delivery_status"
+COMMUNICATIONS_ADDED_COLUMNS = {"column:public.alerts.notify_voip", "column:public.alerts.priority"}
+# Stable logical public-schema objects; physical files, row counts and internal dependency
+# triggers are omitted. Columns, constraints and indexes describe those dependencies.
+COMMUNICATIONS_SCHEMA_SQL = """
+SELECT 'namespace:public' AS object_id, to_jsonb(n) - 'oid' AS definition
+FROM pg_catalog.pg_namespace n WHERE n.nspname = 'public'
+UNION ALL
+SELECT 'relation:public.' || c.relname,
+ to_jsonb(c) - ARRAY['oid','relfilenode','relpages','reltuples','relallvisible','relallfrozen',
+ 'relfrozenxid','relminmxid','reltoastrelid','relnatts','relchecks']::text[]
+FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+WHERE n.nspname='public'
+UNION ALL
+SELECT 'column:public.' || c.relname || '.' || a.attname,
+ jsonb_build_object('type',pg_catalog.format_type(a.atttypid,a.atttypmod),
+ 'nullable',NOT a.attnotnull,'default',pg_catalog.pg_get_expr(d.adbin,d.adrelid),
+ 'identity',a.attidentity,'generated',a.attgenerated,'position',a.attnum,
+ 'collation',a.attcollation,'storage',a.attstorage,'statistics',a.attstattarget,
+ 'options',a.attoptions,'acl',a.attacl,'compression',a.attcompression)
+FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid=a.attrelid
+JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid=a.attrelid AND d.adnum=a.attnum
+WHERE n.nspname='public' AND c.relkind IN ('r','p','v','m','f','c') AND a.attnum>0 AND NOT a.attisdropped
+UNION ALL
+SELECT 'constraint:public.' || COALESCE(c.relname,t.typname) || '.' || k.conname,
+ jsonb_build_object('kind',k.contype,'definition',pg_catalog.pg_get_constraintdef(k.oid,true),
+ 'deferrable',k.condeferrable,'initially_deferred',k.condeferred,'validated',k.convalidated,
+ 'no_inherit',k.connoinherit)
+FROM pg_catalog.pg_constraint k JOIN pg_catalog.pg_namespace n ON n.oid=k.connamespace
+LEFT JOIN pg_catalog.pg_class c ON c.oid=k.conrelid LEFT JOIN pg_catalog.pg_type t ON t.oid=k.contypid
+WHERE n.nspname='public'
+UNION ALL
+SELECT 'index:public.' || c.relname, jsonb_build_object('definition',pg_catalog.pg_get_indexdef(i.indexrelid),
+ 'valid',i.indisvalid,'ready',i.indisready,'live',i.indislive,'clustered',i.indisclustered,
+ 'replica_identity',i.indisreplident)
+FROM pg_catalog.pg_index i JOIN pg_catalog.pg_class c ON c.oid=i.indexrelid
+JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'
+UNION ALL
+SELECT 'sequence:public.' || c.relname, to_jsonb(s) - 'seqrelid'
+FROM pg_catalog.pg_sequence s JOIN pg_catalog.pg_class c ON c.oid=s.seqrelid
+JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'
+UNION ALL
+SELECT 'type:public.' || t.typname, to_jsonb(t) - 'oid' || jsonb_build_object('enum_labels',
+ (SELECT jsonb_agg(e.enumlabel ORDER BY e.enumsortorder) FROM pg_catalog.pg_enum e WHERE e.enumtypid=t.oid))
+FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace WHERE n.nspname='public'
+UNION ALL
+SELECT 'function:public.' || p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')',
+ to_jsonb(p) - 'oid'
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public'
+UNION ALL
+SELECT 'trigger:public.' || c.relname || '.' || t.tgname,
+ jsonb_build_object('definition',pg_catalog.pg_get_triggerdef(t.oid,true),'enabled',t.tgenabled)
+FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid
+JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND NOT t.tgisinternal
+UNION ALL
+SELECT 'rule:public.' || c.relname || '.' || r.rulename,
+ jsonb_build_object('definition',pg_catalog.pg_get_ruledef(r.oid,true),'enabled',r.ev_enabled)
+FROM pg_catalog.pg_rewrite r JOIN pg_catalog.pg_class c ON c.oid=r.ev_class
+JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'
+UNION ALL
+SELECT 'policy:public.' || c.relname || '.' || p.polname, to_jsonb(p) - 'oid'
+FROM pg_catalog.pg_policy p JOIN pg_catalog.pg_class c ON c.oid=p.polrelid
+JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public'
+UNION ALL
+SELECT 'extension:' || e.extname, to_jsonb(e) - 'oid'
+FROM pg_catalog.pg_extension e
+ORDER BY object_id
+"""
+
+
+def communications_added_objects() -> set[str]:
+    names = set(COMMUNICATIONS_ADDED_COLUMNS)
+    for table, columns in COMMUNICATIONS_COLUMNS.items():
+        names |= {"relation:public." + table, "relation:public." + table + "_id_seq",
+                  "sequence:public." + table + "_id_seq", "type:public." + table, "type:public._" + table}
+        names |= {f"column:public.{table}.{column}" for column in columns}
+        names |= {f"constraint:public.{table}.{name}" for name in COMMUNICATIONS_CONSTRAINTS[table]}
+    for name in COMMUNICATIONS_INDEXES:
+        names |= {"relation:public." + name, "index:public." + name}
+    return names
+
+
+def communications_schema_snapshot(rows) -> dict:
+    """Encode rows from COMMUNICATIONS_SCHEMA_SQL on one isolated restored database."""
+    objects, details = {}, {}
+    for identifier, definition in rows:
+        if not isinstance(identifier, str) or identifier in objects or not isinstance(definition, dict):
+            raise DeployStopped("Schema snapshot contains malformed or duplicate objects")
+        objects[identifier] = hashlib.sha256(json.dumps(
+            definition, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+        ).encode()).hexdigest()
+        if identifier.startswith("relation:") or identifier in COMMUNICATIONS_ADDED_COLUMNS | {COMMUNICATIONS_STATUS_KEY}:
+            details[identifier] = definition
+    tables = {key.removeprefix("relation:") for key, value in details.items()
+              if key.startswith("relation:") and value.get("relkind") in {"r", "p"}}
+    columns = {table: sorted(key.removeprefix("column:" + table + ".") for key in objects
+                            if key.startswith("column:" + table + "."))
+               for table in sorted(tables) if table != "public.schema_migrations"}
+    return {"objects": objects, "details": details, "data_columns": columns}
+
+
+def validate_communications_schema(before: dict, after: dict) -> dict:
+    """Reject every logical public-schema delta beyond the pinned tenth migration."""
+    for snapshot in (before, after):
+        if not isinstance(snapshot, dict) or set(snapshot) != {"objects", "details", "data_columns"}:
+            raise DeployStopped("Communications restore needs complete canonical schema snapshots")
+        objects, details = snapshot["objects"], snapshot["details"]
+        if not isinstance(objects, dict) or not objects or any(
+            not isinstance(key, str) or not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value)
+            for key, value in objects.items()
+        ) or not isinstance(details, dict):
+            raise DeployStopped("Communications schema object map is malformed")
+        detail_keys = {key for key in objects if key.startswith("relation:") or
+                       key in COMMUNICATIONS_ADDED_COLUMNS | {COMMUNICATIONS_STATUS_KEY}}
+        if set(details) != detail_keys or any(not isinstance(value, dict) or objects[key] != hashlib.sha256(
+            json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
+        ).hexdigest() for key, value in details.items()):
+            raise DeployStopped("Communications schema details differ from their object hashes")
+        tables = {key.removeprefix("relation:") for key, value in details.items()
+                  if key.startswith("relation:") and value.get("relkind") in {"r", "p"}}
+        columns = {table: sorted(key.removeprefix("column:" + table + ".") for key in objects
+                                if key.startswith("column:" + table + "."))
+                   for table in sorted(tables) if table != "public.schema_migrations"}
+        if snapshot["data_columns"] != columns or any(not values for values in columns.values()):
+            raise DeployStopped("Communications restore data projection omits baseline table columns")
+    old, new = before["objects"], after["objects"]
+    if set(new) - set(old) != communications_added_objects() or set(old) - set(new) or (
+        {key for key in old if old[key] != new.get(key)} != {COMMUNICATIONS_STATUS_KEY}
+    ):
+        raise DeployStopped("Communications restore contains an unreviewed schema addition, removal or change")
+    statuses = "pending processing sending delivered retrying failed dead cancelled".split()
+    for snapshot, expected in ((before, statuses), (after, statuses[:3] + ["accepted"] + statuses[3:] + ["unknown"])):
+        item = snapshot["details"].get(COMMUNICATIONS_STATUS_KEY, {})
+        definition = item.get("definition", "")
+        if not isinstance(definition, str):
+            raise DeployStopped("Communications status constraint is malformed")
+        normalized = re.sub(r"\s+", "", definition).replace("::text[]", "").replace("::charactervarying", "").replace("::text", "")
+        normalized = normalized.replace("(", "").replace(")", "")
+        if normalized != "CHECKstatus=ANYARRAY[" + ",".join("'" + value + "'" for value in expected) + "]" or (
+            item.get("kind") != "c" or item.get("validated") is not True or
+            item.get("deferrable") is not False or item.get("initially_deferred") is not False or
+            item.get("no_inherit") is not False
+        ):
+            raise DeployStopped("Communications status constraint differs from the exact reviewed values")
+    for key, kind, default in (("column:public.alerts.notify_voip", "boolean", "false"),
+                               ("column:public.alerts.priority", "character varying(16)", "'normal'::character varying")):
+        column = after["details"][key]
+        if column.get("type") != kind or column.get("nullable") is not False or column.get("default") != default or (
+            column.get("identity") != "" or column.get("generated") != ""
+        ):
+            raise DeployStopped("Communications alert columns differ from the reviewed safe defaults")
+    return before["data_columns"]
 RESUME_KIND = "iranian-reference-resume-after-first-candidate-v1"
 RESUME_FILES = {
     "failed_attempt", "failed_proof", "failed_log", "migration_plan", "image_manifest",
@@ -548,11 +735,14 @@ class ApplicationDeploy:
 
     def validate_payload(self, payload: dict, *, old: bool, status: int) -> None:
         old_after = old and self.migrated
-        release = self.plan["baseline_backends"][0]["release_version"] if old else "2.8.8"
+        communications = self.plan.get("kind") == COMMUNICATIONS_PLAN_KIND
+        release = self.plan["baseline_backends"][0]["release_version"] if old else (
+            self.plan["application_version"] if communications else "2.8.8")
+        addition = COMMUNICATIONS_MIGRATION if communications else REFERENCE_MIGRATION
         expected = {
             "ready": not old_after, "status": "degraded" if old_after else "ok",
             "database": "connected", "redis": "connected", "migration_current": not old_after,
-            "migration_version": REFERENCE_MIGRATION if self.migrated else max(self.plan["baseline_migrations"]),
+            "migration_version": addition if self.migrated else max(self.plan["baseline_migrations"]),
             "release_version": release,
         }
         if status != (503 if old_after else 200) or not isinstance(payload, dict) or any(
@@ -562,6 +752,9 @@ class ApplicationDeploy:
             raise DeployStopped("Strict readiness or reviewed old migration-only state failed")
 
     def old_migration_state(self) -> dict:
+        if self.plan.get("kind") == COMMUNICATIONS_PLAN_KIND:
+            return {"current": False, "version": COMMUNICATIONS_MIGRATION, "applied_count": 10,
+                    "expected_count": 9, "missing": [], "changed": [], "unknown": [COMMUNICATIONS_MIGRATION]}
         return {"current": False, "version": REFERENCE_MIGRATION, "applied_count": 9,
                 "expected_count": 8, "missing": [], "changed": [], "unknown": [REFERENCE_MIGRATION]}
 
@@ -930,6 +1123,9 @@ class ApplicationDeploy:
             raise DeployStopped("Reviewed additive migration requires the exact packaged migration runner")
         raw = private_bytes(self.plan_path)
         plan = json.loads(raw)
+        if isinstance(plan, dict) and plan.get("kind") == COMMUNICATIONS_PLAN_KIND:
+            self.load_communications_plan(plan, raw, expected, current)
+            return
         keys = {"schema_version", "kind", "commit", "project", "readiness_url", "images",
                 "baseline_backends", "baseline_migrations", "target_migrations", "evidence"}
         if not isinstance(plan, dict) or set(plan) != keys or type(plan["schema_version"]) is not int or (
@@ -1018,6 +1214,104 @@ class ApplicationDeploy:
             self.resume_plan["files"]["restore_transcript"] != proof["transcript"]
         ):
             raise DeployStopped("Resume proof chain differs from the original pinned migration/restore")
+        self.check_plan_files()
+
+    def load_communications_plan(self, plan: dict, raw: bytes, expected: dict, current: dict) -> None:
+        keys = {"schema_version", "kind", "application_version", "commit", "project", "readiness_url", "images",
+                "baseline_backends", "baseline_migrations", "target_migrations", "evidence"}
+        target = COMMUNICATIONS_BASELINE | {COMMUNICATIONS_MIGRATION: COMMUNICATIONS_CHECKSUM}
+        if set(plan) != keys or type(plan.get("schema_version")) is not int or plan["schema_version"] != 1 or (
+            plan.get("kind") != COMMUNICATIONS_PLAN_KIND or plan.get("application_version") != "2.8.13" or
+            (self.root / "VERSION").read_text().strip() != "2.8.13" or self.resume_path is not None or
+            self.resume_plan is not None or self.normal_resume_path is not None
+        ):
+            raise DeployStopped("Communications migration requires its own reviewed 2.8.13 plan without resume")
+        if plan.get("baseline_migrations") != COMMUNICATIONS_BASELINE or expected != target or (
+            plan.get("target_migrations") != target or current.get("expected") != COMMUNICATIONS_BASELINE or
+            current.get("applied") != COMMUNICATIONS_BASELINE
+        ):
+            raise DeployStopped("Communications transition must preserve every pinned checksum in the exact nine-to-ten ledger")
+        binding = {key: plan[key] for key in keys - {"schema_version", "kind", "evidence"}}
+        if plan["commit"] != self.commit or plan["project"] != self.project_name or (
+            plan["readiness_url"] != self.readiness_url or
+            plan["images"] != {name: image_id for name, (_, image_id) in self.images.items()}
+        ):
+            raise DeployStopped("Communications migration target differs from the reviewed release")
+        declared = plan["baseline_backends"]
+        if not isinstance(declared, list) or len(declared) != self.replicas or any(
+            not isinstance(row, dict) or set(row) != {"id", "image", "release_version"} or
+            not isinstance(row["release_version"], str) or not re.fullmatch(r"\d+\.\d+\.\d+", row["release_version"])
+            for row in declared
+        ):
+            raise DeployStopped("Communications baseline needs exact observed API IDs, images and versions")
+        old_versions = {row["release_version"] for row in declared}
+        actual = {item["Id"]: item["Image"] for item in self.baseline_backends.values()}
+        if len(old_versions) != 1 or len({row["id"] for row in declared}) != self.replicas or (
+            {row["id"]: row["image"] for row in declared} != actual or len(set(actual.values())) != 1 or
+            tuple(map(int, next(iter(old_versions)).split("."))) >= (2, 8, 13)
+        ):
+            raise DeployStopped("Communications baseline differs from the observed running APIs")
+        self.plan = plan
+        self.plan_files[self.plan_path] = hashlib.sha256(raw).hexdigest()
+        proof = json.loads(self.read_bound_file(plan["evidence"]))
+        self.proof = proof
+        if not isinstance(proof, dict) or set(proof) != {
+            "schema_version", "kind", "checked_at", "release", "restore", "compatibility", "transcript"
+        } or type(proof.get("schema_version")) is not int or proof["schema_version"] != 1 or (
+            proof.get("kind") != COMMUNICATIONS_PLAN_KIND or proof.get("release") != binding
+        ):
+            raise DeployStopped("Communications restore proof differs from its exact reviewed plan")
+        self.check_proof_time(proof.get("checked_at"))
+        restore = proof["restore"]
+        restore_keys = {"isolated", "source_database_container_id", "restore_database", "migration_command",
+                        "migration_image", "baseline_migrations", "target_migrations", "existing_data_columns",
+                        "existing_data_sha256_before", "existing_data_sha256_after", "schema_before", "schema_after",
+                        "new_table_rows", "added_column_nondefault_rows", "data_fingerprint_scope"}
+        if not isinstance(restore, dict) or set(restore) != restore_keys:
+            raise DeployStopped("Communications restore proof needs the complete schema and data observations")
+        digest = restore["existing_data_sha256_before"]
+        if not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest) or (
+            restore["existing_data_sha256_after"] != digest or restore["isolated"] is not True or
+            restore["source_database_container_id"] != self.database_id or
+            not isinstance(restore["restore_database"], str) or
+            not re.fullmatch(r"[a-z0-9_]+_restore(?:_[a-z0-9_]+)?", restore["restore_database"]) or
+            restore["migration_command"] != MIGRATION_COMMAND or restore["migration_image"] != self.images["migrate"][1] or
+            restore["baseline_migrations"] != COMMUNICATIONS_BASELINE or restore["target_migrations"] != target or
+            restore["data_fingerprint_scope"] != "all-public-tables-baseline-columns-except-schema-migrations-v1"
+        ):
+            raise DeployStopped("Communications restore must run the pinned packaged migrator on an isolated unchanged baseline")
+        projection = validate_communications_schema(restore["schema_before"], restore["schema_after"])
+        if restore["existing_data_columns"] != projection or restore["new_table_rows"] != {
+            "public." + name: 0 for name in COMMUNICATIONS_COLUMNS
+        } or any(type(value) is not int for value in restore["new_table_rows"].values()) or (
+            restore["added_column_nondefault_rows"] != {"public.alerts.notify_voip": 0, "public.alerts.priority": 0} or
+            any(type(value) is not int for value in restore["added_column_nondefault_rows"].values())
+        ):
+            raise DeployStopped("Communications restore must preserve every baseline projection and safe empty/default additions")
+        compatibility = proof["compatibility"]
+        if not isinstance(compatibility, dict) or set(compatibility) != {
+            "old_image", "new_image", "old_release_version", "old_migration_state", "old_ready_status",
+            "old_ready_payload", "new_ready_status", "new_ready_payload", "business_probes"
+        } or compatibility.get("old_image") != next(iter(actual.values())) or (
+            compatibility.get("new_image") != self.images["backend"][1] or
+            compatibility.get("old_release_version") != next(iter(old_versions)) or
+            compatibility.get("old_migration_state") != self.old_migration_state()
+        ):
+            raise DeployStopped("Communications compatibility proof differs from the observed old/new images")
+        self.migrated = True
+        try:
+            self.validate_payload(compatibility["old_ready_payload"], old=True, status=compatibility["old_ready_status"])
+            self.validate_payload(compatibility["new_ready_payload"], old=False, status=compatibility["new_ready_status"])
+        finally:
+            self.migrated = False
+        probes = compatibility["business_probes"]
+        if not isinstance(probes, list) or len(probes) != 2 or any(not isinstance(probe, dict) for probe in probes) or (
+            {probe.get("path") for probe in probes} != {"/api/prices", "/api/instruments"} or
+            any(type(probe.get("status")) is not int or probe["status"] != 200 or not isinstance(
+                probe.get("body_sha256"), str) or not re.fullmatch(r"[a-f0-9]{64}", probe["body_sha256"]) for probe in probes)
+        ):
+            raise DeployStopped("Communications compatibility needs both old-image read-only business routes")
+        self.read_bound_file(proof["transcript"])
         self.check_plan_files()
 
     def desired_backend(self, item: dict) -> bool:
@@ -1238,7 +1532,8 @@ class ApplicationDeploy:
             self.compose_run("run", "--rm", "--no-deps", "--pull", "never", "migrate")
             if self.plan:
                 self.migrated = True
-                print(f"Migration service completed; verifying pinned addition {REFERENCE_MIGRATION}, exact ledger "
+                addition = COMMUNICATIONS_MIGRATION if self.plan.get("kind") == COMMUNICATIONS_PLAN_KIND else REFERENCE_MIGRATION
+                print(f"Migration service completed; verifying pinned addition {addition}, exact ledger "
                       "and old migration-only readiness.", flush=True)
             self.backend_health(self.replicas, 0)
         pending = [item for item in old if not self.desired_backend(item) and not (

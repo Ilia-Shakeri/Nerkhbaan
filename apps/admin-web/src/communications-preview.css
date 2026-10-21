@@ -1,0 +1,10 @@
+.communications-preview-shell .sidebar { text-align: right; }
+.communications-preview-shell .workspace-header h1 { font-family: inherit; font-weight: 700; }
+.preview-nav-label { color: var(--muted); margin: 2rem .75rem .5rem; font-size: .7rem; }
+.communications-preview-shell .sidebar nav button:disabled { cursor: default; opacity: .5; }
+.communications-preview-shell .sidebar nav button:disabled:hover { background: transparent; color: var(--muted); }
+.preview-sidebar-note { margin: auto .35rem 1.25rem; padding: 1rem; border: 1px solid var(--line); border-radius: 10px; }
+.preview-sidebar-note strong { font-size: .75rem; color: var(--gold-bright); }
+.preview-sidebar-note p { color: var(--muted); font-size: .72rem; line-height: 1.9; margin: .5rem 0 0; }
+.preview-environment-label { padding: .4rem .7rem; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--gold-bright); font-size: .72rem; white-space: nowrap; }
+@media (max-width: 850px) { .communications-preview-shell .preview-nav-label, .communications-preview-shell .preview-sidebar-note { display: none; } }

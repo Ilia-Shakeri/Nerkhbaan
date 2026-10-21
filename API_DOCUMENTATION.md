@@ -1,6 +1,15 @@
 # Nerkhbaan API Reference
 
-Code candidate: **2.8.12**. Updated: 2026-10-19.
+Code candidate: **2.8.13**. Updated: 2026-10-21.
+
+Administrator communications use `/api/admin/communications` for independently
+versioned SMS/VoIP connections and call policy, consented test recipients,
+idempotent tests and paginated history. Secret values are write-only and encrypted
+with a separate deployment key. See the generated route index and the
+[connection guide](docs/admin-guide.md#راهنمای-اتصال-پیامک-و-تماس) for permissions,
+exact configuration fields and delivery-state meanings. Public alerts support
+`notify_sms`, `notify_voip` and `priority`; calls require verified phone ownership
+and critical priority. HTTP acceptance does not prove end-device delivery.
 
 `GET /api/prices/references?timeframe=30d` returns three explicitly named Iranian
 reference valuations, their original source clocks, calculation parents and

@@ -2,7 +2,7 @@
 
 Generated from the current application. Regenerate with `python scripts/export_api_contracts.py`.
 
-Release: `2.8.12`. Full schemas: [api-contracts.json](api-contracts.json).
+Release: `2.8.13`. Full schemas: [api-contracts.json](api-contracts.json).
 
 | Method | Path | Request | Success |
 | --- | --- | --- | --- |
@@ -26,6 +26,15 @@ Release: `2.8.12`. Full schemas: [api-contracts.json](api-contracts.json).
 | POST | `/api/admin/auth/signin` | `AdminSigninRequest` | 200 |
 | POST | `/api/admin/auth/signout` | `—` | 204 |
 | GET | `/api/admin/backups/status` | `—` | 200 |
+| GET | `/api/admin/communications` | `—` | 200 |
+| PUT | `/api/admin/communications/call-policy` | `CallPolicyUpdate` | 200 |
+| PUT | `/api/admin/communications/channels/{channel}` | `ChannelUpdate` | 200 |
+| GET | `/api/admin/communications/deliveries` | `—` | 200 |
+| GET | `/api/admin/communications/deliveries/{delivery_id}` | `—` | 200 |
+| POST | `/api/admin/communications/test-events` | `TestEventCreate` | 201 |
+| GET | `/api/admin/communications/test-recipients` | `—` | 200 |
+| POST | `/api/admin/communications/test-recipients` | `TestRecipientCreate` | 201 |
+| DELETE | `/api/admin/communications/test-recipients/{recipient_id}` | `—` | 200 |
 | GET | `/api/admin/dashboard` | `—` | 200 |
 | GET | `/api/admin/health` | `—` | 200 |
 | GET | `/api/admin/jobs` | `—` | 200 |

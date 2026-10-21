@@ -111,11 +111,12 @@ class OwnedGuardFixture:
         directory = self.root / "apps/api/db/migrations"
         directory.mkdir(parents=True)
         migrations = {}
-        for source in (ROOT / "apps/api/db/migrations").glob("*.sql"):
+        for name in sorted(guard.COMMUNICATIONS_BASELINE):
+            source = ROOT / "apps/api/db/migrations" / name
             data = source.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n").encode()
             (directory / source.name).write_bytes(data)
             migrations[source.name] = digest(data)
-        if len(migrations) != 9:
+        if migrations != guard.COMMUNICATIONS_BASELINE:
             raise AssertionError("The owned fixture must bind the actual nine immutable migrations")
         for name in ("current_migrations", "desired_migrations", "applied_migrations"):
             state[name] = copy.deepcopy(migrations)

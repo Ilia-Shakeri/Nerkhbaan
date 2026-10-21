@@ -209,6 +209,12 @@ export const adminApi = {
   patch<T = JsonRecord>(path: string, body: unknown): Promise<T> {
     return request<T>(path, { method: "PATCH", body: JSON.stringify(body) });
   },
+  delete<T = JsonRecord>(path: string, body?: unknown): Promise<T> {
+    return request<T>(path, {
+      method: "DELETE",
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+  },
   async download(path: string, signal?: AbortSignal): Promise<Blob> {
     return bounded(signal, false, async (requestSignal) => {
       const response = await fetch(`${API_BASE}${path}`, {

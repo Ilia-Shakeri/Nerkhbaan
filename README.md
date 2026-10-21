@@ -1,6 +1,14 @@
 # Nerkhbaan
 
-Current code candidate: **2.8.12**. `VERSION` is the source of release truth.
+Current code candidate: **2.8.13**. `VERSION` is the source of release truth.
+
+The administrator console now connects Kavenegar SMS and Asterisk ARI calls,
+with encrypted credentials, permission checks, critical-call rules, consented
+test recipients and paged delivery history. Follow the Persian
+[SMS and VoIP connection guide](docs/admin-guide.md#راهنمای-اتصال-پیامک-و-تماس).
+Both providers start disabled; an accepted provider request is not a received
+SMS or an answered call. Email alarm work is outside the current delivery scope;
+account verification and password-reset mail remain supported.
 
 Three separately labelled Iranian reference valuations are now available for
 24K gold, BTC/USD and USDT/USD. Published/calculated values retain source age,
@@ -9,7 +17,7 @@ See [the reference scope and operational limits](docs/iranian-references-2026-10
 
 Step-one fixes and the step-two Iranian price/history work are recorded in the [changelog](CHANGELOG.md) and
 [delivery matrix](docs/delivery-readiness.md). This source release has not been deployed by this change.
-Target checked on 2026-10-19: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.11. The 2.8.12 candidate still needs its own successful rollout receipt.
+Target checked read-only on 2026-10-21: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.12, source `fe8949aeb4c6e1c86e386ba2827ed64785fd6ebe`. The 2.8.13 candidate needs its own CI, runtime and successful rollout receipts.
 See the [server handoff](docs/production-handoff-fa.md) and [saved proof](docs/delivery-readiness.md).
 The [remaining acceptance report](docs/remaining-acceptance-2026-10-11.md) separates real
 in-app receipt and unsigned installation from blocked native push, publisher signing and source coverage.

@@ -1,7 +1,17 @@
-# Release Operations — 2.8.12
+# Release Operations — 2.8.13
 
-Updated: 2026-10-19. Execute against the intended host only after review of the concrete release.
+Updated: 2026-10-21. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
+
+Candidate 2.8.13 uses the explicit nine-to-ten communications transition below.
+SMS/PBX credentials are entered later through the administrator panel; both
+channels and call policy initially stay disabled. Provision and back up one
+independent `COMMUNICATIONS_ENCRYPTION_KEY` through the protected environment.
+Preserve every existing value and the original environment backup; record the
+selected new file path/hash and bind both backend/migrate `env_file` to it.
+Do not reuse a JWT/MFA key, silently rotate an existing key, or mark real
+SMS/call delivery as passed without receiver/PBX evidence. Follow the
+[Persian connection guide](admin-guide.md#راهنمای-اتصال-پیامک-و-تماس).
 
 ## Current application acceptance — 2.8.12
 
@@ -215,6 +225,67 @@ infrastructure recreation or replica scale-down is performed. Without the review
 a different schema stops before the migration service, retaining the old API's strict ledger readiness.
 Passing mocked CLI tests is not target deployment evidence. Compose must support
 [`config --no-env-resolution` and `--hash`](https://docs.docker.com/reference/cli/docker/compose/config/).
+
+### Reviewed communications addition: exact nine-to-ten ledger for 2.8.13
+
+Use a fresh `DEPLOY_MIGRATION_PLAN` with `kind: "communications-addition-v1"` and
+`application_version: "2.8.13"`. The application checkout's `VERSION` must agree. This plan
+cannot be combined with either historical resume input. It accepts only the nine immutable
+filename/checksum pairs in `COMMUNICATIONS_BASELINE` plus `20261021_001_communications.sql`,
+whose normalized SHA-256 is
+`b11b349d3501cadbd73b299e2a99bb8eca8a9045bd01735b07823d115c3ceec2`.
+An already advanced, changed, incomplete or unknown ledger stops before migration.
+
+The plan has the same exact keys as the reference-table plan below, plus `application_version`.
+Its `baseline_backends` must list every freshly observed running API ID, immutable image ID and
+release version. All old replicas must agree; never infer their version from an old receipt. The
+report repeats every plan field except `schema_version`, `kind` and `evidence` in `release`.
+The report has exactly `schema_version`, `kind`, `checked_at`, `release`, `restore`,
+`compatibility` and the private hash-bound `transcript`. Freshness and private-file ownership
+requirements remain the same as the reference-table proof.
+
+The `restore` object has exactly these fields:
+
+| Fields | Observed requirement |
+| --- | --- |
+| `isolated`, `source_database_container_id`, `restore_database` | `true`, exact fresh source container ID, owned separate `*_restore` or `*_restore_*` database |
+| `migration_command`, `migration_image` | Exact packaged runner and reviewed target migrate image ID |
+| `baseline_migrations`, `target_migrations` | Exact pinned nine- and ten-entry manifests |
+| `schema_before`, `schema_after` | Canonical snapshots from `COMMUNICATIONS_SCHEMA_SQL` and `communications_schema_snapshot(rows)` |
+| `existing_data_columns` | Exact `schema_before.data_columns`, covering every public base/partition table except `schema_migrations` |
+| `existing_data_sha256_before`, `existing_data_sha256_after` | Equal full-row fingerprints using only that unchanged baseline projection |
+| `data_fingerprint_scope` | `all-public-tables-baseline-columns-except-schema-migrations-v1` |
+| `new_table_rows` | Exactly `public.admin_secrets`, `public.communication_recipients`, `public.communication_events`, each integer zero |
+| `added_column_nondefault_rows` | Exactly `public.alerts.notify_voip` and `public.alerts.priority`, each integer zero |
+
+Collect both schema snapshots on the same isolated restored database, with the same fixed
+`search_path` (`pg_catalog, public`) and no concurrent application or scheduled jobs. The snapshot
+helper takes rows from a read-only catalog query; it creates no connection and runs no migration.
+It hashes logical public-schema objects, records relation metadata and the changed alert/check
+definitions, and derives the baseline table/column projection. Physical files, estimates and
+internal dependency triggers are excluded; explicit constraints and index definitions cover the
+dependencies. The validator permits exactly the three new tables and their columns, composite
+types, sequences, constraints and indexes; the two safe-default alert columns; and the one
+status-check replacement adding `accepted` and `unknown`. Any other added, missing or changed
+logical object fails. Existing table rows must remain equal when projected onto their original
+columns. Query hypertable parents so their chunk rows are included. Run the full packaged runner,
+including catalog reconciliation, rather than applying only the SQL file.
+
+`compatibility` has exactly `old_image`, `new_image`, `old_release_version`,
+`old_migration_state`, `old_ready_status`, `old_ready_payload`, `new_ready_status`,
+`new_ready_payload`, `business_probes`. It must prove old strict readiness is HTTP 503 solely for
+the unknown tenth migration (`applied_count: 10`, `expected_count: 9`, no missing/changed entries),
+old `/api/prices` and `/api/instruments` each return HTTP 200 with body hashes, and target 2.8.13
+strict readiness is HTTP 200 on the exact ten-entry ledger. Old image/version must match the
+freshly observed baseline, and the new image must match the release manifest.
+
+The wrapper, immutable-image checks, selected private environment binding, source-rights gates,
+protected container/network/volume checks, replacement-before-retirement sequence and bounded
+readiness checks stay active. No historical resume plan, schema bypass, automatic retry or
+automatic rollback is provided for this transition. A failed/unknown attempt requires fresh
+identity and ledger observations before any separately reviewed recovery. Preserve its receipts.
+Passing the local fake-CLI suite is code evidence; actual restore, hosted CI, staged image scans,
+guarded target deployment, post-deploy checks and a later browser check are separate release gates.
 
 ### Reviewed reference-table addition: 2.8.1 to 2.8.8
 

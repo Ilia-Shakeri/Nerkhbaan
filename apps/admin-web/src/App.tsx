@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { adminApi } from "./api";
 import {
@@ -19,6 +19,7 @@ import {
 import type { AdminProfile, DangerousAction } from "./types";
 import { DangerousDialog, humanError } from "./ui";
 import { SecurityPage } from "./SecurityPage";
+import { CommunicationsPage } from "./CommunicationsPage";
 
 type Section =
   | "dashboard"
@@ -33,6 +34,7 @@ type Section =
   | "settings"
   | "audit"
   | "alerts"
+  | "communications"
   | "backups"
   | "security";
 
@@ -99,6 +101,12 @@ const navigation: Array<{
     permission: "admin.alerts.read",
   },
   {
+    id: "communications",
+    label: "مرکز ارتباطات",
+    symbol: "◌",
+    permission: "admin.settings.read",
+  },
+  {
     id: "backups",
     label: "Backup evidence",
     symbol: "◫",
@@ -127,9 +135,12 @@ function Login({
   const [mfaCode, setMfaCode] = useState("");
   const [error, setError] = useState(initialError);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setError("");
     try {
@@ -140,6 +151,7 @@ function Login({
     } catch (reason) {
       setError(humanError(reason));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -216,28 +228,32 @@ function PasswordGate({
   onChanged,
 }: {
   profile: AdminProfile;
-  onChanged: () => void;
+  onChanged: () => void | Promise<void>;
 }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (submitting.current) return;
     if (newPassword !== confirmation) {
       setError("New password confirmation does not match");
       return;
     }
+    submitting.current = true;
     setBusy(true);
     setError("");
     try {
       await adminApi.changePassword(currentPassword, newPassword);
-      onChanged();
+      await onChanged();
     } catch (reason) {
       setError(humanError(reason));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   }
@@ -429,6 +445,7 @@ export default function App() {
     settings: <SettingsPage {...pageProps} />,
     audit: <AuditPage {...pageProps} />,
     alerts: <AlertsPage {...pageProps} />,
+    communications: <CommunicationsPage {...pageProps} client={adminApi} />,
     backups: <BackupsPage {...pageProps} />,
     security: (
       <SecurityPage
@@ -448,8 +465,8 @@ export default function App() {
             <span>N</span>
           </div>
           <div>
-            <strong>Nerkhbaan</strong>
-            <small>Operations</small>
+            <strong>نرخ‌بان</strong>
+            <small>پنل مدیریت</small>
           </div>
         </div>
         <nav>
@@ -485,9 +502,9 @@ export default function App() {
         </div>
       </aside>
       <main className="workspace">
-        <header className="workspace-header">
+        <header className="workspace-header" dir={section === "communications" ? "rtl" : undefined}>
           <div>
-            <p className="eyebrow">CONTROL PLANE / {section.toUpperCase()}</p>
+            <p className="eyebrow">{section === "communications" ? "مدیریت هشدار و تماس" : `CONTROL PLANE / ${section.toUpperCase()}`}</p>
             <h1>{navigation.find((item) => item.id === section)?.label}</h1>
           </div>
           <div className="session-chip">
