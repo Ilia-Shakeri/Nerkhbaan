@@ -4,7 +4,7 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
-## [2.8.13] - 2026-10-21
+## [2.8.13] - 2026-10-24
 
 - Add administrator-managed Kavenegar SMS and Asterisk ARI connections with a separate encryption key, write-only credentials, independent configuration versions, permission checks, CSRF, recent re-authentication and typed confirmations.
 - Add critical-call policy, quiet hours, cooldowns, daily caps, consented test recipients, dry-run previews and paged masked history. Real sending remains disabled until a configured provider and an explicit test confirmation exist. Provider acceptance is not device receipt or an answered call.
@@ -12,6 +12,7 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Improve all fifteen administrator routes, role-limited reads, MFA failure handling, mobile navigation and sensitive-form duplicate/uncertain-result protection. Preserve configuration drafts when paginating history and discard stale responses.
 - Add an explicit fail-closed nine-to-ten migration plan with isolated restore, exact schema/data preservation and old/new image compatibility evidence. Existing recovery plans cannot authorize this transition.
 - Document SMS/PBX setup inside the console and in the Persian administrator guide. Email alarms are outside the current scope; authentication mail remains supported. Final source, hosted runtime and target receipts must identify this exact release.
+- Replace the vulnerable certifi trust bundle with hash-verified 2026.10.23 and build/test the feed with Go 1.26.10, which includes the crypto/x509 security correction. Preserve failed candidate CI 39594722700; do not suppress its findings or reuse its images.
 
 ## [2.8.12] - 2026-10-19
 

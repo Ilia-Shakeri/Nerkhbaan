@@ -101,7 +101,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Test and build feed pull
         run: |
-          docker run --rm -v "$PWD/apps/price-feed-pull:/src" -w /src golang:1.26.9-alpine3.24 sh -c 'apk add --no-cache git && go test ./... && CGO_ENABLED=0 go build -trimpath -o /tmp/price-feed-pull .'
+          docker run --rm -v "$PWD/apps/price-feed-pull:/src" -w /src golang:1.26.10-alpine3.24 sh -c 'apk add --no-cache git && go test ./... && CGO_ENABLED=0 go build -trimpath -o /tmp/price-feed-pull .'
 
   python-unit:
     name: Python static and unit checks

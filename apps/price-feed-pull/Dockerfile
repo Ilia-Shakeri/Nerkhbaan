@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM golang:1.26.9-alpine3.24 AS builder
+FROM golang:1.26.10-alpine3.24 AS builder
 WORKDIR /src
 COPY go.mod main.go ./
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/price-feed-pull ./main.go

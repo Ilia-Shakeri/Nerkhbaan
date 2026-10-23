@@ -1,6 +1,6 @@
 # Delivery Readiness — 2.8.13
 
-Updated: 2026-10-21. Candidate 2.8.13 adds administrator SMS and VoIP connections.
+Updated: 2026-10-24. Candidate 2.8.13 adds administrator SMS and VoIP connections.
 Its acceptance requires its own exact-source CI, four immutable runtime images,
 strict scans, isolated restored-data migration proof and guarded target rollout.
 Installed 2.8.12 was observed read-only at 11:17 UTC. Earlier release receipts
@@ -11,6 +11,17 @@ have local unit, PostgreSQL and browser coverage. See the
 [operator guide](admin-guide.md#راهنمای-اتصال-پیامک-و-تماس). Real SMS receipt and an
 answered call are separate gates after the operator connects an account/PBX.
 The requested scope no longer includes email alarms; account mail is retained.
+
+Initial candidate `72f0111aa6ddf845334fee4714418a564b9b7379` passed functional,
+browser, real Timescale/Redis/migration and desktop checks in
+[CI 39594722700](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39594722700),
+but failed the Python audit and API/feed image scans. The failed run remains a
+failure. Certifi 2026.7.22 was affected by
+[GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2);
+the replacement is 2026.10.23 with both distribution hashes checked against PyPI.
+Go 1.26.9 was affected by CVE-2026-111943; the feed recipe and test use the
+[Go 1.26.10 security release](https://go.dev/doc/devel/release#go1.26.10).
+The corrected source needs a new complete CI and runtime scan before deployment.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |
