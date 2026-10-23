@@ -19,28 +19,108 @@ import urllib.request
 import zipfile
 
 
-APPLICATION_COMMIT = "fe8949aeb4c6e1c86e386ba2827ed64785fd6ebe"
-BASE_COMMIT = "a30ba10bd21d55db7844132996b231f89ae8c1cf"
-VERSION = "2.8.12"
-APPLICATION_CI_RUN = 39217110287
+APPLICATION_COMMIT = '38aceedb584ad691c634c0309c4b84094d3bcfc2'
+BASE_COMMIT = 'fcdac9fc75e974f06162efd9d59dd68cf9257c68'
+VERSION = '2.8.13'
+APPLICATION_CI_RUN = 40024427628
 REPOSITORY = "Ilia-Shakeri/Nerkhbaan"
-PUBLIC_ASSET = "https://nerkhbaan.ir/assets/index-0vsgv0JA.js"
-PUBLIC_ASSET_SHA256 = "9a5b165a82a11b0d8cd7ccf642f6ae6d9e2c84998d58a7cdfd18c25d3248f3d1"
+PUBLIC_ASSET = 'https://nerkhbaan.ir/assets/index-C53fIapv.js'
+PUBLIC_ASSET_SHA256 = 'ce8688b4a5fde4f807247ca8820934bcf538553a536dfcb7f9c648aed419e2a8'
 PUBLIC_KEY_SHA256 = "0dc48003fa42c7f39424bb09461a9f872943fcc51a48fff61ae4e48ca417a2eb"
 EXISTING_PUBLIC_KEY = 'BNg6GMpk04N2Oqp_GRI2DsFRrtJA4M_svcEiNEeJiJuAvQU0U_E6ivDd7C8Z6rHpv5yBYMnXca5vC7BU5ye-vos'
-PUBLIC_KEY_OBSERVED_AT = "2026-10-18T12:38:15.612884+00:00"
+PUBLIC_KEY_OBSERVED_AT = '2026-10-23T21:02:03.892107+00:00'
 OPS_PATHS = {".github/workflows/release-runtime-artifacts.yml", "scripts/build_runtime_artifacts.py"}
 PATCH_PATHS = {
-    "API_DOCUMENTATION.md", "CHANGELOG.md",
-    "PROJECT_STATUS.md", "README.md", "VERSION", "apps/admin-web/package.json",
-    "apps/api/app/release.py", "apps/api/app/services/alert_engine.py",
-    "apps/api/tests/test_push_delivery_failures.py", "apps/api/tests/test_servix_durable_backfill.py",
-    "apps/desktop/package.json",
-    "apps/web/package.json", "apps/web/src/app/components/SplashScreen.tsx",
-    "docs/admin-guide.md", "docs/api-contracts.json", "docs/api-route-index.md",
-    "docs/delivery-readiness.md", "docs/client-delivery-roadmap-fa.md",
-    "package-lock.json", "package.json", "packages/ui/package.json",
+    '.env.example',
+    '.github/workflows/ci.yml',
+    'API_DOCUMENTATION.md',
+    'CHANGELOG.md',
+    'PROJECT_STATUS.md',
+    'README.md',
+    'VERSION',
+    'apps/admin-web/Dockerfile',
+    'apps/admin-web/communications-preview.html',
+    'apps/admin-web/package.json',
+    'apps/admin-web/public/fonts/Vazir/OFL.txt',
+    'apps/admin-web/src/App.tsx',
+    'apps/admin-web/src/CommunicationsPage.tsx',
+    'apps/admin-web/src/SecurityPage.tsx',
+    'apps/admin-web/src/api.ts',
+    'apps/admin-web/src/assets/Vazir-Bold.woff2',
+    'apps/admin-web/src/assets/Vazir-NOTICE.md',
+    'apps/admin-web/src/assets/Vazir-Regular.woff2',
+    'apps/admin-web/src/communications-preview-client.ts',
+    'apps/admin-web/src/communications-preview.css',
+    'apps/admin-web/src/communications-preview.tsx',
+    'apps/admin-web/src/communications.css',
+    'apps/admin-web/src/pages.tsx',
+    'apps/admin-web/src/styles.css',
+    'apps/admin-web/src/ui.tsx',
+    'apps/api/app/admin/communication_schemas.py',
+    'apps/api/app/admin/communication_storage.py',
+    'apps/api/app/admin/models.py',
+    'apps/api/app/admin/routers/alerts.py',
+    'apps/api/app/admin/routers/communications.py',
+    'apps/api/app/admin/routers/operations.py',
+    'apps/api/app/config.py',
+    'apps/api/app/models.py',
+    'apps/api/app/release.py',
+    'apps/api/app/routers/alerts.py',
+    'apps/api/app/routers/notifications.py',
+    'apps/api/app/schemas.py',
+    'apps/api/app/security.py',
+    'apps/api/app/services/alert_delivery_state.py',
+    'apps/api/app/services/alert_engine.py',
+    'apps/api/app/services/communication_delivery.py',
+    'apps/api/app/services/communication_transport.py',
+    'apps/api/app/services/dlq_worker.py',
+    'apps/api/db/migrations/20261021_001_communications.sql',
+    'apps/api/requirements-dev.lock',
+    'apps/api/requirements.lock',
+    'apps/api/tests/test_admin_communications.py',
+    'apps/api/tests/test_communication_transports.py',
+    'apps/api/tests/test_communication_worker.py',
+    'apps/api/tests/test_communications_migration.py',
+    'apps/api/tests/test_smtp_delivery.py',
+    'apps/api/tests/test_step1_transport_worker_insights.py',
+    'apps/desktop/package.json',
+    'apps/price-feed-pull/Dockerfile',
+    'apps/web/Dockerfile',
+    'apps/web/package.json',
+    'apps/web/src/app/components/SplashScreen.tsx',
+    'apps/web/src/app/services/api.ts',
+    'apps/web/src/app/views/AlertsView.tsx',
+    'docs/admin-guide.md',
+    'docs/api-contracts.json',
+    'docs/api-route-index.md',
+    'docs/client-delivery-roadmap-fa.md',
+    'docs/delivery-readiness.md',
+    'docs/notification-delivery-probe.md',
+    'docs/release-operations.md',
+    'docs/step4-delivery-acceptance-2026-10-19.md',
+    'infra/relay/Dockerfile',
+    'nginx/Dockerfile',
+    'package-lock.json',
+    'package.json',
+    'packages/ui/package.json',
+    'playwright.config.ts',
+    'scripts/admin-runtime.test.mjs',
+    'scripts/deploy_application.py',
+    'scripts/notification_delivery_probe.py',
+    'scripts/playwright-admin-panel.config.ts',
+    'scripts/playwright-alert-communications.config.ts',
+    'scripts/playwright-communications.config.ts',
+    'scripts/test_deploy_application.py',
+    'scripts/test_deploy_communications.py',
+    'scripts/test_deploy_normal_resume.py',
+    'scripts/test_notification_delivery_probe.py',
+    'tests/e2e/admin-communications.spec.ts',
+    'tests/e2e/admin-console.spec.ts',
+    'tests/e2e/admin-fixture-url.ts',
+    'tests/e2e/admin-panel.spec.ts',
+    'tests/e2e/alert-communications.spec.ts',
 }
+
 RECIPES = [
     ("api", "apps/api/Dockerfile", "apps/api"),
     ("web", "apps/web/Dockerfile", "."),
@@ -78,6 +158,51 @@ def git(source, *args):
     return run(["git", "-C", str(source), *args])
 
 
+
+SECURITY_LOCK_OLD = b'certifi==2026.7.22 \\\n    --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775 \\\n    --hash=sha256:741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55'
+SECURITY_LOCK_NEW = b'certifi==2026.10.23 \\\n    --hash=sha256:a9895e6e2758b371e0545e321a3a8fd1fcfd9829ada8824a936dfb16aaaf36cd \\\n    --hash=sha256:e9b54de76e530bb6cf0ccd036787103acb58fd42ba930ea8bf948ddbaa2f61d1'
+GO_BASE_OLD = b"golang:1.26.9-alpine3.24"
+GO_BASE_NEW = b"golang:1.26.10-alpine3.24"
+NGINX_BASE_OLD = b"nginx:1.30.4-alpine3.24"
+NGINX_BASE_NEW = b"nginx:1.30.6-alpine3.24"
+VITE_INTEGRITY_OLD = "sha512-NTKlcQjlAK7MlQoyb6LgaqHc8sso/pVyUJYWMws3jg21uTJw/LddqIFPcPqP6PzpgbIcZyKI85sFE4HBrQDA8A=="
+VITE_INTEGRITY_NEW = "sha512-xGjU/SyjeNyb0E4KxXBvYz/1C+3JXuujvf2hXNOtnlcE+58o5ajd9N2/n2VhkiJvpCP2qQasnUpx5PXNeI+p1Q=="
+
+
+def reviewed_runtime_input(path, baseline):
+    if path in {"apps/web/Dockerfile", "apps/admin-web/Dockerfile", "nginx/Dockerfile", "infra/relay/Dockerfile"}:
+        assert baseline.count(NGINX_BASE_OLD) == 1, "Unreviewed baseline Nginx recipe"
+        return baseline.replace(NGINX_BASE_OLD, NGINX_BASE_NEW, 1)
+    if path == "apps/price-feed-pull/Dockerfile":
+        assert baseline.count(GO_BASE_OLD) == 1, "Unreviewed baseline Go recipe"
+        return baseline.replace(GO_BASE_OLD, GO_BASE_NEW, 1)
+    if path in {"apps/api/requirements.lock", "apps/api/requirements-dev.lock"}:
+        assert baseline.count(SECURITY_LOCK_OLD) == 1, "Unreviewed baseline trust bundle"
+        return baseline.replace(SECURITY_LOCK_OLD, SECURITY_LOCK_NEW, 1)
+    return baseline
+
+
+
+def reviewed_node_manifest(value):
+    result = json.loads(json.dumps(value))
+    dev = result.get("devDependencies", {})
+    if "vite" in dev:
+        assert dev["vite"] == "6.4.3", "Unreviewed baseline Vite pin"
+        dev["vite"] = "6.4.4"
+    return result
+
+
+def reviewed_node_lock(value):
+    result = json.loads(json.dumps(value))
+    for path in ["", "apps/web", "apps/admin-web", "apps/desktop", "packages/ui"]:
+        result["packages"][path] = reviewed_node_manifest(result["packages"][path])
+    vite = result["packages"].get("node_modules/vite")
+    if vite is not None:
+        assert vite["version"] == "6.4.3" and vite["integrity"] == VITE_INTEGRITY_OLD, "Unreviewed baseline Vite package"
+        vite["version"], vite["integrity"] = "6.4.4", VITE_INTEGRITY_NEW
+    return result
+
+
 def validate_source(source, ops, workflow_sha):
     assert re.fullmatch(r"[a-f0-9]{40}", workflow_sha), "Invalid workflow commit"
     for checkout, commit in [(source, APPLICATION_COMMIT), (ops, workflow_sha)]:
@@ -90,22 +215,22 @@ def validate_source(source, ops, workflow_sha):
     assert ops_changed == OPS_PATHS, "Workflow commit includes unrelated application changes"
     assert git(source, "show", APPLICATION_COMMIT + ":VERSION").decode().strip() == VERSION
     for _, recipe, _ in RECIPES:
-        assert git(source, "show", BASE_COMMIT + ":" + recipe) == (source / recipe).read_bytes()
-    for path in ["apps/api/requirements.lock", "apps/price-feed-pull/go.mod", ".npmrc", "scripts/install-dependencies.sh"]:
-        assert git(source, "show", BASE_COMMIT + ":" + path) == (source / path).read_bytes()
+        assert reviewed_runtime_input(recipe, git(source, "show", BASE_COMMIT + ":" + recipe)) == (source / recipe).read_bytes()
+    for path in ["apps/api/requirements.lock", "apps/api/requirements-dev.lock", "apps/price-feed-pull/go.mod", ".npmrc", "scripts/install-dependencies.sh", "nginx/Dockerfile", "infra/relay/Dockerfile"]:
+        assert reviewed_runtime_input(path, git(source, "show", BASE_COMMIT + ":" + path)) == (source / path).read_bytes()
     for path in ["package.json", "apps/web/package.json", "apps/admin-web/package.json", "apps/desktop/package.json", "packages/ui/package.json"]:
         old = json.loads(git(source, "show", BASE_COMMIT + ":" + path))
         current = json.loads((source / path).read_bytes())
         assert current.pop("version") == VERSION
         old.pop("version")
-        assert old == current, "Non-version manifest change"
+        assert reviewed_node_manifest(old) == current, "Unreviewed manifest change"
     old = json.loads(git(source, "show", BASE_COMMIT + ":package-lock.json"))
     current = json.loads((source / "package-lock.json").read_bytes())
     for manifest in [old, current]:
         manifest.pop("version")
         for path in ["", "apps/web", "apps/admin-web", "apps/desktop", "packages/ui"]:
             manifest["packages"][path].pop("version")
-    assert old == current, "Non-version lock change"
+    assert reviewed_node_lock(old) == current, "Unreviewed lock change"
     return sorted(changed)
 
 
@@ -306,7 +431,7 @@ class RuntimeBuild:
         source_proof = archive_source(self.checkout, self.source)
         write_new(self.out / "source-build-proof.json", self.proof(**source_proof, allowed_changed_paths=changed, source_archive_only=True, released_notice_code_included=True, application_ci=ci, canonical_recipes=[{"kind": kind, "dockerfile": recipe, "context": context} for kind, recipe, context in RECIPES]))
         self.public_key = validated_public_key()
-        write_new(self.out / "build-inputs.json", self.proof(vapid_public_key_sha256=PUBLIC_KEY_SHA256, public_asset_sha256=PUBLIC_ASSET_SHA256, admin_base_path="/admin/", platform="linux/amd64", public_key_source={"kind": "existing_published_web_client_key", "url": PUBLIC_ASSET, "asset_sha256": PUBLIC_ASSET_SHA256, "asset_bytes": 216486, "observed_at": PUBLIC_KEY_OBSERVED_AT, "runner_fetched_public_asset": False, "private_inputs_used": False}))
+        write_new(self.out / "build-inputs.json", self.proof(vapid_public_key_sha256=PUBLIC_KEY_SHA256, public_asset_sha256=PUBLIC_ASSET_SHA256, admin_base_path="/admin/", platform="linux/amd64", public_key_source={"kind": "existing_published_web_client_key", "url": PUBLIC_ASSET, "asset_sha256": PUBLIC_ASSET_SHA256, "asset_bytes": 224424, "observed_at": PUBLIC_KEY_OBSERVED_AT, "runner_fetched_public_asset": False, "private_inputs_used": False}))
 
     def build(self):
         images = []
@@ -336,7 +461,7 @@ class RuntimeBuild:
                 app_count = len(expected)
                 migrations = {"/app/" + str(path.relative_to(self.source / "apps/api")): sha256(path) for path in (self.source / "apps/api/db").rglob("*") if path.is_file()}
                 migration_count = len(list((self.source / "apps/api/db/migrations").glob("*.sql")))
-                assert len(migrations) == 10 and migration_count == 9, "Reviewed DB source count differs"
+                assert len(migrations) == 11 and migration_count == 10, "Reviewed DB source count differs"
                 expected.update(migrations)
                 expected["/app/requirements.lock"] = sha256(self.source / "apps/api/requirements.lock")
                 script = (
@@ -447,6 +572,34 @@ class RuntimeBuild:
 
 
 class OfflineContracts(unittest.TestCase):
+    def test_node_patch_changes_only_exact_vite_pin_and_integrity(self):
+        old = {"devDependencies": {"vite": "6.4.3", "typescript": "5.9.3"}, "custom": True}
+        self.assertEqual(reviewed_node_manifest(old), {"devDependencies": {"vite": "6.4.4", "typescript": "5.9.3"}, "custom": True})
+        self.assertEqual(old["devDependencies"]["vite"], "6.4.3")
+        lock = {"packages": {key: {} for key in ["", "apps/web", "apps/admin-web", "apps/desktop", "packages/ui"]}}
+        lock["packages"]["node_modules/vite"] = {"version": "6.4.3", "integrity": VITE_INTEGRITY_OLD, "other": "keep"}
+        result = reviewed_node_lock(lock)
+        self.assertEqual(result["packages"]["node_modules/vite"], {"version": "6.4.4", "integrity": VITE_INTEGRITY_NEW, "other": "keep"})
+        for field, value in [("version", "6.4.2"), ("integrity", "unreviewed")]:
+            changed = json.loads(json.dumps(lock))
+            changed["packages"]["node_modules/vite"][field] = value
+            with self.subTest(field=field), self.assertRaises(AssertionError):
+                reviewed_node_lock(changed)
+
+    def test_security_input_patch_allows_only_pinned_trust_bundle_and_go_tag(self):
+        for path, old, new in [
+            ("apps/api/requirements.lock", SECURITY_LOCK_OLD, SECURITY_LOCK_NEW),
+            ("apps/api/requirements-dev.lock", SECURITY_LOCK_OLD, SECURITY_LOCK_NEW),
+            ("apps/price-feed-pull/Dockerfile", GO_BASE_OLD, GO_BASE_NEW),
+            ("apps/admin-web/Dockerfile", NGINX_BASE_OLD, NGINX_BASE_NEW),
+        ]:
+            self.assertEqual(reviewed_runtime_input(path, b"prefix\n" + old + b"\nsuffix"),
+                             b"prefix\n" + new + b"\nsuffix")
+            for invalid in (b"unreviewed", old + old, new):
+                with self.subTest(path=path), self.assertRaises(AssertionError):
+                    reviewed_runtime_input(path, invalid)
+        self.assertEqual(reviewed_runtime_input("apps/api/Dockerfile", b"keep"), b"keep")
+
     def test_nginx_probe_adds_only_chown_with_network_readonly_and_other_caps_dropped(self):
         common = ["docker", "run", "--rm", "--pull=never", "--network", "none", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges", "--label", "org.nerkhbaan.owner=fixture"]
         command = nginx_probe_command(common, "sha256:" + "a" * 64)
@@ -483,8 +636,12 @@ class OfflineContracts(unittest.TestCase):
             previous = {}
             for _, recipe, _ in RECIPES:
                 previous[recipe] = b"original recipe"
-            for path in ["apps/api/requirements.lock", "apps/price-feed-pull/go.mod", ".npmrc", "scripts/install-dependencies.sh"]:
+            for path in ["apps/api/requirements.lock", "apps/api/requirements-dev.lock", "apps/price-feed-pull/go.mod", ".npmrc", "scripts/install-dependencies.sh", "nginx/Dockerfile", "infra/relay/Dockerfile"]:
                 previous[path] = b"locked original input"
+            for recipe in ["apps/web/Dockerfile", "apps/admin-web/Dockerfile", "nginx/Dockerfile", "infra/relay/Dockerfile"]:
+                previous[recipe] = b"FROM " + NGINX_BASE_OLD + b" AS runtime\n"
+            previous["apps/price-feed-pull/Dockerfile"] = b"FROM " + GO_BASE_OLD + b" AS builder\n"
+            previous["apps/api/requirements.lock"] = previous["apps/api/requirements-dev.lock"] = SECURITY_LOCK_OLD + b"\n"
             manifests = ["package.json", "apps/web/package.json", "apps/admin-web/package.json", "apps/desktop/package.json", "packages/ui/package.json"]
             for path in manifests:
                 previous[path] = json.dumps({"version": "2.8.8", "scripts": {"build": "original"}}).encode()
@@ -493,7 +650,7 @@ class OfflineContracts(unittest.TestCase):
             for path, raw in previous.items():
                 target = source / path
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(raw.replace(b"2.8.8", VERSION.encode()) if path.endswith("package.json") or path == "package-lock.json" else raw)
+                target.write_bytes(raw.replace(b"2.8.8", VERSION.encode()) if path.endswith("package.json") or path == "package-lock.json" else reviewed_runtime_input(path, raw))
             state = {"dirty": False, "foreign": False, "head": APPLICATION_COMMIT}
 
             def read(checkout, *args):
@@ -559,7 +716,7 @@ class OfflineContracts(unittest.TestCase):
                     rows = [
                         {"Target": args[-1] + " (alpine 3.24.2)", "Class": "os-pkgs", "Type": "alpine", "Packages": [] if missing_packages else [{"Name": "alpine-baselayout", "Version": "3.7.1-r0"}], "Vulnerabilities": findings},
                         {"Target": "Python", "Class": "lang-pkgs", "Type": "python-pkg", "Packages": [{"Name": "pip", "Version": "25.2"}]},
-                        {"Target": "usr/local/bin/price-feed-pull", "Class": "lang-pkgs", "Type": "gobinary", "Packages": [{"Name": "stdlib", "Version": "v1.26.9"}]},
+                        {"Target": "usr/local/bin/price-feed-pull", "Class": "lang-pkgs", "Type": "gobinary", "Packages": [{"Name": "stdlib", "Version": "v1.26.10"}]},
                     ]
                     report.write_text(json.dumps({"SchemaVersion": 2, "Metadata": {"ImageID": "foreign" if wrong_image else args[-1], "OS": {"Family": "alpine", "Name": "3.24.2"}}, "Results": [] if empty else rows}))
                     return subprocess.CompletedProcess(args, returncode, b"", b"")
