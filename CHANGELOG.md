@@ -13,6 +13,7 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 - Add an explicit fail-closed nine-to-ten migration plan with isolated restore, exact schema/data preservation and old/new image compatibility evidence. Existing recovery plans cannot authorize this transition.
 - Document SMS/PBX setup inside the console and in the Persian administrator guide. Email alarms are outside the current scope; authentication mail remains supported. Final source, hosted runtime and target receipts must identify this exact release.
 - Replace the vulnerable certifi trust bundle with hash-verified 2026.10.23 and build/test the feed with Go 1.26.10, which includes the crypto/x509 security correction. Preserve failed candidate CI 39594722700; do not suppress its findings or reuse its images.
+- Update the four Nginx recipes to 1.30.6 and Vite to the compatible 6.4.4 security patch. Keep failed CI 40023578757 as failed evidence; all security scans remain mandatory and include unfixed HIGH/CRITICAL findings. Protected ingress services require their own scoped rollout and are not recreated by the application wrapper.
 
 ## [2.8.12] - 2026-10-19
 

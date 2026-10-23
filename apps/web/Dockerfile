@@ -34,7 +34,7 @@ ENV VITE_VAPID_PUBLIC_KEY=$VITE_VAPID_PUBLIC_KEY
 
 RUN npm run build --workspace=nerkhbaan-web
 
-FROM nginx:1.30.4-alpine3.24 AS runtime
+FROM nginx:1.30.6-alpine3.24 AS runtime
 
 RUN apk upgrade --no-cache
 

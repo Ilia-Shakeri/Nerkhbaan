@@ -22,6 +22,15 @@ the replacement is 2026.10.23 with both distribution hashes checked against PyPI
 Go 1.26.9 was affected by CVE-2026-111943; the feed recipe and test use the
 [Go 1.26.10 security release](https://go.dev/doc/devel/release#go1.26.10).
 The corrected source needs a new complete CI and runtime scan before deployment.
+
+The next [candidate CI 40023578757](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/40023578757)
+passed Python audit, API/feed scans and real database checks, then found newer
+Nginx and Vite advisories. The correction pins Nginx 1.30.6 in all four recipes
+and Vite 6.4.4 in all workspaces and the lock. See
+[upstream Nginx advisories](https://nginx.org/en/security_advisories.html) and
+[Vite 6.4.4](https://github.com/vitejs/vite/releases/tag/v6.4.4).
+No scanner exception was added. Existing protected ingress/relay services are
+outside the application replacement set; do not recreate them to pass this gate.
 Do not change a pending marker to passed without a saved successful run for the final source snapshot.
 
 | Gate | Command or proof | Expected marker | Proof scope |

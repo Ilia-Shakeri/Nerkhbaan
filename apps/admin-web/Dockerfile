@@ -39,7 +39,7 @@ ARG VITE_ADMIN_BASE_PATH="/"
 ENV VITE_ADMIN_BASE_PATH=$VITE_ADMIN_BASE_PATH
 RUN npm run build --workspace=nerkhbaan-admin-web
 
-FROM nginx:1.30.4-alpine3.24 AS runtime
+FROM nginx:1.30.6-alpine3.24 AS runtime
 
 RUN apk upgrade --no-cache
 
