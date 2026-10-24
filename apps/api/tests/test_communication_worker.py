@@ -386,7 +386,41 @@ def _owned_postgres_url(value):
     return url
 
 
+def _communication_fixture_metadata(schema):
+    # Automatic column labels include the long run-owned schema. PostgreSQL's
+    # 63-byte limit then reduces names to a short digest that can collide.
+    # Table/column names are already unique inside each isolated schema.
+    metadata = MetaData(naming_convention={"ix": "ix_%(table_name)s_%(column_0_name)s"})
+    for model in (User, Alert, AlertTriggerEvent, AlertDeliveryJob, CommunicationRecipient,
+                  CommunicationEvent, OperationalSetting, AdminSecret, AdminAuditLog):
+        model.__table__.to_metadata(metadata, schema=schema)
+    return metadata
+
+
 class CommunicationDatabaseGuardTests(unittest.TestCase):
+    def test_long_owned_schema_keeps_all_postgres_index_names_distinct(self):
+        from sqlalchemy.dialects import postgresql
+        dialect = postgresql.dialect()
+        schemas = ("communication_worker_0d08380c56634278a74c422e643dec7c",
+                   "communication_worker_" + "f" * 32,
+                   "communication_worker_" + "0" * 32)
+        for schema in schemas:
+            with self.subTest(schema=schema):
+                metadata = _communication_fixture_metadata(schema)
+                names = [dialect.identifier_preparer.format_index(index)
+                         for table in metadata.tables.values() for index in table.indexes]
+                self.assertGreater(len(names), 20)
+                self.assertEqual(len(names), len(set(names)))
+                self.assertTrue(all(len(name.encode("utf-8")) <= 63 for name in names))
+                self.assertTrue(all(table.schema == schema for table in metadata.tables.values()))
+
+    def test_fixture_naming_does_not_change_application_metadata(self):
+        models = (User, AlertDeliveryJob, AdminAuditLog)
+        before = [(model.__table__.schema, sorted(str(index.name) for index in model.__table__.indexes)) for model in models]
+        _communication_fixture_metadata("communication_worker_" + "a" * 32)
+        after = [(model.__table__.schema, sorted(str(index.name) for index in model.__table__.indexes)) for model in models]
+        self.assertEqual(after, before)
+
     def test_ci_port_and_database_name_are_allowed_without_shared_data_access(self):
         url = _owned_postgres_url("postgresql+psycopg://owned@127.0.0.1:5433/nerkhbaan_history_ci")
         self.assertEqual(url.port, 5433)
@@ -415,9 +449,7 @@ class CommunicationConcurrencyPostgresTests(unittest.TestCase):
         cls.quoted = cls.admin.dialect.identifier_preparer.quote(cls.schema)
         with cls.admin.begin() as connection: connection.execute(text("CREATE SCHEMA " + cls.quoted))
         try:
-            metadata = MetaData()
-            for model in (User, Alert, AlertTriggerEvent, AlertDeliveryJob, CommunicationRecipient, CommunicationEvent, OperationalSetting, AdminSecret, AdminAuditLog):
-                model.__table__.to_metadata(metadata, schema=cls.schema)
+            metadata = _communication_fixture_metadata(cls.schema)
             metadata.create_all(cls.admin)
             cls.engine = create_engine(url, connect_args={"connect_timeout": 5, "application_name": cls.schema,
                 "options": "-csearch_path=" + cls.schema + " -clock_timeout=5000 -cstatement_timeout=15000"})
