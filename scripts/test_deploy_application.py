@@ -943,7 +943,8 @@ import urllib.request
 os.environ['PATH'] = os.environ['FAKE_DEPLOY_BIN'] + os.pathsep + os.environ['PATH']
 state = json.loads(Path(os.environ['FAKE_DEPLOY_STATE']).read_text())
 if not state.get('external_clis'):
-    import contextlib, importlib.util, io, subprocess
+    import contextlib, importlib.util, io, subprocess, threading
+    fixture_cli_lock = threading.RLock()
     spec = importlib.util.spec_from_file_location('owned_deploy_fixture', os.environ['FAKE_DEPLOY_FIXTURE'])
     fixture_module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(fixture_module)
@@ -952,7 +953,7 @@ if not state.get('external_clis'):
         kind = Path(args[0]).stem
         if kind not in {'docker', 'git'}: return external_run(args, **kwargs)
         output = io.StringIO()
-        with contextlib.redirect_stdout(output): code = fixture_module.fake_cli(kind, args[1:], kwargs.get('input'))
+        with fixture_cli_lock, contextlib.redirect_stdout(output): code = fixture_module.fake_cli(kind, args[1:], kwargs.get('input'))
         return subprocess.CompletedProcess(args, code, output.getvalue(), '')
     subprocess.run = fixture_run
 class Response:

@@ -13,6 +13,33 @@ Do not reuse a JWT/MFA key, silently rotate an existing key, or mark real
 SMS/call delivery as passed without receiver/PBX evidence. Follow the
 [Persian connection guide](admin-guide.md#راهنمای-اتصال-پیامک-و-تماس).
 
+## Communications cutover recovery — 2.8.13
+
+The October 24 attempt applied the pinned tenth migration, added one healthy
+candidate and stopped one old API. It then exhausted its shared 30-second
+retirement budget during the second pair probe. The failed receipt stays false;
+never rerun the ordinary transition or the migrator against that state.
+
+Only `communications-resume-after-stopped-old-v1` may select this exact state.
+It binds the original attempt, failure log, dispatch/job, source guard copy,
+preflight/stage, environment backup, restore proof and transcript. Current 23
+identities may differ from the original 22 only by one recorded candidate and
+the recorded old API's running bit. All 17 protected identities, baseline
+checksums, candidate configuration and strict running old/new readiness stay
+required. All fifteen hosted jobs must pass on the exact clean guard commit;
+packaged application inputs must remain unchanged. The fresh target observation
+expires after fifteen minutes.
+
+Select the original application `RELEASE_DIR`, runtime environment, override,
+image manifest, operator evidence and `DEPLOY_MIGRATION_PLAN`, plus the separately
+reviewed `DEPLOY_RESUME_PLAN`. Invoke `scripts/deploy-nerkhbaan-prod.sh` from the
+clean recovery guard checkout. It executes that checkout's guard. Recovery
+rechecks/removes only the already stopped old API, then replaces the remaining
+old API with healthy overlap. It does not rerun migrations. Strict communications
+pair probes run concurrently inside the unchanged shared 30-second budget;
+legacy reference transitions keep their original behavior. Identity, source,
+secret binding, ledger, TLS and deadline failures still stop the operation.
+
 ## Current application acceptance — 2.8.12
 
 Application 2.8.12 is the immutable source `fe8949aeb4c6e1c86e386ba2827ed64785fd6ebe` and tag `v2.8.12`. [Source CI 39217110287](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217110287) passed all fifteen jobs. [Hosted runtime 39217586742](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217586742), workflow source `5ecac56cdf63ce2222d0c58ea2fc1441f4328f66`, passed all four builds, source checks and strict image scans. HIGH/CRITICAL findings are zero, including unfixed findings. Notification code is included in these images.

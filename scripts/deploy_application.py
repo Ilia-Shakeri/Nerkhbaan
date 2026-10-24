@@ -218,6 +218,7 @@ def validate_communications_schema(before: dict, after: dict) -> dict:
         ):
             raise DeployStopped("Communications alert columns differ from the reviewed safe defaults")
     return before["data_columns"]
+COMMUNICATIONS_RESUME_KIND = "communications-resume-after-stopped-old-v1"
 RESUME_KIND = "iranian-reference-resume-after-first-candidate-v1"
 RESUME_FILES = {
     "failed_attempt", "failed_proof", "failed_log", "migration_plan", "image_manifest",
@@ -615,6 +616,13 @@ class ApplicationDeploy:
         raise DeployStopped(f"Target HTTPS readiness failed; stage=retirement type={safe_type} operation=public_probe "
                             f"command=none elapsed={elapsed:.3f}s")
 
+    def strict_pair_healthy(self, items: list[dict]) -> bool:
+        if getattr(self, "normal_resume_plan", None) or (
+            self.plan and self.plan.get("kind") == COMMUNICATIONS_PLAN_KIND
+        ):
+            return self.normal_pair_healthy(items)
+        return all(self.backend_healthy(item) for item in items)
+
     def normal_pair_healthy(self, items: list[dict]) -> bool:
         executor = ThreadPoolExecutor(max_workers=2)
         futures = []
@@ -636,9 +644,7 @@ class ApplicationDeploy:
         expected_new = self.retirement_new_count if self.retirement_new_count is not None else 1
         if len(running) != self.replicas:
             raise DeployStopped("Remaining backend pair changed during retirement readiness wait")
-        pair_healthy = self.normal_pair_healthy(running) if getattr(self, "normal_resume_plan", None) else all(
-            self.backend_healthy(item) for item in running
-        )
+        pair_healthy = self.strict_pair_healthy(running)
         if not pair_healthy or (
             any(network_identity(item) != self.service_networks["backend"] for item in running) or
             sum(self.desired_backend(item) for item in running) < expected_new
@@ -979,6 +985,10 @@ class ApplicationDeploy:
     def load_resume_plan(self, current: list[dict]) -> None:
         raw = private_bytes(self.resume_path)
         plan = json.loads(raw)
+        if isinstance(plan, dict) and plan.get("kind") == COMMUNICATIONS_RESUME_KIND:
+            from deploy_communications_recovery import load_recovery
+            load_recovery(self, current, plan, raw)
+            return
         binding_keys = {"application_commit", "guard_commit", "application_version", "project",
                         "readiness_url", "images", "baseline_backends", "added_backend", "target_migrations"}
         if not isinstance(plan, dict) or set(plan) != binding_keys | {"schema_version", "kind", "files"} or (
@@ -1222,13 +1232,14 @@ class ApplicationDeploy:
         target = COMMUNICATIONS_BASELINE | {COMMUNICATIONS_MIGRATION: COMMUNICATIONS_CHECKSUM}
         if set(plan) != keys or type(plan.get("schema_version")) is not int or plan["schema_version"] != 1 or (
             plan.get("kind") != COMMUNICATIONS_PLAN_KIND or plan.get("application_version") != "2.8.13" or
-            (self.root / "VERSION").read_text().strip() != "2.8.13" or self.resume_path is not None or
-            self.resume_plan is not None or self.normal_resume_path is not None
+            (self.root / "VERSION").read_text().strip() != "2.8.13" or
+            ((self.resume_path is not None or self.resume_plan is not None) and not self.communications_recovery()) or
+            self.normal_resume_path is not None
         ):
             raise DeployStopped("Communications migration requires its own reviewed 2.8.13 plan without resume")
         if plan.get("baseline_migrations") != COMMUNICATIONS_BASELINE or expected != target or (
             plan.get("target_migrations") != target or current.get("expected") != COMMUNICATIONS_BASELINE or
-            current.get("applied") != COMMUNICATIONS_BASELINE
+            current.get("applied") != (target if self.communications_recovery() else COMMUNICATIONS_BASELINE)
         ):
             raise DeployStopped("Communications transition must preserve every pinned checksum in the exact nine-to-ten ledger")
         binding = {key: plan[key] for key in keys - {"schema_version", "kind", "evidence"}}
@@ -1314,6 +1325,9 @@ class ApplicationDeploy:
         self.read_bound_file(proof["transcript"])
         self.check_plan_files()
 
+    def communications_recovery(self) -> bool:
+        return isinstance(self.resume_plan, dict) and self.resume_plan.get("kind") == COMMUNICATIONS_RESUME_KIND
+
     def desired_backend(self, item: dict) -> bool:
         return item["Image"] == self.images["backend"][1] and (
             item["Config"]["Labels"].get("com.docker.compose.config-hash") == self.backend_hash
@@ -1384,8 +1398,12 @@ class ApplicationDeploy:
             len(backends) != self.replicas or any(not healthy(item, require_probe=True) for item in backends)
         ):
             raise DeployStopped("Backend baseline must match healthy requested replica count")
-        if self.resume_path is not None and (len(backends) != 3 or any(not item["State"].get("Running") for item in backends)):
-            raise DeployStopped("Explicit resume requires two running old APIs and one running recorded candidate")
+        if self.resume_path is not None and len(backends) != 3:
+            raise DeployStopped("Explicit resume requires the exact two old APIs and one recorded candidate")
+        if self.resume_path is not None and any(not item["State"].get("Running") for item in backends):
+            selected_resume = json.loads(private_bytes(self.resume_path))
+            if not isinstance(selected_resume, dict) or selected_resume.get("kind") != COMMUNICATIONS_RESUME_KIND:
+                raise DeployStopped("Legacy explicit resume requires three running recorded APIs")
         self.baseline_backends = {item["Id"]: item for item in backends}
         self.service_hashes = {}
         for name in ("backend", *self.targets):
@@ -1440,8 +1458,12 @@ class ApplicationDeploy:
             if set(self.protected) != expected_protected or self.plan is None:
                 raise DeployStopped("Resume protected set differs from the original failed attempt")
             self.migrated = True
-            self.validate_resume_probes()
-            self.backend_health(self.replicas + 1, 1)
+            if self.communications_recovery():
+                from deploy_communications_recovery import validate_running_pair
+                validate_running_pair(self)
+            else:
+                self.validate_resume_probes()
+                self.backend_health(self.replicas + 1, 1)
             return list(self.baseline_backends.values())
         if self.plan:
             self.backend_health(self.replicas, 0)
@@ -1539,7 +1561,12 @@ class ApplicationDeploy:
         pending = [item for item in old if not self.desired_backend(item) and not (
             self.normal_resume_plan and item["Id"] == self.normal_resume_plan["stopped_backend"]["id"]
         )]
-        if self.resume_plan:
+        if self.communications_recovery():
+            new_count = 1
+            self.finish_stopped_normal_retirement()
+            pending = [item for item in pending if item["Id"] != self.normal_stopped["Id"]]
+            print("Reviewed communications stopped-old retirement complete; migration not rerun.", flush=True)
+        elif self.resume_plan:
             new_count = 1
             self.backend_health(self.replicas + 1, new_count)
             print("Reviewed existing candidate ready; retaining the already applied pinned ledger without a migration run.", flush=True)
@@ -1597,9 +1624,7 @@ class ApplicationDeploy:
                     running = [item for item in self.backends() if item["State"].get("Running")]
                     if len(running) != self.replicas:
                         raise DeployStopped("Remaining backend health failed; no container removal")
-                    pair_healthy = self.normal_pair_healthy(running) if getattr(self, "normal_resume_plan", None) else all(
-                        self.backend_healthy(item) for item in running
-                    )
+                    pair_healthy = self.strict_pair_healthy(running)
                     if not pair_healthy:
                         raise DeployStopped("Remaining backend health failed; no container removal")
                 with self.retirement_step("protected_before_public"):
@@ -1666,4 +1691,5 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    sys.modules.setdefault("deploy_application", sys.modules[__name__])
     raise SystemExit(main())
