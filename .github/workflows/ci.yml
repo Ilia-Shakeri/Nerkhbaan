@@ -82,13 +82,15 @@ jobs:
         run: npm run package:dir --workspace=nerkhbaan-desktop
       - name: Smoke test actual desktop package
         run: npm run test:desktop
+      - name: Test Windows publisher signature policy
+        run: node --test scripts/windows-signature.test.mjs
       - name: Prove unsigned desktop fails publisher signature gate
         shell: pwsh
         run: |
-          $gateOutput = powershell.exe -NoProfile -File scripts/verify-windows-signature.ps1 -ArtifactPath apps/desktop/release/win-unpacked/Nerkhbaan.exe -ExpectedPublisher 'CN=Unsigned CI fixture'
+          $gateOutput = powershell.exe -NoProfile -File scripts/verify-windows-signature.ps1 -ArtifactPath apps/desktop/release/win-unpacked/Nerkhbaan.exe -ExpectedPublisher 'CN=Unsigned CI fixture' -ExpectedVersion (Get-Content VERSION -Raw).Trim()
           $gateExit = $LASTEXITCODE
           $receipt = ($gateOutput -join "`n") | ConvertFrom-Json
-          if ($gateExit -ne 1 -or $receipt.accepted -or $receipt.artifacts.Count -ne 1 -or $receipt.artifacts[0].signature_status -ne 'NotSigned') {
+          if ($gateExit -ne 1 -or $receipt.accepted -or $receipt.artifacts.Count -ne 1 -or $receipt.artifacts[0].signature_status -ne 'NotSigned' -or -not $receipt.artifacts[0].version_matches -or -not $receipt.artifacts[0].unchanged_during_verification) {
             throw 'Unsigned desktop must be rejected by the signature gate with a complete receipt.'
           }
           $global:LASTEXITCODE = 0

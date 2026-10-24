@@ -2,16 +2,25 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { _electron } from '@playwright/test';
 
 const root = path.resolve(import.meta.dirname, '..');
 const temporaryRoot = path.resolve(os.tmpdir());
-const profile = await mkdtemp(path.join(temporaryRoot, 'nerkhbaan-desktop-smoke-'));
 const executable = path.resolve(process.env.NERKHBAAN_DESKTOP_EXECUTABLE || path.join(root, 'apps/desktop/release/win-unpacked/Nerkhbaan.exe'));
 const receiptPath = process.env.NERKHBAAN_DESKTOP_SMOKE_RECEIPT;
+const expectedVersion = (await readFile(path.join(root, 'VERSION'), 'utf8')).trim();
+// Reserve evidence before launching so a repeated run cannot replace an earlier result.
+if (receiptPath) {
+  await mkdir(path.dirname(path.resolve(receiptPath)), { recursive: true });
+  await writeFile(receiptPath, JSON.stringify({ schema: 1, passed: false, state: 'started', expected_version: expectedVersion }), { flag: 'wx' });
+}
+const profile = await mkdtemp(path.join(temporaryRoot, 'nerkhbaan-desktop-smoke-'));
 const receipt = { schema: 1, checked_at_utc: new Date().toISOString(), executable, scope: 'Actual packaged Windows runtime with synthetic intercepted authentication and initial network blocked by a loopback discard proxy; no production account or server login', passed: false };
 let application;
 try {
+  const archive = path.join(path.dirname(executable), 'resources', 'app.asar');
+  const archiveHash = createHash('sha256').update(await readFile(archive)).digest('hex');
   application = await _electron.launch({
     executablePath: executable,
     args: [`--user-data-dir=${profile}`, '--proxy-server=http://127.0.0.1:9', '--proxy-bypass-list=<-loopback>'],
@@ -55,6 +64,7 @@ try {
   await page.getByRole('button', { name: /ورود به حساب|Sign In/ }).waitFor({ timeout: 40_000 });
   const runtime = await application.evaluate(({ app }) => ({ packaged: app.isPackaged, profile: app.getPath('userData'), version: app.getVersion() }));
   assert.equal(runtime.packaged, true);
+  assert.equal(runtime.version, expectedVersion, 'Packaged runtime must match the source release');
   assert.equal(path.resolve(runtime.profile), path.resolve(profile));
   assert.match(page.url(), /^nerkhbaan:\/\/app\/index\.html#/);
   assert.equal(await page.evaluate(() => window.isSecureContext), true);
@@ -117,10 +127,12 @@ try {
   assert.equal(nativeAfterLogout.optedIn, false);
   assert.equal(nativeAfterLogout.leaseActive, false);
   assert.ok(nativeAfterLogout.sessionGeneration > nativeBridge.initial.sessionGeneration);
+  assert.equal(createHash('sha256').update(await readFile(archive)).digest('hex'), archiveHash, 'Packaged code must remain unchanged during acceptance');
   const appUrl = new URL(page.url());
   Object.assign(receipt, { packaged: runtime.packaged, version: runtime.version, secure_context: true, local_origin: `${appUrl.protocol}//${appUrl.host}`, asset_http_status: assetStatus, blocked_paths: blocked, synthetic_ui_signin: true, synthetic_ui_signout: true, encrypted_at_rest: true, session_file_removed_on_logout: true, passed: true });
   Object.assign(receipt, { native_bridge_methods: nativeBridge.methods, native_bridge_default_off: true,
-    native_bridge_malformed_requests_denied: true, native_session_revoked_on_logout: true, native_os_send_executed: false });
+    native_bridge_malformed_requests_denied: true, native_session_revoked_on_logout: true, native_os_send_executed: false,
+    expected_version: expectedVersion, packaged_archive_sha256: archiveHash });
   console.log('DESKTOP_SMOKE_OK: packaged protocol, secure context, assets, path guards, isolated encrypted credentials, synthetic sign-in and UI logout');
 } finally {
   await application?.close();

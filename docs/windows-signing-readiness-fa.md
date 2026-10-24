@@ -51,18 +51,22 @@ npm.cmd run package:win:signed --workspace=nerkhbaan-desktop -- --config.win.sig
 بررسی نصب‌کننده و فایل اصلی، پیش از نصب:
 
 ```powershell
+$releaseVersion = (Get-Content VERSION -Raw).Trim()
 $signatureArgs = @{
   ArtifactPath = @(
-    '.\apps\desktop\release\Nerkhbaan Setup 2.8.1.exe',
+    ".\apps\desktop\release\Nerkhbaan Setup $releaseVersion.exe",
     '.\apps\desktop\release\win-unpacked\Nerkhbaan.exe'
   )
   ExpectedPublisher = 'FULL_SUBJECT_FROM_REAL_CERTIFICATE'
   ExpectedSignerThumbprint = 'THUMBPRINT_FROM_REAL_CERTIFICATE'
-  ReceiptPath = 'C:\ReleaseEvidence\windows-signature.json'
+  ExpectedVersion = $releaseVersion
+  ReceiptPath = "C:\ReleaseEvidence\windows-signature-$([DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffffffZ')).json"
 }
 .\scripts\verify-windows-signature.ps1 @signatureArgs
 if ($LASTEXITCODE -ne 0) { throw 'Publisher signature gate failed.' }
 ```
+
+برای هر تلاش، `ReceiptPath` تازه بدهید؛ فایل موجود بازنویسی نشود. نسخهٔ Windows با revision صفر، مانند `2.8.13.0`، با انتشار `2.8.13` برابر است؛ revision غیرصفر یا نسخهٔ دیگر رد شود. hash فایل پیش و پسِ سنجش برابر باشد. جدول و رسیدهای۲.۸.۱ بالا تاریخی‌اند. [شاهدِ تازهٔ گام۵](step5-acceptance-2026-10-24.md).
 
 شرط قبولی: `accepted=true` برای هر دو فایل و کل رسید؛ خروجی صفر. `NotSigned`، ناشر دیگر، گواهی خودساخته، نبود مهر زمان یا خطای trust رد شود. اعتماد در همین میزبان سنجیده می‌شود؛ رفتار همهٔ دستگاه‌ها یا نبود هشدار SmartScreen ثابت نمی‌شود. شناسهٔ گواهی برای تمدید باید با شاهد ناشر تازه شود.
 

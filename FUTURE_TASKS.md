@@ -1,5 +1,11 @@
 # Remaining Acceptance and Optional Work
 
+Current application: **2.8.13**, deployed 2026-10-24. The older entries below retain their dated
+evidence. Email alarms are outside the requested scope; account verification and recovery remain.
+Step five installation/acceptance checks and exact remaining signing/device/provider access are
+tracked in [the current step-five report](docs/step5-acceptance-2026-10-24.md).
+Passing local policy tests does not close signed installation or actual device delivery acceptance.
+
 Code baseline: **2.8.5**. Updated: 2026-10-17. The target checks below remain dated 2.8.1 evidence.
 A task here is external acceptance or optional product work; it is not a substitute for fixing a known code defect.
 
