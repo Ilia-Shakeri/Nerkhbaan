@@ -20,6 +20,7 @@
 
 ## مسیر۲ — Microsoft Store با AppX/MSIX
 
+- [وضع مالک،۲۴اکتبر]: مالک گفت حساب توسعه‌دهنده ندارد. این مسیر هنوز نیاز به ثبت و احراز هویت خود مالک دارد؛ نبود حساب با هویت یا شناسه نمونه پوشانده نشود. راهنمای دقیق در [دسترسی‌های گام۵](step5-access-fa.md) ثبت است.
 - [هزینه و دامنه]: برای بستهٔ AppX/MSIX پذیرفته‌شده در Store، امضا رایگان و در فرایندِ انتشارِ فروشگاه انجام می‌شود. این روش، امضای رایگانِ EXE/NSIS فعلیِ سایت نیست؛ MSI/EXE به امضای ناشرِ خود نیاز دارند. [سند رسمی امضا](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)، [فرایند انتشار](https://learn.microsoft.com/en-us/windows/apps/publish/get-started).
 - [حساب]: مسیر جدیدِ رسمی از [storedeveloper.microsoft.com](https://storedeveloper.microsoft.com) هزینهٔ ثبت ندارد؛ نوع حساب به استفادهٔ واقعیِ فرد/کسب‌وکار بستگی دارد. احراز هویت یا شرکت را خودِ صاحب حساب با اطلاعاتِ واقعی در همان سامانه انجام دهد. امکان پذیرشِ کشور و هویتِ همین مالک در این دور تأیید نشده؛ حساب یا کشورِ دیگر ساخته نشود. [راهنمای ثبت و شرط‌های هویتی](https://learn.microsoft.com/en-us/windows/apps/publish/partner-center/open-a-developer-account).
 - [دسترسی لازم]: حساب Partner Center تأییدشده، نقشِ مجاز برای برنامه و نامِ رزروشده؛ سپس Package/Identity/Name، Package/Identity/Publisher و PublisherDisplayName از بخشِ هویتِ خودِ برنامه. این‌ها metadata عمومی‌اند؛ گذرواژه، کد ورود، مدرک یا تصویر چهره در گفتگو، Git یا رسیدِ تست نیایند. ورود و احراز هویت را صاحب حساب انجام دهد.
