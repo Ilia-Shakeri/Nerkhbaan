@@ -18,8 +18,9 @@ Dependency and brand-asset clearance is still a separate check, not an implied g
 The repository owner, [Ilia-Shakeri](https://github.com/Ilia-Shakeri), is the
 proposed committer, reviewer and release-signing approver. This records a proposed
 service role; it does not alter repository permissions or certify MFA status.
-The owner must confirm MFA on repository access and enroll it on the signing
-account. Every production signing request requires the owner's manual approval
+The owner has reported MFA enabled for repository access and confirmed the
+published contact is reachable. Enrollment on the signing account remains
+unverified. Every production signing request requires the owner's manual approval
 of the exact source revision and artifact. Automated tests do not approve signing.
 
 Changes from other contributors require review by a maintainer. The workflow,
@@ -65,7 +66,8 @@ No test will replace an existing user installation or change system trust stores
 
 ## Current missing evidence
 
-- Owner confirmation of reachable application contact and repository MFA.
+- The owner has confirmed reachable contact and repository MFA; service-side
+  enrollment remains unverified. The application form's human challenge is pending.
 - Cleared bundled dependencies and permission for every brand asset in scope.
 - Service application, acceptance and configured signing/approver roles.
 - Approved hosted artifact and successful signing of all required files.

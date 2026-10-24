@@ -2,6 +2,11 @@
 
 Prepared for the project owner to review. **Not submitted.**
 
+The owner has now confirmed the published contact is reachable, reported
+repository MFA enabled and explicitly authorized sending this prepared request.
+The live form contains reCAPTCHA, so no submission POST was made. A human must
+complete the challenge on the official form; this document is not a submission receipt.
+
 | Field | Prepared value |
 | --- | --- |
 | Project | Nerkhbaan |
@@ -14,7 +19,7 @@ Prepared for the project owner to review. **Not submitted.**
 | Proposed build | Reviewed source on hosted Windows CI; exact revision and artifact receipt required |
 | Policy | https://github.com/Ilia-Shakeri/Nerkhbaan/blob/215d694a76f3c4763d5aa553722a12a031bc9d63/docs/code-signing-policy.md |
 | MIT grant | https://github.com/Ilia-Shakeri/Nerkhbaan/blob/215d694a76f3c4763d5aa553722a12a031bc9d63/LICENSE |
-| Contact | Existing published operator contact; owner must confirm it is still reachable |
+| Contact | Existing published operator contact; owner confirmed it is reachable |
 
 ## Application text
 
@@ -46,6 +51,56 @@ required form field. Complete actual form fields honestly; don't assert cleared
 rights, MFA or accepted signing before they exist. Supply contact details through
 the official form or a private local file, never through versioned source changes.
 
-The public operator notice contains an owner-approved contact address; that is
-not proof the mailbox is currently reachable or enrolled at SignPath. No account
-has been created and no email/application has been sent by preparing this draft.
+The public operator notice contains the owner-approved contact address. Its
+reachability and repository MFA were confirmed by the owner on 2026-10-24;
+SignPath MFA/account enrollment has not been verified. No account has been created
+and no email/application has been sent by preparing this draft.
+
+## Fields observed on the official form — 2026-10-24
+
+The current public form definition is published and contains a `reCaptcha2`
+module, required processing consent and required agreement to the Foundation
+Code of Conduct. Optional general communications are separate; leave that
+optional subscription unchecked. Complete the challenge and consent choices
+only in the official page. Never copy a challenge response or login cookie here.
+
+| Actual field | Prepared entry |
+| --- | --- |
+| Project Name | Nerkhbaan |
+| Repository URL | https://github.com/Ilia-Shakeri/Nerkhbaan |
+| Homepage URL | https://nerkhbaan.ir/ |
+| Download URL | Leave empty: no public installer download was verified; repository Releases API returned no releases |
+| Privacy Policy URL | https://nerkhbaan.ir/privacy |
+| Wikipedia URL | Leave empty; none verified |
+| Tagline | Persian market-price tracking with history and user-defined alerts. |
+| Category | Other |
+| Description | First paragraph under Application text above |
+| Reputation | Use the truthful review request below; no invented usage, press or download figures |
+| Maintainer Type | Individual maintainer(s) |
+| Build System | GitHub Actions |
+| First Name | Ilia |
+| Last Name | Shakeri |
+| Email | Confirmed contact in the existing operator notice; enter only on the official form |
+| Company Name | Leave empty; no company asserted |
+| Primary Discovery Channel | Select the actual source; this investigation used public web search |
+| Exact discovery source | Optional; no tracking or private conversation link needed |
+
+Reputation/review field preparation, preserving the approved request:
+
+No independently verified press coverage, active-user count or download statistics
+are available. Public maintenance evidence includes the source repository,
+tag history and this exact-source 15-job build/test/scan result:
+https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/40086214127
+
+The MIT grant and proposed signing policy are linked in the table above at the
+immutable preparation source. The remaining paragraphs under Application text
+describe the requested preliminary eligibility review and proposed signing scope.
+They disclose that dependency/asset clearance and installer privacy review are
+still being prepared. Please assess eligibility and advise on required changes;
+this request does not claim the project is already widely adopted or approved.
+
+The downloaded public form definition and a local blocked receipt are preserved
+outside Git under `D:\Nerkhbaan-Delivery\step5-20261024\signpath-submit-20261024T104506840581Z\`.
+The receipt records `captcha_present=true`, `submission_attempted=false` and
+`accepted=false`. Do not retry a completed human submission or label this receipt
+as a registered request.
