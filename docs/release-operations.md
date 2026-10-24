@@ -1,9 +1,9 @@
 # Release Operations — 2.8.13
 
-Updated: 2026-10-21. Execute against the intended host only after review of the concrete release.
+Updated: 2026-10-24. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
 
-Candidate 2.8.13 uses the explicit nine-to-ten communications transition below.
+Application 2.8.13 uses the explicit nine-to-ten communications transition below.
 SMS/PBX credentials are entered later through the administrator panel; both
 channels and call policy initially stay disabled. Provision and back up one
 independent `COMMUNICATIONS_ENCRYPTION_KEY` through the protected environment.
@@ -12,6 +12,17 @@ selected new file path/hash and bind both backend/migrate `env_file` to it.
 Do not reuse a JWT/MFA key, silently rotate an existing key, or mark real
 SMS/call delivery as passed without receiver/PBX evidence. Follow the
 [Persian connection guide](admin-guide.md#راهنمای-اتصال-پیامک-و-تماس).
+
+## Current application acceptance — 2.8.13
+
+The actual guarded recovery passed at 07:15:21 UTC on October 24, postdeployment
+at 07:16:09, public home/admin browser at 07:17:31 and atomic release pointer at
+07:18:30. Both APIs use the exact new image and ten-migration ledger. All 22
+containers remain; all 17 protected identities and the original root environment
+are preserved. The chosen environment adds only the separately backed-up
+communications key. Providers and call policy remain off. The original failed
+attempt remains false; no second migration run or gate bypass occurred.
+See [the source/runtime/guard CI and final evidence](admin-release-2.8.13-fa.md).
 
 ## Communications cutover recovery — 2.8.13
 
@@ -40,7 +51,7 @@ pair probes run concurrently inside the unchanged shared 30-second budget;
 legacy reference transitions keep their original behavior. Identity, source,
 secret binding, ledger, TLS and deadline failures still stop the operation.
 
-## Current application acceptance — 2.8.12
+## Historical application acceptance — 2.8.12
 
 Application 2.8.12 is the immutable source `fe8949aeb4c6e1c86e386ba2827ed64785fd6ebe` and tag `v2.8.12`. [Source CI 39217110287](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217110287) passed all fifteen jobs. [Hosted runtime 39217586742](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217586742), workflow source `5ecac56cdf63ce2222d0c58ea2fc1441f4328f66`, passed all four builds, source checks and strict image scans. HIGH/CRITICAL findings are zero, including unfixed findings. Notification code is included in these images.
 

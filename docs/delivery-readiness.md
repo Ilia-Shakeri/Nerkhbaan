@@ -1,10 +1,14 @@
 # Delivery Readiness — 2.8.13
 
-Updated: 2026-10-24. Candidate 2.8.13 adds administrator SMS and VoIP connections.
-Its acceptance requires its own exact-source CI, four immutable runtime images,
-strict scans, isolated restored-data migration proof and guarded target rollout.
-Installed 2.8.12 was observed read-only at 11:17 UTC. Earlier release receipts
-below remain dated history. Overall product acceptance remains false.
+Updated: 2026-10-24. Application 2.8.13 is installed. Exact source CI, four
+immutable runtime images and strict scans, actual isolated restored-data
+migration, guarded recovery, both API replicas, ten migrations, 17 protected
+identities and public browser/asset checks passed. See the
+[final administrator release record](admin-release-2.8.13-fa.md) for commits,
+CI links, timestamps and preserved failed receipts. Both providers and the call
+policy remain off; real SMS/call receipt needs the operator account and device.
+Overall product acceptance remains false for the explicitly separate gates below.
+Earlier 2.8.12/2.8.11 observations remain dated history.
 
 SMS and call adapters, policy, consent, credentials, pagination and test controls
 have local unit, PostgreSQL and browser coverage. See the
@@ -21,7 +25,7 @@ failure. Certifi 2026.7.22 was affected by
 the replacement is 2026.10.23 with both distribution hashes checked against PyPI.
 Go 1.26.9 was affected by CVE-2026-111943; the feed recipe and test use the
 [Go 1.26.10 security release](https://go.dev/doc/devel/release#go1.26.10).
-The corrected source needs a new complete CI and runtime scan before deployment.
+The exact final source and immutable runtime scans subsequently passed in the linked final release record.
 
 The next [candidate CI 40023578757](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/40023578757)
 passed Python audit, API/feed scans and real database checks, then found newer
@@ -35,7 +39,7 @@ Do not change a pending marker to passed without a saved successful run for the 
 
 | Gate | Command or proof | Expected marker | Proof scope |
 | --- | --- | --- | --- |
-| Release consistency | `npm run check:release` | candidate 2.8.13, no drift | Local |
+| Release consistency | `npm run check:release` | release 2.8.13, no drift | Local |
 | Python static/unit | `python -m pyflakes app tests scripts`; `python -m unittest discover -s tests -v` from apps/api | zero static errors; all required tests pass | Local |
 | Infra fixture behavior | `python scripts/test_infra_contracts.py` | OK | Local, mocked network/data |
 | Browser fixture safety | `TEST_DATABASE_URL=... python scripts/test_browser_fixture.py` | five cases pass, none skipped | Explicit loopback test PostgreSQL, run-owned schema |

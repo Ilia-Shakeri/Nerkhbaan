@@ -6,6 +6,8 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [2.8.13] - 2026-10-24
 
+- Deployed the exact tagged application with ten migrations and 17 protected identities retained. Guard-only recovery binds the original failed retirement receipts and uses concurrent strict pair probes inside the unchanged 30-second deadline; migrations are not rerun. See [the final administrator release record](docs/admin-release-2.8.13-fa.md).
+
 - Add administrator-managed Kavenegar SMS and Asterisk ARI connections with a separate encryption key, write-only credentials, independent configuration versions, permission checks, CSRF, recent re-authentication and typed confirmations.
 - Add critical-call policy, quiet hours, cooldowns, daily caps, consented test recipients, dry-run previews and paged masked history. Real sending remains disabled until a configured provider and an explicit test confirmation exist. Provider acceptance is not device receipt or an answered call.
 - Connect SMS phone verification and critical VoIP alerts to the durable worker. Recheck consent, current settings, source rights, fresh prices and persistent conditions at dispatch. Paid unknown outcomes are not retried automatically. Complete mixed paid/nonpaid alert aggregates in either completion order.

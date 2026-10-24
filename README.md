@@ -1,6 +1,7 @@
 # Nerkhbaan
 
-Current code candidate: **2.8.13**. `VERSION` is the source of release truth.
+Current deployed application: **2.8.13**, verified 2026-10-24. `VERSION` is the source of release truth.
+See the [administrator release evidence and remaining account/device gates](docs/admin-release-2.8.13-fa.md).
 
 The administrator console now connects Kavenegar SMS and Asterisk ARI calls,
 with encrypted credentials, permission checks, critical-call rules, consented
