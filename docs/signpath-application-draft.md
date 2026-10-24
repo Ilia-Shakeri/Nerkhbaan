@@ -6,12 +6,14 @@ Prepared for the project owner to review. **Not submitted.**
 | --- | --- |
 | Project | Nerkhbaan |
 | Repository | https://github.com/Ilia-Shakeri/Nerkhbaan |
+| Reviewed preparation source | https://github.com/Ilia-Shakeri/Nerkhbaan/tree/215d694a76f3c4763d5aa553722a12a031bc9d63 |
 | Website | https://nerkhbaan.ir/ |
 | Maintainer account | Ilia-Shakeri |
 | Source license | MIT for owner-controlled original code; third-party terms preserved |
 | Proposed platforms | Windows x64; Electron application and NSIS installer/uninstaller |
 | Proposed build | Reviewed source on hosted Windows CI; exact revision and artifact receipt required |
-| Policy | docs/code-signing-policy.md in the repository |
+| Policy | https://github.com/Ilia-Shakeri/Nerkhbaan/blob/215d694a76f3c4763d5aa553722a12a031bc9d63/docs/code-signing-policy.md |
+| MIT grant | https://github.com/Ilia-Shakeri/Nerkhbaan/blob/215d694a76f3c4763d5aa553722a12a031bc9d63/LICENSE |
 | Contact | Existing published operator contact; owner must confirm it is still reachable |
 
 ## Application text
