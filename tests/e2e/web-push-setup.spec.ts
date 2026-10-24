@@ -6,7 +6,7 @@ async function setup(page: Page, mode: 'unconfigured' | 'denied' | 'ios') {
   await page.addInitScript(mode => {
     localStorage.setItem('language', 'fa');
     sessionStorage.setItem('splash-shown', 'true');
-    if (mode === 'denied') Object.defineProperty(Notification, 'permission', { configurable: true, get: () => 'denied' });
+    Object.defineProperty(Notification, 'permission', { configurable: true, get: () => mode === 'denied' ? 'denied' : 'default' });
     if (mode === 'ios') Object.defineProperty(navigator, 'userAgent', { configurable: true, get: () => 'iPhone' });
   }, mode);
   await page.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
