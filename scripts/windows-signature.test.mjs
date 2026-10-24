@@ -40,6 +40,7 @@ function Get-AuthenticodeSignature {
   }
 }`;
     const script = `${mock}
+$global:LASTEXITCODE = 19
 & ${quote(verifier)} -ArtifactPath ${quote(artifact)} -ExpectedPublisher ${quote(options.publisher ?? 'CN=Policy Fixture')} -ExpectedSignerThumbprint '${options.wrongThumbprint ? 'B'.repeat(40) : thumbprint}' ${options.version ? "-ExpectedVersion '2.8.13'" : ''} -ReceiptPath ${quote(receipt)}
 exit $LASTEXITCODE`;
     const runner = path.join(directory, 'runner.ps1');

@@ -100,6 +100,7 @@ if ($null -ne $receiptStream) {
 }
 Write-Output $json
 if (-not $receipt.accepted) { exit 1 }
+exit 0
 } finally {
     if ($null -ne $receiptStream) { $receiptStream.Dispose() }
 }
