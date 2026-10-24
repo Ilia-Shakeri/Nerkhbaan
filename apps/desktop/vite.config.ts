@@ -3,6 +3,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { desktopLicenses } from '../../scripts/desktop-licenses.mjs'
 
 const appDir = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(appDir, '../..')
@@ -14,7 +15,8 @@ export default defineConfig({
   base: './', 
   plugins: [
     react(),
-    VitePWA({ disable: true })
+    VitePWA({ disable: true }),
+    desktopLicenses(repoRoot)
   ],
   resolve: {
     alias: {

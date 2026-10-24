@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "upstream_repository": "https://github.com/rastikerdar/vazir-font",
+  "upstream_commit": "70af9b63bc7f547a9ce6d0bd4279ae2c10de7b9d",
+  "upstream_tag": "v29.1.0",
+  "license": "OFL-1.1",
+  "files": {
+    "OFL.txt": {
+      "sha256": "0deb92b7b0e3d3eceeb1cffed7789d64edbcff39c611aecca96a9fc3f805835a",
+      "upstream_path": "OFL.txt"
+    },
+    "Vazir-Black.woff": {
+      "sha256": "efa2a7759d24738efbeb8b32899c0fd0769da9c5bb49c3e442857f5e6859e953",
+      "upstream_path": "dist/Vazir-Black.woff"
+    },
+    "Vazir-Black.woff2": {
+      "sha256": "5bd29c0f4971da3540eb53bffa4f691674b2c77b53826bffc189d9b0d3876da0",
+      "upstream_path": "dist/Vazir-Black.woff2"
+    },
+    "Vazir-Bold.woff": {
+      "sha256": "692950737a37add430c358febf3cd70838aa415289188998655aceacbc93626e",
+      "upstream_path": "dist/Vazir-Bold.woff"
+    },
+    "Vazir-Bold.woff2": {
+      "sha256": "bac13b3ceb142d7e45fd7ca48f34b06f07a11b69fc039cca1d1a94a5c29518dd",
+      "upstream_path": "dist/Vazir-Bold.woff2"
+    },
+    "Vazir-Regular.woff": {
+      "sha256": "bab74b4c968b9d81c65b08d34c51f65d251cac0a3a8d9e8d716c9632536b04d3",
+      "upstream_path": "dist/Vazir-Regular.woff"
+    },
+    "Vazir-Regular.woff2": {
+      "sha256": "591c5689805f393a1a3460d601fb5927f37b61e2506f82a341e4dde921dcbd63",
+      "upstream_path": "dist/Vazir-Regular.woff2"
+    }
+  }
+}

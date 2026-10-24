@@ -95,6 +95,9 @@ The [Code signing policy](docs/code-signing-policy.md) describes the proposed
 SignPath route. **Application received; review pending. Signing is not enabled.**
 See the [submission evidence](docs/signpath-submission-2026-10-24.md).
 No unsigned download is represented as a signed release.
+[Desktop pre-sign review](docs/desktop-pre-sign-review-2026-10-24.md) records
+isolated installer tests and bundled notices; [required access](docs/step5-access-fa.md)
+separates signing access from real device and optional provider receipts.
 
 ## Production
 

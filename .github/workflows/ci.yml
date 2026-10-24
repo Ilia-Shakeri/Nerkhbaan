@@ -82,8 +82,28 @@ jobs:
         run: npm run package:dir --workspace=nerkhbaan-desktop
       - name: Smoke test actual desktop package
         run: npm run test:desktop
+      - name: Build unsigned NSIS test candidate
+        run: npm exec --workspace=nerkhbaan-desktop -- electron-builder --win nsis --x64 --publish never --config.forceCodeSigning=false --config.win.signExecutable=false --config.directories.output=release-installer-test --config.nsis.createDesktopShortcut=false --config.nsis.createStartMenuShortcut=false --config.nsis.runAfterFinish=false
+      - name: Test isolated NSIS install and removal
+        shell: pwsh
+        run: |
+          ./scripts/windows-installer-preflight.ps1 -AllowUnsignedTest -InstallerPath "apps/desktop/release-installer-test/Nerkhbaan Setup $((Get-Content VERSION -Raw).Trim()).exe" -UnpackedPath apps/desktop/release-installer-test/win-unpacked -EvidenceDirectory "$env:RUNNER_TEMP/nerkhbaan-installer-evidence"
+      - name: Preserve desktop preflight receipts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-preflight-receipts
+          path: |
+            ${{ runner.temp }}/nerkhbaan-installer-evidence/*.json
+            ${{ runner.temp }}/nerkhbaan-installer-evidence/*.log
+          if-no-files-found: warn
+          retention-days: 14
       - name: Test Windows publisher signature policy
         run: node --test scripts/windows-signature.test.mjs
+      - name: Test desktop dependency notice gates
+        run: node --test scripts/desktop-licenses.test.mjs
+      - name: Test installer preflight guards
+        run: node --test scripts/windows-installer-preflight.test.mjs
       - name: Prove unsigned desktop fails publisher signature gate
         shell: pwsh
         run: |

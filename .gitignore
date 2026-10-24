@@ -20,6 +20,7 @@ node_modules/
 dist/
 apps/desktop/release/
 apps/desktop/release-unsigned/
+apps/desktop/release-installer-test/
 test-results/
 playwright-report/
 build/

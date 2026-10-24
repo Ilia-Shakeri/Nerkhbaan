@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { _electron } from '@playwright/test';
+import { extractFile, listPackage } from '@electron/asar';
+import { collectDesktopLicenses } from './desktop-licenses.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const temporaryRoot = path.resolve(os.tmpdir());
@@ -29,6 +31,33 @@ try {
   receipt.legal_notices_sha256 = legalNotices;
   const archive = path.join(path.dirname(executable), 'resources', 'app.asar');
   const archiveHash = createHash('sha256').update(await readFile(archive)).digest('hex');
+  const archiveFiles = listPackage(archive).map(file => file.replaceAll('\\', '/'));
+  assert.ok(archiveFiles.every(file => !/(^|\/)(?:\.env(?:\.|$)|\.local-keys|\.git|node_modules)(\/|$)/.test(file)), 'Private inputs and unreviewed runtime dependencies must not ship');
+  receipt.private_paths_absent = true;
+  // The archive reader splits nested directories using the host path separator.
+  const bundledFile = file => extractFile(archive, path.normalize(file));
+  const bundledInventory = bundledFile('dist/desktop-dependencies.json');
+  const inventory = JSON.parse(bundledInventory.toString('utf8'));
+  assert.equal(inventory.schema, 1);
+  assert.ok(Array.isArray(inventory.packages) && inventory.packages.length > 0);
+  const rebuiltLicenses = collectDesktopLicenses(inventory.packages.map(pkg => path.join(root, pkg.lock_path, 'package.json')), root);
+  assert.deepEqual(inventory.packages, rebuiltLicenses, 'Packaged dependency notices must match the locked reviewed packages');
+  const expectedNotices = rebuiltLicenses.map(pkg => `${pkg.name}@${pkg.version} (${pkg.license})\n${pkg.files.map(file => `--- ${file.file} ---\n${file.text}`).join('\n')}`).join('\n\n========================================\n\n') + '\n';
+  assert.equal(bundledFile('dist/THIRD-PARTY-NOTICES.txt').toString('utf8'), expectedNotices);
+  for (const file of ['fonts/Vazir/OFL.txt', 'fonts/Vazir/provenance.json', 'fonts/Noto_Nastaliq_Urdu/OFL.txt']) {
+    assert.deepEqual(bundledFile(`dist/${file}`), await readFile(path.join(root, 'apps/web/public', file)), `Packaged font notice must preserve ${file}`);
+  }
+  const fontProvenance = JSON.parse(bundledFile('dist/fonts/Vazir/provenance.json').toString('utf8'));
+  for (const [file, record] of Object.entries(fontProvenance.files)) {
+    assert.equal(createHash('sha256').update(bundledFile(`dist/fonts/Vazir/${file}`)).digest('hex'), record.sha256, 'Bundled font must match pinned upstream');
+  }
+  for (const file of ['LICENSE.electron.txt', 'LICENSES.chromium.html']) {
+    assert.ok((await readFile(path.join(path.dirname(executable), file))).length > 100, 'Runtime licenses must remain in distribution');
+  }
+  receipt.dependency_notice_packages = inventory.packages.length;
+  receipt.dependency_inventory_sha256 = createHash('sha256').update(bundledInventory).digest('hex');
+  receipt.vazir_font_provenance_verified = true;
+  receipt.noto_font_license_preserved = true;
   application = await _electron.launch({
     executablePath: executable,
     args: [`--user-data-dir=${profile}`, '--proxy-server=http://127.0.0.1:9', '--proxy-bypass-list=<-loopback>'],

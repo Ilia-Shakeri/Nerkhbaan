@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "owner_confirmation_date": "2026-10-24",
+  "basis": "Owner states these project logos are their own work and authorizes MIT distribution. This records the statement; it is not a trademark search or independent authorship certification.",
+  "license": "MIT",
+  "files": {
+    "apps/desktop/src/logo/logo.png": "e402e348339011df16d7d9f3316b9c3c0c0d90e0fb3ee2dba684495753b3421b",
+    "apps/desktop/src/logo/main-logo.png": "413b8b085b1a99415acf043d0dd685c2f061ba79b00900b393b249ca4c45cd62",
+    "apps/web/public/icons/icon-192.png": "1949ee2571d6e5935a2071cbb60514c52aaa5c1fe57d7fd246bdd03b76126ffe",
+    "apps/web/public/icons/icon-512.png": "b77e3c73cc9fcb7044d3e92610d24f5846bb44014ffce9c5337ca0ddccc06db2",
+    "apps/web/public/icons/logo.ico": "cac7ddf7861908852d4853b333b9cfe8d4d68a5902c8bdbf512879de09651847",
+    "apps/web/public/icons/logo.png": "e402e348339011df16d7d9f3316b9c3c0c0d90e0fb3ee2dba684495753b3421b",
+    "apps/web/src/logo/logo.png": "e402e348339011df16d7d9f3316b9c3c0c0d90e0fb3ee2dba684495753b3421b",
+    "apps/web/src/logo/main-logo.png": "413b8b085b1a99415acf043d0dd685c2f061ba79b00900b393b249ca4c45cd62"
+  },
+  "excluded": "Third-party cryptocurrency icons, fonts, external content and trademarks retain their own terms."
+}

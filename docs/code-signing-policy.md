@@ -70,7 +70,8 @@ No test will replace an existing user installation or change system trust stores
 
 - The owner has confirmed reachable contact and repository MFA; service-side
   enrollment remains unverified. The owner completed submission; receipt is not approval.
-- Cleared bundled dependencies and permission for every brand asset in scope.
+- Service review of the recorded dependency notices and owner image grant;
+  see [pre-sign technical review](desktop-pre-sign-review-2026-10-24.md).
 - Service acceptance and configured signing/approver roles.
 - Approved hosted artifact and successful signing of all required files.
 - Trusted signed installation and actual native notification/click receipts.
