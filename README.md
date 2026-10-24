@@ -89,6 +89,10 @@ See [admin guide](docs/admin-guide.md) and the generated [route index](docs/api-
 
 ## Code signing policy and source license
 
+Initial customer delivery targets the website and installed web app, including real web-push
+delivery. Windows publisher signing is a separate native-distribution gate, not a prerequisite
+for that web delivery. See the [initial web delivery scope and checks](docs/web-initial-delivery-fa.md).
+
 Owner-controlled original source code is licensed under [MIT](LICENSE); see
 [license scope](docs/license-scope.md) and preserve [third-party notices](NOTICE).
 The [Code signing policy](docs/code-signing-policy.md) describes the proposed

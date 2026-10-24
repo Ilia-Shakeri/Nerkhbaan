@@ -24,7 +24,7 @@
     "check:api": "cd apps/api && python -m compileall app && python -m pyflakes app tests scripts",
     "check:release": "node scripts/check-release-version.mjs",
     "test:api": "cd apps/api && python -m unittest discover -s tests -v",
-    "test:frontend": "node --test scripts/frontend-contracts.test.mjs scripts/client-runtime.test.mjs scripts/app-context-runtime.test.mjs scripts/admin-runtime.test.mjs scripts/desktop-notifications-runtime.test.mjs scripts/desktop-notifications-web.test.mjs",
+    "test:frontend": "node --test scripts/frontend-contracts.test.mjs scripts/client-runtime.test.mjs scripts/app-context-runtime.test.mjs scripts/admin-runtime.test.mjs scripts/desktop-notifications-runtime.test.mjs scripts/desktop-notifications-web.test.mjs scripts/web-push-runtime.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:logout": "playwright test --config scripts/playwright-logout.config.ts",
     "test:desktop": "node scripts/desktop-smoke.mjs",

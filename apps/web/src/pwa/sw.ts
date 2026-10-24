@@ -30,31 +30,41 @@ registerRoute(
 self.addEventListener("push", (event: PushEvent) => {
   let payload: PushPayload = {};
   try {
-    payload = (event.data?.json() ?? {}) as PushPayload;
+    const data: unknown = event.data?.json();
+    if (data && typeof data === 'object' && !Array.isArray(data)) payload = data as PushPayload;
   } catch {
     payload = { body: event.data?.text() };
   }
 
-  const title = payload.title || "Nerkhbaan";
+  const title = typeof payload.title === 'string' && payload.title ? payload.title : "Nerkhbaan";
   const options: NotificationOptions & { renotify?: boolean } = {
-    body: payload.body || "",
+    body: typeof payload.body === 'string' ? payload.body : "",
     // userVisibleOnly subscriptions must show something; keep it silent
     // rather than skipping the notification when the user asked for quiet.
-    silent: Boolean(payload.silent),
-    tag: payload.asset ? `nerkhbaan-${payload.asset}` : "nerkhbaan",
+    silent: payload.silent === true,
+    tag: typeof payload.asset === 'string' && payload.asset ? `nerkhbaan-${payload.asset}` : "nerkhbaan",
     // Replaces an earlier alert for the same asset instead of stacking, and
     // still vibrates. Not yet in the bundled DOM typings.
     renotify: true,
     icon: "/icons/icon-192.png",
     badge: "/icons/icon-192.png",
-    data: { url: payload.url || "/" },
+    data: { url: notificationTarget(payload.url) },
   };
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
+function notificationTarget(value: unknown): string {
+  try {
+    const target = new URL(typeof value === 'string' ? value : '/', self.location.origin);
+    if (target.origin === self.location.origin && !target.username && !target.password &&
+        !/^\/(?:admin|api)(?:\/|$)/i.test(decodeURIComponent(target.pathname))) return target.href;
+  } catch { /* Malformed targets fall back to the public application. */ }
+  return `${self.location.origin}/`;
+}
+
 self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.notification.close();
-  const target = (event.notification.data?.url as string) || "/";
+  const target = notificationTarget(event.notification.data?.url);
   event.waitUntil(
     (async () => {
       const clientList = await self.clients.matchAll({
@@ -62,13 +72,12 @@ self.addEventListener("notificationclick", (event: NotificationEvent) => {
         includeUncontrolled: true,
       });
       for (const client of clientList) {
-        if ("focus" in client) {
-          await client.focus();
-          if ("navigate" in client) {
-            await client.navigate(target);
-          }
-          return;
-        }
+        // Leave the separate admin application and other tabs in place.
+        if (notificationTarget(client.url) !== client.url || !('navigate' in client)) continue;
+        try {
+          const navigated = await client.navigate(target);
+          if (navigated) { await navigated.focus(); return; }
+        } catch { /* Try another client or open a new window. */ }
       }
       await self.clients.openWindow(target);
     })(),

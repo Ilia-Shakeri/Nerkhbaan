@@ -11,6 +11,7 @@ import { api, type NotificationPreferences, type TelegramDeepLink, type UserSess
 import { disablePushNotifications, enablePushNotifications, hasPushSubscription, pushIsConfigured, pushIsSupported } from '@/pwa/push';
 import { toast } from 'sonner';
 import { desktopNotifications } from '../services/desktop-notifications';
+import { pushReadiness, pushReadinessText } from '@/pwa/push-readiness';
 
 type OtpPanel = 'sms' | 'email' | null;
 
@@ -53,6 +54,18 @@ export function SettingsView() {
   const [sessions, setSessions] = useState<UserSession[]>([]);
   const nativeNotice = useSyncExternalStore(desktopNotifications.subscribe, desktopNotifications.snapshot);
   const nativeDesktop = Boolean(window.electronAPI?.notifications);
+  const [pushState, setPushState] = useState(() => pushReadiness(pushIsConfigured(), pushIsSupported()));
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => {
+      setPushState(pushReadiness(pushIsConfigured(), pushIsSupported()));
+      void hasPushSubscription().then(value => { if (active) setPushActive(value); }).catch(() => { if (active) setPushActive(false); });
+    };
+    window.addEventListener('focus', refresh);
+    refresh();
+    return () => { active = false; window.removeEventListener('focus', refresh); };
+  }, [isSaving]);
 
   const t = {
     title: { fa: 'تنظیمات', en: 'Settings' },
@@ -63,7 +76,7 @@ export function SettingsView() {
     darkTheme: { fa: 'حالت تاریک', en: 'Dark Theme' },
     darkThemeSub: { fa: 'تغییر ظاهر برنامه به حالت شب', en: 'Switch to night appearance' },
     languageSet: { fa: 'زبان برنامه', en: 'App Language' },
-    pushApp: { fa: 'اعلان درون‌برنامه‌ای', en: 'In-App Notifications' },
+    pushApp: { fa: nativeDesktop ? 'اعلان درون‌برنامه‌ای' : 'اعلان وب حساب', en: nativeDesktop ? 'In-App Notifications' : 'Account web notifications' },
     nativeNotice: { fa: 'اعلان ویندوز برای این نشست', en: 'Windows notices for this session' },
     nativeHelp: { fa: 'فقط خبر وجود هشدار؛ جزئیات و قیمت در برنامه می‌ماند. برنامه باید باز بماند. پس از خروج یا تغییر دسترسی دوباره روشن کنید.', en: 'Only a generic alert notice; details and prices stay in the app. Keep the app open. Enable again after sign-out or a permission change.' },
     nativeBlocked: { fa: 'اعلان متوقف شد؛ دسترسی و اتصال را بررسی و دوباره روشن کنید.', en: 'Notices stopped. Check access and connection, then enable again.' },
@@ -314,8 +327,11 @@ export function SettingsView() {
         <h2 className={headingCls}><Bell className="text-[#D4AF37]" size={22} />{t.notifications[language]}</h2>
         <Card className={cardCls}>
           <div className={rowCls}>
-            <div className="flex items-center gap-4"><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><Bell size={20} /></div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.pushApp[language]}</span></div>
-            <Switch disabled={isSaving || (!nativeDesktop && (!prefs.push_available || !pushIsConfigured() || !pushIsSupported()))} checked={nativeDesktop ? prefs.push_app : prefs.push_available && prefs.push_app && pushActive} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} aria-label={t.pushApp[language]} />
+            <div className="flex items-center gap-4"><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><Bell size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.pushApp[language]}</span>
+              {!nativeDesktop && <p role="status" className="mt-1 max-w-xl text-xs leading-6 text-slate-500">{pushReadinessText(pushState === 'ready' && !prefs.push_available ? 'unconfigured' : pushState, pushActive && prefs.push_app, language)}</p>}
+              {!nativeDesktop && <p className="mt-1 max-w-xl text-xs leading-6 text-slate-500">{language === 'fa' ? 'اجازه اعلان در هر دستگاه جداست؛ خاموشی این گزینه، اعلان وب حساب را در همه دستگاه‌ها می‌بندد.' : 'Device permission is separate on each device. Turning this off disables account web push on all devices.'}</p>}
+            </div></div>
+            <Switch disabled={isSaving || (!nativeDesktop && (!prefs.push_available || pushState !== 'ready'))} checked={nativeDesktop ? prefs.push_app : prefs.push_available && prefs.push_app && pushActive} onCheckedChange={(value: boolean) => saveBasic('push_app', value)} aria-label={t.pushApp[language]} />
           </div>
           {nativeDesktop && <div className={rowCls}>
             <div className="flex items-center gap-4"><div className={iconWrap('bg-[#D4AF37]/10 text-[#D4AF37]')}><Bell size={20} /></div>
