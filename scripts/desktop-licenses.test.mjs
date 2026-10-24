@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { collectDesktopLicenses, desktopLicenses, desktopCssLicenseModules } from './desktop-licenses.mjs';
+import { collectDesktopLicenses, desktopLicenses, desktopCssLicenseModules, privateDesktopPaths } from './desktop-licenses.mjs';
 
 function fixture(t) {
   const root = mkdtempSync(path.join(os.tmpdir(), 'desktop-license-test-'));
@@ -94,4 +94,9 @@ test('package imports consumed by PostCSS still enter the license inventory', t 
   writeFileSync(path.join(styles, 'theme.css'), '@import "fixture/dist/index.js";');
   assert.deepEqual(desktopCssLicenseModules(f.root), [f.source]);
   assert.equal(collectDesktopLicenses(desktopCssLicenseModules(f.root), f.root)[0].name, 'fixture');
+});
+test('archive policy rejects dotenv variants, private folders and Windows case/path forms', () => {
+  const forbidden = ['/dist/.env', '/dist/.env.production', '/.env.local', '\\dist\\.ENV.PRODUCTION', '/.local-keys/key', '/.git/config', '/node_modules/pkg/index.js'];
+  assert.deepEqual(privateDesktopPaths(forbidden), forbidden);
+  assert.deepEqual(privateDesktopPaths(['/dist/assets/index.js', '/dist/desktop-dependencies.json', '/electron/main.cjs']), []);
 });

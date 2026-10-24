@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { _electron } from '@playwright/test';
 import { extractFile, listPackage } from '@electron/asar';
-import { collectDesktopLicenses } from './desktop-licenses.mjs';
+import { collectDesktopLicenses, privateDesktopPaths } from './desktop-licenses.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const temporaryRoot = path.resolve(os.tmpdir());
@@ -32,7 +32,7 @@ try {
   const archive = path.join(path.dirname(executable), 'resources', 'app.asar');
   const archiveHash = createHash('sha256').update(await readFile(archive)).digest('hex');
   const archiveFiles = listPackage(archive).map(file => file.replaceAll('\\', '/'));
-  assert.ok(archiveFiles.every(file => !/(^|\/)(?:\.env(?:\.|$)|\.local-keys|\.git|node_modules)(\/|$)/.test(file)), 'Private inputs and unreviewed runtime dependencies must not ship');
+  assert.deepEqual(privateDesktopPaths(archiveFiles), [], 'Private inputs and unreviewed runtime dependencies must not ship');
   receipt.private_paths_absent = true;
   // The archive reader splits nested directories using the host path separator.
   const bundledFile = file => extractFile(archive, path.normalize(file));

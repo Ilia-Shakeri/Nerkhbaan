@@ -6,6 +6,10 @@ import { createRequire } from 'node:module';
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const noticeName = /^(licen[sc]e|copying|copyright|notice)([.-]|$)/i;
 
+export function privateDesktopPaths(files) {
+  return files.filter(file => /(^|\/)(?:\.env[^/]*|\.local-keys|\.git|node_modules)(\/|$)/i.test(file.replaceAll('\\', '/')));
+}
+
 function packageNotices(folder, prefix = '') {
   return readdirSync(path.join(folder, prefix), { withFileTypes: true }).flatMap(file => {
     const relative = path.posix.join(prefix, file.name);

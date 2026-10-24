@@ -82,6 +82,8 @@ jobs:
         run: npm run package:dir --workspace=nerkhbaan-desktop
       - name: Smoke test actual desktop package
         run: npm run test:desktop
+      - name: Reject an archive containing private configuration before launch
+        run: node scripts/desktop-package-negative.mjs
       - name: Build unsigned NSIS test candidate
         run: npm exec --workspace=nerkhbaan-desktop -- electron-builder --win nsis --x64 --publish never --config.forceCodeSigning=false --config.win.signExecutable=false --config.directories.output=release-installer-test --config.nsis.createDesktopShortcut=false --config.nsis.createStartMenuShortcut=false --config.nsis.runAfterFinish=false
       - name: Test isolated NSIS install and removal
