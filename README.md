@@ -87,6 +87,14 @@ Production Compose requires MFA enrollment by default; local settings allow an o
 Sensitive writes require the current permission and any confirmation required by the endpoint.
 See [admin guide](docs/admin-guide.md) and the generated [route index](docs/api-route-index.md).
 
+## Code signing policy and source license
+
+Owner-controlled original source code is licensed under [MIT](LICENSE); see
+[license scope](docs/license-scope.md) and preserve [third-party notices](NOTICE).
+The [Code signing policy](docs/code-signing-policy.md) describes the proposed
+SignPath route. **Application preparation only: not submitted, accepted or active.**
+No unsigned download is represented as a signed release.
+
 ## Production
 
 [Release operations](docs/release-operations.md) covers staging, migration, backup, restore, TLS,

@@ -110,7 +110,21 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "deleteAppDataOnUninstall": false
-    }
+    },
+    "extraFiles": [
+      {
+        "from": "../../LICENSE",
+        "to": "LICENSE-Nerkhbaan.txt"
+      },
+      {
+        "from": "../../NOTICE",
+        "to": "NOTICE-Nerkhbaan.txt"
+      },
+      {
+        "from": "../../docs/license-scope.md",
+        "to": "LICENSE-SCOPE.md"
+      }
+    ]
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
@@ -128,5 +142,6 @@
     "vite": "6.4.4",
     "vite-tsconfig-paths": "^6.1.1",
     "wait-on": "^7.2.0"
-  }
+  },
+  "license": "MIT"
 }

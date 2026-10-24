@@ -19,6 +19,14 @@ const profile = await mkdtemp(path.join(temporaryRoot, 'nerkhbaan-desktop-smoke-
 const receipt = { schema: 1, checked_at_utc: new Date().toISOString(), executable, scope: 'Actual packaged Windows runtime with synthetic intercepted authentication and initial network blocked by a loopback discard proxy; no production account or server login', passed: false };
 let application;
 try {
+  const legalNotices = {};
+  for (const [source, bundled] of [['LICENSE', 'LICENSE-Nerkhbaan.txt'], ['NOTICE', 'NOTICE-Nerkhbaan.txt'], ['docs/license-scope.md', 'LICENSE-SCOPE.md']]) {
+    const expected = await readFile(path.join(root, source));
+    const actual = await readFile(path.join(path.dirname(executable), bundled));
+    assert.deepEqual(actual, expected, `Packaged legal notice must preserve ${source}`);
+    legalNotices[bundled] = createHash('sha256').update(actual).digest('hex');
+  }
+  receipt.legal_notices_sha256 = legalNotices;
   const archive = path.join(path.dirname(executable), 'resources', 'app.asar');
   const archiveHash = createHash('sha256').update(await readFile(archive)).digest('hex');
   application = await _electron.launch({

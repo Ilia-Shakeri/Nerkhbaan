@@ -51,5 +51,6 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
-  }
+  },
+  "license": "MIT"
 }

@@ -17,6 +17,7 @@ for (const manifest of [
 ]) {
   const value = JSON.parse(read(manifest)).version;
   assert.equal(value, version, `${manifest} version must match VERSION`);
+  assert.equal(JSON.parse(read(manifest)).license, 'MIT', `${manifest} must declare the owner-authorized source license`);
 }
 
 const lockfile = JSON.parse(read("package-lock.json"));
@@ -33,6 +34,7 @@ for (const workspace of [
     version,
     `${workspace} lockfile version must match VERSION`,
   );
+  assert.equal(lockfile.packages[workspace]?.license, 'MIT', `${workspace} lockfile license must match its manifest`);
   const manifest = JSON.parse(read(`${workspace}/package.json`));
   for (const field of ['dependencies', 'devDependencies']) {
     assert.deepEqual(lockfile.packages[workspace]?.[field] ?? {}, manifest[field] ?? {}, `${workspace} ${field} must match its lock entry`);
@@ -40,6 +42,7 @@ for (const workspace of [
 }
 
 const rootManifest = JSON.parse(read('package.json'));
+assert.equal(lockfile.packages[''].license, rootManifest.license, 'Root lock license must match its manifest');
 assert.deepEqual(lockfile.packages[''].devDependencies, rootManifest.devDependencies, 'Root development dependencies must match the lock');
 assert.equal(JSON.parse(read('docs/api-contracts.json')).info.version, version, 'Generated API contract must match VERSION');
 assert.equal(
