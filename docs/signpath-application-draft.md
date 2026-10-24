@@ -1,11 +1,15 @@
 # SignPath application draft
 
-Prepared for the project owner to review. **Not submitted.**
+Prepared request retained for reference. **Owner submission acknowledged; review pending.**
+
+See [current submission evidence](signpath-submission-2026-10-24.md). The exact
+submitted payload was not captured; the text below is the prepared draft.
 
 The owner has now confirmed the published contact is reachable, reported
 repository MFA enabled and explicitly authorized sending this prepared request.
-The live form contains reCAPTCHA, so no submission POST was made. A human must
-complete the challenge on the official form; this document is not a submission receipt.
+The initial automated attempt stopped at reCAPTCHA without a submission POST.
+The owner subsequently completed the official form and supplied its confirmation
+and email acknowledgement. Do not repeat submission; this draft is not its receipt.
 
 | Field | Prepared value |
 | --- | --- |
@@ -53,8 +57,8 @@ the official form or a private local file, never through versioned source change
 
 The public operator notice contains the owner-approved contact address. Its
 reachability and repository MFA were confirmed by the owner on 2026-10-24;
-SignPath MFA/account enrollment has not been verified. No account has been created
-and no email/application has been sent by preparing this draft.
+SignPath MFA/account enrollment has not been verified. Preparing this draft did
+not create an account or send an application; the owner later submitted the form.
 
 ## Fields observed on the official form — 2026-10-24
 

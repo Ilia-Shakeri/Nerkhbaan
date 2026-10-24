@@ -1,7 +1,9 @@
 # Code signing policy
 
-Status: **Preparation for a SignPath Foundation application. Not submitted,
-accepted or enabled. No Nerkhbaan artifact is claimed to be signed by SignPath.**
+Status: **Owner submission acknowledged; service review pending. Acceptance and
+signing access are unverified. No Nerkhbaan artifact is claimed to be signed by SignPath.**
+
+See [submission evidence](signpath-submission-2026-10-24.md).
 
 ## Proposed service
 
@@ -67,9 +69,9 @@ No test will replace an existing user installation or change system trust stores
 ## Current missing evidence
 
 - The owner has confirmed reachable contact and repository MFA; service-side
-  enrollment remains unverified. The application form's human challenge is pending.
+  enrollment remains unverified. The owner completed submission; receipt is not approval.
 - Cleared bundled dependencies and permission for every brand asset in scope.
-- Service application, acceptance and configured signing/approver roles.
+- Service acceptance and configured signing/approver roles.
 - Approved hosted artifact and successful signing of all required files.
 - Trusted signed installation and actual native notification/click receipts.
 
