@@ -1,6 +1,6 @@
 # SignPath application draft
 
-Prepared request retained for reference. **Owner submission acknowledged; review pending.**
+Prepared request retained for reference. **Owner submission acknowledged, then free Foundation application declined.**
 
 See [current submission evidence](signpath-submission-2026-10-24.md). The exact
 submitted payload was not captured; the text below is the prepared draft.

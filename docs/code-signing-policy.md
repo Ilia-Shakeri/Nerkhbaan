@@ -1,7 +1,8 @@
 # Code signing policy
 
-Status: **Owner submission acknowledged; service review pending. Acceptance and
-signing access are unverified. No Nerkhbaan artifact is claimed to be signed by SignPath.**
+Status: **The owner-forwarded Foundation reply declines the free application
+at this time for insufficient public trust/visibility. Signing is not enabled.
+No Nerkhbaan artifact is claimed to be signed by SignPath.**
 
 See [submission evidence](signpath-submission-2026-10-24.md).
 

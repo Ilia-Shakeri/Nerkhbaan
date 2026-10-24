@@ -92,7 +92,7 @@ See [admin guide](docs/admin-guide.md) and the generated [route index](docs/api-
 Owner-controlled original source code is licensed under [MIT](LICENSE); see
 [license scope](docs/license-scope.md) and preserve [third-party notices](NOTICE).
 The [Code signing policy](docs/code-signing-policy.md) describes the proposed
-SignPath route. **Application received; review pending. Signing is not enabled.**
+SignPath route. **Foundation application declined; signing is not enabled.**
 See the [submission evidence](docs/signpath-submission-2026-10-24.md).
 No unsigned download is represented as a signed release.
 [Desktop pre-sign review](docs/desktop-pre-sign-review-2026-10-24.md) records
