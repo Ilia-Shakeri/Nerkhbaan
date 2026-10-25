@@ -177,6 +177,8 @@ jobs:
           python ../../scripts/test_deploy_communications.py
           python ../../scripts/test_deploy_communications_recovery.py
           python ../../scripts/test_notification_delivery_probe.py
+          python -m unittest discover -s ../../scripts -p test_operator_access.py -v
+          python -m pyflakes ../../scripts/operator_access.py ../../scripts/test_operator_access.py
           python -m pyflakes ../../scripts/deploy_application.py ../../scripts/test_deploy_application.py ../../scripts/test_deploy_normal_resume.py
           python -m pyflakes ../../scripts/test_deploy_communications.py ../../scripts/deploy_communications_recovery.py ../../scripts/test_deploy_communications_recovery.py
           python -m pyflakes ../../scripts/notification_delivery_probe.py ../../scripts/test_notification_delivery_probe.py

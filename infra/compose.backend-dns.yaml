@@ -1,0 +1,7 @@
+# Merge into the reviewed runtime override before the guarded rollout.
+# Docker keeps internal service discovery; these resolvers serve external names.
+services:
+  backend:
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
