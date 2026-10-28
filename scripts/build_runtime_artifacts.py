@@ -19,19 +19,24 @@ import urllib.request
 import zipfile
 
 
-APPLICATION_COMMIT = '6ec3b0e8c13f70da8bc5e44844fc1b1840322f5c'
+APPLICATION_COMMIT = '7978e8938d17c4749ba7c43044a5e3e22bcf0ad2'
 BASE_COMMIT = 'fcdac9fc75e974f06162efd9d59dd68cf9257c68'
 NODE_BASE_COMMIT = '9a8947b51cb924e3eaf62553193e104db8361834'
-VERSION = '2.8.18'
-APPLICATION_CI_RUN = 40694766299
+VERSION = '2.8.19'
+APPLICATION_CI_RUN = 40700980670
 REPOSITORY = "Ilia-Shakeri/Nerkhbaan"
-PUBLIC_ASSET = 'https://nerkhbaan.ir/assets/index-cdOUMH5g.js'
-PUBLIC_ASSET_SHA256 = 'bfb434fd3632d9eb071ab23a0be60840b4ecab5ccf758a92a4637bd25cffad85'
+PUBLIC_ASSET = 'https://nerkhbaan.ir/assets/index-CzqMuVIX.js'
+PUBLIC_ASSET_SHA256 = '358390775276a66ae0d50e6b1667b99f51d1c4df422298f84c72a061d3568bbc'
 PUBLIC_KEY_SHA256 = "0dc48003fa42c7f39424bb09461a9f872943fcc51a48fff61ae4e48ca417a2eb"
 EXISTING_PUBLIC_KEY = 'BNg6GMpk04N2Oqp_GRI2DsFRrtJA4M_svcEiNEeJiJuAvQU0U_E6ivDd7C8Z6rHpv5yBYMnXca5vC7BU5ye-vos'
-PUBLIC_KEY_OBSERVED_AT = '2026-10-28T12:19:55.778768+00:00'
+PUBLIC_KEY_OBSERVED_AT = '2026-10-28T13:58:29.437955+00:00'
 OPS_PATHS = {".github/workflows/release-runtime-artifacts.yml", "scripts/build_runtime_artifacts.py"}
 PATCH_PATHS = {
+    'apps/api/app/db.py',
+    'apps/api/app/main.py',
+    'apps/api/tests/test_request_pool_isolation.py',
+    'docs/request-pool-release-2.8.19-fa.md',
+
     '.env.example',
     '.github/security-exceptions/POLICY.md',
     '.github/workflows/ci.yml',
