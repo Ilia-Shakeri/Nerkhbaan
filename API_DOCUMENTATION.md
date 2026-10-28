@@ -1,6 +1,6 @@
 # Nerkhbaan API Reference
 
-Code candidate: **2.8.15**. Updated: 2026-10-28. Installed application remains 2.8.13 until a separate guarded rollout succeeds.
+Installed application: **2.8.15**. Updated: 2026-10-28. Both API replicas, the exact ten-migration ledger, native rates and reference responses passed their separate live checks. [Acceptance and backup evidence](docs/pricing-release-2.8.15-fa.md).
 
 Administrator communications use `/api/admin/communications` for independently
 versioned SMS/VoIP connections and call policy, consented test recipients,

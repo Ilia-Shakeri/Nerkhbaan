@@ -6,6 +6,9 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [2.8.15] - 2026-10-28
 
+- Deployed and accepted the exact source with all 15 source jobs, four strict-scanned runtime images, preserved ten-migration ledger, live native/reference rates, account flows and browser asset checks. Preserve the initial failed HTTPS receipt and the separately reviewed successful continuation. [Release and off-VPS backup evidence](docs/pricing-release-2.8.15-fa.md).
+- Revalidate the USD last-change reference within its existing 60-second receipt window and 180-second source-age cap; do not rewrite its source timestamp or renew it from a cache read.
+
 - Separate explicitly scoped same-instrument quality validation from permission to publish derived valuations. Keep source clocks, anomaly thresholds, independent verification, revocation and full derivation gates intact. Reject cross-instrument comparisons under a quality-only grant.
 - Bind quality checks to current source evidence and expiry in the rights manifest, at both calculation and SQL decision storage. Hide calculated diagnostics after revocation; do not grant resale, relay or external processing.
 - Retain the failed 2.8.14 real-source canary: seven routes refreshed, USD did not; native updates were blocked by the broader derivation-only comparison check. No 2.8.14 application deployment occurred.

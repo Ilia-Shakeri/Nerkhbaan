@@ -1,9 +1,9 @@
 # Nerkhbaan
 
-Current deployed application: **2.8.13**, verified 2026-10-24. `VERSION` is the source of release truth.
-Source candidate: **2.8.15**, pricing refresh isolation and the documented USDT book route. Deployment remains pending its own CI, runtime and guarded acceptance; [backup and repair evidence](docs/pricing-repair-2026-10-28.md).
-Pricing quality validation and the bounded USD reference clock: [candidate evidence](docs/source-quality-validation-2026-10-28.md).
-See the [administrator release evidence and remaining account/device gates](docs/admin-release-2.8.13-fa.md).
+Current deployed application: **2.8.15**, verified 2026-10-28. `VERSION` is the source of release truth.
+Pricing refresh, all eight native routes, three separately labelled references, live registration/login/logout, exact browser assets and guarded deployment passed. The original failed attempts remain preserved; [release and backup evidence](docs/pricing-release-2.8.15-fa.md).
+Pricing quality validation and the bounded USD reference clock: [source policy](docs/source-quality-validation-2026-10-28.md).
+The full database backup passed an isolated restore and has two verified copies on this workstation. Actual notification receipt on physical devices remains unproved. See the [historical administrator acceptance and provider gates](docs/admin-release-2.8.13-fa.md).
 
 The administrator console now connects Kavenegar SMS and Asterisk ARI calls,
 with encrypted credentials, permission checks, critical-call rules, consented

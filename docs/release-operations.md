@@ -1,7 +1,9 @@
-# Release Operations — 2.8.13
+# Release Operations — 2.8.15
 
-Updated: 2026-10-24. Execute against the intended host only after review of the concrete release.
+Updated: 2026-10-28. Execute against the intended host only after review of the concrete release.
 This runbook does not certify a deployment; dated target evidence is in [delivery readiness](delivery-readiness.md).
+
+Application 2.8.15 passed same-ledger guarded deployment, both API replicas, all protected identities, live rate/account and exact public asset checks on October 28. The first HTTPS failure remains false; a separately reviewed healthy-pair continuation passed. No stopped-old recovery plan or migration transition was selected. [Current acceptance, preserved failures and verified backup locations](pricing-release-2.8.15-fa.md). The 2.8.13 transition below is historical.
 
 Application 2.8.13 uses the explicit nine-to-ten communications transition below.
 SMS/PBX credentials are entered later through the administrator panel; both

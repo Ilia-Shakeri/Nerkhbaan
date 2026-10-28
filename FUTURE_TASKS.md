@@ -1,9 +1,10 @@
 # Remaining Acceptance and Optional Work
 
-Current application: **2.8.13**, deployed 2026-10-24. The older entries below retain their dated
-evidence. Email alarms are outside the requested scope; account verification and recovery remain.
-Step five installation/acceptance checks and exact remaining signing/device/provider access are
-tracked in [the current step-five report](docs/step5-acceptance-2026-10-24.md).
+Current application: **2.8.15**, deployed and verified 2026-10-28. Pricing refresh, native/reference coverage, live account flows and a restore-tested off-VPS history snapshot passed; [current evidence](docs/pricing-release-2.8.15-fa.md). The two verified backup copies are on one workstation; a scheduled copy to another machine/storage destination remains to be configured. An additional postdeployment download timed out and is explicitly quarantined as a partial file.
+
+Initial delivery is web/PWA. Physical iPhone, Android and desktop receipt/click tests remain unavailable; no actual delivery claim follows from provider TLS or a subscription. SMS requires a funded provider/line; calls require a configured PBX/ARI/trunk; email requires a configured mail service and a consenting real recipient. Keep secrets in the existing private configuration paths, outside chat and Git. The older entries below retain their dated evidence.
+Historical desktop installation/acceptance checks and remaining signing/device/provider access are
+tracked in [the dated October 24 step-five report](docs/step5-acceptance-2026-10-24.md).
 Passing local policy tests does not close signed installation or actual device delivery acceptance.
 
 Code baseline: **2.8.5**. Updated: 2026-10-17. The target checks below remain dated 2.8.1 evidence.

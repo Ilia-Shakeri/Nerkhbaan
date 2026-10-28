@@ -1,9 +1,9 @@
-# Delivery Readiness — 2.8.13
+# Delivery Readiness — 2.8.15
 
-Candidate **2.8.15**, October 28: pricing isolation and source-transport repairs are tested locally; the off-host full database dump passed an isolated Timescale restore. Candidate deployment and source/runtime CI remain pending. Historical acceptance below belongs to 2.8.13. [Dated repair record](pricing-repair-2026-10-28.md).
+Installed **2.8.15**, October 28: source/runtime CI, strict scans, isolated native/reference pricing, guarded rollout, both APIs, 22 containers, 17 protected identities, live web/admin assets, registration/login/logout and production rate samples passed. The full off-VPS database backup passed an isolated Timescale restore and has two verified workstation copies. Real device receipt remains open. [Current release evidence](pricing-release-2.8.15-fa.md).
 
-Pricing quality validation and the bounded USD reference clock: [candidate evidence](source-quality-validation-2026-10-28.md).
-Updated: 2026-10-24. Application 2.8.13 is installed. Exact source CI, four
+Pricing quality validation and the bounded USD reference clock: [source policy](source-quality-validation-2026-10-28.md).
+Historical acceptance, 2026-10-24: application 2.8.13 was installed. Exact source CI, four
 immutable runtime images and strict scans, actual isolated restored-data
 migration, guarded recovery, both API replicas, ten migrations, 17 protected
 identities and public browser/asset checks passed. See the
