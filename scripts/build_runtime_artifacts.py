@@ -19,10 +19,10 @@ import urllib.request
 import zipfile
 
 
-APPLICATION_COMMIT = '3ee9e7881e39baca02554cc403f48a2fd9486e69'
+APPLICATION_COMMIT = '6ec3b0e8c13f70da8bc5e44844fc1b1840322f5c'
 BASE_COMMIT = 'fcdac9fc75e974f06162efd9d59dd68cf9257c68'
 NODE_BASE_COMMIT = '9a8947b51cb924e3eaf62553193e104db8361834'
-VERSION = '2.8.17'
+VERSION = '2.8.18'
 APPLICATION_CI_RUN = 40686330282
 REPOSITORY = "Ilia-Shakeri/Nerkhbaan"
 PUBLIC_ASSET = 'https://nerkhbaan.ir/assets/index-cdOUMH5g.js'
@@ -191,7 +191,7 @@ PATCH_PATHS = {
     'docs/step5-acceptance-2026-10-24.md',
     'docs/step5-access-fa.md',
     'docs/telegram-ingestion-guide-fa.md',
-    'docs/telegram-release-2.8.17-fa.md',
+    'docs/telegram-release-2.8.18-fa.md',
     'docs/time-sync-runbook.md',
     'docs/web-initial-delivery-fa.md',
     'docs/web-push-dns-repair-2026-10-25.md',
