@@ -30,6 +30,30 @@ SOURCE = {
 
 
 class NerkhsanjSnapshotTests(unittest.TestCase):
+    def test_usd_last_change_revalidation_preserves_clock_and_source_age_cap(self):
+        from app.pricing.models import ProviderQuote
+        from app.pricing.providers import ProviderQuoteCollector
+
+        provider = PROVIDERS["nerkhsanj_usd_toman"]
+        instrument = get_instrument("USD_TOMAN")
+        parsed = self.parse()
+        quote = ProviderQuote.create(instrument_id=instrument.instrument_id,
+            provider_id=provider.provider_id, source_type="http", price=parsed.price,
+            currency=parsed.currency, weight_unit=parsed.weight_unit, purity=parsed.purity,
+            observed_at=parsed.observed_at, received_at=NOW, parser_version=provider.parser_version,
+            validation_status="accepted")
+        boundary = ProviderQuoteCollector._freshness_boundaries(quote, provider, instrument)
+        self.assertTrue(provider.anchor_live_window_at_receive_time)
+        self.assertEqual(instrument.operational_ttl_seconds, 60)
+        self.assertEqual(provider.maximum_source_age_seconds, 180)
+        self.assertEqual(quote.observed_at, datetime(2026, 10, 17, 11, 46, tzinfo=UTC))
+        self.assertEqual(boundary.live_eligible_until, NOW + timedelta(seconds=60))
+        quote.received_at = quote.observed_at + timedelta(seconds=179)
+        boundary = ProviderQuoteCollector._freshness_boundaries(quote, provider, instrument)
+        self.assertEqual(boundary.live_eligible_until, quote.observed_at + timedelta(seconds=180))
+        # Another local read cannot renew the stored first-receipt timestamp.
+        self.assertEqual(ProviderQuoteCollector._freshness_boundaries(quote, provider, instrument), boundary)
+
     def parse(self, symbol="dollar", source=None, instrument=None, age=180):
         instrument = instrument or get_instrument(NERKHSANJ_MARKETS[symbol].instrument_id)
         return NerkhsanjSnapshotParser(symbol).parse(

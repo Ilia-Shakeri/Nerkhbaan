@@ -1,7 +1,8 @@
 # Delivery Readiness — 2.8.13
 
-Candidate **2.8.14**, October 28: pricing isolation and source-transport repairs are tested locally; the off-host full database dump passed an isolated Timescale restore. Candidate deployment and source/runtime CI remain pending. Historical acceptance below belongs to 2.8.13. [Dated repair record](pricing-repair-2026-10-28.md).
+Candidate **2.8.15**, October 28: pricing isolation and source-transport repairs are tested locally; the off-host full database dump passed an isolated Timescale restore. Candidate deployment and source/runtime CI remain pending. Historical acceptance below belongs to 2.8.13. [Dated repair record](pricing-repair-2026-10-28.md).
 
+Pricing quality validation and the bounded USD reference clock: [candidate evidence](source-quality-validation-2026-10-28.md).
 Updated: 2026-10-24. Application 2.8.13 is installed. Exact source CI, four
 immutable runtime images and strict scans, actual isolated restored-data
 migration, guarded recovery, both API replicas, ten migrations, 17 protected

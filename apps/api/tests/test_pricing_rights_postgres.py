@@ -218,6 +218,24 @@ class RightsPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
         with self.engine.begin() as connection:
             connection.execute(ProviderQuoteRecord.__table__.insert(), dict(id=identifier, instrument_id="BTC_USD", provider_id=provider, price=100+identifier, observed_at=stamp, received_at=stamp, source_type="http", currency="USD", parser_version="owned/1", validation_status="accepted", confidence_score=1, persistence_status="persisted", idempotency_key=f"owned-provider-{identifier}"))
 
+    def test_native_quality_permission_is_resolved_from_real_rows_without_derivation(self):
+        from app.pricing.persistence import PricingPersistence, InvalidPersistenceEvent
+
+        grant = self.grants["approved"]
+        grant["permissions"].remove("derive")
+        grant["permissions"].append("quality_check")
+        grant["quality_check"] = {"scope": "same_instrument_anomaly_validation",
+            "checked_at": grant["checked_at"], "expires_at": grant["expires_at"],
+            "evidence_ref": grant["evidence_ref"]}
+        self.provider(10)
+        self.canonical(1, 100, 0)
+        with self.sessions() as db:
+            PricingPersistence._require_decision_sources(db, "BTC_USD", 10, 1)
+            self.assertFalse(rights.provider_allowed("approved", "derive"))
+            grant["permissions"].remove("quality_check")
+            with self.assertRaises(InvalidPersistenceEvent):
+                PricingPersistence._require_decision_sources(db, "BTC_USD", 10, 1)
+
     def test_retired_sources_do_not_mask_older_current_quotes_or_erase_history(self):
         retired = "servix_btc_usd"
         self.grants[retired] = deepcopy(self.grants["approved"])

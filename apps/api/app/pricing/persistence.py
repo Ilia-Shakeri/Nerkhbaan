@@ -575,15 +575,15 @@ class PricingPersistence:
                        "derived": bool(derived)}
             if derived:
                 summary["inputs"] = metadata.get("inputs")
-            if not all(rights.canonical_allowed(summary, action) for action in ("store", "derive")):
+            if not rights.quality_check_allowed(summary):
                 raise InvalidPersistenceEvent("Decision provider permissions unavailable")
         previous = PricingPersistence._decision_record(
             db, CanonicalQuoteRecord, instrument_id, previous_canonical_quote_id,
         )
         if (not PricingPersistence._canonical_storage_allowed(previous)
-                or not rights.canonical_allowed(previous.source_summary, "derive")
+                or not rights.quality_check_allowed(previous.source_summary)
                 or (previous.candidate_provider_id is not None
-                    and not rights.provider_allowed(previous.candidate_provider_id, "derive"))
+                    and not rights.provider_quality_check_allowed(previous.candidate_provider_id))
                 or revision != rights.revision()):
             raise InvalidPersistenceEvent("Decision previous-source permissions unavailable")
 

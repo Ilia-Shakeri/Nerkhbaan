@@ -797,7 +797,8 @@ class InternalPriceHistory:
                         WHERE instrument_id = :instrument_id AND id = ANY(:quote_ids)"""),
                         {"instrument_id": instrument_id, "quote_ids": list(quote_ids)}).mappings().all()
                     approved = ({source["id"] for source in sources} == quote_ids
-                                and all(rights.provider_allowed(source["provider_id"], "display") for source in sources))
+                                and all(rights.provider_allowed(source["provider_id"], "display")
+                                        and rights.provider_quality_check_allowed(source["provider_id"]) for source in sources))
                 previous_id = row.get("previous_canonical_quote_id")
                 approved = approved and isinstance(previous_id, int) and not isinstance(previous_id, bool)
                 if approved and previous_id is not None:
@@ -805,10 +806,11 @@ class InternalPriceHistory:
                         WHERE id = :quote_id AND instrument_id = :instrument_id"""),
                         {"quote_id": previous_id, "instrument_id": instrument_id}).mappings().all()
                     approved = (len(previous) == 1
-                        and rights.canonical_allowed(previous[0]["source_summary"], "display")
+                        and rights.quality_check_allowed(previous[0]["source_summary"])
                         and (previous[0]["candidate_price"] is None or previous[0]["candidate_provider_id"] is not None)
                         and (previous[0]["candidate_provider_id"] is None
-                            or rights.provider_allowed(previous[0]["candidate_provider_id"], "display")))
+                            or (rights.provider_allowed(previous[0]["candidate_provider_id"], "display")
+                                and rights.provider_quality_check_allowed(previous[0]["candidate_provider_id"]))))
                 if not approved:
                     return {"instrument_id": instrument_id, "status": "unavailable"}
         finally:

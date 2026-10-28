@@ -144,6 +144,19 @@ class DecisionStorageRightsTests(unittest.TestCase):
         self.grants[PRIMARY] = _grant("store", "display")
         self.assert_withheld(self.anomaly)
 
+    def test_scoped_quality_check_preserves_decision_storage_but_not_derived_prices(self):
+        for provider in (PRIMARY, PREVIOUS, VERIFIER):
+            grant = _grant("collect", "store", "display", "quality_check")
+            grant["quality_check"] = {"scope": "same_instrument_anomaly_validation",
+                "checked_at": grant["checked_at"], "expires_at": grant["expires_at"],
+                "evidence_ref": grant["evidence_ref"]}
+            self.grants[provider] = grant
+        self.assertEqual(self.anomaly(), 99)
+        self.assertFalse(rights.provider_allowed(PRIMARY, "derive"))
+        self.grants[PREVIOUS]["permissions"].remove("quality_check")
+        with self.assertRaises(InvalidPersistenceEvent):
+            self.anomaly()
+
     def test_derived_previous_status_requires_derived_recursive_proof(self):
         self.db.records[CanonicalQuoteRecord][0].status = "derived_fallback"
         self.assert_withheld(self.anomaly)

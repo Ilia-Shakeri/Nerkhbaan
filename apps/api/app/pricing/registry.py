@@ -303,6 +303,9 @@ _PROVIDERS = (
             INSTRUMENTS[instrument].operational_ttl_seconds,
             rpm=1, rph=60, rpd=1440, interval=60,
             maximum_source_age_seconds=INSTRUMENTS[instrument].stale_after_seconds,
+            # USD's minute clock is last rate change, not observation time.
+            # Revalidation keeps that clock and the existing 180-second cap.
+            anchor_live_window_at_receive_time=(instrument == "USD_TOMAN"),
             history_url=("https://nerkh.jahankhahan.shop/data/intraday.json" if currency == "toman" else None),
             history_parser_id=(f"nerkhsanj_{asset}_intraday_v1" if currency == "toman" else None),
             history_requires_live_quote=False, history_priority=80,

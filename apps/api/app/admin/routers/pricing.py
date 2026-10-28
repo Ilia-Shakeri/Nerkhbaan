@@ -198,12 +198,22 @@ def _restricted_rows(db: Session, table_name: str, rows: list[dict]) -> list[dic
 
     def provider_ok(identifier, instrument):
         value = providers.get(reference_id(identifier))
-        return bool(value and value.get("instrument_id") == instrument and rights.provider_allowed(value.get("provider_id"), "display"))
+        if not value or value.get("instrument_id") != instrument:
+            return False
+        extra = value.get("extra") if isinstance(value.get("extra"), dict) else {}
+        derived = bool(value.get("is_derived") or value.get("source_type") == "derived" or extra.get("source_semantic") == "derived")
+        summary = {"provider_ids": [value.get("provider_id")], "primary_provider_id": value.get("provider_id"), "derived": derived}
+        if derived:
+            summary["inputs"] = extra.get("inputs")
+        return rights.quality_check_allowed(summary)
 
     def anomaly_ok(row):
         instrument = row.get("instrument_id")
         previous = canonicals.get(reference_id(row.get("previous_canonical_quote_id")))
-        return bool(provider_ok(row.get("candidate_quote_id"), instrument) and previous and previous.get("instrument_id") == instrument and _canonical_row_allowed(previous))
+        return bool(provider_ok(row.get("candidate_quote_id"), instrument) and previous and previous.get("instrument_id") == instrument and _canonical_row_allowed(previous)
+                    and rights.quality_check_allowed(previous.get("source_summary"))
+                    and (previous.get("candidate_provider_id") is None
+                         or rights.provider_quality_check_allowed(previous["candidate_provider_id"])))
 
     result = []
     for row in rows:

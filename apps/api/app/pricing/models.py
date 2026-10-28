@@ -704,6 +704,10 @@ class CanonicalQuote:
             }.get(effective, effective)
         current = ensure_utc(now or utc_now())
         summary = self.source_summary if authenticated else _public_source_summary(self.source_summary)
+        if "candidate_difference_percent" in summary:
+            from . import rights
+            if not rights.quality_check_allowed(self.source_summary):
+                summary = {key: value for key, value in summary.items() if key != "candidate_difference_percent"}
         return {
             "id": self.id,
             "instrument_id": self.instrument_id,

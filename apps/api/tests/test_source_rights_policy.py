@@ -37,6 +37,28 @@ class StrictFixture:
 
 
 class RightsPolicyTests(StrictFixture, unittest.TestCase):
+    def test_native_quality_grant_is_narrow_and_has_no_price_derivation_right(self):
+        for name in rights.QUALITY_CHECK_PROVIDERS:
+            self.assertTrue(rights.provider_allowed(name, "quality_check"), name)
+            self.assertFalse(rights.provider_allowed(name, "derive"), name)
+            self.assertFalse(rights.provider_allowed(name, "relay"), name)
+            self.assertFalse(rights.provider_allowed(name, "external_processing"), name)
+
+    def test_quality_check_needs_explicit_scoped_current_evidence(self):
+        from copy import deepcopy
+        from datetime import UTC, datetime, timedelta
+        name = "nobitex_orderbook_usdt"
+        original = deepcopy(rights._BUILTIN[name])
+        for key, value in (("scope", "valuation"), ("checked_at", (datetime.now(UTC) + timedelta(days=1)).isoformat()),
+                           ("expires_at", "2000-01-01T00:00:00Z"), ("evidence_ref", "http://example.invalid/terms")):
+            grant = deepcopy(original)
+            grant["quality_check"][key] = value
+            with self.subTest(key=key), patch.object(rights, "grants", return_value={name: grant}):
+                self.assertFalse(rights.provider_allowed(name, "quality_check"))
+        original.pop("quality_check")
+        with patch.object(rights, "grants", return_value={name: original}):
+            self.assertFalse(rights.provider_allowed(name, "quality_check"))
+
     def test_default_requires_explicit_application_permission(self):
         self.assertTrue(rights.provider_allowed("gold_api_free_xau", "display"))
         for name in ("coinbase_btc_usd", "coingecko_btc", "bitpin_usdt_toman", "unlisted", "telegram:unknown"):

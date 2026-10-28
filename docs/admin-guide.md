@@ -1,7 +1,8 @@
-# Administrator guide — 2.8.14
+# Administrator guide — 2.8.15
 
-Candidate 2.8.14 retains the existing administrator flows. Installed version remains 2.8.13 until its own rollout succeeds. [Pricing and backup evidence](pricing-repair-2026-10-28.md).
+Candidate 2.8.15 retains the existing administrator flows. Installed version remains 2.8.13 until its own rollout succeeds. [Pricing and backup evidence](pricing-repair-2026-10-28.md).
 
+Pricing quality validation and the bounded USD reference clock: [candidate evidence](source-quality-validation-2026-10-28.md).
 The dashboard reference panel has three separate Iranian reference identities.
 Gold purity is unconfirmed; BTC/USD and USDT/USD are ratios of same-source
 Iranian Toman prices. Read the source last-change clock, age and delayed status.

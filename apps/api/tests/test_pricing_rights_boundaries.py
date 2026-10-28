@@ -177,7 +177,7 @@ class RightsReadBoundaryTests(_StrictFixture, unittest.IsolatedAsyncioTestCase):
         service.store.recent_canonical.assert_not_awaited()
         service.history.recent_prices.assert_not_awaited()
 
-    async def test_anomaly_requires_derive_permission_for_both_current_inputs(self):
+    async def test_anomaly_requires_calculation_permission_for_both_current_inputs(self):
         service = self.service()
         service.store.recent_canonical = AsyncMock(return_value=[])
         service.history.recent_prices = AsyncMock(return_value=[])
@@ -185,6 +185,52 @@ class RightsReadBoundaryTests(_StrictFixture, unittest.IsolatedAsyncioTestCase):
         self.grants["approved_source"]["permissions"].remove("derive")
         with self.assertRaises(PricingRefreshSuspended):
             await service._assess_candidate(_candidate(), _canonical(provider="approved_source"), get_instrument("BTC_USD"))
+
+    def enable_quality_only(self):
+        now = datetime.now(UTC)
+        for grant in self.grants.values():
+            grant["permissions"].remove("derive")
+            grant["permissions"].append("quality_check")
+            grant["quality_check"] = {"scope": "same_instrument_anomaly_validation",
+                "checked_at": (now - timedelta(minutes=1)).isoformat(),
+                "expires_at": grant["expires_at"], "evidence_ref": grant["evidence_ref"]}
+
+    async def test_native_quality_grant_checks_jump_without_authorizing_derived_prices(self):
+        self.enable_quality_only()
+        service = self.service()
+        service.store.get_provider_runtime = AsyncMock(return_value=SimpleNamespace(success_rate=Decimal(1)))
+        result = await service._assess_candidate(_candidate(), _canonical(provider="approved_source"), get_instrument("BTC_USD"))
+        self.assertIsNotNone(result)
+        self.assertTrue(result.is_suspicious)
+        self.assertFalse(rights.provider_allowed("approved_source", "derive"))
+        derived = {"provider_ids": ["derived:conversion"], "primary_provider_id": "derived:conversion", "derived": True,
+            "inputs": [{"source_summary": _summary("approved_source")}]}
+        self.assertFalse(rights.canonical_allowed(derived, "display"))
+        self.assertFalse(rights.quality_check_allowed(derived))
+
+    async def test_quality_grant_cannot_compare_different_instruments(self):
+        self.enable_quality_only()
+        service = self.service()
+        with self.assertRaises(PricingRefreshSuspended):
+            await service._assess_candidate(_candidate(), _canonical("USDT_USD", "approved_source", price="1"), get_instrument("BTC_USD"))
+
+    async def test_quality_revocation_during_runtime_read_still_stops_calculation(self):
+        self.enable_quality_only()
+        service = self.service()
+        async def revoke(*_args):
+            self.grants["approved_source"]["permissions"].remove("quality_check")
+            return SimpleNamespace(success_rate=Decimal(1))
+        service.store.get_provider_runtime = AsyncMock(side_effect=revoke)
+        with self.assertRaises(PricingRefreshSuspended):
+            await service._assess_candidate(_candidate(), _canonical(provider="approved_source"), get_instrument("BTC_USD"))
+
+    def test_quality_diagnostic_is_hidden_after_quality_permission_revocation(self):
+        self.enable_quality_only()
+        value = _canonical(provider="approved_source")
+        value.source_summary["candidate_difference_percent"] = 5
+        self.assertEqual(value.to_dict()["source_summary"]["candidate_difference_percent"], 5)
+        self.grants["approved_source"]["permissions"].remove("quality_check")
+        self.assertNotIn("candidate_difference_percent", value.to_dict()["source_summary"])
 
     async def test_anomaly_revocation_during_runtime_read_stops_before_calculation(self):
         service = self.service()

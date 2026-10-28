@@ -4,6 +4,12 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
+## [2.8.15] - 2026-10-28
+
+- Separate explicitly scoped same-instrument quality validation from permission to publish derived valuations. Keep source clocks, anomaly thresholds, independent verification, revocation and full derivation gates intact. Reject cross-instrument comparisons under a quality-only grant.
+- Bind quality checks to current source evidence and expiry in the rights manifest, at both calculation and SQL decision storage. Hide calculated diagnostics after revocation; do not grant resale, relay or external processing.
+- Retain the failed 2.8.14 real-source canary: seven routes refreshed, USD did not; native updates were blocked by the broader derivation-only comparison check. No 2.8.14 application deployment occurred.
+
 ## [2.8.14] - 2026-10-28
 
 - Isolate slow pricing refreshes with one owned task per instrument and a bounded cycle wait. Preserve distributed leases, source budgets, source clocks and alert eligibility; cancel and await owned tasks on shutdown or Redis loss.

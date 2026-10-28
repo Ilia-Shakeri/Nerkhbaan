@@ -12,7 +12,7 @@ from urllib.parse import urlsplit
 from ..config import settings
 
 _APP_ACTIONS = frozenset({"collect", "store", "display", "history", "derive", "own_app_transport"})
-_ACTIONS = _APP_ACTIONS | {"external_processing", "relay"}
+_ACTIONS = _APP_ACTIONS | {"external_processing", "relay", "quality_check"}
 _REVIEWED = "2026-10-17T00:00:00Z"
 _EXPIRES = "2027-01-15T00:00:00Z"
 _BUILTIN = {
@@ -75,6 +75,23 @@ for _source_name in ("wallgold_gold18_quote", "wallgold_silver925_quote",
         "evidence_refs": ["https://wallgold.ir/terms-and-conditions"],
         "hosts": ["api.wallgold.ir"],
         "attribution": {"label": "Wallgold", "url": "https://wallgold.ir/blog/announcement/wallgold-api/"},
+    }
+
+
+QUALITY_CHECK_PROVIDERS = frozenset({
+    "nerkhsanj_usd_toman", "nerkhsanj_gold18_toman", "nerkhsanj_silver999_toman",
+    "nerkhsanj_usdt_toman", "nerkhsanj_btc_toman", "nerkhsanj_xau_usd", "nerkhsanj_xag_usd",
+    "wallgold_gold18_quote", "wallgold_silver925_quote",
+    "nobitex_orderbook_usdt", "nobitex_orderbook_btc", "gta_silver925_toman",
+})
+
+for _source_name in QUALITY_CHECK_PROVIDERS:
+    _grant_record = _BUILTIN[_source_name]
+    _grant_record["permissions"] = [*_grant_record["permissions"], "quality_check"]
+    _grant_record["quality_check"] = {
+        "scope": "same_instrument_anomaly_validation",
+        "checked_at": "2026-10-28T08:41:00Z", "expires_at": _EXPIRES,
+        "evidence_ref": _grant_record["evidence_ref"],
     }
 
 
@@ -146,6 +163,17 @@ def provider_allowed(provider_id: str, action: str = "display") -> bool:
         return True
     grant = _grant(provider_id)
     required = {action, "display"} if action == "history" else {action}
+    if grant and action == "quality_check":
+        check = grant.get("quality_check")
+        try:
+            ref = urlsplit(check["evidence_ref"])
+            if (check["scope"] != "same_instrument_anomaly_validation"
+                    or not _time(check["checked_at"]) <= datetime.now(UTC) < _time(check["expires_at"])
+                    or _time(check["expires_at"]) > _time(grant["expires_at"])
+                    or ref.scheme != "https" or not ref.hostname or ref.username or ref.password):
+                return False
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return False
     return bool(grant and required <= set(grant["permissions"]))
 
 
@@ -226,6 +254,22 @@ def canonical_allowed(summary: Mapping, action: str = "display") -> bool:
     derived = summary.get("derived") is True or str(summary.get("primary_provider_id", "")).startswith("derived:")
     return all(provider_allowed(name, action) and (not derived or provider_allowed(name, "derive"))
                for name in leaves)
+
+
+def provider_quality_check_allowed(provider_id: str) -> bool:
+    return provider_allowed(provider_id, "derive") or provider_allowed(provider_id, "quality_check")
+
+
+def quality_check_allowed(summary: Mapping) -> bool:
+    """Native quote validation is separate from publishing a derived price.
+
+    canonical_allowed still requires full derivation permission for every
+    transformed input; a quality-only grant cannot authorize a new valuation.
+    """
+    if not enforced():
+        return True
+    return bool(canonical_allowed(summary, "display") and canonical_allowed(summary, "store")
+                and all(provider_quality_check_allowed(name) for name in (_leaves(summary) or ())))
 
 
 def attribution(summary: Mapping) -> list[dict[str, str]]:

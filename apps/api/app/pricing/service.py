@@ -1090,12 +1090,12 @@ class InstrumentPricingService:
             summary = {"provider_ids": [candidate.provider_id], "primary_provider_id": candidate.provider_id, "derived": candidate.is_derived}
             if candidate.is_derived:
                 summary["inputs"] = candidate.metadata.get("inputs")
-            permitted = self._allowed_current_quote(previous) and all(
-                rights.canonical_allowed(summary, action)
-                and rights.canonical_allowed(previous.source_summary, action)
-                and (previous.candidate_provider_id is None or rights.provider_allowed(previous.candidate_provider_id, action))
-                for action in ("derive", "display", "store")
-            )
+            same_instrument = candidate.instrument_id == previous.instrument_id == instrument.instrument_id
+            permitted = (same_instrument and self._allowed_current_quote(previous)
+                and rights.quality_check_allowed(summary)
+                and rights.quality_check_allowed(previous.source_summary)
+                and (previous.candidate_provider_id is None
+                     or rights.provider_quality_check_allowed(previous.candidate_provider_id)))
             if not permitted or revision != rights.revision():
                 raise PricingRefreshSuspended("Anomaly source permission unavailable")
 
