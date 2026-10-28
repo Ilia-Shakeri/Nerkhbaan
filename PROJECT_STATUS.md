@@ -1,5 +1,10 @@
 # Project Status
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
+
+Source/docs release: **2.8.16**. Live application: **2.8.15**. Full project acceptance remains open. Required Telegram channel/group price ingestion is not operationally accepted; existing collector, parser and administrator code is only a starting point. Real device delivery, continuous feed acceptance, independent offsite backup and external channel services remain open. [Current roadmap with flowcharts](docs/project-completion-roadmap-fa.md). Reports below are dated evidence, not acceptance of this new source version.
+
 Installed **2.8.15**, verified October 28. Source CI, four fixed runtime images and strict scans, isolated real-source pricing, guarded deployment, both API replicas, web/admin assets, registration/login/logout and production rate observations passed. All 22 containers and 17 protected identities remain; [current acceptance and backup evidence](docs/pricing-release-2.8.15-fa.md). Physical-device notification receipt remains open.
 
 Pricing quality validation and the bounded USD reference clock: [source policy](docs/source-quality-validation-2026-10-28.md).

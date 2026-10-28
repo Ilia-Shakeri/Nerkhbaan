@@ -1,5 +1,10 @@
 # Pricing Sources and Semantics — 2.8.0
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](../../docs/project-completion-roadmap-fa.md) · [فهرست سندها](../../docs/documentation-index-fa.md).
+
+Source/docs **2.8.16**, live **2.8.15**. Current eight native routes and three separately labelled references are recorded in [the accepted pricing release](../../docs/pricing-release-2.8.15-fa.md). Telegram ingestion remains required but not live-accepted; see [source onboarding](../../docs/telegram-ingestion-guide-fa.md). Rules and dated source lists below retain their original context.
+
 Updated: 2026-10-11. Definitions are in `app/pricing/instruments.py`; source roles and budgets
 are in the registry plus persisted operator overrides. Read [operations](../../docs/pricing-operations-runbook.md).
 

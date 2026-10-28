@@ -1,4 +1,9 @@
-# Remaining Acceptance and Optional Work
+# Remaining Delivery and Later Work
+
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
+
+Source/docs **2.8.16**; live **2.8.15**. Required delivery now follows [the completion roadmap](docs/project-completion-roadmap-fa.md): (1) independent offsite backup, (2) Telegram channel/group price ingestion and its recovery/rights/real-message gates, (3) continuous pricing and iPhone/Android/computer receipt/click tests, (4) first web handoff, (5) consented Telegram/Bale, SMS/VoIP/email service acceptance. Telegram ingestion is required product scope, even though its runtime profile is opt-in. Signing is separate from first web delivery. Any older optional-channel wording below describes earlier scope.
 
 Current application: **2.8.15**, deployed and verified 2026-10-28. Pricing refresh, native/reference coverage, live account flows and a restore-tested off-VPS history snapshot passed; [current evidence](docs/pricing-release-2.8.15-fa.md). The two verified backup copies are on one workstation; a scheduled copy to another machine/storage destination remains to be configured. An additional postdeployment download timed out and is explicitly quarantined as a partial file.
 
@@ -37,7 +42,7 @@ and final-commit hosted checks remain pending. Current source inputs are tracked
 - The owned acceptance containers/network/database volume were removed after receipts were saved;
   all eighteen nonowned container IDs/start times remained equal and production readiness passed.
 
-## Remaining external acceptance
+## Remaining external acceptance — service/device dependent
 
 - Obtain current provider usage/redistribution rights and canary fixtures from the operator.
 - Supply reachable continuous external collection and approved direct GOLD_24K/cash USD sources.

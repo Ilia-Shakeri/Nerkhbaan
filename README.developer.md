@@ -1,5 +1,10 @@
 # Nerkhbaan Developer Guide
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
+
+Source/docs **2.8.16**; deployed runtime **2.8.15**. Telegram source configuration comes from the database and source grants, not `TELEGRAM_CHANNELS`. Follow the [ingestion guide](docs/telegram-ingestion-guide-fa.md). Existing collector tests do not certify a live channel or group. See the [completion roadmap](docs/project-completion-roadmap-fa.md).
+
 Local setup, how the system is put together, and what to run before you push.
 For deployment see [`README.md`](README.md); for API shapes see
 [`API_DOCUMENTATION.md`](API_DOCUMENTATION.md).
@@ -16,7 +21,7 @@ For deployment see [`README.md`](README.md); for API shapes see
 | Web | React 18, TypeScript, Vite 6, Tailwind, vite-plugin-pwa |
 | Admin | React 18, TypeScript, Vite 6 (separate app, separate host) |
 | Desktop | Electron + the React renderer |
-| Telegram worker | Python, Telethon (optional, profile-gated) |
+| Telegram worker | Python, Telethon (profile-gated; required unfinished product scope) |
 
 Node **22.23.0** and npm **10.9.8** are pinned in `.nvmrc` and `package.json`.
 CI enforces both. Python 3.12.13 is what the production image and CI use —
@@ -44,7 +49,7 @@ Nerkhbaan/
 │   │   └── tests/
 │   ├── admin-web/               Admin SPA
 │   ├── desktop/                 Electron shell + renderer
-│   ├── telegram_worker/         Optional MTProto ingestion
+│   ├── telegram_worker/         MTProto ingestion; acceptance pending
 │   └── web/                     Public PWA
 ├── packages/ui/                 Shared React components
 ├── nginx/                       Edge proxy: TLS, HSTS, rate limits, admin vhost

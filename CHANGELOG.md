@@ -1,8 +1,18 @@
 # Changelog
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
+
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
 
 ## [Unreleased]
+
+## [2.8.16] - 2026-10-28
+
+- Refresh all tracked first-party Markdown delivery documents with an explicit current/historical boundary, document inventory and authoritative roadmap. Preserve dated acceptance, failed receipts and third-party legal notices.
+- Make Telegram channel/group price reading a required unfinished milestone, separate from bot alarm delivery. Document actual database allowlisting, rights manifests, credentials, parser preview, group limitations, delete/recovery gaps and deployment prerequisites; remove the unused channel-variable instruction from the worker setup guide.
+- Add Persian delivery and Telegram flowcharts, ordered acceptance gates, precise owner access requirements, current live 2.8.15 evidence, restore-tested backup limits and deferred desktop signing.
+- Advance consistent source/API/browser metadata to 2.8.16. This is a source/documentation release; it neither implements the remaining Telegram work nor deploys new runtime images. Live acceptance belongs to 2.8.15 only.
 
 ## [2.8.15] - 2026-10-28
 

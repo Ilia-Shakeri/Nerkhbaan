@@ -1,5 +1,10 @@
 # Backend tests — 2.8.0
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](../../../docs/project-completion-roadmap-fa.md) · [فهرست سندها](../../../docs/documentation-index-fa.md).
+
+Current source/docs **2.8.16**. The dated suite below is historical; select checks from the current workflow and code. For the default local legacy-fixture suite use process-only `PRICING_RIGHTS_ENFORCED=false`; focused rights tests override and test enforcement. Never apply this test setting to production. Real database/Redis suites require disposable owned resources; skips are not passes. Installed 2.8.15 recorded 1194 local cases, 137 skipped, with hosted integration evidence separately recorded. New source needs fresh CI; Telegram live messages and physical-device receipt remain separate gates.
+
 Updated: 2026-10-11.
 
 ```bash

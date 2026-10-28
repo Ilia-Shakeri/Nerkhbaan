@@ -1,6 +1,9 @@
 # Nerkhbaan
 
-Current deployed application: **2.8.15**, verified 2026-10-28. `VERSION` is the source of release truth.
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
+
+Current deployed application: **2.8.15**, verified 2026-10-28. `VERSION` identifies the checked-out source release; the live application has its own immutable deployment record.
 Pricing refresh, all eight native routes, three separately labelled references, live registration/login/logout, exact browser assets and guarded deployment passed. The original failed attempts remain preserved; [release and backup evidence](docs/pricing-release-2.8.15-fa.md).
 Pricing quality validation and the bounded USD reference clock: [source policy](docs/source-quality-validation-2026-10-28.md).
 The full database backup passed an isolated restore and has two verified copies on this workstation. Actual notification receipt on physical devices remains unproved. See the [historical administrator acceptance and provider gates](docs/admin-release-2.8.13-fa.md).
@@ -10,20 +13,17 @@ with encrypted credentials, permission checks, critical-call rules, consented
 test recipients and paged delivery history. Follow the Persian
 [SMS and VoIP connection guide](docs/admin-guide.md#راهنمای-اتصال-پیامک-و-تماس).
 Both providers start disabled; an accepted provider request is not a received
-SMS or an answered call. Email alarm work is outside the current delivery scope;
-account verification and password-reset mail remain supported.
+SMS or an answered call. Email alarms are required follow-up delivery work; no configured sending service or real mailbox receipt is accepted. Account verification and password-reset mail also require a working mail service.
 
 Three separately labelled Iranian reference valuations are now available for
 24K gold, BTC/USD and USDT/USD. Published/calculated values retain source age,
 parent prices and actual daily gaps; they do not replace native market contracts.
 See [the reference scope and operational limits](docs/iranian-references-2026-10-17.md).
 
-Step-one fixes and the step-two Iranian price/history work are recorded in the [changelog](CHANGELOG.md) and
-[delivery matrix](docs/delivery-readiness.md). This source release has not been deployed by this change.
-Target checked read-only on 2026-10-21: [site](https://nerkhbaan.ir/) and [admin](https://nerkhbaan.ir/admin/) run 2.8.12, source `fe8949aeb4c6e1c86e386ba2827ed64785fd6ebe`. The 2.8.13 candidate needs its own CI, runtime and successful rollout receipts.
-See the [server handoff](docs/production-handoff-fa.md) and [saved proof](docs/delivery-readiness.md).
-The [remaining acceptance report](docs/remaining-acceptance-2026-10-11.md) separates real
-in-app receipt and unsigned installation from blocked native push, publisher signing and source coverage.
+Source/documentation release: **2.8.16**. Installed application remains **2.8.15**; this documentation release does not deploy new runtime images.
+Read [the 2.8.16 source release scope and checks](docs/source-release-2.8.16-fa.md).
+Telegram channel/group price ingestion is a required unfinished delivery item. Collector/parser/admin code exists; live ingestion, group coverage, recovery and end-to-end alert receipt are not accepted.
+Read the [Persian completion roadmap and flowcharts](docs/project-completion-roadmap-fa.md), [Telegram ingestion guide](docs/telegram-ingestion-guide-fa.md), [document index](docs/documentation-index-fa.md), and [current deployment/backup evidence](docs/pricing-release-2.8.15-fa.md).
 
 ## Components
 

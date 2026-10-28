@@ -1,5 +1,8 @@
 # Production clock synchronization
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
+
 Correct UTC time is a hard dependency for login tokens, provider freshness,
 cache expiry, scheduled work, and TLS. In the historical 2026-09-12 incident, the production host was found about 84
 minutes behind while Chrony had no reachable source. Do not weaken timestamp

@@ -1,5 +1,10 @@
 # Delivery Readiness — 2.8.15
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
+
+Source/docs **2.8.16**, installed runtime **2.8.15**. Required Telegram channel/group price ingestion remains unaccepted. [Authoritative completion roadmap](project-completion-roadmap-fa.md). Source CI for this release must be recorded separately; 2.8.15 runtime receipts do not certify a 2.8.16 deployment.
+
 Installed **2.8.15**, October 28: source/runtime CI, strict scans, isolated native/reference pricing, guarded rollout, both APIs, 22 containers, 17 protected identities, live web/admin assets, registration/login/logout and production rate samples passed. The full off-VPS database backup passed an isolated Timescale restore and has two verified workstation copies. Real device receipt remains open. [Current release evidence](pricing-release-2.8.15-fa.md).
 
 Pricing quality validation and the bounded USD reference clock: [source policy](source-quality-validation-2026-10-28.md).
@@ -68,7 +73,7 @@ Do not change a pending marker to passed without a saved successful run for the 
 - Existing compressed chunks and market-price duplicates need target database checks before uniqueness changes.
 - Keep production evidence outside source control and exclude secrets and customer payloads.
 
-## Current installed application — 2.8.12
+## Historical installed application — 2.8.12
 
 Application 2.8.12 is the immutable source `fe8949aeb4c6e1c86e386ba2827ed64785fd6ebe` and tag `v2.8.12`. [Source CI 39217110287](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217110287) passed all fifteen jobs. [Hosted runtime 39217586742](https://github.com/Ilia-Shakeri/Nerkhbaan/actions/runs/39217586742), workflow source `5ecac56cdf63ce2222d0c58ea2fc1441f4328f66`, passed all four builds, source checks and strict image scans. HIGH/CRITICAL findings are zero, including unfixed findings. Notification code is included in these images.
 

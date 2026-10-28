@@ -1,5 +1,8 @@
 # License scope
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
+
 The project owner authorized the MIT license on 2026-10-24 for the original
 project source code and documentation that the owner has the right to license.
 The owner's published attribution is recorded in the existing operator notice;

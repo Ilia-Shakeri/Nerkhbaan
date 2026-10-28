@@ -1,5 +1,8 @@
 # SignPath submission evidence
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. گزارش تاریخ‌دار؛ شاهدِ همان زمان. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
+
 ## Decision supplied by owner — 2026-10-24
 
 The owner subsequently supplied a screenshot titled “Your SignPath Foundation

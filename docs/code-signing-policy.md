@@ -1,5 +1,8 @@
 # Code signing policy
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
+
 Status: **The owner-forwarded Foundation reply declines the free application
 at this time for insufficient public trust/visibility. Signing is not enabled.
 No Nerkhbaan artifact is claimed to be signed by SignPath.**

@@ -1,5 +1,10 @@
 # Nerkhbaan API Reference
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
+
+Source API metadata: **2.8.16**; the deployed API remains **2.8.15**. No API route behavior changes in this release. [Current route contracts](docs/api-route-index.md); [Telegram ingestion scope](docs/telegram-ingestion-guide-fa.md).
+
 Installed application: **2.8.15**. Updated: 2026-10-28. Both API replicas, the exact ten-migration ledger, native rates and reference responses passed their separate live checks. [Acceptance and backup evidence](docs/pricing-release-2.8.15-fa.md).
 
 Administrator communications use `/api/admin/communications` for independently

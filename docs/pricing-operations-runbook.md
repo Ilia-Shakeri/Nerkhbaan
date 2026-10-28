@@ -1,5 +1,10 @@
 # Pricing Operations Runbook — 2.8.4
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
+
+Current source/docs **2.8.16**; accepted installed pricing **2.8.15**. Read [current native/reference evidence](pricing-release-2.8.15-fa.md) and [Telegram onboarding](telegram-ingestion-guide-fa.md). Servix is retired; historical Servix setup below is not an activation instruction. Keep source clocks and stale rejection; a successful refresh sample is not a 24-hour feed acceptance.
+
 Updated: 2026-10-17. Dated target evidence is recorded separately in the delivery matrix.
 The 2.8.4 source contracts require explicit currency and source time; new Servix metal routes also
 require confirmed weight/purity declarations. Contract fixtures do not replace authenticated source

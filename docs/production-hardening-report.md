@@ -1,5 +1,8 @@
 > Historical report. Reviewed for the 2.8.1 documentation set on 2026-10-12. Dates, facts and past results below remain historical; use [delivery readiness](delivery-readiness.md) and [current status](../PROJECT_STATUS.md) for current acceptance.
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. گزارش تاریخ‌دار؛ شاهدِ همان زمان. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
+
 # Production Hardening Report
 
 > **Historical record.** This captures the state of the repository on

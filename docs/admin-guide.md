@@ -1,5 +1,10 @@
 # Administrator guide — 2.8.15
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
+
+Source/docs **2.8.16**; live **2.8.15**. Telegram price sources in this panel are required delivery scope with live acceptance pending. Source CRUD and parser preview do not connect an account by themselves. Read [Telegram setup and remaining group/recovery gates](telegram-ingestion-guide-fa.md) and [current roadmap](project-completion-roadmap-fa.md). SMS, voice and email still need actual configured services and receiver evidence.
+
 Installed 2.8.15 retains the existing administrator flows. Pricing, web/admin assets and live account flows passed their own guarded acceptance. [Release and backup evidence](pricing-release-2.8.15-fa.md).
 
 Pricing quality validation and the bounded USD reference clock: [source policy](source-quality-validation-2026-10-28.md).

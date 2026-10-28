@@ -1,5 +1,8 @@
 # SignPath application draft
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. گزارش تاریخ‌دار؛ شاهدِ همان زمان. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
+
 Prepared request retained for reference. **Owner submission acknowledged, then free Foundation application declined.**
 
 See [current submission evidence](signpath-submission-2026-10-24.md). The exact

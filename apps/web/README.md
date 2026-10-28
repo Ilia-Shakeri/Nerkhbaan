@@ -1,5 +1,10 @@
 # nerkhbaan-web
 
+<!-- delivery-docs:2.8.16 -->
+> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](../../docs/project-completion-roadmap-fa.md) · [فهرست سندها](../../docs/documentation-index-fa.md).
+
+Source/docs **2.8.16**, deployed **2.8.15**. Initial delivery targets the website/PWA. Physical iPhone/Android/computer receipt and click-through remain unaccepted; browser or mocked push tests do not replace them. See [delivery roadmap](../../docs/project-completion-roadmap-fa.md).
+
 The public progressive web app: price dashboard, charts, alerts, notifications
 and the market assistant.
 
