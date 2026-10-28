@@ -19,22 +19,27 @@ import urllib.request
 import zipfile
 
 
-APPLICATION_COMMIT = '38aceedb584ad691c634c0309c4b84094d3bcfc2'
+APPLICATION_COMMIT = '8bdfe76dee1dcfb443b84a29ecfa64ebb0475a91'
 BASE_COMMIT = 'fcdac9fc75e974f06162efd9d59dd68cf9257c68'
-VERSION = '2.8.13'
-APPLICATION_CI_RUN = 40024427628
+NODE_BASE_COMMIT = '9a8947b51cb924e3eaf62553193e104db8361834'
+VERSION = '2.8.14'
+APPLICATION_CI_RUN = 40653188478
 REPOSITORY = "Ilia-Shakeri/Nerkhbaan"
 PUBLIC_ASSET = 'https://nerkhbaan.ir/assets/index-C53fIapv.js'
 PUBLIC_ASSET_SHA256 = 'ce8688b4a5fde4f807247ca8820934bcf538553a536dfcb7f9c648aed419e2a8'
 PUBLIC_KEY_SHA256 = "0dc48003fa42c7f39424bb09461a9f872943fcc51a48fff61ae4e48ca417a2eb"
 EXISTING_PUBLIC_KEY = 'BNg6GMpk04N2Oqp_GRI2DsFRrtJA4M_svcEiNEeJiJuAvQU0U_E6ivDd7C8Z6rHpv5yBYMnXca5vC7BU5ye-vos'
-PUBLIC_KEY_OBSERVED_AT = '2026-10-23T21:02:03.892107+00:00'
+PUBLIC_KEY_OBSERVED_AT = '2026-10-28T07:23:52.586887+00:00'
 OPS_PATHS = {".github/workflows/release-runtime-artifacts.yml", "scripts/build_runtime_artifacts.py"}
 PATCH_PATHS = {
     '.env.example',
     '.github/workflows/ci.yml',
+    '.github/workflows/release-runtime-artifacts.yml',
+    '.gitignore',
     'API_DOCUMENTATION.md',
     'CHANGELOG.md',
+    'FUTURE_TASKS.md',
+    'LICENSE',
     'PROJECT_STATUS.md',
     'README.md',
     'VERSION',
@@ -64,6 +69,9 @@ PATCH_PATHS = {
     'apps/api/app/admin/routers/operations.py',
     'apps/api/app/config.py',
     'apps/api/app/models.py',
+    'apps/api/app/pricing/providers.py',
+    'apps/api/app/pricing/registry.py',
+    'apps/api/app/pricing/service.py',
     'apps/api/app/release.py',
     'apps/api/app/routers/alerts.py',
     'apps/api/app/routers/notifications.py',
@@ -71,6 +79,7 @@ PATCH_PATHS = {
     'apps/api/app/security.py',
     'apps/api/app/services/alert_delivery_state.py',
     'apps/api/app/services/alert_engine.py',
+    'apps/api/app/services/background.py',
     'apps/api/app/services/communication_delivery.py',
     'apps/api/app/services/communication_transport.py',
     'apps/api/app/services/dlq_worker.py',
@@ -81,23 +90,51 @@ PATCH_PATHS = {
     'apps/api/tests/test_communication_transports.py',
     'apps/api/tests/test_communication_worker.py',
     'apps/api/tests/test_communications_migration.py',
+    'apps/api/tests/test_nobitex_source_contracts.py',
+    'apps/api/tests/test_pricing_refresh_health.py',
+    'apps/api/tests/test_pricing_refresh_isolation.py',
+    'apps/api/tests/test_provider_contracts.py',
     'apps/api/tests/test_smtp_delivery.py',
     'apps/api/tests/test_step1_transport_worker_insights.py',
     'apps/desktop/package.json',
+    'apps/desktop/vite.config.ts',
     'apps/price-feed-pull/Dockerfile',
     'apps/web/Dockerfile',
     'apps/web/package.json',
+    'apps/web/public/fonts/Vazir/OFL.txt',
+    'apps/web/public/fonts/Vazir/provenance.json',
     'apps/web/src/app/components/SplashScreen.tsx',
     'apps/web/src/app/services/api.ts',
     'apps/web/src/app/views/AlertsView.tsx',
+    'apps/web/src/app/views/SettingsView.tsx',
+    'apps/web/src/pwa/push-readiness.ts',
+    'apps/web/src/pwa/sw.ts',
     'docs/admin-guide.md',
+    'docs/admin-release-2.8.13-fa.md',
     'docs/api-contracts.json',
     'docs/api-route-index.md',
+    'docs/brand-license-record-2026-10-24.json',
     'docs/client-delivery-roadmap-fa.md',
+    'docs/code-signing-policy.md',
     'docs/delivery-readiness.md',
+    'docs/desktop-pre-sign-review-2026-10-24.md',
+    'docs/free-windows-signing-2026-10-24.md',
+    'docs/license-scope.md',
+    'docs/live-auth-readiness-2026-10-24.md',
     'docs/notification-delivery-probe.md',
+    'docs/operator-workspace-fa.md',
+    'docs/pricing-repair-2026-10-28.md',
+    'docs/production-readiness-roadmap.md',
     'docs/release-operations.md',
+    'docs/signpath-application-draft.md',
+    'docs/signpath-submission-2026-10-24.md',
     'docs/step4-delivery-acceptance-2026-10-19.md',
+    'docs/step5-acceptance-2026-10-24.md',
+    'docs/step5-access-fa.md',
+    'docs/web-initial-delivery-fa.md',
+    'docs/web-push-dns-repair-2026-10-25.md',
+    'docs/windows-signing-readiness-fa.md',
+    'infra/compose.backend-dns.yaml',
     'infra/relay/Dockerfile',
     'nginx/Dockerfile',
     'package-lock.json',
@@ -105,20 +142,67 @@ PATCH_PATHS = {
     'packages/ui/package.json',
     'playwright.config.ts',
     'scripts/admin-runtime.test.mjs',
+    'scripts/build_runtime_artifacts.py',
+    'scripts/check-release-version.mjs',
     'scripts/deploy_application.py',
+    'scripts/deploy_communications_recovery.py',
+    'scripts/desktop-licenses.mjs',
+    'scripts/desktop-licenses.test.mjs',
+    'scripts/desktop-package-negative.mjs',
+    'scripts/desktop-smoke.mjs',
+    'scripts/live-web-auth-smoke.mjs',
     'scripts/notification_delivery_probe.py',
+    'scripts/operator_access.py',
     'scripts/playwright-admin-panel.config.ts',
     'scripts/playwright-alert-communications.config.ts',
     'scripts/playwright-communications.config.ts',
+    'scripts/playwright-web-push.config.ts',
     'scripts/test_deploy_application.py',
     'scripts/test_deploy_communications.py',
+    'scripts/test_deploy_communications_recovery.py',
     'scripts/test_deploy_normal_resume.py',
     'scripts/test_notification_delivery_probe.py',
+    'scripts/test_operator_access.py',
+    'scripts/vendor-licenses/fancy-canvas-2.1.0-LICENSE.txt',
+    'scripts/vendor-licenses/manifest.json',
+    'scripts/vendor-licenses/radix-ui-primitive-1.1.1-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-arrow-1.1.2-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-collection-1.1.2-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-compose-refs-1.1.1-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-context-1.1.1-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-dialog-1.1.6-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-direction-1.1.0-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-dismissable-layer-1.1.5-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-dropdown-menu-2.1.6-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-focus-guards-1.1.1-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-focus-scope-1.1.2-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-id-1.1.0-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-menu-2.1.6-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-popover-1.1.6-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-popper-1.2.2-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-portal-1.1.4-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-presence-1.1.2-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-primitive-2.0.2-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-roving-focus-1.1.2-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-slot-1.1.2-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-use-callback-ref-1.1.0-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-use-controllable-state-1.1.0-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-use-escape-keydown-1.1.0-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-use-layout-effect-1.1.0-LICENSE.txt',
+    'scripts/vendor-licenses/radix-ui-react-use-size-1.1.0-LICENSE.txt',
+    'scripts/vendor-licenses/react-remove-scroll-bar-2.3.8-LICENSE.txt',
+    'scripts/vendor-licenses/victory-vendor-36.9.2-LICENSE.txt',
+    'scripts/verify-windows-signature.ps1',
+    'scripts/web-push-runtime.test.mjs',
+    'scripts/windows-installer-preflight.ps1',
+    'scripts/windows-installer-preflight.test.mjs',
+    'scripts/windows-signature.test.mjs',
     'tests/e2e/admin-communications.spec.ts',
     'tests/e2e/admin-console.spec.ts',
     'tests/e2e/admin-fixture-url.ts',
     'tests/e2e/admin-panel.spec.ts',
     'tests/e2e/alert-communications.spec.ts',
+    'tests/e2e/web-push-setup.spec.ts',
 }
 
 RECIPES = [
@@ -209,6 +293,7 @@ def validate_source(source, ops, workflow_sha):
         assert git(checkout, "rev-parse", "HEAD").decode().strip() == commit
         assert not git(checkout, "status", "--porcelain", "--untracked-files=all").strip()
     git(source, "merge-base", "--is-ancestor", BASE_COMMIT, APPLICATION_COMMIT)
+    git(source, "merge-base", "--is-ancestor", NODE_BASE_COMMIT, APPLICATION_COMMIT)
     changed = set(git(source, "diff", "--name-only", BASE_COMMIT, APPLICATION_COMMIT).decode().splitlines())
     assert changed == PATCH_PATHS, "Application patch differs from reviewed release paths"
     ops_changed = set(git(ops, "diff", "--name-only", APPLICATION_COMMIT, workflow_sha).decode().splitlines())
@@ -219,18 +304,20 @@ def validate_source(source, ops, workflow_sha):
     for path in ["apps/api/requirements.lock", "apps/api/requirements-dev.lock", "apps/price-feed-pull/go.mod", ".npmrc", "scripts/install-dependencies.sh", "nginx/Dockerfile", "infra/relay/Dockerfile"]:
         assert reviewed_runtime_input(path, git(source, "show", BASE_COMMIT + ":" + path)) == (source / path).read_bytes()
     for path in ["package.json", "apps/web/package.json", "apps/admin-web/package.json", "apps/desktop/package.json", "packages/ui/package.json"]:
-        old = json.loads(git(source, "show", BASE_COMMIT + ":" + path))
+        old = json.loads(git(source, "show", NODE_BASE_COMMIT + ":" + path))
         current = json.loads((source / path).read_bytes())
         assert current.pop("version") == VERSION
         old.pop("version")
-        assert reviewed_node_manifest(old) == current, "Unreviewed manifest change"
-    old = json.loads(git(source, "show", BASE_COMMIT + ":package-lock.json"))
+        assert current["license"] == "MIT", "Owner-authorized license required"
+        assert old == current, "Unreviewed manifest change"
+    old = json.loads(git(source, "show", NODE_BASE_COMMIT + ":package-lock.json"))
     current = json.loads((source / "package-lock.json").read_bytes())
     for manifest in [old, current]:
         manifest.pop("version")
         for path in ["", "apps/web", "apps/admin-web", "apps/desktop", "packages/ui"]:
             manifest["packages"][path].pop("version")
-    assert reviewed_node_lock(old) == current, "Unreviewed lock change"
+            assert manifest["packages"][path]["license"] == "MIT"
+    assert old == current, "Unreviewed lock change"
     return sorted(changed)
 
 
@@ -384,6 +471,7 @@ class RuntimeBuild:
         self.provenance = {
             "commit": APPLICATION_COMMIT, "application_commit": APPLICATION_COMMIT,
             "workflow_commit": args.workflow_sha, "version": VERSION,
+            "dependency_manifest_baseline": NODE_BASE_COMMIT,
             "workflow_run_id": args.run_id, "workflow_run_attempt": args.run_attempt,
             "repository": args.repository,
         }
@@ -644,8 +732,8 @@ class OfflineContracts(unittest.TestCase):
             previous["apps/api/requirements.lock"] = previous["apps/api/requirements-dev.lock"] = SECURITY_LOCK_OLD + b"\n"
             manifests = ["package.json", "apps/web/package.json", "apps/admin-web/package.json", "apps/desktop/package.json", "packages/ui/package.json"]
             for path in manifests:
-                previous[path] = json.dumps({"version": "2.8.8", "scripts": {"build": "original"}}).encode()
-            lock = {"version": "2.8.8", "packages": {key: {"version": "2.8.8"} for key in ["", "apps/web", "apps/admin-web", "apps/desktop", "packages/ui"]}}
+                previous[path] = json.dumps({"version": "2.8.8", "license": "MIT", "scripts": {"build": "original"}}).encode()
+            lock = {"version": "2.8.8", "packages": {key: {"version": "2.8.8", "license": "MIT"} for key in ["", "apps/web", "apps/admin-web", "apps/desktop", "packages/ui"]}}
             previous["package-lock.json"] = json.dumps(lock).encode()
             for path, raw in previous.items():
                 target = source / path
