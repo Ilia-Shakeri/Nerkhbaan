@@ -1,5 +1,7 @@
 # Nerkhbaan
 
+Source candidate **2.8.18** releases instrument identity read transactions before awaited pricing work. The 2.8.17 live account check failed under connection-pool pressure; its successful deployment is not application acceptance. Telegram collection remains disabled without an account and approved sources. [Current candidate and acceptance gates](docs/web-session-release-2.8.18-fa.md).
+
 Source candidate **2.8.17**: Telegram channel/group ingestion, typed peer IDs, durable edit/delete handling, bounded recovery and cached-input revalidation. Live acceptance remains at **2.8.15** until the guarded rollout passes. Real Telegram collection remains disabled: no reading account or approved sources are available. [Scope and remaining activation gates](docs/telegram-release-2.8.17-fa.md).
 
 <!-- delivery-docs:2.8.16 -->

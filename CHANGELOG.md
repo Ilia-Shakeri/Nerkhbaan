@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.8.18] - 2026-10-28
+
+- Release the optional instrument authentication transaction before awaited pricing work so parallel price reads do not reserve the shared connection pool while waiting for more connections. Rejected identities stay rejected.
+- Add single-connection contention and revoked/public identity regression coverage. Preserve the failed 2.8.17 live account evidence; collector activation still requires an owner account and approved sources.
+
+
 <!-- delivery-docs:2.8.16 -->
 > مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
 

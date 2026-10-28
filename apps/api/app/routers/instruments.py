@@ -22,10 +22,15 @@ def optional_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User | None:
-    cookie_token = request.cookies.get(settings.auth_cookie_name)
-    if credentials is None and not cookie_token:
-        return None
-    return get_current_user(request, credentials, db)
+    # These read routes use only the resolved identity. Release its transaction
+    # before awaiting pricing work, which needs connections from the same pool.
+    try:
+        cookie_token = request.cookies.get(settings.auth_cookie_name)
+        if credentials is None and not cookie_token:
+            return None
+        return get_current_user(request, credentials, db)
+    finally:
+        db.close()
 
 
 @router.get("")
