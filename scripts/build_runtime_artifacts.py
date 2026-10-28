@@ -671,6 +671,11 @@ class RuntimeBuild:
 
 
 class OfflineContracts(unittest.TestCase):
+    def test_workflow_artifact_name_binds_application_version_and_short_commit(self):
+        workflow = Path(__file__).resolve().parents[1] / '.github/workflows/release-runtime-artifacts.yml'
+        expected = 'name: release-runtime-' + VERSION + '-' + APPLICATION_COMMIT[:7] + '-${{ github.run_id }}-${{ github.run_attempt }}'
+        self.assertIn(expected, workflow.read_text(encoding='utf8'))
+
     def test_node_patch_changes_only_exact_vite_pin_and_integrity(self):
         old = {"devDependencies": {"vite": "6.4.3", "typescript": "5.9.3"}, "custom": True}
         self.assertEqual(reviewed_node_manifest(old), {"devDependencies": {"vite": "6.4.4", "typescript": "5.9.3"}, "custom": True})
