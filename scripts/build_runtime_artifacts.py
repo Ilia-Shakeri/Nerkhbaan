@@ -23,7 +23,7 @@ APPLICATION_COMMIT = '6ec3b0e8c13f70da8bc5e44844fc1b1840322f5c'
 BASE_COMMIT = 'fcdac9fc75e974f06162efd9d59dd68cf9257c68'
 NODE_BASE_COMMIT = '9a8947b51cb924e3eaf62553193e104db8361834'
 VERSION = '2.8.18'
-APPLICATION_CI_RUN = 40686330282
+APPLICATION_CI_RUN = 40694766299
 REPOSITORY = "Ilia-Shakeri/Nerkhbaan"
 PUBLIC_ASSET = 'https://nerkhbaan.ir/assets/index-cdOUMH5g.js'
 PUBLIC_ASSET_SHA256 = 'bfb434fd3632d9eb071ab23a0be60840b4ecab5ccf758a92a4637bd25cffad85'
@@ -191,7 +191,10 @@ PATCH_PATHS = {
     'docs/step5-acceptance-2026-10-24.md',
     'docs/step5-access-fa.md',
     'docs/telegram-ingestion-guide-fa.md',
-    'docs/telegram-release-2.8.18-fa.md',
+    'docs/telegram-release-2.8.17-fa.md',
+    'docs/web-session-release-2.8.18-fa.md',
+    'apps/api/app/routers/instruments.py',
+    'apps/api/tests/test_instrument_auth_pool.py',
     'docs/time-sync-runbook.md',
     'docs/web-initial-delivery-fa.md',
     'docs/web-push-dns-repair-2026-10-25.md',
