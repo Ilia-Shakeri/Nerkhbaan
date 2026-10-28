@@ -33,7 +33,7 @@ delivery = load("source_delivery", "scripts/build_delivery_archive.py")
 
 class TelegramParserTests(unittest.TestCase):
     def test_api_preview_matches_worker(self):
-        mirror = ROOT / "apps/api/app/admin/telegram_parser.py"
+        mirror = ROOT / "apps/api/app/telegram_price_parser.py"
         self.assertTrue(mirror.is_file(), "Admin preview must ship the worker parser")
         self.assertEqual(mirror.read_bytes(), (ROOT / "apps/telegram_worker/app/parser.py").read_bytes())
     def parse(self, text, parser_type="strict_explicit"):

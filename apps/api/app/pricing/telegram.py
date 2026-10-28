@@ -9,7 +9,7 @@ from sqlalchemy import text
 
 from ..db import SessionLocal
 from . import rights
-from ..admin.telegram_parser import parser_policy_version
+from ..telegram_price_parser import parser_policy_version
 from .operational import operational_pricing_settings
 from .models import (
     Currency,

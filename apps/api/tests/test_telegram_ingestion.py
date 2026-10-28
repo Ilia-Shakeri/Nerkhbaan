@@ -3,6 +3,9 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import os
+from pathlib import Path
+import subprocess
+import sys
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, patch
@@ -20,6 +23,13 @@ def summary():
 
 
 class PeerSchemaTests(unittest.TestCase):
+    def test_repository_imports_in_a_fresh_process(self):
+        env={**os.environ,'JWT_SECRET_KEY':'cold-import-not-for-runtime-0000000000000000',
+             'DATABASE_URL':'postgresql+psycopg://test:test@127.0.0.1:5432/test','REDIS_URL':'',
+             'PYTHONPATH':str(Path(__file__).resolve().parents[1])}
+        result=subprocess.run([sys.executable,'-c','from app.pricing.telegram import StoredTelegramQuoteRepository'],
+                              env=env,capture_output=True,text=True,timeout=20)
+        self.assertEqual(result.returncode,0,result.stderr)
     def create(self, peer, kind):
         return TelegramSourceCreate(channel_id=peer, source_type=kind, display_name='Owned source',
             allowed_instruments=['USDT_TOMAN'], parser_version='strict-explicit-3', confirmation='owned test')
