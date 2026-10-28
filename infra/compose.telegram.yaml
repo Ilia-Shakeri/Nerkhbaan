@@ -1,0 +1,31 @@
+# Merge only after owned source access, permissions and private files are verified.
+# The rights file must retain all existing HTTP-provider grants as well.
+services:
+  telegram-worker:
+    env_file:
+      - ${TELEGRAM_PRIVATE_ENV_FILE:?Set a reviewed private Telegram environment file}
+    environment:
+      TELEGRAM_STATE_PATH: /state/collector.json
+      PRICING_RIGHTS_MANIFEST_PATH: /run/telegram-rights.json
+    volumes:
+      - type: bind
+        source: ${TELEGRAM_RIGHTS_FILE:?Set a reviewed complete source-rights manifest}
+        target: /run/telegram-rights.json
+        read_only: true
+      - telegram-state:/state
+    healthcheck:
+      test: [CMD, python, -m, app.healthcheck]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+  backend:
+    environment:
+      PRICING_RIGHTS_MANIFEST_PATH: /run/telegram-rights.json
+    volumes:
+      - type: bind
+        source: ${TELEGRAM_RIGHTS_FILE:?Set a reviewed complete source-rights manifest}
+        target: /run/telegram-rights.json
+        read_only: true
+volumes:
+  telegram-state:

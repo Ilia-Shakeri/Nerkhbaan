@@ -156,7 +156,9 @@ jobs:
             apps/api/requirements-dev.lock
 
       - name: Install Python dependencies
-        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements-dev.lock
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements-dev.lock
+          python -m pip install --disable-pip-version-check --require-hashes -r ../telegram_worker/requirements.lock
 
       - name: Check installed dependency set
         run: python -m pip check
@@ -182,8 +184,8 @@ jobs:
           python -m pyflakes ../../scripts/deploy_application.py ../../scripts/test_deploy_application.py ../../scripts/test_deploy_normal_resume.py
           python -m pyflakes ../../scripts/test_deploy_communications.py ../../scripts/deploy_communications_recovery.py ../../scripts/test_deploy_communications_recovery.py
           python -m pyflakes ../../scripts/notification_delivery_probe.py ../../scripts/test_notification_delivery_probe.py
-          python ../telegram_worker/tests/test_source_rights.py -v
-          python -m pyflakes ../telegram_worker/app/source_rights.py ../telegram_worker/app/worker.py ../telegram_worker/tests/test_source_rights.py
+          python -m unittest discover -s ../telegram_worker/tests -v
+          python -m pyflakes ../telegram_worker/app ../telegram_worker/tests
 
       - name: Run backend unit tests
         run: python -m unittest discover -s tests -v
@@ -257,7 +259,9 @@ jobs:
           cache-dependency-path: apps/api/requirements.lock
 
       - name: Install backend dependencies
-        run: python -m pip install --disable-pip-version-check --require-hashes -r requirements.lock
+        run: |
+          python -m pip install --disable-pip-version-check --require-hashes -r requirements.lock
+          python -m pip install --disable-pip-version-check --require-hashes -r ../telegram_worker/requirements.lock
 
       - name: Apply migrations
         run: python -m app.migrations.runner
@@ -273,6 +277,11 @@ jobs:
 
       - name: Prove multi-replica lease exclusion and handover
         run: python tests/ci_multi_replica_check.py
+
+      - name: Prove Telegram ingestion transactions and canonical retraction
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://nerkhbaan:ci-database-password@127.0.0.1:5432/nerkhbaan_ci
+        run: python -m unittest tests.test_telegram_ingestion_postgres -v
 
       - name: Prove shared source snapshots and URL quotas on owned Redis
         env:

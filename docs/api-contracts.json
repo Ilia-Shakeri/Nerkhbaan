@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Nerkhbaan API",
-    "version": "2.8.16"
+    "version": "2.8.17"
   },
   "paths": {
     "/api/auth/signup": {
@@ -10138,7 +10138,7 @@
           "enabled": {
             "type": "boolean",
             "title": "Enabled",
-            "default": true
+            "default": false
           },
           "confirmation": {
             "type": "string",

@@ -7,6 +7,14 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
+## [2.8.17] - 2026-10-28
+
+- Implement basic-group/channel identity checks, disabled-by-default source creation, private owner login without session output, account-bound collector state and opt-in rights/credential deployment wiring.
+- Add transaction-locked message revisions, deletion tombstones, canonical retraction, parser-policy revalidation, bounded independent reconciliation, provider cooldowns and bounded event processing. Preserve source clocks and reject stale replay; do not infer deletion from a limited history page.
+- Revalidate Telegram inputs on both individual and aggregate cache reads, including current role, confidence, trust, required independent sources and source permission. Keep native HTTP reads independent of Telegram storage checks.
+- Extend explicit text templates to eleven native instruments, keep physical 24K purity explicit, preserve forwarded observation time and deduplicate shared forwarding origins. Reject ambiguous, negative, malformed or incorrectly labelled values.
+- Add collector behavior and real owned-PostgreSQL concurrency/retraction tests to CI. No migration is added. Actual Telegram account/source acceptance remains blocked by unavailable owner access; production collection stays off until the activation gates pass.
+
 ## [2.8.16] - 2026-10-28
 
 - Refresh all tracked first-party Markdown delivery documents with an explicit current/historical boundary, document inventory and authoritative roadmap. Preserve dated acceptance, failed receipts and third-party legal notices.

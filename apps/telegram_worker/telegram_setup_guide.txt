@@ -1,13 +1,15 @@
-Telegram price ingestion setup — source/docs 2.8.16, reviewed 2026-10-28
+Telegram ingestion — 2.8.17
 
-Required product scope; real channel/group collection is not yet accepted.
-Authoritative Persian guide: ../../docs/telegram-ingestion-guide-fa.md
-Acceptance and flowcharts: ../../docs/project-completion-roadmap-fa.md
+Owner access is not available. Production collection remains disabled.
+Read ../../docs/telegram-ingestion-guide-fa.md for current private login, source rights, account binding, group types, bounded recovery, retraction and activation gates.
 
-1. Owner selects an accessible channel and group and establishes permitted collection, storage and display/history scope. Do not assume public access grants reuse rights.
-2. Reading uses TELEGRAM_API_ID, TELEGRAM_API_HASH and TELEGRAM_SESSION_STRING. Keep them only in a restricted private environment. login.py prints the session; run only in a private unrecorded terminal. Never paste phone, code, password or session into chat, logs or Git.
-3. Create sources through the administrator panel with numeric channel identity, permitted instruments, parser, confidence, age, role and explicit confirmation. TELEGRAM_CHANNELS is unused by the current worker; database allowlisting selects sources.
-4. Supply current source grants as telegram:<database-source-id> through PRICING_RIGHTS_MANIFEST_PATH. Worker requires collect/store. API display/history permissions are separately checked. Mount the validated manifest read-only in both worker and API; a path variable alone does not mount a file. The current worker compose service needs this deployment wiring verified/completed.
-5. The API additionally checks telegram_source_enabled. Consumer roles verifier/fallback do not make Telegram an automatic primary source. A bot token for sending alarms does not replace the reading account session.
-6. Before enabling the telegram profile, complete and test actual group types, deletion, interrupted delivery, bounded catch-up, revoked sessions, current grants and end-to-end stored rate/alert receipts. Existing NewMessage/MessageEdited handlers and local fixtures are not proof of these missing gates.
-7. Deploy only reviewed fixed images with the normal guard, preserve other services and data, and record real-message and 24-hour monitoring evidence without secrets. Rotate a leaked session by revoking it in the account and generating a replacement privately.
+Required private values: TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_SESSION_STRING.
+Private file: D:\Projects\Nerkhbaan\repo\.local-keys\telegram-ingestion.private.env
+Owner login: python apps/telegram_worker/login.py --env-file <absolute-private-file>
+The login helper saves the session privately and never prints it. Never share login codes, passwords, sessions or private invite links.
+
+TELEGRAM_CHANNELS is unused. Sources come from the administrator panel/database and current permissions. New sources default to disabled. Use exact numeric group/channel identities; do not rewrite a basic group into a channel.
+
+The opt-in infra/compose.telegram.yaml requires a reviewed private env and complete rights manifest. Preserve all HTTP provider grants. Keep the collector state volume and account binding backed up. No schema migration is added. Do not enable the profile until real account/source and target acceptance pass.
+
+Recovery scans only a bounded fresh window with history permission, not a full archive. Missing from a limited page does not prove deletion. A deleted message has a durable tombstone. Cache inputs are checked again before current-price use. Forwarded prices retain original time and shared-origin identity. Images, audio and ambiguous text are not accepted rates.

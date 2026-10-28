@@ -1,4 +1,4 @@
-# فهرست سندهای پروژه — ۲.۸.۱۶
+# فهرست سندهای پروژه — ۲.۸.۱۷
 
 تاریخ: ۲۸اکتبر۲۰۲۶. منبع/سند **۲.۸.۱۶**؛ نصبِ پذیرفته **۲.۸.۱۵**. مرجعِ کارِ باز: [نقشهٔ پایان با فلوچارت](project-completion-roadmap-fa.md). مرجعِ نصب و داده: [رسید۲.۸.۱۵](pricing-release-2.8.15-fa.md).
 
@@ -8,6 +8,7 @@
 
 | سند | نوع و مرز |
 | --- | --- |
+| [docs/telegram-release-2.8.17-fa.md](telegram-release-2.8.17-fa.md) | کد خواندن؛ پذیرش واقعی باز |
 | [docs/source-release-2.8.16-fa.md](source-release-2.8.16-fa.md) | نسخهٔ جاریِ سند و منبع؛ نصب زنده۲.۸.۱۵ |
 | [.github/security-exceptions/POLICY.md](../.github/security-exceptions/POLICY.md) | راهنما؛ وضع جاری در نقشه |
 | [API_DOCUMENTATION.md](../API_DOCUMENTATION.md) | راهنما؛ وضع جاری در نقشه |

@@ -1,5 +1,7 @@
 # Remaining Delivery and Later Work
 
+Source candidate **2.8.17** implements Telegram text collection, recovery and retraction. Real account/source access, live acceptance and activation remain open; see [the candidate scope](docs/telegram-release-2.8.17-fa.md).
+
 <!-- delivery-docs:2.8.16 -->
 > مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
 

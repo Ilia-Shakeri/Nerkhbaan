@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.lock
 COPY app ./app
 
 RUN addgroup -S deploy && adduser -S -G deploy deploy
-RUN chown -R deploy:deploy /app
+RUN mkdir -p /state && chown -R deploy:deploy /app /state
 USER deploy
 
 CMD ["python", "-m", "app.worker"]

@@ -1142,7 +1142,7 @@ const defaultSource = () => ({
   requires_multiple_sources: false,
   parser_type: "strict_explicit",
   parser_version: "strict-explicit-3",
-  enabled: true,
+  enabled: false,
 });
 
 export function ProvidersPage(props: PageProps) {
@@ -1557,12 +1557,12 @@ function TelegramSources(props: PageProps) {
               {!editing && (
                 <>
                   <label>
-                    Marked chat ID
+                    Numeric channel or group ID
                     <input
                       value={value.channel_id}
                       required
-                      pattern="-100[0-9]+"
-                      placeholder="-1001234567890"
+                      pattern={value.source_type === "group" ? "-[1-9][0-9]*" : "-100[1-9][0-9]*"}
+                      placeholder={value.source_type === "group" ? "-123456789 or -1001234567890" : "-1001234567890"}
                       onChange={(event) =>
                         setValue({ ...value, channel_id: event.target.value })
                       }

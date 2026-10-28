@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
@@ -34,7 +35,7 @@ class ParsedTelegramQuote:
     confidence_score: Decimal
     validation_status: str
     rejection_reason: str | None
-    parser_version: str = "strict-explicit-3"
+    parser_version: str = "strict-text-4"
 
 
 RULES = (
@@ -88,22 +89,41 @@ RULES = (
         Decimal("1000000"),
         Decimal("100000000000"),
     ),
+    InstrumentRule("USD_TOMAN", "TOMAN", None, None,
+                   ("#دلار", "دلار", "USD"), (), Decimal("1000"), Decimal("1000000")),
+    InstrumentRule("GOLD_24K_TOMAN_GRAM", "TOMAN", "gram", "999.9",
+                   ("طلای 24 عیار", "#طلای24", "#طلا_24", "24K"),
+                   ("گرم", "9999"), Decimal("100000"), Decimal("150000000")),
+    InstrumentRule("XAU_USD_OZ", "USD", "troy_ounce", "999.9",
+                   ("XAUUSD", "XAU/USD", "اونس طلا", "انس طلا", "#اونس_طلا"),
+                   (), Decimal("500"), Decimal("10000")),
+    InstrumentRule("XAG_USD_OZ", "USD", "troy_ounce", "999.9",
+                   ("XAGUSD", "XAG/USD", "اونس نقره", "انس نقره", "#اونس_نقره"),
+                   (), Decimal("5"), Decimal("500")),
+    InstrumentRule("BTC_USD", "USD", None, None,
+                   ("BTCUSD", "BTC/USD", "BTC", "بیت کوین", "#بیت_کوین"),
+                   (), Decimal("1000"), Decimal("1000000")),
+    InstrumentRule("USDT_USD", "USD", None, None,
+                   ("USDTUSD", "USDT/USD", "USDT", "تتر", "#تتر_دلار"),
+                   (), Decimal("0.8"), Decimal("1.2")),
 )
 
-NUMBER_PATTERN = re.compile(r"(?<![\d.])([\d]+(?:[,٬_][\d]{3})*(?:[.٫][\d]+)?)(?![\d.])")
+NUMBER_PATTERN = re.compile(r"(?<![\w.,٬_٫+\-−])([0-9]+(?:[,٬_][0-9]{3})*(?:[.٫][0-9]+)?)(?![\w.,٬_٫])")
 PARSER_TYPES = frozenset({"strict_explicit", "strict_hashtag"})
 
 
-def normalize_channel_id(value: str | int) -> str:
-    """Store Telegram channel IDs in the marked -100 form."""
+def normalize_channel_id(value: str | int, *, source_type: str = "channel") -> str:
+    """Keep marked channel/supergroup IDs distinct from basic group IDs."""
     raw = str(value).strip()
     if not raw.lstrip("-").isdigit():
         raise ValueError("Channel ID must be numeric")
     if raw.startswith("-100") and len(raw) > 4:
         return raw
+    if raw.startswith("-") and source_type == "group" and int(raw) < 0:
+        return str(int(raw))
     if raw.startswith("-"):
         raise ValueError("Expected a channel ID, not a group ID")
-    if int(raw) <= 0:
+    if int(raw) <= 0 or source_type == "group":
         raise ValueError("Channel ID must be positive or marked -100")
     return f"-100{int(raw)}"
 
@@ -115,6 +135,14 @@ def normalize_text(text: str) -> str:
 
 def message_hash(text: str) -> str:
     return hashlib.sha256(normalize_text(text).encode("utf-8")).hexdigest()
+
+
+def parser_policy_version(source: dict) -> str:
+    policy = {"type": source["parser_type"], "declared_version": source["parser_version"],
+              "instruments": sorted(set(source["allowed_instruments"])),
+              "confidence": str(Decimal(str(source["minimum_confidence"])).normalize())}
+    digest = hashlib.sha256(json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:10]
+    return "strict-text-4:" + digest
 
 
 def _number(raw: str) -> Decimal | None:
@@ -130,14 +158,28 @@ def _number(raw: str) -> Decimal | None:
 def _rule_matches(text: str, rule: InstrumentRule, *, hashtag: bool = False) -> list[Decimal]:
     values: list[Decimal] = []
     for line in text.splitlines():
-        labels = [label for label in rule.labels if label in line and (not hashtag or label.startswith("#") or f"#{label}" in line)]
+        labels = []
+        for label in rule.labels:
+            match = re.search(r"(?<!\w)" + re.escape(label) + r"(?!\w)", line, flags=re.IGNORECASE)
+            if match and (not hashtag or label.startswith("#") or (match.start() > 0 and line[match.start()-1] == "#")):
+                labels.append(match.start())
         if not labels or any(term not in line for term in rule.required_terms):
+            continue
+        if rule.instrument_id == "USD_TOMAN" and re.search(r"تتر|بیت|طلا|نقره|\bUSDT\b|\bBTC\b|\bXAU\b|\bXAG\b", line, re.IGNORECASE):
             continue
         has_toman = bool(re.search(r"تومان|\bTOMAN\b", line, re.IGNORECASE))
         has_rial = bool(re.search(r"ریال|\bRIAL\b|\bIRR\b", line, re.IGNORECASE))
-        if has_toman == has_rial:
+        if rule.currency == "USD":
+            has_usd = bool(re.search(r"\bUSD\b|دلار|\$", line, re.IGNORECASE))
+            if not has_usd or has_toman or has_rial:
+                continue
+        elif has_toman == has_rial:
             continue
-        position = min(line.find(label) for label in labels)
+        if rule.weight_unit == "gram" and re.search(r"کیلو|مثقال|\bkg\b|\boz\b|اونس|انس", line, re.IGNORECASE):
+            continue
+        if rule.weight_unit == "troy_ounce" and (not re.search(r"اونس|انس|\boz\b|\btroy\s+ounce\b", line, re.IGNORECASE) or re.search(r"گرم|\bgram\b|\bkg\b", line, re.IGNORECASE)):
+            continue
+        position = min(labels)
         window = line[max(0, position - 20) : position + 180]
         for match in NUMBER_PATTERN.finditer(window):
             value = _number(match.group(1))
@@ -156,6 +198,8 @@ def parse_message(
     minimum_confidence: Decimal,
 ) -> list[ParsedTelegramQuote]:
     normalized = normalize_text(text)
+    if len(text or "") > MAX_MESSAGE_CHARS:
+        return [ParsedTelegramQuote(None, None, None, None, None, Decimal("0"), "rejected", "message_too_long")]
     if parser_type not in PARSER_TYPES:
         return [
             ParsedTelegramQuote(

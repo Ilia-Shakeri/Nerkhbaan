@@ -1,5 +1,7 @@
 # Delivery Readiness — 2.8.15
 
+Source candidate **2.8.17**: Telegram channel/group ingestion, typed peer IDs, durable edit/delete handling, bounded recovery and cached-input revalidation. Live acceptance remains at **2.8.15** until the guarded rollout passes. Real Telegram collection remains disabled: no reading account or approved sources are available. [Scope and remaining activation gates](telegram-release-2.8.17-fa.md).
+
 <!-- delivery-docs:2.8.16 -->
 > مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
 

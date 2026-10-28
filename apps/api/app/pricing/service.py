@@ -313,6 +313,7 @@ class InstrumentPricingService:
                     if not isinstance(quote, BaseException) and quote is not None
                     and self._allowed_current_quote(quote)]
         eligible = [quote for quote in eligible if quote is not None]
+        eligible = [quote for quote in eligible if await self._telegram_inputs_valid(quote, instrument)]
         return max(eligible, key=lambda quote: (quote.observed_at, quote.canonical_at), default=None)
 
     async def get_all_canonical(self) -> dict[str, CanonicalQuote]:
@@ -348,15 +349,26 @@ class InstrumentPricingService:
                 resolved[key] = quote
         if definitions is None:
             definitions = await self._instrument_definitions(resolved)
-        effective = {}
+        candidates = {}
         for key, quote in resolved.items():
             definition = definitions.get(key)
             if definition is None:
                 continue
             adjusted = self._current_policy(quote, definition)
             if adjusted is not None:
-                effective[key] = adjusted
-        return effective
+                candidates[key] = adjusted
+        allowed = await asyncio.gather(*(self._telegram_inputs_valid(quote, definitions[key])
+                                         for key, quote in candidates.items()))
+        return {key: quote for (key, quote), valid in zip(candidates.items(), allowed) if valid}
+
+    async def _telegram_inputs_valid(self, quote: CanonicalQuote, instrument: InstrumentDefinition) -> bool:
+        leaves = rights._leaves(quote.source_summary) or set()
+        if not any(name.startswith("telegram:") for name in leaves):
+            return True
+        try:
+            return await asyncio.wait_for(self.telegram_quotes.canonical_inputs_valid(quote, instrument), timeout=3)
+        except Exception:
+            return False
 
     async def _instrument_definitions(
         self, instrument_ids: Iterable[str], *, strict: bool = False,

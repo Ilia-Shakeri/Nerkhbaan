@@ -37,7 +37,7 @@ class EventFilter:
         self.chats = kwargs.get("chats")
 
 
-fake_telethon.events = types.SimpleNamespace(NewMessage=EventFilter, MessageEdited=EventFilter)
+fake_telethon.events = types.SimpleNamespace(NewMessage=EventFilter, MessageEdited=EventFilter, MessageDeleted=EventFilter)
 fake_sessions = types.ModuleType("telethon.sessions")
 fake_sessions.StringSession = lambda value: value
 with patch.dict(sys.modules, {"psycopg": fake_psycopg, "psycopg.rows": fake_rows,
@@ -62,7 +62,7 @@ def grant(**changes):
 def source(source_id=1):
     return {"id": source_id, "channel_id": "-100123", "username": "fixture_channel",
             "enabled": True, "maximum_message_age_seconds": 300,
-            "allowed_instruments": ["USDT_TOMAN"], "parser_type": "strict_explicit",
+            "allowed_instruments": ["USDT_TOMAN"], "parser_type": "strict_explicit", "parser_version": "strict-text-4",
             "minimum_confidence": "0.8", "role": "verifier", "trust_score": "0.8",
             "requires_multiple_sources": False}
 
@@ -142,9 +142,14 @@ class FakeEvent:
 
     def __init__(self, channel_id=-100123):
         self.chat_id = channel_id
-        self.message = types.SimpleNamespace(id=8, date=datetime.now(UTC), edit_date=None)
+        self._message = types.SimpleNamespace(id=8, date=datetime.now(UTC), edit_date=None, message="USDT 100000 تومان")
         self.raw_reads = 0
         self.metadata_requests = 0
+
+    @property
+    def message(self):
+        self.raw_reads += 1
+        return self._message
 
     @property
     def raw_text(self):
@@ -173,14 +178,29 @@ class FakeClient:
             return callback
         return decorate
 
-    async def start(self):
+    async def connect(self):
         self.starts += 1
         if self.on_start:
             self.on_start()
 
-    async def run_until_disconnected(self):
-        if self.event:
-            await self.handlers[0](self.event)
+    async def is_user_authorized(self):
+        return True
+
+    async def get_me(self):
+        return types.SimpleNamespace(id=9001, bot=False)
+
+    def is_connected(self):
+        return self.disconnects == 0
+
+    @property
+    def disconnected(self):
+        future = asyncio.get_running_loop().create_future()
+        async def complete():
+            if self.event:
+                await self.handlers[0](self.event)
+            future.set_result(None)
+        asyncio.create_task(complete())
+        return future
 
     async def disconnect(self):
         self.disconnects += 1
@@ -193,6 +213,7 @@ class ManifestFixture(unittest.TestCase):
         self.manifest = Path(self.directory.name) / "permissions.json"
         self.environment = patch.dict(os.environ, {"PRICING_RIGHTS_MANIFEST_PATH": str(self.manifest),
             "DATABASE_URL": "postgresql://fixture/db", "TELEGRAM_API_ID": "9001",
+            "TELEGRAM_STATE_PATH": str(Path(self.directory.name) / "collector.json"),
             "TELEGRAM_API_HASH": "fixture-hash", "TELEGRAM_SESSION_STRING": "fixture-session"}, clear=True)
         self.environment.start()
         self.addCleanup(self.environment.stop)
@@ -401,7 +422,8 @@ class WorkerRightsBoundaryTests(ManifestFixture):
         self.assertEqual(self.client.starts, 1)
         self.assertEqual(event.raw_reads, 0)
         self.assertEqual(event.metadata_requests, 0)
-        self.assertTrue(all(set(item.chats) == {-100123} for item in self.client.filters))
+        self.assertEqual(len(self.client.filters), 3)
+        self.assertEqual(self.database.committed, [])
 
     def test_granted_event_persists_without_network_metadata_request(self):
         self.write({"telegram:1": grant()})

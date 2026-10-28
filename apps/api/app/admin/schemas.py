@@ -152,18 +152,22 @@ class TelegramSourceCreate(BaseModel):
     requires_multiple_sources: bool = False
     parser_type: Literal["strict_explicit", "strict_hashtag"] = "strict_explicit"
     parser_version: str = Field(min_length=1, max_length=32)
-    enabled: bool = True
+    enabled: bool = False
     confirmation: str = Field(min_length=3, max_length=200)
 
     @field_validator("channel_id")
     @classmethod
     def valid_channel_id(cls, value: str) -> str:
         clean = value.strip()
-        if not re.fullmatch(r"[-A-Za-z0-9_]{2,80}", clean):
-            raise ValueError("Telegram channel ID is invalid")
-        if clean.lstrip("-").isdigit():
-            return clean if clean.startswith("-100") else "-100" + clean.lstrip("-")
+        if not re.fullmatch(r"-?[1-9][0-9]{0,18}", clean):
+            raise ValueError("Telegram source requires a numeric peer ID")
         return clean
+
+    @model_validator(mode="after")
+    def marked_peer_identity(self):
+        from .telegram_parser import normalize_channel_id
+        self.channel_id = normalize_channel_id(self.channel_id, source_type=self.source_type)
+        return self
 
     @field_validator("username")
     @classmethod

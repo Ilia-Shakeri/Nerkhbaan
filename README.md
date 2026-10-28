@@ -1,5 +1,7 @@
 # Nerkhbaan
 
+Source candidate **2.8.17**: Telegram channel/group ingestion, typed peer IDs, durable edit/delete handling, bounded recovery and cached-input revalidation. Live acceptance remains at **2.8.15** until the guarded rollout passes. Real Telegram collection remains disabled: no reading account or approved sources are available. [Scope and remaining activation gates](docs/telegram-release-2.8.17-fa.md).
+
 <!-- delivery-docs:2.8.16 -->
 > مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
 
@@ -20,9 +22,9 @@ Three separately labelled Iranian reference valuations are now available for
 parent prices and actual daily gaps; they do not replace native market contracts.
 See [the reference scope and operational limits](docs/iranian-references-2026-10-17.md).
 
-Source/documentation release: **2.8.16**. Installed application remains **2.8.15**; this documentation release does not deploy new runtime images.
+Previous source/documentation release: **2.8.16**; its scope and checks remain historical.
 Read [the 2.8.16 source release scope and checks](docs/source-release-2.8.16-fa.md).
-Telegram channel/group price ingestion is a required unfinished delivery item. Collector/parser/admin code exists; live ingestion, group coverage, recovery and end-to-end alert receipt are not accepted.
+Telegram channel/group price ingestion is required delivery scope. The 2.8.17 candidate implements collection, group typing, bounded recovery and retraction. Real account/source and end-to-end receipt acceptance are still open.
 Read the [Persian completion roadmap and flowcharts](docs/project-completion-roadmap-fa.md), [Telegram ingestion guide](docs/telegram-ingestion-guide-fa.md), [document index](docs/documentation-index-fa.md), and [current deployment/backup evidence](docs/pricing-release-2.8.15-fa.md).
 
 ## Components

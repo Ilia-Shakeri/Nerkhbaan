@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from ..db import SessionLocal
 from . import rights
+from ..admin.telegram_parser import parser_policy_version
 from .operational import operational_pricing_settings
 from .models import (
     Currency,
@@ -26,6 +27,74 @@ from .models import (
 
 
 class StoredTelegramQuoteRepository:
+    async def canonical_inputs_valid(self, quote, instrument: InstrumentDefinition) -> bool:
+        """Never let a Redis snapshot revive an edited/deleted Telegram input."""
+        leaves = rights._leaves(quote.source_summary) or set()
+        if not any(name.startswith("telegram:") for name in leaves):
+            return True
+        ids = [value for value in (quote.primary_quote_id, *quote.verification_quote_ids)
+               if isinstance(value, int) and value > 0]
+        if not ids:
+            return False
+        try:
+            rows = await asyncio.to_thread(self._input_rows, ids)
+            if {int(row["id"]) for row in rows} != set(ids):
+                return False
+            telegram_ids = {int(row["id"]) for row in rows if row["source_type"] == "telegram"}
+            if not telegram_ids:
+                return False
+            valid_ids = set()
+            identities: set[tuple[str, str]] = set()
+            for instrument_id in {row["instrument_id"] for row in rows if row["source_type"] == "telegram"}:
+                definition = instrument if instrument_id == instrument.instrument_id else await operational_pricing_settings.instrument(instrument_id)
+                fresh = await self.latest(definition, roles=("verifier", "fallback"))
+                selected = [item for item in fresh if item.id in telegram_ids]
+                role_map = self._canonical_roles(quote.source_summary)
+                for item in selected:
+                    roles = role_map.get(item.provider_id, set())
+                    if roles != {item.metadata.get("source_role")}:
+                        return False
+                    identity = (instrument_id, str(item.metadata.get("source_identity")))
+                    if identity in identities:
+                        return False
+                    identities.add(identity)
+                fallback = [item for item in selected if item.metadata.get("source_role") == "fallback"]
+                if any(item.metadata.get("requires_multiple_sources") for item in fallback) and len(fallback) < 2:
+                    return False
+                valid_ids.update(item.id for item in selected)
+            return telegram_ids <= valid_ids
+        except Exception:
+            # Unavailable verification storage cannot certify a cached social quote.
+            return False
+
+    @staticmethod
+    def _canonical_roles(summary: dict, depth: int = 0) -> dict[str, set[str]]:
+        if not isinstance(summary, dict) or depth > 6:
+            return {}
+        result: dict[str, set[str]] = {}
+        if summary.get("derived"):
+            for item in summary.get("inputs", []):
+                for provider, roles in StoredTelegramQuoteRepository._canonical_roles(item.get("source_summary", {}), depth+1).items():
+                    result.setdefault(provider, set()).update(roles)
+        else:
+            providers = summary.get("provider_ids", [])
+            role = "fallback" if providers and all(name.startswith("telegram:") for name in providers) else "verifier"
+            for provider in providers:
+                if provider.startswith("telegram:"):
+                    result[provider] = {role}
+        return result
+
+    @staticmethod
+    def _input_rows(ids: list[int]):
+        db = SessionLocal()
+        try:
+            if db.get_bind().dialect.name == "postgresql":
+                db.execute(text("SET LOCAL statement_timeout = '2000ms'"))
+            return db.execute(text("SELECT id, source_type, instrument_id FROM provider_quotes WHERE id = ANY(:ids)"),
+                              {"ids": ids}).mappings().all()
+        finally:
+            db.close()
+
     async def latest(
         self,
         instrument: InstrumentDefinition,
@@ -62,6 +131,8 @@ class StoredTelegramQuoteRepository:
     ) -> list[Any]:
         db = SessionLocal()
         try:
+            if db.get_bind().dialect.name == "postgresql":
+                db.execute(text("SET LOCAL statement_timeout = '2000ms'"))
             return db.execute(
                 text(
                     """
@@ -73,6 +144,7 @@ class StoredTelegramQuoteRepository:
                         quote.confidence_score, quote.is_direct,
                         quote.is_derived, quote.is_suspicious,
                         quote.idempotency_key,
+                        quote.metadata AS telegram_metadata,
                         parsed.validation_status AS parse_validation_status,
                         message.message_date, message.channel_id,
                         source.id AS telegram_source_id,
@@ -81,6 +153,7 @@ class StoredTelegramQuoteRepository:
                         source.maximum_message_age_seconds,
                         source.maximum_deviation_percent,
                         source.requires_multiple_sources
+                        , source.parser_type, source.parser_version AS source_parser_version
                     FROM provider_quotes AS quote
                     JOIN telegram_parse_results AS parsed
                       ON parsed.provider_quote_id = quote.id
@@ -93,6 +166,7 @@ class StoredTelegramQuoteRepository:
                       AND quote.source_type = 'telegram'
                       AND quote.validation_status = 'accepted'
                       AND parsed.validation_status = 'accepted'
+                      AND parsed.parser_version = quote.parser_version
                       AND source.enabled = TRUE
                       AND source.role IN ('verifier', 'fallback')
                       AND (:rights_enforced = FALSE OR quote.provider_id = ANY(:rights_provider_ids))
@@ -120,6 +194,11 @@ class StoredTelegramQuoteRepository:
         current: datetime,
     ) -> ProviderQuote | None:
         role = str(row["role"] or "")
+        if row.get("source_parser_version") is not None:
+            policy = {"parser_type": row["parser_type"], "parser_version": row["source_parser_version"],
+                      "allowed_instruments": row["allowed_instruments"], "minimum_confidence": row["minimum_confidence"]}
+            if row["parser_version"] != parser_policy_version(policy):
+                return None
         allowed_instruments = row["allowed_instruments"]
         if (
             role not in allowed_roles
@@ -153,6 +232,7 @@ class StoredTelegramQuoteRepository:
                 purity /= Decimal(1000)
             trust_score = Decimal(str(row["trust_score"]))
             minimum_confidence = Decimal(str(row["minimum_confidence"]))
+            confidence = Decimal(str(row["confidence_score"]))
             maximum_deviation = Decimal(str(row["maximum_deviation_percent"]))
             currency = Currency(str(row["currency"]))
             weight_unit = (
@@ -171,11 +251,17 @@ class StoredTelegramQuoteRepository:
             or not Decimal(0) <= trust_score <= Decimal(1)
             or not minimum_confidence.is_finite()
             or not Decimal(0) <= minimum_confidence <= Decimal(1)
+            or not confidence.is_finite() or confidence < minimum_confidence
+            or trust_score < (Decimal("0.8") if role == "fallback" else Decimal("0.5"))
             or not maximum_deviation.is_finite()
             or maximum_deviation <= 0
         ):
             return None
         try:
+            import re
+            metadata = row.get("telegram_metadata") or {}
+            origin = metadata.get("origin_identity") if isinstance(metadata, dict) else None
+            identity = f"origin:{origin}" if isinstance(origin, str) and re.fullmatch(r"[0-9a-f]{32}", origin) else str(row["telegram_source_id"])
             return ProviderQuote.create(
                 id=int(row["id"]),
                 instrument_id=instrument.instrument_id,
@@ -194,7 +280,7 @@ class StoredTelegramQuoteRepository:
                 is_derived=False,
                 is_suspicious=False,
                 source_semantic=SourceSemantic.TELEGRAM_OBSERVATION,
-                source_family=f"telegram:{row['telegram_source_id']}",
+                source_family=f"telegram:{identity}",
                 venue="telegram",
                 selected_price_semantic=PriceSemantic.PROVIDER_SELECTED,
                 original_currency=currency.value,
@@ -205,7 +291,7 @@ class StoredTelegramQuoteRepository:
                 provenance=(f"telegram:{row['telegram_source_id']}",),
                 metadata={
                     "whitelisted": True,
-                    "source_identity": str(row["telegram_source_id"]),
+                    "source_identity": identity,
                     "source_role": role,
                     "approved_verifier": role == "verifier",
                     "approved_fallback": role == "fallback",
