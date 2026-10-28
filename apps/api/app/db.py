@@ -11,22 +11,45 @@ from .config import settings
 class Base(DeclarativeBase):
     pass
 
-# Two engines share one PostgreSQL max_connections budget, and the sync engine
-# is also used from worker threads, so the pools are sized from configuration
-# rather than hardcoded. Total peak connections per process is
-# (sync_pool + sync_overflow) + (async_pool + async_overflow).
+def sync_pool_plan(size: int, overflow: int) -> tuple[int, int, int]:
+    """Reserve request capacity inside the configured synchronous budget."""
+    if size < 1 or overflow < 0:
+        raise ValueError("Database pools require a positive size and bounded overflow")
+    budget = size + overflow
+    reserved = min(2, budget - 1)
+    background_size = min(size, budget - reserved)
+    return background_size, budget - reserved - background_size, reserved
+
+
+# Price workers and history reads must not occupy the last request connections.
+# The two synchronous pools together keep the existing configured peak budget;
+# the asynchronous pool keeps its independent configured budget.
+_background_size, _background_overflow, _request_size = sync_pool_plan(
+    settings.database_pool_size, settings.database_max_overflow,
+)
 engine = create_engine(
     settings.database_url,
     future=True,
     pool_pre_ping=True,
-    pool_size=settings.database_pool_size,
-    max_overflow=settings.database_max_overflow,
+    pool_size=_background_size,
+    max_overflow=_background_overflow,
     pool_timeout=settings.database_pool_timeout_seconds,
     pool_recycle=1800,
     connect_args={"connect_timeout": 5} if settings.database_url.startswith("postgresql") else {},
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, class_=Session)
+request_engine = create_engine(
+    settings.database_url,
+    future=True,
+    pool_pre_ping=True,
+    pool_size=_request_size,
+    max_overflow=0,
+    pool_timeout=settings.database_pool_timeout_seconds,
+    pool_recycle=1800,
+    connect_args={"connect_timeout": 5} if settings.database_url.startswith("postgresql") else {},
+) if _request_size else engine
+RequestSessionLocal = sessionmaker(bind=request_engine, autoflush=False, autocommit=False, class_=Session)
 
 
 def _async_database_url(url: str) -> str:
@@ -62,7 +85,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
+    db = RequestSessionLocal()
     try:
         yield db
     except Exception:

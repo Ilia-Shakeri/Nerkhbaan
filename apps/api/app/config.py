@@ -18,8 +18,8 @@ class Settings(BaseSettings):
     database_url: str = Field(
         default="postgresql+psycopg://nerkhbaan:nerkhbaan@localhost:5432/nerkhbaan"
     )
-    # Peak connections per process is roughly
-    # (pool + overflow) * 2 because a sync and an async engine both exist.
+    # Request capacity is reserved inside the synchronous budget. Combined peak:
+    # (sync size + overflow) + (async size + overflow), never an extra request budget.
     database_pool_size: int = 5
     database_async_pool_size: int = 5
     database_max_overflow: int = 3

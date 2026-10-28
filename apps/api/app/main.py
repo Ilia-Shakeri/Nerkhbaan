@@ -19,7 +19,7 @@ from . import models
 from .admin import models as admin_models
 from .admin.worker import admin_operations_worker
 from .config import settings
-from .db import async_engine, engine
+from .db import async_engine, engine, request_engine
 from .health import health_snapshot
 from .migrations.state import assert_migrations_current
 from .observability import configure_logging, request_id_context
@@ -125,6 +125,8 @@ async def lifespan(app: FastAPI):
         except Exception:
             logger.warning("Redis connection pool did not close cleanly")
         await async_engine.dispose()
+        if request_engine is not engine:
+            await asyncio.to_thread(request_engine.dispose)
         await asyncio.to_thread(engine.dispose)
         logger.info("API shutdown complete")
 

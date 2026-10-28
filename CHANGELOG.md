@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.8.19] - 2026-10-28
+
+- Reserve up to two request connections inside the existing synchronous connection budget; background pricing/history cannot occupy those slots. Keep one shared pool when the entire configured synchronous budget is one connection.
+- Retain early release of read-only instrument identity transactions, dispose both synchronous engines, reject unbounded pool plans, and test exhausted background capacity plus request rollback. No new environment key or schema migration.
+
+
 ## [2.8.18] - 2026-10-28
 
 - Release the optional instrument authentication transaction before awaited pricing work so parallel price reads do not reserve the shared connection pool while waiting for more connections. Rejected identities stay rejected.
