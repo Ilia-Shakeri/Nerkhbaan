@@ -4,6 +4,14 @@ All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning
 
 ## [Unreleased]
 
+## [2.8.14] - 2026-10-28
+
+- Isolate slow pricing refreshes with one owned task per instrument and a bounded cycle wait. Preserve distributed leases, source budgets, source clocks and alert eligibility; cancel and await owned tasks on shutdown or Redis loss.
+- Keep price refresh start cadence between six and ten seconds at the default interval, including cycle work, so a slow source cannot consume another instrument's entire twenty-second live window.
+- Read the documented Nobitex multi-market book for USDT, selecting only its own timestamp and Rial-valued levels. Preserve strict freshness, payload bounds and attribution.
+- Classify non-JSON HTTP error pages by their actual status. Honour HTML 429 cooldowns, retry bounded 503 responses, and reject HTML 200 responses as invalid data.
+- Preserve an off-host full database snapshot and verify an isolated Timescale restore. Application deployment and live-rate acceptance need their own final evidence; see the dated pricing repair record.
+
 ## [2.8.13] - 2026-10-24
 
 - Deployed the exact tagged application with ten migrations and 17 protected identities retained. Guard-only recovery binds the original failed retirement receipts and uses concurrent strict pair probes inside the unchanged 30-second deadline; migrations are not rerun. See [the final administrator release record](docs/admin-release-2.8.13-fa.md).

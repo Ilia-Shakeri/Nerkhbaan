@@ -1,4 +1,6 @@
-# Administrator guide — 2.8.13
+# Administrator guide — 2.8.14
+
+Candidate 2.8.14 retains the existing administrator flows. Installed version remains 2.8.13 until its own rollout succeeds. [Pricing and backup evidence](pricing-repair-2026-10-28.md).
 
 The dashboard reference panel has three separate Iranian reference identities.
 Gold purity is unconfirmed; BTC/USD and USDT/USD are ratios of same-source

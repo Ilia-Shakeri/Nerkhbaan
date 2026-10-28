@@ -34,6 +34,20 @@ def candles(start=None, count=3):
 
 
 class NobitexOrderBookSourceTests(unittest.TestCase):
+    def test_multi_market_route_uses_only_requested_market_clock_and_units(self):
+        from app.pricing.registry import PROVIDERS
+
+        self.assertTrue(PROVIDERS["nobitex_orderbook_usdt"].url.endswith("/v3/orderbook/all"))
+        source = {"status": "ok", "BTCIRT": book("BTCIRT"), "USDTIRT": book()}
+        value = self.parse(source)
+        self.assertEqual(value.price, Decimal("263311.5"))
+        source["USDTIRT"]["lastUpdate"] = int((NOW - timedelta(minutes=2)).timestamp() * 1000)
+        with self.assertRaises(ParserError):
+            self.parse(source)
+        del source["USDTIRT"]
+        with self.assertRaises(ParserError):
+            self.parse(source)
+
     def parse(self, payload, symbol="USDTIRT", instrument=None):
         instrument = instrument or get_instrument("USDT_TOMAN" if symbol == "USDTIRT" else "BTC_TOMAN")
         return NobitexOrderBookParser(symbol).parse(payload, ParserContext(instrument, NOW, 60))

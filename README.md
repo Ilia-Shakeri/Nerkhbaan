@@ -1,6 +1,7 @@
 # Nerkhbaan
 
 Current deployed application: **2.8.13**, verified 2026-10-24. `VERSION` is the source of release truth.
+Source candidate: **2.8.14**, pricing refresh isolation and the documented USDT book route. Deployment remains pending its own CI, runtime and guarded acceptance; [backup and repair evidence](docs/pricing-repair-2026-10-28.md).
 See the [administrator release evidence and remaining account/device gates](docs/admin-release-2.8.13-fa.md).
 
 The administrator console now connects Kavenegar SMS and Asterisk ARI calls,

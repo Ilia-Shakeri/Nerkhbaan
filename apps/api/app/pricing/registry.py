@@ -486,7 +486,8 @@ _PROVIDERS = (
     ),
     _provider(
         "nobitex_orderbook_usdt", "Nobitex USDT Order Book", "USDT_TOMAN",
-        ProviderRole.PRIMARY, 1, "0.91", _setting_url("nobitex_api_base_url", "/v3/orderbook/USDTIRT"),
+        # The documented multi-market response retains each book's own clock.
+        ProviderRole.PRIMARY, 1, "0.91", _setting_url("nobitex_api_base_url", "/v3/orderbook/all"),
         "nobitex_orderbook_usdtirt_v1", "nobitex-orderbook/1.1.0", 20,
         maximum_payload_bytes=1_048_576,
         rpm=12, rph=360, rpd=5000, interval=20, headers=_NOBITEX_HEADERS,

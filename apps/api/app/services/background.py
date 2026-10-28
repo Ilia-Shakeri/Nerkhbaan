@@ -89,8 +89,14 @@ class BackgroundRunner:
         jitter = max(0, settings.pricing_refresh_jitter_seconds)
         return max(1.0, base + (secrets.randbelow(jitter * 2 + 1) - jitter if jitter else 0))
 
+    def _refresh_delay(self, elapsed: float) -> float:
+        jitter = min(2, max(0, settings.pricing_refresh_jitter_seconds))
+        cadence = min(self.interval, 8) + (secrets.randbelow(jitter * 2 + 1) - jitter if jitter else 0)
+        return max(0.1, max(1.0, cadence) - elapsed)
+
     async def _run_refresh_loop(self) -> None:
         while self._running:
+            cycle_started = asyncio.get_running_loop().time()
             self._refresh_state.update(
                 {
                     "state": "running",
@@ -133,7 +139,10 @@ class BackgroundRunner:
                     }
                 )
                 logger.error("Pricing refresh failed error_type=%s", type(exc).__name__)
-            await asyncio.sleep(self._next_delay(self.interval))
+            # Start-to-start cadence, rather than cycle duration plus interval.
+            # The fastest current instruments expire after twenty seconds.
+            elapsed = asyncio.get_running_loop().time() - cycle_started
+            await asyncio.sleep(self._refresh_delay(elapsed))
 
     async def _run_alert_loop(self) -> None:
         while self._running:
@@ -224,6 +233,7 @@ class BackgroundRunner:
         # work against the connection pool being torn down.
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
+        await instrument_pricing_service.cancel_refreshes()
         logger.info("Background alert runner stopped")
 
 

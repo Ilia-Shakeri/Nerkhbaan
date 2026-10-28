@@ -97,6 +97,7 @@ class InstrumentPricingService:
         self.operational = operational
         self.telegram_quotes = telegram_quotes
         self.source_policy = source_policy
+        self._refresh_tasks: dict[str, asyncio.Task[str]] = {}
 
     async def initialize(self) -> None:
         await self.persistence.sync_provider_catalog()
@@ -231,30 +232,58 @@ class InstrumentPricingService:
 
     async def refresh_cycle(self) -> dict[str, str]:
         if not await self.store.ping():
+            await self.cancel_refreshes()
             return {instrument_id: "suspended_redis_unavailable" for instrument_id in INSTRUMENTS}
-        results: dict[str, str] = {}
+        # One owned task per instrument. A slow metal source must not hold the
+        # next crypto refresh behind its network timeout. Redis still governs
+        # cross-replica leases, source sharing, cooldowns and request budgets.
         for instrument_id in _REFRESH_ORDER:
-            started = time.monotonic()
-            current = await self.get_canonical(instrument_id)
-            if current is not None and utc_now() <= current.valid_until:
-                results[instrument_id] = "fresh"
-                self._record_refresh_metrics(
-                    instrument_id,
-                    current.effective_status().value,
-                    started,
-                    current,
+            task = self._refresh_tasks.get(instrument_id)
+            if task is None or task.done():
+                self._refresh_tasks[instrument_id] = asyncio.create_task(
+                    self._refresh_one(instrument_id), name=f"price-refresh:{instrument_id}"
                 )
-                continue
-            try:
-                refreshed = await self.refresh_instrument(instrument_id)
-                results[instrument_id] = refreshed.effective_status().value if refreshed else "unavailable"
-                self._record_refresh_metrics(instrument_id, results[instrument_id], started, refreshed)
-            except Exception as exc:
-                results[instrument_id] = f"failed:{type(exc).__name__}"
-                self._record_refresh_metrics(instrument_id, "failed", started, current)
-            await asyncio.sleep(secrets.randbelow(250) / 1000)
+        try:
+            await asyncio.wait(
+                self._refresh_tasks.values(),
+                timeout=min(5.0, max(0.1, float(_settings().pricing_refresh_interval_seconds) / 2)),
+            )
+        except asyncio.CancelledError:
+            await self.cancel_refreshes()
+            raise
+        results = {
+            instrument_id: task.result() if task.done() else "refreshing"
+            for instrument_id, task in self._refresh_tasks.items()
+        }
         pricing_refresh_timestamp_seconds.set(utc_now().timestamp())
         return results
+
+    async def _refresh_one(self, instrument_id: str) -> str:
+        started = time.monotonic()
+        current = None
+        try:
+            await asyncio.sleep(secrets.randbelow(250) / 1000)
+            current = await self.get_canonical(instrument_id)
+            if current is not None and utc_now() <= current.valid_until:
+                result = "fresh"
+            else:
+                current = await self.refresh_instrument(instrument_id)
+                result = current.effective_status().value if current else "unavailable"
+            self._record_refresh_metrics(instrument_id, result, started, current)
+            return result
+        except Exception as exc:
+            self._record_refresh_metrics(instrument_id, "failed", started, current)
+            logger.warning("Price refresh failed instrument=%s error_type=%s", instrument_id, type(exc).__name__)
+            return f"failed:{type(exc).__name__}"
+
+    async def cancel_refreshes(self) -> None:
+        tasks = tuple(self._refresh_tasks.values())
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._refresh_tasks.clear()
 
     @staticmethod
     def _record_refresh_metrics(

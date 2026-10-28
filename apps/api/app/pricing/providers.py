@@ -621,12 +621,15 @@ class ProviderQuoteCollector:
                     try:
                         payload = json.loads(body)
                     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-                        raise ProviderCallFailure(
-                            "invalid_json",
-                            "Provider response is not valid JSON",
-                            http_status=response.status_code,
-                            content_type=content_type,
-                        ) from exc
+                        # Error pages may be HTML. Preserve the HTTP status so
+                        # throttling and bounded server-error retries still work.
+                        if 200 <= response.status_code < 300:
+                            raise ProviderCallFailure(
+                                "invalid_json",
+                                "Provider response is not valid JSON",
+                                http_status=response.status_code,
+                                content_type=content_type,
+                            ) from exc
                 if response.status_code == 429:
                     raise ProviderCallFailure(
                         "rate_limited",

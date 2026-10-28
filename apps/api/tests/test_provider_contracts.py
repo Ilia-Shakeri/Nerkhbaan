@@ -193,6 +193,43 @@ class ProviderRetryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.retry_after_seconds, 30)
         self.assertEqual(client.calls, 1)
 
+    async def test_html_rate_limit_preserves_cooldown_without_retry(self) -> None:
+        client = _StreamClient([_StreamResponse(429, b'<html>slow down</html>',
+            headers={"retry-after": "900", "content-type": "text/html"})])
+        with self.assertRaises(ProviderCallFailure) as raised:
+            await ProviderQuoteCollector()._request_payload(client, PROVIDERS["coinbase_btc_usd"])
+        self.assertEqual(raised.exception.code, "rate_limited")
+        self.assertEqual(raised.exception.retry_after_seconds, 900)
+        self.assertIsNone(raised.exception.payload)
+        self.assertEqual(client.calls, 1)
+
+    async def test_html_server_fault_uses_bounded_retry(self) -> None:
+        client = _StreamClient([_StreamResponse(503, b'<html>unavailable</html>'),
+            _StreamResponse(200, b'{"price":"100"}')])
+        provider_settings = __import__("app.pricing.providers", fromlist=["settings"]).settings
+        with patch.object(provider_settings, "pricing_provider_max_retries", 1), patch.object(
+            provider_settings, "pricing_provider_backoff_base_seconds", Decimal("0")
+        ):
+            payload, _kind, status_code = await ProviderQuoteCollector()._request_payload(
+                client, PROVIDERS["coinbase_btc_usd"])
+        self.assertEqual((payload, status_code, client.calls), ({"price": "100"}, 200, 2))
+
+    async def test_html_forbidden_is_http_error_without_retry(self) -> None:
+        client = _StreamClient([_StreamResponse(403, b'<html>forbidden</html>')])
+        with self.assertRaises(ProviderCallFailure) as raised:
+            await ProviderQuoteCollector()._request_payload(client, PROVIDERS["coinbase_btc_usd"])
+        self.assertEqual(raised.exception.code, "http_error")
+        self.assertEqual(raised.exception.http_status, 403)
+        self.assertIsNone(raised.exception.payload)
+        self.assertEqual(client.calls, 1)
+
+    async def test_success_with_html_remains_invalid(self) -> None:
+        client = _StreamClient([_StreamResponse(200, b'<html>not a quote</html>')])
+        with self.assertRaises(ProviderCallFailure) as raised:
+            await ProviderQuoteCollector()._request_payload(client, PROVIDERS["coinbase_btc_usd"])
+        self.assertEqual(raised.exception.code, "invalid_json")
+        self.assertEqual(client.calls, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

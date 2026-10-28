@@ -12,6 +12,14 @@ from app.services.background import BackgroundRunner
 
 
 class PricingRefreshHealthTests(unittest.TestCase):
+    def test_price_cadence_leaves_room_before_twenty_second_expiry(self) -> None:
+        runner = BackgroundRunner(interval=20)
+        with patch("app.services.background.secrets.randbelow", return_value=0):
+            self.assertEqual(runner._refresh_delay(2), 4)
+        with patch("app.services.background.secrets.randbelow", return_value=4):
+            self.assertEqual(runner._refresh_delay(2), 8)
+            self.assertEqual(runner._refresh_delay(40), 0.1)
+
     def test_initial_state_is_explicit(self) -> None:
         runner = BackgroundRunner(interval=1)
 
