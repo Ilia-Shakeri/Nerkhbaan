@@ -13,17 +13,17 @@ permissions:
   actions: read
 
 concurrency:
-  group: release-runtime-2.8.14
+  group: release-runtime-2.8.15
   cancel-in-progress: false
 
 jobs:
   build-runtime:
-    name: Build exact 2.8.14 runtime artifacts
+    name: Build exact 2.8.15 runtime artifacts
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       PYTHONDONTWRITEBYTECODE: "1"
-      APPLICATION_COMMIT: "8bdfe76dee1dcfb443b84a29ecfa64ebb0475a91"
+      APPLICATION_COMMIT: "228ca5868d90686bb0a476f93179afead83d474a"
       TRIVY_VERSION: "v0.70.0"
     steps:
       - name: Check out workflow tools
@@ -80,7 +80,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release-runtime-2.8.14-8bdfe76-${{ github.run_id }}-${{ github.run_attempt }}
+          name: release-runtime-2.8.15-8bdfe76-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             public-evidence-only/*.json
             public-evidence-only/*.log

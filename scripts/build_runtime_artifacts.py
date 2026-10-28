@@ -19,11 +19,11 @@ import urllib.request
 import zipfile
 
 
-APPLICATION_COMMIT = '8bdfe76dee1dcfb443b84a29ecfa64ebb0475a91'
+APPLICATION_COMMIT = '228ca5868d90686bb0a476f93179afead83d474a'
 BASE_COMMIT = 'fcdac9fc75e974f06162efd9d59dd68cf9257c68'
 NODE_BASE_COMMIT = '9a8947b51cb924e3eaf62553193e104db8361834'
-VERSION = '2.8.14'
-APPLICATION_CI_RUN = 40653188478
+VERSION = '2.8.15'
+APPLICATION_CI_RUN = 40661404431
 REPOSITORY = "Ilia-Shakeri/Nerkhbaan"
 PUBLIC_ASSET = 'https://nerkhbaan.ir/assets/index-CgtClNOA.js'
 PUBLIC_ASSET_SHA256 = '6230de7ea0e342b2e43a13f9b96eb61d0cca81512fa244783d0b6bfc8ae94663'
@@ -67,10 +67,15 @@ PATCH_PATHS = {
     'apps/api/app/admin/routers/alerts.py',
     'apps/api/app/admin/routers/communications.py',
     'apps/api/app/admin/routers/operations.py',
+    'apps/api/app/admin/routers/pricing.py',
     'apps/api/app/config.py',
     'apps/api/app/models.py',
+    'apps/api/app/pricing/history.py',
+    'apps/api/app/pricing/models.py',
+    'apps/api/app/pricing/persistence.py',
     'apps/api/app/pricing/providers.py',
     'apps/api/app/pricing/registry.py',
+    'apps/api/app/pricing/rights.py',
     'apps/api/app/pricing/service.py',
     'apps/api/app/release.py',
     'apps/api/app/routers/alerts.py',
@@ -90,11 +95,16 @@ PATCH_PATHS = {
     'apps/api/tests/test_communication_transports.py',
     'apps/api/tests/test_communication_worker.py',
     'apps/api/tests/test_communications_migration.py',
+    'apps/api/tests/test_nerkhsanj_markets.py',
     'apps/api/tests/test_nobitex_source_contracts.py',
     'apps/api/tests/test_pricing_refresh_health.py',
     'apps/api/tests/test_pricing_refresh_isolation.py',
+    'apps/api/tests/test_pricing_rights_boundaries.py',
+    'apps/api/tests/test_pricing_rights_postgres.py',
     'apps/api/tests/test_provider_contracts.py',
     'apps/api/tests/test_smtp_delivery.py',
+    'apps/api/tests/test_source_rights_decision_storage.py',
+    'apps/api/tests/test_source_rights_policy.py',
     'apps/api/tests/test_step1_transport_worker_insights.py',
     'apps/desktop/package.json',
     'apps/desktop/vite.config.ts',
@@ -128,6 +138,7 @@ PATCH_PATHS = {
     'docs/release-operations.md',
     'docs/signpath-application-draft.md',
     'docs/signpath-submission-2026-10-24.md',
+    'docs/source-quality-validation-2026-10-28.md',
     'docs/step4-delivery-acceptance-2026-10-19.md',
     'docs/step5-acceptance-2026-10-24.md',
     'docs/step5-access-fa.md',
