@@ -211,7 +211,7 @@ class TelegramIngestionPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
 
     def test_old_future_and_unknown_source_do_not_create_prices(self):
         self.assertEqual(self.store(age=600), 'rejected')
-        self.assertEqual(self.store(identity='11', age=-600), 'rejected')
+        self.assertEqual(self.store(identity='11', age=-600), 'rejected_timestamp')
         self.assertEqual(self.store(peer='-1000000000999'), 'rejected_source')
         self.assertEqual(self.rows('SELECT * FROM provider_quotes'), [])
 

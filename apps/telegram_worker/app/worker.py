@@ -334,7 +334,7 @@ def _store_message(
                     WHERE id = %s
                     RETURNING id
                     """,
-                    (source["id"], chat_id, message_date, edited_at or now, digest, sanitized, existing["id"]),
+                    (source["id"], chat_id, message_date, edited_at, digest, sanitized, existing["id"]),
                 )
             else:
                 _require_source_rights(source)
