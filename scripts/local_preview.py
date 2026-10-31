@@ -17,7 +17,9 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 HOME = ROOT / ".local-preview"
 API_PORT, WEB_PORT, DB_PORT = 43187, 43188, 55449
+ADMIN_PORT = 43189
 ORIGIN = f"http://127.0.0.1:{WEB_PORT}"
+ADMIN_ORIGIN = f"http://127.0.0.1:{ADMIN_PORT}"
 OWNER = "nerkhbaan-local-preview-v1"
 
 
@@ -76,10 +78,13 @@ def preview_environment(value):
     env = base_environment()
     env.update({"NERKHBAAN_LOCAL_PREVIEW": "1", "NERKHBAAN_BROWSER_SCHEMA": "browser_fixture_" + value["id"],
                 "TEST_DATABASE_URL": database_url(value), "BROWSER_TEST_JWT_SECRET": value["jwt"],
-                "BROWSER_TEST_PUBLIC_ORIGIN": ORIGIN, "BROWSER_TEST_ADMIN_ORIGIN": ORIGIN,
+                "BROWSER_TEST_PUBLIC_ORIGIN": ORIGIN, "BROWSER_TEST_ADMIN_ORIGIN": ADMIN_ORIGIN,
+                "LOCAL_PREVIEW_ADMIN_ORIGIN": ADMIN_ORIGIN,
                 "LOCAL_PREVIEW_WEB_ORIGIN": ORIGIN, "BACKGROUND_TASKS_ENABLED": "false",
                 "REDIS_URL": "", "JWT_SECRET_KEY": value["jwt"], "PRICING_REQUIRE_PROVIDER_KEYS": "true",
                 "AUTH_COOKIE_NAME": "nerkhbaan_local_session", "AUTH_REFRESH_COOKIE_NAME": "nerkhbaan_local_refresh",
+                "ADMIN_COOKIE_NAME": "nerkhbaan_local_admin_session",
+                "VITE_ADMIN_API_URL": f"http://127.0.0.1:{API_PORT}/api/admin", "VITE_ADMIN_BASE_PATH": "/",
                 "VITE_API_URL": f"http://127.0.0.1:{API_PORT}", "VITE_LOCAL_PREVIEW": "true",
                 "VITE_VAPID_PUBLIC_KEY": ""})
     return env
@@ -124,7 +129,7 @@ def serve():
     volume = name + "-data"
     started_db = False
     try:
-        for port in [API_PORT, WEB_PORT]:
+        for port in [API_PORT, WEB_PORT, ADMIN_PORT]:
             assert_port_free(port)
         image = "postgres:17-alpine"
         docker("image", "inspect", image)
@@ -181,10 +186,24 @@ def serve():
             with urlopen(ORIGIN + "/auth", timeout=2) as response:
                 return response.status == 200
         wait_for(web_ready)
+        admin_command = ([os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c",
+                          f'npm.cmd run dev --workspace=nerkhbaan-admin-web -- --host 127.0.0.1 --port {ADMIN_PORT} --strictPort']
+                         if os.name == "nt" else ["npm", "run", "dev", "--workspace=nerkhbaan-admin-web", "--",
+                                                  "--host", "127.0.0.1", "--port", str(ADMIN_PORT), "--strictPort"])
+        admin_log = (HOME / "admin.log").open("a", encoding="utf8")
+        streams.append(admin_log)
+        admin = subprocess.Popen(admin_command, cwd=ROOT, env=env, stdout=admin_log,
+                                 stderr=subprocess.STDOUT, creationflags=flags)
+        children.append(admin)
+        def admin_ready():
+            with urlopen(ADMIN_ORIGIN, timeout=2) as response:
+                return response.status == 200
+        wait_for(admin_ready)
         (HOME / "running.json").write_text(json.dumps({"owner": OWNER, "id": value["id"], "url": ORIGIN,
-            "worker_pid": os.getpid(), "api_pid": api.pid, "web_pid": web.pid, "container": name}), encoding="utf8")
+            "admin_url": ADMIN_ORIGIN, "worker_pid": os.getpid(), "api_pid": api.pid,
+            "web_pid": web.pid, "admin_pid": admin.pid, "container": name}), encoding="utf8")
         while not (HOME / "stop.request").exists():
-            if api.poll() is not None or web.poll() is not None:
+            if any(process.poll() is not None for process in (api, web, admin)):
                 raise RuntimeError("A local preview process stopped; data volume preserved")
             time.sleep(.5)
     finally:
@@ -222,7 +241,11 @@ def main():
             with urlopen(ORIGIN + "/auth", timeout=2) as response:
                 if response.status != 200:
                     raise RuntimeError("Local website is not ready")
+            with urlopen(ADMIN_ORIGIN, timeout=2) as response:
+                if response.status != 200:
+                    raise RuntimeError("Local administrator website is not ready")
             print(ORIGIN)
+            print(ADMIN_ORIGIN)
         else:
             raise RuntimeError("Local preview receipt exists but the API is not ready")
     else:

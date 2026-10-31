@@ -39,6 +39,9 @@ class LocalPreviewTests(unittest.TestCase):
         self.assertEqual(env["BACKGROUND_TASKS_ENABLED"], "false")
         self.assertEqual(env["VITE_VAPID_PUBLIC_KEY"], "")
         self.assertEqual(env["REDIS_URL"], "")
+        self.assertNotEqual(env["BROWSER_TEST_ADMIN_ORIGIN"], env["BROWSER_TEST_PUBLIC_ORIGIN"])
+        self.assertNotEqual(env["AUTH_COOKIE_NAME"], env["ADMIN_COOKIE_NAME"])
+        self.assertEqual(env["VITE_ADMIN_API_URL"], "http://127.0.0.1:43187/api/admin")
 
     def test_synthetic_prices_and_history_match_real_response_contracts(self):
         payload = PricesResponse.model_validate(prices())
