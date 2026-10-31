@@ -409,6 +409,7 @@ code {
   backdrop-filter: blur(18px);
 }
 .sidebar-brand {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 0.85rem;
@@ -433,6 +434,10 @@ code {
   font-size: 0.72rem;
 }
 .sidebar nav {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   display: grid;
   gap: 0.25rem;
   margin-top: 1.2rem;
@@ -473,6 +478,7 @@ code {
   );
 }
 .sidebar-profile {
+  flex-shrink: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;

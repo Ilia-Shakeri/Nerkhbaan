@@ -36,11 +36,19 @@ test('local administrator can sign in, inspect pages and sign out', async ({ pag
   ]);
   expect(signedIn.status()).toBe(200);
   await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeVisible();
-  for (const name of ['Users', 'Access', 'مرکز ارتباطات', 'Audit']) {
-    await page.getByRole('button', { name: new RegExp(`${name}$`) }).click();
+  await expect(page.getByRole('button', { name: 'Sign out', exact: true })).toBeInViewport();
+  for (const [name, endpoint] of [['Users', '/users'], ['Access', '/roles'], ['مرکز ارتباطات', '/communications'], ['Audit', '/audit']]) {
+    const [loaded] = await Promise.all([
+      page.waitForResponse(response => new URL(response.url()).pathname === `/api/admin${endpoint}` && response.status() === 200),
+      page.getByRole('button', { name: new RegExp(`${name}$`) }).click(),
+    ]);
+    expect(loaded.status()).toBe(200);
     await expect(page.getByRole('heading', { name, exact: true }).first()).toBeVisible();
   }
-  await page.getByRole('button', { name: /مرکز ارتباطات$/ }).click();
+  await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/api/admin/communications' && response.status() === 200),
+    page.getByRole('button', { name: /مرکز ارتباطات$/ }).click(),
+  ]);
   await expect(page.getByRole('heading', { name: 'سرویس پیامک', exact: true })).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'ارائه‌دهنده', exact: true })).toBeVisible();
   await page.screenshot({ path: '.local-preview/review-admin.png', fullPage: true });

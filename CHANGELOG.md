@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Keep the administrator navigation independently scrollable on short screens so lower sections and sign-out remain reachable. Local browser review waits for actual page data before testing the next section.
+
 - Extend the isolated local review to the administrator panel on loopback port 43189, with a separately scoped administrator session, private generated test credentials and real local role checks. Keep external sending/jobs blocked and cover login, page reads, session recovery, logout and private-file access in the local browser test.
 
 - Add an explicitly labelled, loopback-only local web review with owned persistent PostgreSQL storage, real local accounts/alerts and sample in-app messages. Scrub inherited configuration, disable external delivery, and exclude private state from Git, Docker builds and Vite file serving.
