@@ -1,17 +1,10 @@
-# Delivery Readiness — 2.8.15
+# Delivery Readiness — 2.8.19
 
-Source candidate **2.8.19** reserves HTTP-request database connections within the existing synchronous budget, independent of background pricing/history work. Live acceptance of 2.8.17 and 2.8.18 failed at logout; neither is a completed web delivery. Telegram collection remains disabled. [Current correction and gates](request-pool-release-2.8.19-fa.md).
+Source **2.8.19**, tag `v2.8.19`, commit `7978e8938d17c4749ba7c43044a5e3e22bcf0ad2`, is published. Source CI, fixed runtime images/scans and the isolated full-background-pool authentication/pricing canary passed on **2026-10-28**. This is source and isolated-test evidence, not a production acceptance receipt. [Exact tests and release record](request-pool-release-2.8.19-fa.md).
 
-Source candidate **2.8.18** releases instrument identity read transactions before awaited pricing work. The 2.8.17 live account check failed under connection-pool pressure; its successful deployment is not application acceptance. Telegram collection remains disabled without an account and approved sources. [Current candidate and acceptance gates](web-session-release-2.8.18-fa.md).
+**Production deployment is unconfirmed.** The deployment SSH connection reset without a result receipt. On **2026-10-31**, management and public HTTPS were unreachable from this workstation; the owner reports the VPS is off or deleted. The last verified runtime was 2.8.18 on October 28 and failed live logout; the last observed accepted pointer was 2.8.15. Current remote state is unknown. Reconcile the interrupted deployment before any retry on a restored server. [Recovery and backup guide](server-recovery-guide-fa.md).
 
-Source candidate **2.8.17**: Telegram channel/group ingestion, typed peer IDs, durable edit/delete handling, bounded recovery and cached-input revalidation. Live acceptance remains at **2.8.15** until the guarded rollout passes. Real Telegram collection remains disabled: no reading account or approved sources are available. [Scope and remaining activation gates](telegram-release-2.8.17-fa.md).
-
-<!-- delivery-docs:2.8.16 -->
-> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](project-completion-roadmap-fa.md) · [فهرست سندها](documentation-index-fa.md).
-
-Source/docs **2.8.16**, installed runtime **2.8.15**. Required Telegram channel/group price ingestion remains unaccepted. [Authoritative completion roadmap](project-completion-roadmap-fa.md). Source CI for this release must be recorded separately; 2.8.15 runtime receipts do not certify a 2.8.16 deployment.
-
-Installed **2.8.15**, October 28: source/runtime CI, strict scans, isolated native/reference pricing, guarded rollout, both APIs, 22 containers, 17 protected identities, live web/admin assets, registration/login/logout and production rate samples passed. The full off-VPS database backup passed an isolated Timescale restore and has two verified workstation copies. Real device receipt remains open. [Current release evidence](pricing-release-2.8.15-fa.md).
+Telegram channel/group reading code is implemented and tested, but real collection remains disabled: no reading account or approved sources are available. [Private configuration and activation gates](telegram-ingestion-guide-fa.md). Actual device notification receipt and configured external services retain separate acceptance gates. [Current roadmap](project-completion-roadmap-fa.md) · [Document index](documentation-index-fa.md).
 
 Pricing quality validation and the bounded USD reference clock: [source policy](source-quality-validation-2026-10-28.md).
 Historical acceptance, 2026-10-24: application 2.8.13 was installed. Exact source CI, four

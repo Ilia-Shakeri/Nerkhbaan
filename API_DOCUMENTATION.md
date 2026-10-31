@@ -1,17 +1,10 @@
 # Nerkhbaan API Reference
 
-Source candidate **2.8.19** reserves HTTP-request database connections within the existing synchronous budget, independent of background pricing/history work. Live acceptance of 2.8.17 and 2.8.18 failed at logout; neither is a completed web delivery. Telegram collection remains disabled. [Current correction and gates](docs/request-pool-release-2.8.19-fa.md).
+Source **2.8.19**, tag `v2.8.19`, commit `7978e8938d17c4749ba7c43044a5e3e22bcf0ad2`, is published. Source CI, fixed runtime images/scans and the isolated full-background-pool authentication/pricing canary passed on **2026-10-28**. This is source and isolated-test evidence, not a production acceptance receipt. [Exact tests and release record](docs/request-pool-release-2.8.19-fa.md).
 
-Source candidate **2.8.18** releases instrument identity read transactions before awaited pricing work. The 2.8.17 live account check failed under connection-pool pressure; its successful deployment is not application acceptance. Telegram collection remains disabled without an account and approved sources. [Current candidate and acceptance gates](docs/web-session-release-2.8.18-fa.md).
+**Production deployment is unconfirmed.** The deployment SSH connection reset without a result receipt. On **2026-10-31**, management and public HTTPS were unreachable from this workstation; the owner reports the VPS is off or deleted. The last verified runtime was 2.8.18 on October 28 and failed live logout; the last observed accepted pointer was 2.8.15. Current remote state is unknown. Reconcile the interrupted deployment before any retry on a restored server. [Recovery and backup guide](docs/server-recovery-guide-fa.md).
 
-Source candidate **2.8.17**: Telegram channel/group ingestion, typed peer IDs, durable edit/delete handling, bounded recovery and cached-input revalidation. Live acceptance remains at **2.8.15** until the guarded rollout passes. Real Telegram collection remains disabled: no reading account or approved sources are available. [Scope and remaining activation gates](docs/telegram-release-2.8.17-fa.md).
-
-<!-- delivery-docs:2.8.16 -->
-> مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
-
-Source API metadata: **2.8.16**; the deployed API remains **2.8.15**. No API route behavior changes in this release. [Current route contracts](docs/api-route-index.md); [Telegram ingestion scope](docs/telegram-ingestion-guide-fa.md).
-
-Installed application: **2.8.15**. Updated: 2026-10-28. Both API replicas, the exact ten-migration ledger, native rates and reference responses passed their separate live checks. [Acceptance and backup evidence](docs/pricing-release-2.8.15-fa.md).
+Telegram channel/group reading code is implemented and tested, but real collection remains disabled: no reading account or approved sources are available. [Private configuration and activation gates](docs/telegram-ingestion-guide-fa.md). Actual device notification receipt and configured external services retain separate acceptance gates. [Current roadmap](docs/project-completion-roadmap-fa.md) · [Document index](docs/documentation-index-fa.md).
 
 Administrator communications use `/api/admin/communications` for independently
 versioned SMS/VoIP connections and call policy, consented test recipients,
