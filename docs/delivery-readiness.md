@@ -2,7 +2,11 @@
 
 Source **2.8.19**, tag `v2.8.19`, commit `7978e8938d17c4749ba7c43044a5e3e22bcf0ad2`, is published. Source CI, fixed runtime images/scans and the isolated full-background-pool authentication/pricing canary passed on **2026-10-28**. This is source and isolated-test evidence, not a production acceptance receipt. [Exact tests and release record](request-pool-release-2.8.19-fa.md).
 
-**Production deployment is unconfirmed.** The deployment SSH connection reset without a result receipt. On **2026-10-31**, management and public HTTPS were unreachable from this workstation; the owner reports the VPS is off or deleted. The last verified runtime was 2.8.18 on October 28 and failed live logout; the last observed accepted pointer was 2.8.15. Current remote state is unknown. Reconcile the interrupted deployment before any retry on a restored server. [Recovery and backup guide](server-recovery-guide-fa.md).
+**Production observation, 2026-10-31:** access returned after the owner renewed the VPS through today; the owner says it will then be deleted. Both API replicas match the 2.8.19 image and report healthy. The recovered guard receipt passed on October 28; the last observed accepted pointer remains 2.8.15. A fresh browser check passed registration, desktop login and logout, but timed out at email login in a narrow viewport; full application acceptance remains open. [Dated rescue and test record](server-rescue-2026-10-31-fa.md).
+
+An unreleased frontend correction now waits for the initial session check and cleanup before enabling authentication. Local browser regressions and frontend tests passed; it is not installed in the existing 2.8.19 images. Fresh production acceptance remains required on the replacement host.
+
+A fresh full database dump is saved locally and passed an isolated workstation restore: 55 public tables and ten migrations. Historical rate backups, private configuration, certificates and runtime artifacts are preserved separately. Snapshots have separate clocks and are not a continuous or atomic backup of the whole server. [Recovery guide](server-recovery-guide-fa.md).
 
 Telegram channel/group reading code is implemented and tested, but real collection remains disabled: no reading account or approved sources are available. [Private configuration and activation gates](telegram-ingestion-guide-fa.md). Actual device notification receipt and configured external services retain separate acceptance gates. [Current roadmap](project-completion-roadmap-fa.md) · [Document index](documentation-index-fa.md).
 

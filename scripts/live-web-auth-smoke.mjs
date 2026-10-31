@@ -18,6 +18,7 @@ const receipt = { started_at: new Date().toISOString(), base_url: origin,
 const receiptDir = path.resolve(import.meta.dirname, '../../delivery/web-auth-smoke');
 mkdirSync(receiptDir, { recursive: true, mode: 0o700 });
 const output = path.join(receiptDir, `live-auth-${Date.now()}-${id}.json`);
+writeFileSync(output, JSON.stringify({ ...receipt, passed: false, incomplete: true }, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
 let browser;
 const contexts = [];
 let phase = 'launch';
@@ -41,9 +42,10 @@ async function profile(item) {
 async function signout(item, page, label) {
   phase = label + '-signout';
   await page.getByRole('button', { name: 'منوی کاربر', exact: true }).click();
-  const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/signout' && response.request().method() === 'POST');
-  await page.getByRole('menuitem', { name: 'خروج از حساب', exact: true }).click();
-  const response = await responsePromise;
+  const [response] = await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/signout' && response.request().method() === 'POST'),
+    page.getByRole('menuitem', { name: 'خروج از حساب', exact: true }).click(),
+  ]);
   if (response.status() !== 204) throw new Error(`Signout status ${response.status()}`);
   await expect(page.getByRole('button', { name: 'ورود به حساب', exact: true })).toBeVisible();
   const me = await item.request.get(`${origin}/api/auth/me`);
@@ -55,9 +57,10 @@ async function signin(item, page, identifier, label) {
   await page.goto(`${origin}/auth`, { waitUntil: 'domcontentloaded' });
   await page.locator('input[name="username"]').fill(identifier);
   await page.locator('#auth-password').fill(password);
-  const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/signin' && response.request().method() === 'POST');
-  await page.getByRole('button', { name: 'ورود به حساب', exact: true }).click();
-  const response = await responsePromise;
+  const [response] = await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/signin' && response.request().method() === 'POST'),
+    page.getByRole('button', { name: 'ورود به حساب', exact: true }).click(),
+  ]);
   if (response.status() !== 200) throw new Error(`Signin status ${response.status()}`);
   await expect(page.getByRole('button', { name: 'منوی کاربر', exact: true })).toBeVisible();
   await profile(item); checked(label + '-signin-and-profile');
@@ -83,9 +86,10 @@ try {
   if (await agreements.count() !== 2) throw new Error('Unexpected agreement controls');
   await agreements.nth(0).check(); await agreements.nth(1).check();
   phase = 'signup-submit-once';
-  const responsePromise = page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/signup' && response.request().method() === 'POST');
-  await page.getByRole('button', { name: 'ایجاد حساب کاربری', exact: true }).click();
-  const response = await responsePromise;
+  const [response] = await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/signup' && response.request().method() === 'POST'),
+    page.getByRole('button', { name: 'ایجاد حساب کاربری', exact: true }).click(),
+  ]);
   receipt.signup_http_status = response.status();
   if (response.status() !== 201) throw new Error(`Signup status ${response.status()}`);
   checked('signup-through-live-form');
@@ -103,9 +107,11 @@ try {
   phase = 'wrong-password';
   await page.locator('input[name="username"]').fill(username);
   await page.locator('#auth-password').fill('WrongTestPassword9!');
-  const rejected = page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/signin' && response.request().method() === 'POST');
-  await page.getByRole('button', { name: 'ورود به حساب', exact: true }).click();
-  if ((await rejected).status() !== 401) throw new Error('Wrong password did not return 401');
+  const [rejected] = await Promise.all([
+    page.waitForResponse(response => new URL(response.url()).pathname === '/api/auth/signin' && response.request().method() === 'POST'),
+    page.getByRole('button', { name: 'ورود به حساب', exact: true }).click(),
+  ]);
+  if (rejected.status() !== 401) throw new Error('Wrong password did not return 401');
   await expect(page.getByRole('alert').filter({ hasText: 'نام کاربری یا رمز عبور اشتباه است' })).toBeVisible();
   checked('wrong-password-rejected-with-visible-error');
   await signin(item, page, username.toUpperCase(), 'desktop-username');
@@ -134,7 +140,8 @@ try {
   }
   receipt.passed = Boolean(receipt.passed) && receipt.checks.every(check => check.passed) && receipt.page_errors.length === 0;
   receipt.finished_at = new Date().toISOString();
-  writeFileSync(output, JSON.stringify(receipt, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+  receipt.incomplete = false;
+  writeFileSync(output, JSON.stringify(receipt, null, 2) + '\n', { flag: 'w', mode: 0o600 });
   console.log(JSON.stringify({ receipt: output, ...receipt }));
 }
 process.exitCode = receipt.passed ? 0 : 1;

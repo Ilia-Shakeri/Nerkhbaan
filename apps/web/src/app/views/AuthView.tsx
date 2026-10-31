@@ -12,7 +12,7 @@ import { POLICY_VERSION } from '../legal/policies';
 import { getLogoutStatus, subscribeLogoutStatus } from '../services/logout-state';
 
 export function AuthView() {
-  const { language, toggleLanguage, login, theme, toggleTheme } = useAppContext();
+  const { language, toggleLanguage, login, theme, toggleTheme, authReady } = useAppContext();
   const isDark = theme === 'dark';
   const isRtl = language === 'fa';
   const navigate = useNavigate();
@@ -90,6 +90,7 @@ export function AuthView() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!authReady || logoutPending) return;
     setFormError('');
     if (!isLogin && (!acceptedTerms || !dataConsent)) {
       setFormError(language === 'fa' ? 'شرایط و پردازش داده حساب را بررسی و تأیید کنید.' : 'Review and confirm the terms and account data processing.');
@@ -309,7 +310,7 @@ export function AuthView() {
                 type="submit"
                 aria-label={isLogin ? t.submitLogin[language] : t.submitSignup[language]}
                 aria-busy={isSubmitting}
-                disabled={logoutPending || isSubmitting || (!isLogin && !isPasswordValid)}
+                disabled={!authReady || logoutPending || isSubmitting || (!isLogin && !isPasswordValid)}
                 className={`w-full rounded-2xl text-sm font-bold transition-all duration-300 ${isLogin ? 'mt-6 h-12' : 'mt-4 h-11'} ${
                   (!isLogin && !isPasswordValid) ? 'opacity-50 cursor-not-allowed' : ''
                 } ${

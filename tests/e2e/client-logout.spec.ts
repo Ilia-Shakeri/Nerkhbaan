@@ -3,7 +3,7 @@ import { emptyMarketPrices, mockMarketStream } from './market-fixture';
 
 const profile = { id: 1, username: 'logout_test', full_name: 'Logout Test', email: 'logout@example.test', is_active: true, must_change_password: false, created_at: '2026-10-13T00:00:00Z' };
 
-type SessionState = { signedOut: boolean; fail: boolean; offline: boolean; profiles: number; signouts: number; detached: number; crash: boolean; calls: string[]; signinGate?: Promise<void>; signoutCookie?: string; pushFails?: boolean };
+type SessionState = { signedOut: boolean; fail: boolean; offline: boolean; profiles: number; signouts: number; detached: number; crash: boolean; calls: string[]; signinGate?: Promise<void>; profileGate?: Promise<void>; signoutGate?: Promise<void>; signoutCookie?: string; pushFails?: boolean };
 async function session(page: Page, shared?: SessionState) {
   await mockMarketStream(page);
   await page.addInitScript(() => {
@@ -21,6 +21,7 @@ async function session(page: Page, shared?: SessionState) {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/auth/me') {
       state.profiles++;
+      if (state.profiles === 1) await state.profileGate;
       await route.fulfill(state.signedOut ? { status: 401, json: { detail: 'No session' } } : { json: profile });
     } else if (path === '/api/auth/signin') {
       state.calls.push('signin-start');
@@ -31,6 +32,7 @@ async function session(page: Page, shared?: SessionState) {
     } else if (path === '/api/auth/signout') {
       state.signouts++;
       state.calls.push('signout');
+      await state.signoutGate;
       if (state.offline) await route.abort('internetdisconnected');
       else if (state.fail) await route.fulfill({ status: 503, json: { detail: 'Temporary signout failure' } });
       else { state.signedOut = true; state.signoutCookie = route.request().headers().cookie; await route.fulfill({ status: 204, headers: { 'set-cookie': 'test_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax' } }); }
@@ -50,6 +52,34 @@ async function session(page: Page, shared?: SessionState) {
 async function leave(page: Page) {
   await page.getByRole('button', { name: 'User menu', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Logout', exact: true }).click();
+}
+
+for (const width of [390, 1440]) {
+  test(`first email login waits for the initial anonymous session check at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    let releaseProfile!: () => void;
+    let releaseSignout!: () => void;
+    const state = await session(page);
+    state.signedOut = true;
+    state.profileGate = new Promise<void>(resolve => { releaseProfile = resolve; });
+    state.signoutGate = new Promise<void>(resolve => { releaseSignout = resolve; });
+    await page.route('**/api/auth/refresh', route => route.fulfill({ status: 401, json: { detail: 'No refresh session' } }));
+    await page.goto('/auth');
+    const submit = page.getByRole('button', { name: 'Sign In', exact: true });
+    await expect(submit).toBeDisabled();
+    await page.locator('input[name="username"]').fill(profile.email);
+    await page.locator('#auth-password').fill('LocalBrowserTest42!');
+    await page.locator('#auth-password').press('Enter');
+    expect(state.calls).not.toContain('signin-start');
+    releaseProfile();
+    await expect.poll(() => state.signouts).toBe(1);
+    await expect(submit).toBeDisabled();
+    releaseSignout();
+    await expect(submit).toBeEnabled();
+    await submit.click();
+    await expect(page.getByRole('button', { name: 'User menu', exact: true })).toBeVisible();
+    expect(state.calls.filter(call => call === 'signin-start')).toHaveLength(1);
+  });
 }
 
 test('failed logout stays visible across reload and explicit retry closes the server session', async ({ page }) => {

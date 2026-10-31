@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+- Wait for initial session recovery and any anonymous-session cleanup before accepting sign-in or registration. Preserve logout cancellation rather than allowing an early login to race the initial refresh. Two browser regressions cover delayed initial checks at narrow and desktop widths. This correction is not included in the existing 2.8.19 runtime images.
+- Preserve live browser failure receipts when a click or response wait fails; record an incomplete receipt before starting network work. Document the October 31 rescue and independently verified local database restores.
+
 ## [2.8.19] - 2026-10-28
 
 - Reserve up to two request connections inside the existing synchronous connection budget; background pricing/history cannot occupy those slots. Keep one shared pool when the entire configured synchronous budget is one connection.
@@ -16,8 +21,6 @@
 > مرور سند: ۲۸اکتبر۲۰۲۶؛ منبع/سند **۲.۸.۱۶**، آخرین نصبِ پذیرفته **۲.۸.۱۵**. راهنما؛ وضع جاری در نقشه. عددها، شکست‌ها و قبولی‌های قدیم، شاهد تازه نیستند. [نقشهٔ جاری و فلوچارت](docs/project-completion-roadmap-fa.md) · [فهرست سندها](docs/documentation-index-fa.md).
 
 All notable Nerkhbaan changes live here. Version numbers use Semantic Versioning.
-
-## [Unreleased]
 
 ## [2.8.17] - 2026-10-28
 
