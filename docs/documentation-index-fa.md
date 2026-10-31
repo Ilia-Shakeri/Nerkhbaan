@@ -10,6 +10,7 @@
 
 | سند | نوع و مرز |
 | --- | --- |
+| [docs/local-web-preview-fa.md](local-web-preview-fa.md) | شروع/توقف، دادهٔ محلی، تست و مرز نرخ نمونه؛ ارسال بیرونی خاموش |
 | [docs/request-pool-release-2.8.19-fa.md](request-pool-release-2.8.19-fa.md) | مرجع کد و تست۲۸اکتبر؛ وضع تازه در سند نجات |
 | [docs/web-handoff-readiness-2026-10-31.md](web-handoff-readiness-2026-10-31.md) | اصلاح وب و تست محلی؛ نصب و رسید واقعی باز |
 | [docs/server-rescue-2026-10-31-fa.md](server-rescue-2026-10-31-fa.md) | شاهد تازهٔ بکاپ و تست؛ حذف قریب سرور |

@@ -1,5 +1,7 @@
 # Project Status
 
+Keyless local review is available through `npm.cmd run preview:local`: isolated persistent accounts/alerts, explicitly synthetic charts, and account-scoped sample in-app messages. Production configuration and rescued backups are excluded. [Local review guide](docs/local-web-preview-fa.md). This is Unreleased source work; hosting and external/device receipt gates remain open.
+
 Source **2.8.19**, tag `v2.8.19`, commit `7978e8938d17c4749ba7c43044a5e3e22bcf0ad2`, is published. Source CI, fixed runtime images/scans and the isolated full-background-pool authentication/pricing canary passed on **2026-10-28**. This is source and isolated-test evidence, not a production acceptance receipt. [Exact tests and release record](docs/request-pool-release-2.8.19-fa.md).
 
 **Production observation, 2026-10-31:** access returned after the owner renewed the VPS through today; the owner says it will then be deleted. Both API replicas match the 2.8.19 image and report healthy. The recovered guard receipt passed on October 28; the last observed accepted pointer remains 2.8.15. A fresh browser check passed registration, desktop login and logout, but timed out at email login in a narrow viewport; full application acceptance remains open. [Dated rescue and test record](docs/server-rescue-2026-10-31-fa.md).

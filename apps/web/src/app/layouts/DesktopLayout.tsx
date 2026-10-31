@@ -32,6 +32,7 @@ import { BarChart3 } from 'lucide-react';
 import { api, type NotificationItem } from '../services/api';
 import { PRICING_RIGHTS_EVENT } from '../services/price-stream';
 import { DESKTOP_OPEN_INBOX } from '../services/desktop-notifications';
+import { LocalPreviewNotice } from '../components/LocalPreviewNotice';
 import { logoutIsPending } from '../services/logout-state';
 
 const NAV_ITEMS = [
@@ -397,6 +398,7 @@ export function DesktopLayout() {
 
       {/* Main Content Area */}
       <div className="relative flex flex-1 flex-col overflow-hidden">
+        <LocalPreviewNotice />
         {/* Topbar */}
         <header
           className={`relative z-10 flex min-h-16 shrink-0 items-center justify-between border-b border-[#D4AF37]/12 px-4 backdrop-blur-md transition-colors duration-200 sm:px-6 ${

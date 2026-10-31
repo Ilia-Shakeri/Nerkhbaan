@@ -9,7 +9,15 @@ const repoRoot = path.resolve(appDir, "../..");
 
 export default defineConfig({
   // Force Vite to load environment variables from the monorepo root
-  envDir: repoRoot,
+  envDir: process.env.NERKHBAAN_LOCAL_PREVIEW === '1' ? false : repoRoot,
+  cacheDir: process.env.NERKHBAAN_LOCAL_PREVIEW === '1' ? path.join(repoRoot, 'node_modules/.vite/nerkhbaan-local-preview') : undefined,
+  server: {
+    fs: {
+      strict: true,
+      deny: ['**/.env', '**/.env.*', '**/*.{crt,pem,key}', '**/.git/**',
+        '**/.local-keys/**', '**/.local-preview/**', '**/*.private.*'],
+    },
+  },
   plugins: [
     react(),
     VitePWA({

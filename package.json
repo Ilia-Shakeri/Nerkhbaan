@@ -30,7 +30,11 @@
     "test:desktop": "node scripts/desktop-smoke.mjs",
     "test": "npm run test:api",
     "verify": "npm run check:release && npm run check:api && npm run check:ui && npm run test:api && npm run test:frontend && npm run build && npm run test:e2e",
-    "check:ui": "npm run typecheck --workspace=@nerkhbaan/ui"
+    "check:ui": "npm run typecheck --workspace=@nerkhbaan/ui",
+    "preview:local": "python scripts/local_preview.py start",
+    "preview:local:stop": "python scripts/local_preview.py stop",
+    "preview:local:status": "python scripts/local_preview.py status",
+    "test:local-preview": "python scripts/test_local_preview.py && playwright test --config scripts/playwright-local-preview.config.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

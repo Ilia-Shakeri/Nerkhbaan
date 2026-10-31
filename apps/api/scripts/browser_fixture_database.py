@@ -6,6 +6,7 @@ import re
 import sys
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy import event, inspect, text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -13,6 +14,15 @@ from sqlalchemy.engine import make_url
 
 API_ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATTERN = re.compile(r"^browser_fixture_[0-9a-f]{32}$")
+
+
+def validate_local_origin(value: str) -> str:
+    parsed = urlsplit(value)
+    if (parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+            or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment
+            or not parsed.port or not 1 <= parsed.port <= 65535):
+        raise ValueError("Browser fixtures require an explicit loopback HTTP origin")
+    return value
 
 
 def validate_database_url(value: str) -> str:
@@ -40,18 +50,20 @@ def configure(schema: str | None = None):
     os.environ["JWT_SECRET_KEY"] = os.environ.get("BROWSER_TEST_JWT_SECRET", "browser-fixture-key-not-for-runtime-000000000000")
     os.environ["AUTH_COOKIE_SECURE"] = "false"
     os.environ["ADMIN_COOKIE_SECURE"] = "false"
-    os.environ["PUBLIC_FRONTEND_ORIGIN"] = "http://127.0.0.1:4173"
-    os.environ["ALLOWED_ORIGINS"] = "http://127.0.0.1:4173,http://127.0.0.1:4174"
-    os.environ["ADMIN_FRONTEND_ORIGIN"] = "http://127.0.0.1:4174"
+    public = validate_local_origin(os.environ.get("BROWSER_TEST_PUBLIC_ORIGIN", "http://127.0.0.1:4173"))
+    admin = validate_local_origin(os.environ.get("BROWSER_TEST_ADMIN_ORIGIN", "http://127.0.0.1:4174"))
+    os.environ["PUBLIC_FRONTEND_ORIGIN"] = public
+    os.environ["ALLOWED_ORIGINS"] = f"{public},{admin}"
+    os.environ["ADMIN_FRONTEND_ORIGIN"] = admin
     os.environ["TRUSTED_HOSTS"] = "127.0.0.1,localhost,testserver"
     os.environ["NERKHBAAN_BROWSER_SCHEMA"] = schema
     sys.path.insert(0, str(API_ROOT))
-    from app.db import Base, async_engine, engine
+    from app.db import Base, async_engine, engine, request_engine
     from app import models as _user_models  # noqa: F401
     from app.admin import models as _admin_models  # noqa: F401
     from app.pricing import db_models as _pricing_models  # noqa: F401
     del _user_models, _admin_models, _pricing_models
-    if engine.url != make_url(value):
+    if engine.url != make_url(value) or request_engine.url != make_url(value):
         raise ValueError("Database engines were already loaded for another URL; use a fresh fixture process")
 
     def set_search_path(dbapi_connection, _connection_record):
@@ -67,6 +79,8 @@ def configure(schema: str | None = None):
             dbapi_connection.autocommit = previous
 
     event.listen(engine, "connect", set_search_path)
+    if request_engine is not engine:
+        event.listen(request_engine, "connect", set_search_path)
     event.listen(async_engine.sync_engine, "connect", set_search_path)
     return schema, Base, engine, async_engine
 

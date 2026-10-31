@@ -482,6 +482,7 @@ export type NotificationItem = {
 };
 
 export type OperationalPriceStatus =
+  | 'preview'
   | 'live'
   | 'fresh_cache'
   | 'cached'

@@ -5,6 +5,7 @@ import asyncio
 import os
 import sys
 import unittest
+from unittest.mock import patch
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -42,6 +43,10 @@ class FixtureGuards(unittest.TestCase):
                 self.assertEqual(connection.execute(text("SELECT current_schema()")).scalar_one(), schema)
                 self.assertIsNone(connection.execute(text("SELECT to_regclass('schema_migrations')")).scalar_one())
                 self.assertIsNotNone(connection.execute(text("SELECT to_regclass('users')")).scalar_one())
+            from app.db import RequestSessionLocal, request_engine
+            with RequestSessionLocal() as request_session:
+                self.assertEqual(request_session.execute(text("SELECT current_schema()")).scalar_one(), schema)
+                self.assertIsNotNone(request_session.execute(text("SELECT to_regclass('users')")).scalar_one())
             # Syntax/ORM compatibility only. No hypertables, compression, or ledger proof.
             migration = (Path(__file__).resolve().parents[1] / "apps/api/db/migrations/20261011_001_delivery_hardening.sql").read_text()
             from app.pricing.db_models import CanonicalQuoteRecord, ProviderQuoteRecord
@@ -85,7 +90,10 @@ class FixtureGuards(unittest.TestCase):
                 self.assertEqual(connection.execute(text("SELECT role FROM pricing_providers WHERE provider_id='gold_api_free_xag'")).scalar_one(), "verifier")
                 self.assertEqual(connection.execute(text("SELECT role FROM instrument_provider_configs WHERE provider_id='gold_api_free_xag'")).scalar_one(), "verifier")
             from app.pricing.history import InternalPriceHistory
-            latest = InternalPriceHistory._query_latest_rows(None)
+            from app.config import settings
+            # This synthetic instrument checks SQL/ORM shape, not provider rights.
+            with patch.object(settings, "pricing_rights_enforced", False):
+                latest = InternalPriceHistory._query_latest_rows(None)
             self.assertEqual(len(latest), 1)
             self.assertEqual(latest[0]["source_summary"]["fixture_role"], "normal")
 
@@ -108,6 +116,7 @@ class FixtureGuards(unittest.TestCase):
         with engine.connect() as connection:
             self.assertIsNone(connection.execute(text("SELECT to_regnamespace(:schema)"), {"schema": schema}).scalar_one())
         engine.dispose()
+        request_engine.dispose()
 
 
 if __name__ == "__main__":

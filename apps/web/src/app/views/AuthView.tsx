@@ -10,6 +10,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { LegalLinks } from '../components/LegalLinks';
 import { POLICY_VERSION } from '../legal/policies';
 import { getLogoutStatus, subscribeLogoutStatus } from '../services/logout-state';
+import { LocalPreviewNotice } from '../components/LocalPreviewNotice';
 
 export function AuthView() {
   const { language, toggleLanguage, login, theme, toggleTheme, authReady } = useAppContext();
@@ -163,6 +164,7 @@ export function AuthView() {
       </div>
 
       <div className="my-auto w-full max-w-md perspective-1000">
+        <LocalPreviewNotice />
         <AnimatePresence mode="wait">
           <motion.div
             key={isLogin ? 'login' : 'signup'}
@@ -214,7 +216,7 @@ export function AuthView() {
                       <User size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]" />
                       <Input
                         name="username" autoComplete="username" type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-                        placeholder={t.usernamePlaceholder[language]} required minLength={3} maxLength={50} pattern="[a-zA-Z0-9._-]+" dir="ltr"
+                        placeholder={t.usernamePlaceholder[language]} required minLength={3} maxLength={50} pattern={'[a-zA-Z0-9._\\-]+'} dir="ltr"
                         className={`h-11 rounded-2xl pl-11 pr-4 text-left text-sm shadow-inner transition-all focus:ring-2 focus:ring-[#D4AF37]/50 ${isDark ? 'border-[#D4AF37]/20 bg-[#141414] text-[#F7F2E3] placeholder:text-gray-600' : 'border-[#D4AF37]/30 bg-white/80 text-[#3B2E13] placeholder:text-gray-400'}`}
                       />
                     </div>

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Add an explicitly labelled, loopback-only local web review with owned persistent PostgreSQL storage, real local accounts/alerts and sample in-app messages. Scrub inherited configuration, disable external delivery, and exclude private state from Git, Docker builds and Vite file serving.
+- Apply the owned browser fixture schema to the separate request pool; verify sync, request and async engines against real PostgreSQL. Escape the username pattern hyphen for modern browser validation. Label synthetic prices as local samples.
+
 - Handle browser subscription-read errors during background web-push synchronization, preserve retry on a later start and never prompt for permission during that recovery. Explain the initial sign-in readiness wait visibly and to assistive technology.
 - Refresh the initial web delivery checklist and roadmap with owner actions and separate real-device, hosting and external-service acceptance gates.
 

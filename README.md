@@ -1,5 +1,7 @@
 # Nerkhbaan
 
+**Keyless local web review:** `npm.cmd run preview:local`, then open [the local website](http://127.0.0.1:43188). Local accounts and saved alerts use a separate persistent database; charts are explicitly synthetic and external delivery is disabled. [Persian start/stop and test guide](docs/local-web-preview-fa.md). This Unreleased work does not change the published 2.8.19 tag or establish production/device acceptance.
+
 Source **2.8.19**, tag `v2.8.19`, commit `7978e8938d17c4749ba7c43044a5e3e22bcf0ad2`, is published. Source CI, fixed runtime images/scans and the isolated full-background-pool authentication/pricing canary passed on **2026-10-28**. This is source and isolated-test evidence, not a production acceptance receipt. [Exact tests and release record](docs/request-pool-release-2.8.19-fa.md).
 
 **Production observation, 2026-10-31:** access returned after the owner renewed the VPS through today; the owner says it will then be deleted. Both API replicas match the 2.8.19 image and report healthy. The recovered guard receipt passed on October 28; the last observed accepted pointer remains 2.8.15. A fresh browser check passed registration, desktop login and logout, but timed out at email login in a narrow viewport; full application acceptance remains open. [Dated rescue and test record](docs/server-rescue-2026-10-31-fa.md).

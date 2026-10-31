@@ -65,6 +65,7 @@ _agent_tmp/
 
 # Local SSH keys for operational hosts. Never commit these files.
 .local-keys/
+.local-preview/
 
 # Private operational notes and credentials
 ALERT_SETUP.md

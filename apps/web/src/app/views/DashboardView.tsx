@@ -94,6 +94,7 @@ const CHART_COLORS: Record<AssetId, { dark: string; light: string }> = {
 };
 
 const STATUS_COLORS: Record<OperationalPriceStatus, { dark: string; light: string }> = {
+  preview: { dark: 'bg-amber-500/10 text-amber-300', light: 'bg-amber-100 text-amber-800' },
   live: { dark: 'bg-emerald-500/10 text-emerald-400', light: 'bg-emerald-100 text-emerald-700' },
   fresh_cache: { dark: 'bg-sky-500/10 text-sky-300', light: 'bg-sky-100 text-sky-700' },
   cached: { dark: 'bg-sky-500/10 text-sky-300', light: 'bg-sky-100 text-sky-700' },
@@ -857,6 +858,7 @@ export function DashboardView() {
   const activeCurrencyLabel = currencyMode === 'usd' ? t.usd[language] : t.toman[language];
 
   const statusLabels: Record<OperationalPriceStatus, { fa: string; en: string }> = {
+    preview: { fa: 'نمونهٔ محلی', en: 'Local sample' },
     live: { fa: 'زنده', en: 'Live' },
     fresh_cache: { fa: 'ذخیره تازه', en: 'Fresh cache' },
     cached: { fa: 'ذخیره تازه', en: 'Fresh cache' },

@@ -26,6 +26,7 @@ gitea_data
 full_Nerkhbaan_project_code.txt
 _export*.tar.gz
 .local-keys
+.local-preview
 _archives
 backups
 data
