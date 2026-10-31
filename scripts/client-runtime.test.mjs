@@ -457,6 +457,30 @@ test('failed desktop logout retains secure revocation credentials across reload 
   assert.equal(shared.pending, false);
 });
 
+test('startup push sync handles a browser storage failure and retries without prompting', async () => {
+  let reads = 0, writes = 0, prompts = 0;
+  const subscription = { toJSON: () => ({ endpoint: 'test-endpoint' }) };
+  const worker = { pushManager: { getSubscription: async () => {
+    reads++;
+    if (reads === 1) throw new Error('Browser subscription storage unavailable');
+    return subscription;
+  } } };
+  const push = moduleAt('apps/web/src/pwa/push.ts', {
+    __env: { VITE_VAPID_PUBLIC_KEY: 'test-key' },
+    window: { Notification: { requestPermission: async () => { prompts++; } }, PushManager: {} },
+    navigator: { serviceWorker: { getRegistration: async () => worker, ready: Promise.resolve(worker) } },
+  }, { '@/app/services/api': { apiInstance: { post: async () => {
+    writes++;
+    if (writes === 1) throw new Error('Subscription service temporarily unavailable');
+  } } } });
+  await assert.doesNotReject(push.syncPushSubscription());
+  assert.equal(writes, 0);
+  await assert.doesNotReject(push.syncPushSubscription());
+  await assert.doesNotReject(push.syncPushSubscription());
+  assert.equal(writes, 2);
+  assert.equal(prompts, 0);
+});
+
 test('late startup subscription read cannot bind an endpoint after logout begins', async () => {
   let releaseRead, pending = false, generation = 0, writes = 0;
   const read = new Promise(resolve => { releaseRead = resolve; });

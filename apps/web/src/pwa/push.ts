@@ -66,14 +66,14 @@ export async function hasPushSubscription(): Promise<boolean> {
 export async function syncPushSubscription(): Promise<void> {
   if (!pushIsConfigured() || logoutIsPending()) return;
   const generation = logoutGeneration();
-  const worker = await registration();
-  if (!worker) return;
-  const existing = await worker.pushManager.getSubscription();
-  if (!existing) return;
   try {
+    const worker = await registration();
+    if (!worker) return;
+    const existing = await worker.pushManager.getSubscription();
+    if (!existing) return;
     await writeSubscription(existing, generation);
   } catch {
-    // A failed sync is retried the next time the app starts.
+    // Browser storage and transport failures are retried on the next app start.
   }
 }
 

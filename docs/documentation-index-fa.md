@@ -1,4 +1,6 @@
 # فهرست سندهای پروژه — ۲.۸.۱۹
+مرجع تحویل نخست وب، شروط روشن پذیرش و کارهای صاحب سرویس در [راهنمای تحویل نخست](web-initial-delivery-fa.md) و [نقشهٔ به‌روز](project-completion-roadmap-fa.md) است. اصلاح تازهٔ مهار خطای اشتراک اعلان در منبع کاری است؛ نصب زنده ثابت نیست.
+
 
 تاریخ:۳۱اکتبر۲۰۲۶. منبع۲.۸.۱۹؛ تصویر زنده دیده شد، قبولی کامل حساب باز است. سرور پس از پایان امروز حذف می‌شود؛ بکاپ تازه روی رایانه بازیابی شد. [مرجع نجات و تست](server-rescue-2026-10-31-fa.md)، [راه بازیابی](server-recovery-guide-fa.md)، [نقشه](project-completion-roadmap-fa.md).
 
@@ -9,6 +11,7 @@
 | سند | نوع و مرز |
 | --- | --- |
 | [docs/request-pool-release-2.8.19-fa.md](request-pool-release-2.8.19-fa.md) | مرجع کد و تست۲۸اکتبر؛ وضع تازه در سند نجات |
+| [docs/web-handoff-readiness-2026-10-31.md](web-handoff-readiness-2026-10-31.md) | اصلاح وب و تست محلی؛ نصب و رسید واقعی باز |
 | [docs/server-rescue-2026-10-31-fa.md](server-rescue-2026-10-31-fa.md) | شاهد تازهٔ بکاپ و تست؛ حذف قریب سرور |
 | [docs/server-recovery-guide-fa.md](server-recovery-guide-fa.md) | راه بازیابی و بکاپِ بررسی‌شده |
 | [docs/telegram-release-2.8.17-fa.md](telegram-release-2.8.17-fa.md) | کد خواندن؛ پذیرش واقعی باز |

@@ -21,7 +21,7 @@ async function session(page: Page, shared?: SessionState) {
     const path = new URL(route.request().url()).pathname;
     if (path === '/api/auth/me') {
       state.profiles++;
-      if (state.profiles === 1) await state.profileGate;
+      await state.profileGate;
       await route.fulfill(state.signedOut ? { status: 401, json: { detail: 'No session' } } : { json: profile });
     } else if (path === '/api/auth/signin') {
       state.calls.push('signin-start');
@@ -67,6 +67,7 @@ for (const width of [390, 1440]) {
     await page.goto('/auth');
     const submit = page.getByRole('button', { name: 'Sign In', exact: true });
     await expect(submit).toBeDisabled();
+    await expect(page.getByRole('status').filter({ hasText: 'Preparing sign-in' })).toBeVisible();
     await page.locator('input[name="username"]').fill(profile.email);
     await page.locator('#auth-password').fill('LocalBrowserTest42!');
     await page.locator('#auth-password').press('Enter');
@@ -76,6 +77,7 @@ for (const width of [390, 1440]) {
     await expect(submit).toBeDisabled();
     releaseSignout();
     await expect(submit).toBeEnabled();
+    await expect(page.getByRole('status').filter({ hasText: 'Preparing sign-in' })).toHaveCount(0);
     await submit.click();
     await expect(page.getByRole('button', { name: 'User menu', exact: true })).toBeVisible();
     expect(state.calls.filter(call => call === 'signin-start')).toHaveLength(1);

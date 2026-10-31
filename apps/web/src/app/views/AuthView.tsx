@@ -49,6 +49,7 @@ export function AuthView() {
     login: { fa: 'ورود', en: 'Login' },
     signup: { fa: 'ثبت نام', en: 'Sign up' },
     submitLogin: { fa: 'ورود به حساب', en: 'Sign In' },
+    preparingLogin: { fa: 'در حال آماده‌سازی ورود…', en: 'Preparing sign-in…' },
     submitSignup: { fa: 'ایجاد حساب کاربری', en: 'Create Account' },
     identifierLabel: { fa: 'نام کاربری یا ایمیل', en: 'Username or Email' },
     identifierPlaceholder: { fa: 'username یا name@example.com', en: 'username or name@example.com' },
@@ -306,10 +307,15 @@ export function AuthView() {
                 </div>
               )}
 
+              {!authReady && (
+                <p role="status" className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                  {t.preparingLogin[language]}
+                </p>
+              )}
               <Button
                 type="submit"
                 aria-label={isLogin ? t.submitLogin[language] : t.submitSignup[language]}
-                aria-busy={isSubmitting}
+                aria-busy={isSubmitting || !authReady}
                 disabled={!authReady || logoutPending || isSubmitting || (!isLogin && !isPasswordValid)}
                 className={`w-full rounded-2xl text-sm font-bold transition-all duration-300 ${isLogin ? 'mt-6 h-12' : 'mt-4 h-11'} ${
                   (!isLogin && !isPasswordValid) ? 'opacity-50 cursor-not-allowed' : ''

@@ -4,7 +4,7 @@ Source **2.8.19**, tag `v2.8.19`, commit `7978e8938d17c4749ba7c43044a5e3e22bcf0a
 
 **Production observation, 2026-10-31:** access returned after the owner renewed the VPS through today; the owner says it will then be deleted. Both API replicas match the 2.8.19 image and report healthy. The recovered guard receipt passed on October 28; the last observed accepted pointer remains 2.8.15. A fresh browser check passed registration, desktop login and logout, but timed out at email login in a narrow viewport; full application acceptance remains open. [Dated rescue and test record](server-rescue-2026-10-31-fa.md).
 
-An unreleased frontend correction now waits for the initial session check and cleanup before enabling authentication. Local browser regressions and frontend tests passed; it is not installed in the existing 2.8.19 images. Fresh production acceptance remains required on the replacement host.
+Unreleased web corrections wait for the initial session check and cleanup before enabling authentication, explain that wait, and handle browser subscription-storage failures during background push synchronization. Local validation is separate from installed 2.8.19 images; fresh production and real-device acceptance remain required on a replacement host.
 
 A fresh full database dump is saved locally and passed an isolated workstation restore: 55 public tables and ten migrations. Historical rate backups, private configuration, certificates and runtime artifacts are preserved separately. Snapshots have separate clocks and are not a continuous or atomic backup of the whole server. [Recovery guide](server-recovery-guide-fa.md).
 

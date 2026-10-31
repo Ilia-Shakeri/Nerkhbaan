@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- Handle browser subscription-read errors during background web-push synchronization, preserve retry on a later start and never prompt for permission during that recovery. Explain the initial sign-in readiness wait visibly and to assistive technology.
+- Refresh the initial web delivery checklist and roadmap with owner actions and separate real-device, hosting and external-service acceptance gates.
+
 - Wait for initial session recovery and any anonymous-session cleanup before accepting sign-in or registration. Preserve logout cancellation rather than allowing an early login to race the initial refresh. Two browser regressions cover delayed initial checks at narrow and desktop widths. This correction is not included in the existing 2.8.19 runtime images.
 - Preserve live browser failure receipts when a click or response wait fails; record an incomplete receipt before starting network work. Document the October 31 rescue and independently verified local database restores.
 
