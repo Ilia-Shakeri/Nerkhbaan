@@ -1,0 +1,39 @@
+# Small-host override; use with docker-compose.prod.yaml and reviewed fixed images.
+services:
+  postgres:
+    command: [postgres, -c, shared_preload_libraries=timescaledb, -c, shared_buffers=128MB,
+      -c, effective_cache_size=768MB, -c, maintenance_work_mem=32MB, -c, work_mem=2MB,
+      -c, max_connections=40, -c, max_worker_processes=4, -c, max_parallel_workers=1,
+      -c, max_parallel_workers_per_gather=0, -c, timescaledb.max_background_workers=2]
+    deploy:
+      resources:
+        limits: {cpus: "0.75", memory: 768M}
+  redis:
+    environment: {REDIS_MAXMEMORY: 128mb}
+    deploy:
+      resources:
+        limits: {cpus: "0.25", memory: 256M}
+  backend:
+    environment:
+      DATABASE_POOL_SIZE: "4"
+      DATABASE_ASYNC_POOL_SIZE: "2"
+      DATABASE_MAX_OVERFLOW: "0"
+    deploy:
+      resources:
+        limits: {cpus: "0.75", memory: 512M}
+  frontend:
+    deploy:
+      resources:
+        limits: {cpus: "0.25", memory: 96M}
+  admin-frontend:
+    deploy:
+      resources:
+        limits: {cpus: "0.25", memory: 96M}
+  edge:
+    deploy:
+      resources:
+        limits: {cpus: "0.25", memory: 128M}
+  db-backup:
+    deploy:
+      resources:
+        limits: {cpus: "0.25", memory: 128M}
