@@ -68,7 +68,8 @@ def run(kit, output, cli):
             "label": token, "image": IMAGE, "network": "none", "memory_mib": 768}), encoding="utf8")
         for _ in range(60):
             owned()
-            ready = subprocess.run([*cli, "exec", name, "pg_isready", "-U", "postgres"],
+            # Initialization uses a socket-only server; TCP starts after that server exits.
+            ready = subprocess.run([*cli, "exec", name, "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "restore_drill"],
                                    capture_output=True, timeout=10)
             if ready.returncode == 0:
                 break
