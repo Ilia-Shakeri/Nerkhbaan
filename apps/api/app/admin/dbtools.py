@@ -28,8 +28,12 @@ def reflected_table(db: Session, table_name: str) -> Table | None:
         if cache_key in _reflected:
             return _reflected[cache_key]
         table: Table | None = None
-        if db.bind is not None and inspect(db.bind).has_table(table_name):
-            table = Table(table_name, MetaData(), autoload_with=db.bind)
+        # The authenticated request already owns a connection. Checking out a
+        # second one here can exhaust a small pool while other reads wait on
+        # this reflection lock.
+        connection = db.connection()
+        if inspect(connection).has_table(table_name):
+            table = Table(table_name, MetaData(), autoload_with=connection)
         # A missing table is cached too: the answer will not change until the
         # next migration, which requires a restart to pick up anyway.
         _reflected[cache_key] = table

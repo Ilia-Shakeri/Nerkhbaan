@@ -61,6 +61,18 @@ test('local accounts, alerts and in-app notices work without external delivery',
   await expect(page.getByRole('switch', { name: 'Account web notifications', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '.local-preview/review-phone.png', fullPage: true });
+  for (const width of [390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const [url, title] of [
+      ['/support', 'Support'], ['/contact', 'Contact Us'],
+      ['/advanced-report', 'Advanced TradingView chart'], ['/analysis', 'Smart Analysis'], ['/assistant', 'Smart Assistant'],
+    ]) {
+      await page.goto(url);
+      await expect(page.getByRole('heading', { name: title, exact: true }).first()).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${url} at ${width}`).toBe(true);
+    }
+  }
+  await page.goto('/settings');
   await page.getByRole('button', { name: 'User menu', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Logout', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sign In', exact: true })).toBeVisible();

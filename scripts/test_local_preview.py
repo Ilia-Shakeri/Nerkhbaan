@@ -1,7 +1,9 @@
 """Safety and data contracts for the keyless, local review launcher."""
 import os
+import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -11,12 +13,38 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps/api"))
 os.environ.setdefault("JWT_SECRET_KEY", "local-preview-contract-test-not-a-real-key-000000")
 
 from browser_fixture_database import validate_local_origin
-from local_preview import base_environment, database_url, preview_environment
+from local_preview import OWNER, base_environment, database_url, preview_environment, recover_stale_worker
 from local_preview_data import ASSETS, REVISION, history, prices, references
 from app.schemas import PricesResponse, PriceHistoryResponse, ReferenceRatesResponse
 
 
 class LocalPreviewTests(unittest.TestCase):
+    def test_reboot_recovery_requires_owned_dead_processes_and_free_ports(self):
+        value = {"id": "a" * 32}
+        row = {"owner": OWNER, "id": value["id"], "worker_pid": 101, "api_pid": 102, "web_pid": 103, "admin_pid": 104}
+        with tempfile.TemporaryDirectory() as directory, patch("local_preview.HOME", Path(directory)):
+            root = Path(directory)
+            lock, receipt = root / "worker.lock", root / "running.json"
+            lock.write_text("101", encoding="utf8")
+            receipt.write_text(json.dumps(row), encoding="utf8")
+            (root / "keep.private.txt").write_text("preserved", encoding="utf8")
+            with patch("local_preview.process_exists", return_value=True):
+                self.assertFalse(recover_stale_worker(value))
+                self.assertTrue(lock.exists())
+            receipt.write_text(json.dumps({**row, "owner": "another-workspace"}), encoding="utf8")
+            with self.assertRaises(RuntimeError):
+                recover_stale_worker(value)
+            receipt.write_text(json.dumps(row), encoding="utf8")
+            with patch("local_preview.process_exists", return_value=False):
+                with patch("local_preview.assert_port_free", side_effect=OSError("occupied")), self.assertRaises(OSError):
+                    recover_stale_worker(value)
+                self.assertTrue(lock.exists())
+                with patch("local_preview.assert_port_free"):
+                    self.assertTrue(recover_stale_worker(value))
+            self.assertFalse(receipt.exists())
+            self.assertFalse(lock.exists())
+            self.assertEqual((root / "keep.private.txt").read_text(encoding="utf8"), "preserved")
+
     def test_parent_credentials_are_not_inherited(self):
         with patch.dict(os.environ, {"DATABASE_URL": "production", "SMTP_PASSWORD": "private",
                                      "TELEGRAM_BOT_TOKEN": "private", "VITE_VAPID_PUBLIC_KEY": "private"}):

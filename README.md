@@ -1,5 +1,7 @@
 # Nerkhbaan
 
+Joint web/administrator verification and initial delivery gates, **2026-11-09**: [dated local test report](docs/joint-web-admin-review-2026-11-09-fa.md) · [current Persian roadmap](docs/project-completion-roadmap-fa.md). These are local/source checks; replacement hosting and actual device/message receipt remain open.
+
 **Keyless local web review:** `npm.cmd run preview:local`, then open [the local website](http://127.0.0.1:43188). Local accounts and saved alerts use a separate persistent database; charts are explicitly synthetic and external delivery is disabled. [Persian start/stop and test guide](docs/local-web-preview-fa.md). This Unreleased work does not change the published 2.8.19 tag or establish production/device acceptance.
 
 Source **2.8.19**, tag `v2.8.19`, commit `7978e8938d17c4749ba7c43044a5e3e22bcf0ad2`, is published. Source CI, fixed runtime images/scans and the isolated full-background-pool authentication/pricing canary passed on **2026-10-28**. This is source and isolated-test evidence, not a production acceptance receipt. [Exact tests and release record](docs/request-pool-release-2.8.19-fa.md).

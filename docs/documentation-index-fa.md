@@ -10,6 +10,7 @@
 
 | سند | نوع و مرز |
 | --- | --- |
+| [آزمون مشترک وب و پنل،۹نوامبر](joint-web-admin-review-2026-11-09-fa.md) | گردش واقعی محلی، پوشش صفحه‌ها و پایگاه/صف؛ مرز استقرار و دستگاه باز |
 | [docs/local-web-preview-fa.md](local-web-preview-fa.md) | شروع/توقف، دادهٔ محلی، تست و مرز نرخ نمونه؛ ارسال بیرونی خاموش |
 | [docs/request-pool-release-2.8.19-fa.md](request-pool-release-2.8.19-fa.md) | مرجع کد و تست۲۸اکتبر؛ وضع تازه در سند نجات |
 | [docs/web-handoff-readiness-2026-10-31.md](web-handoff-readiness-2026-10-31.md) | اصلاح وب و تست محلی؛ نصب و رسید واقعی باز |

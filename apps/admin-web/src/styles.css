@@ -393,14 +393,14 @@ code {
 }
 
 .app-shell {
-  min-height: 100dvh;
+  min-height: calc(100dvh - var(--local-preview-banner-height, 0px));
   display: grid;
   grid-template-columns: 15.5rem minmax(0, 1fr);
 }
 .sidebar {
   position: sticky;
   top: 0;
-  height: 100dvh;
+  height: calc(100dvh - var(--local-preview-banner-height, 0px));
   display: flex;
   flex-direction: column;
   padding: 1.15rem;

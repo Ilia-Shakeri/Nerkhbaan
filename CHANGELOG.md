@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Reuse the request's database connection for administrator schema reflection. Cold concurrent page reads no longer need a second reserved connection while holding the reflection lock. Preserve readable sanitized internal errors for explicitly allowed browser origins; reject unrelated origins.
+
+- Keep local administrator sign-out visible below a wrapping preview banner, including viewport changes. Recover owned stale preview markers after a workstation restart only when every recorded process is absent and all application ports are free.
+- Add real local web/admin support and account-state integration coverage, full administrator page reads at phone/desktop widths, and wider customer page checks. Make initial refresh-health tests explicit about enabled and disabled background configuration.
+
 - Keep the administrator navigation independently scrollable on short screens so lower sections and sign-out remain reachable. Local browser review waits for actual page data before testing the next section.
 
 - Extend the isolated local review to the administrator panel on loopback port 43189, with a separately scoped administrator session, private generated test credentials and real local role checks. Keep external sending/jobs blocked and cover login, page reads, session recovery, logout and private-file access in the local browser test.

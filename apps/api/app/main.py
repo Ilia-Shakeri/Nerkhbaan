@@ -293,8 +293,15 @@ async def global_exception_handler(request: Request, exc: Exception):
         exc_info=True,
         extra={"request_id": request_id, "error_type": type(exc).__name__},
     )
+    headers = {settings.request_id_header: request_id}
+    origin = request.headers.get("origin")
+    if origin and (origin in origins or "*" in origins):
+        headers["Access-Control-Allow-Origin"] = "*" if origins == ["*"] else origin
+        if origins != ["*"]:
+            headers["Access-Control-Allow-Credentials"] = "true"
+            headers["Vary"] = "Origin"
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error", "request_id": request_id},
-        headers={settings.request_id_header: request_id},
+        headers=headers,
     )

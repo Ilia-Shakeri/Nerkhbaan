@@ -22,18 +22,19 @@ class PricingRefreshHealthTests(unittest.TestCase):
 
     def test_initial_state_is_explicit(self) -> None:
         runner = BackgroundRunner(interval=1)
-
-        self.assertEqual(
-            runner.refresh_health(),
-            {
-                "enabled": True,
-                "state": "not_started",
-                "last_started_at": None,
-                "last_completed_at": None,
-                "last_error_type": None,
-                "result_counts": {},
-            },
-        )
+        for enabled in (True, False):
+            with self.subTest(enabled=enabled), patch("app.services.background.settings.background_tasks_enabled", enabled):
+                self.assertEqual(
+                    runner.refresh_health(),
+                    {
+                        "enabled": enabled,
+                        "state": "not_started",
+                        "last_started_at": None,
+                        "last_completed_at": None,
+                        "last_error_type": None,
+                        "result_counts": {},
+                    },
+                )
 
     def test_zero_usable_results_degrade_cycle_and_stopped_task_is_failed(self) -> None:
         runner = BackgroundRunner(interval=1)

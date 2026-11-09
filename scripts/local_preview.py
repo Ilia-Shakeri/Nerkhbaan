@@ -112,6 +112,56 @@ def assert_port_free(port):
         probe.bind(("127.0.0.1", port))
 
 
+def process_exists(pid):
+    if not isinstance(pid, int) or pid <= 0:
+        raise RuntimeError("Invalid local preview process receipt")
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+        kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        handle = kernel.OpenProcess(0x1000, False, pid)
+        if handle:
+            kernel.CloseHandle(handle)
+            return True
+        error = ctypes.get_last_error()
+        if error == 87:
+            return False
+        if error == 5:
+            return True
+        raise OSError(error, "Cannot verify the local preview process")
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def recover_stale_worker(value):
+    lock = HOME / "worker.lock"
+    if not lock.exists():
+        return False
+    pid = int(lock.read_text(encoding="utf8"))
+    receipt = HOME / "running.json"
+    pids = [pid]
+    if receipt.exists():
+        row = json.loads(receipt.read_text(encoding="utf8"))
+        if row.get("owner") != OWNER or row.get("id") != value["id"] or row.get("worker_pid") != pid:
+            raise RuntimeError("Refusing stale recovery of another preview receipt")
+        pids += [row[key] for key in ("api_pid", "web_pid", "admin_pid") if key in row]
+    if any(process_exists(item) for item in pids):
+        return False
+    for port in (API_PORT, WEB_PORT, ADMIN_PORT):
+        assert_port_free(port)
+    receipt.unlink(missing_ok=True)
+    lock.unlink()
+    return True
+
+
 def owned_container(name):
     row = json.loads(docker("inspect", name).stdout)[0]
     if row["Config"].get("Labels", {}).get("nerkhbaan.local-preview") != OWNER:
@@ -229,7 +279,9 @@ def main():
     if action == "serve":
         serve()
         return
-    config()
+    value = config()
+    if action in {"start", "stop"}:
+        recover_stale_worker(value)
     if action == "stop":
         (HOME / "stop.request").touch()
         wait_for(lambda: not (HOME / "worker.lock").exists(), timeout=45)

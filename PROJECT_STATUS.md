@@ -1,5 +1,7 @@
 # Project Status
 
+Joint web/administrator review, **2026-11-09**: keyless local account/support flows, every administrator section at phone/desktop widths, and owned PostgreSQL/Redis/Timescale checks are recorded in [the dated review](docs/joint-web-admin-review-2026-11-09-fa.md). Local sign-out layout and restart recovery are corrected. [The delivery roadmap](docs/project-completion-roadmap-fa.md) keeps replacement hosting, valid live prices, web-device and messenger receipt, mail recovery and independent backups as open gates.
+
 Keyless local review is available through `npm.cmd run preview:local`: isolated persistent accounts/alerts, explicitly synthetic charts, and account-scoped sample in-app messages. Production configuration and rescued backups are excluded. [Local review guide](docs/local-web-preview-fa.md). This is Unreleased source work; hosting and external/device receipt gates remain open.
 
 Source **2.8.19**, tag `v2.8.19`, commit `7978e8938d17c4749ba7c43044a5e3e22bcf0ad2`, is published. Source CI, fixed runtime images/scans and the isolated full-background-pool authentication/pricing canary passed on **2026-10-28**. This is source and isolated-test evidence, not a production acceptance receipt. [Exact tests and release record](docs/request-pool-release-2.8.19-fa.md).
