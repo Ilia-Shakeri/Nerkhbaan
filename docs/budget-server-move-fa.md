@@ -20,16 +20,18 @@
 - `scripts/rehearse_host_restore.py`: بازیابی snapshotثابت روی ظرف تازه،بدون شبکه و درگاه،با سقف۷۶۸مگ. اصل dumpو پایگاه محلی سایت دست‌نخورده‌اند؛ تست موفق فقط ظرف و حجم خودش را پاک می‌کند. شکست فایل خصوصی دارد و تکرار خودکار ندارد.
 - `scripts/new-host-preflight.sh`: سنجش فقط‌خواندنی سخت‌افزار،فضا،سیستم،ساعت و درگاه‌ها؛ نصب یا تغییر شبکه نمی‌کند. Dockerو شبکه و برنامه هنوز گیت جدا دارند.
 
-بستهٔ نهایی و رسید همین دور بیرونGitدر `D:\Projects\Nerkhbaan\delivery\host-move-20261109` ساخته می‌شوند. فایل‌های آن خصوصی‌اند؛ در Git،گفتگو یا میزبان عمومی قرار نگیرند. `KIT_MANIFEST.json` هش هر فایل و commitمنبع را ثبت می‌کند؛ `live_ready:false` تا پذیرش زنده پابرجاست.
+بستهٔ نهایی بیرونGitدر `D:\Projects\Nerkhbaan\delivery\host-move-20261109-r3` است. فایل‌های آن خصوصی‌اند؛ در Git،گفتگو یا میزبان عمومی قرار نگیرند. `KIT_MANIFEST.json` هش هر فایل و commitمنبع را ثبت می‌کند؛ `live_ready:false` تا پذیرش زنده پابرجاست.
+
+شاهد۹نوامبر:هفت تست حفاظت بسته،بررسی نام‌ها و نحو،یکسانی نسخه و ترکیبComposeبا پروفایلedge/backupپاس. تست نخست بازیابی،آمادگی زودهنگام پایگاه موقت نصب را دید و متوقف شد؛ رسید شکست محفوظ ماند. ابزار اصلاح شد تا آماده‌شدنTCPپایگاه نهایی را ببیند. بازیابی تازه در۱۱:۱۵تا۱۱:۱۶UTCبا سقف۷۶۸مگ پاس:۵۵جدول،۱۰مهاجرت،۳۸۹۵۵۵نرخcanonical،۶۳۷۵۹۵نرخproviderو۲۶۶۶۲نرخlegacyبا snapshotبرابر شد؛ کارهای نگهداری قدیم خاموش ماندند. ظرف و حجم آزمون خودش پاک شدند. رسید `D:\Projects\Nerkhbaan\delivery\host-move-check-20261109-r2\restore-result.json` مربوط به منبع ابزار `dd921df66919639a494a1c0fa3a87e0bed6d09f1` است؛ بستهٔr3فقط سند تازه دارد و همان ابزار/داده را نگه می‌دارد. امتیاز آماده‌سازی محلی پس از اصلاح۹از۱۰؛ پذیرش زنده همچنان باز است.
 
 ## فرمان‌های آمادهٔ محلی
 
 از ریشهٔ منبع،پس از commitتمیز:
 
 ```powershell
-python scripts/prepare_host_move.py pack --backup D:\Projects\Nerkhbaan\delivery\private-backups\rescue-20261031 --output D:\Projects\Nerkhbaan\delivery\host-move-20261109
-python scripts/prepare_host_move.py verify --output D:\Projects\Nerkhbaan\delivery\host-move-20261109
-python scripts/rehearse_host_restore.py --wsl --kit D:\Projects\Nerkhbaan\delivery\host-move-20261109 --output D:\Projects\Nerkhbaan\delivery\host-move-check-20261109
+python scripts/prepare_host_move.py pack --backup D:\Projects\Nerkhbaan\delivery\private-backups\rescue-20261031 --output D:\Projects\Nerkhbaan\delivery\host-move-20261109-r3
+python scripts/prepare_host_move.py verify --output D:\Projects\Nerkhbaan\delivery\host-move-20261109-r3
+python scripts/rehearse_host_restore.py --wsl --kit D:\Projects\Nerkhbaan\delivery\host-move-20261109-r3 --output D:\Projects\Nerkhbaan\delivery\host-move-check-20261109-r3
 ```
 
 خروجی موجود باشد،اول رسیدش خوانده شود؛ برای اجرای تازه نام یکتا لازم است. تصویر بازیابی باید همان شناسهٔ ثابت داخل ابزار باشد؛ نبود تصویر مجوز جایگزینی کور نیست. بازبینی۷۶۸مگ فقط بازیابی و شمارش را ثابت می‌کند،نه پایداری کل برنامه زیر بار.
@@ -44,7 +46,7 @@ python scripts/rehearse_host_restore.py --wsl --kit D:\Projects\Nerkhbaan\delive
 2. روی میزبان خالی،DockerEngineوComposeاز مخزن رسمی،پوشه خصوصی،حجم پایدار و بکاپ بیرون میزبان آماده شود. این نصب هنوز اجرا نشده؛ فرمان نسخهٔ روز در همان نوبت با سند رسمی سنجیده شود. فایل فعلی نصب برنامه برای ساخت زیرساخت خالی نیست؛ خط مبنای قدیمی۲۲ظرف به میزبان تازه نسبت داده نشود.
 3. بسته از راهSSHقفل‌شده منتقل و دوباره هش سنجیده شود. dumpروی حجم جدا بازیابی شود؛ نقش و مالکیت برنامه بررسی شود. فایل نقش‌های قدیمی کامل اجرا نشود؛ مجوزsuperuserو رمز قدیم کور وارد نشود. ابزار rehearsalپایگاه تمرینی می‌سازد؛ ابزار نصب مستقیم پایگاه مشتری نیست.
 4. تنظیم فعال قدیم در `configuration-3.private.env` بازبینی شود؛ نشانی قدیم،شبکه،TLSو دامنه برای مقصد جدید اصلاح شوند. کلید معتبررمزگذاری،JWTوVAPIDحفظ شود؛ کلید تازه کور ساخته نشود. Redisتازه و خالی شروع شود؛ صف قدیمی و اعلان‌های مانده بازپخش نشوند. فایل‌هایSSH،دیوار و tarهمه پروژه‌ها روی میزبان تازه باز نشوند.
-5. تصویرهای ثابت از commitنهایی باCIو اسکن تازه ساخته شوند؛ روی میزبان۴گیگ buildنکنیم. لایهٔ بودجه همراه فایل اصلی و overrideتصویر ثابت مصرف شود. خط مبنای میزبان تازه و گیت محیط/حق مصرف/مهاجرت حاضر شوند؛ سپس نگهبان رسمی `scripts/deploy-nerkhbaan-prod.sh` و `scripts/deploy_application.py` مصرف شود. هیچ گیت و دوAPIحذف نشوند.
+5. تصویرهای ثابت از commitنهایی باCIو اسکن تازه ساخته شوند؛ روی میزبان۴گیگ buildنکنیم. نگهبان فقط یک `COMPOSE_OVERRIDE_FILE` می‌خواند:تنظیم بودجه باید پیش از گرفتن شواهد در همان overrideخصوصیِ تصویر ثابت ادغام و نتیجهٔComposeدوباره سنجیده شود؛ فایل سوم خودکار خوانده نمی‌شود. خط مبنای میزبان تازه و گیت محیط/حق مصرف/مهاجرت حاضر شوند؛ سپس نگهبان رسمی `scripts/deploy-nerkhbaan-prod.sh` و `scripts/deploy_application.py` مصرف شود. هیچ گیت و دوAPIحذف نشوند.
 6. نخست با دامنه به مقصد سالم و HTTPSمعتبر تست:ثبت‌نام،ورود،مدیر،خروج،نشست لغوشده،جدایی حساب،نرخ تازه و هشدار. ۲۴ساعت پایش نرخ/صف و بکاپ بیرون میزبان لازم است. سپس دریافت و کلیک اعلان رویiPhoneاز صفحه اصلی،Androidو رایانه و پیام تلگرام/بله؛ رسید واقعی هر مسیر ثبت شود.
 
 ```mermaid
