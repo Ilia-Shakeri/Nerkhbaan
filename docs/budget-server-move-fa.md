@@ -20,18 +20,18 @@
 - `scripts/rehearse_host_restore.py`: بازیابی snapshotثابت روی ظرف تازه،بدون شبکه و درگاه،با سقف۷۶۸مگ. اصل dumpو پایگاه محلی سایت دست‌نخورده‌اند؛ تست موفق فقط ظرف و حجم خودش را پاک می‌کند. شکست فایل خصوصی دارد و تکرار خودکار ندارد.
 - `scripts/new-host-preflight.sh`: سنجش فقط‌خواندنی سخت‌افزار،فضا،سیستم،ساعت و درگاه‌ها؛ نصب یا تغییر شبکه نمی‌کند. Dockerو شبکه و برنامه هنوز گیت جدا دارند.
 
-بستهٔ نهایی بیرونGitدر `D:\Projects\Nerkhbaan\delivery\host-move-20261109-r3` است. فایل‌های آن خصوصی‌اند؛ در Git،گفتگو یا میزبان عمومی قرار نگیرند. `KIT_MANIFEST.json` هش هر فایل و commitمنبع را ثبت می‌کند؛ `live_ready:false` تا پذیرش زنده پابرجاست.
+بستهٔ نهایی بیرونGitدر `D:\Projects\Nerkhbaan\delivery\host-move-20261109-final` است. فایل‌های آن خصوصی‌اند؛ در Git،گفتگو یا میزبان عمومی قرار نگیرند. `KIT_MANIFEST.json` هش هر فایل و commitمنبع را ثبت می‌کند؛ `live_ready:false` تا پذیرش زنده پابرجاست.
 
-شاهد۹نوامبر:هفت تست حفاظت بسته،بررسی نام‌ها و نحو،یکسانی نسخه و ترکیبComposeبا پروفایلedge/backupپاس. تست نخست بازیابی،آمادگی زودهنگام پایگاه موقت نصب را دید و متوقف شد؛ رسید شکست محفوظ ماند. ابزار اصلاح شد تا آماده‌شدنTCPپایگاه نهایی را ببیند. بازیابی تازه در۱۱:۱۵تا۱۱:۱۶UTCبا سقف۷۶۸مگ پاس:۵۵جدول،۱۰مهاجرت،۳۸۹۵۵۵نرخcanonical،۶۳۷۵۹۵نرخproviderو۲۶۶۶۲نرخlegacyبا snapshotبرابر شد؛ کارهای نگهداری قدیم خاموش ماندند. ظرف و حجم آزمون خودش پاک شدند. رسید `D:\Projects\Nerkhbaan\delivery\host-move-check-20261109-r2\restore-result.json` مربوط به منبع ابزار `dd921df66919639a494a1c0fa3a87e0bed6d09f1` است؛ بستهٔr3فقط سند تازه دارد و همان ابزار/داده را نگه می‌دارد. امتیاز آماده‌سازی محلی پس از اصلاح۹از۱۰؛ پذیرش زنده همچنان باز است.
+شاهد۹نوامبر:هفت تست حفاظت بسته،بررسی نام‌ها و نحو،یکسانی نسخه و ترکیبComposeبا پروفایلedge/backupپاس. تست نخست بازیابی،آمادگی زودهنگام پایگاه موقت نصب را دید و متوقف شد؛ رسید شکست محفوظ ماند. ابزار اصلاح شد تا آماده‌شدنTCPپایگاه نهایی را ببیند. بازیابی تازه در۱۱:۱۵تا۱۱:۱۶UTCبا سقف۷۶۸مگ پاس:۵۵جدول،۱۰مهاجرت،۳۸۹۵۵۵نرخcanonical،۶۳۷۵۹۵نرخproviderو۲۶۶۶۲نرخlegacyبا snapshotبرابر شد؛ کارهای نگهداری قدیم خاموش ماندند. ظرف و حجم آزمون خودش پاک شدند. رسید `D:\Projects\Nerkhbaan\delivery\host-move-check-20261109-r2\restore-result.json` مربوط به منبع ابزار `dd921df66919639a494a1c0fa3a87e0bed6d09f1` است؛ بستهٔ تاریخیr3فقط سند تازه داشت؛ بستهٔ جاریfinalاصلاح خروج پس از تغییر رمز را هم دارد. ابزار بازیابی و dumpهمان نسخهٔ آزموده‌اند. امتیاز آماده‌سازی محلی پس از اصلاح۹از۱۰؛ پذیرش زنده همچنان باز است.
 
 ## فرمان‌های آمادهٔ محلی
 
 از ریشهٔ منبع،پس از commitتمیز:
 
 ```powershell
-python scripts/prepare_host_move.py pack --backup D:\Projects\Nerkhbaan\delivery\private-backups\rescue-20261031 --output D:\Projects\Nerkhbaan\delivery\host-move-20261109-r3
-python scripts/prepare_host_move.py verify --output D:\Projects\Nerkhbaan\delivery\host-move-20261109-r3
-python scripts/rehearse_host_restore.py --wsl --kit D:\Projects\Nerkhbaan\delivery\host-move-20261109-r3 --output D:\Projects\Nerkhbaan\delivery\host-move-check-20261109-r3
+python scripts/prepare_host_move.py pack --backup D:\Projects\Nerkhbaan\delivery\private-backups\rescue-20261031 --output D:\Projects\Nerkhbaan\delivery\host-move-20261109-final
+python scripts/prepare_host_move.py verify --output D:\Projects\Nerkhbaan\delivery\host-move-20261109-final
+python scripts/rehearse_host_restore.py --wsl --kit D:\Projects\Nerkhbaan\delivery\host-move-20261109-final --output D:\Projects\Nerkhbaan\delivery\host-move-check-20261109-r3
 ```
 
 خروجی موجود باشد،اول رسیدش خوانده شود؛ برای اجرای تازه نام یکتا لازم است. تصویر بازیابی باید همان شناسهٔ ثابت داخل ابزار باشد؛ نبود تصویر مجوز جایگزینی کور نیست. بازبینی۷۶۸مگ فقط بازیابی و شمارش را ثابت می‌کند،نه پایداری کل برنامه زیر بار.
