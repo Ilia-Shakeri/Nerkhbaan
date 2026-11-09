@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+- End the customer browser session immediately after a successful password change and return to sign-in, matching server-side revocation. Block duplicate password submissions and retain the dialog when the current password is wrong.
+- Add shared real-database browser acceptance scenarios for password rotation across two sessions and alert editing/deletion across two isolated accounts; run them in the existing browser suite and local preview. Add the customer first-use and acceptance guide.
+
 - Reuse the request's database connection for administrator schema reflection. Cold concurrent page reads no longer need a second reserved connection while holding the reflection lock. Preserve readable sanitized internal errors for explicitly allowed browser origins; reject unrelated origins.
 
 - Keep local administrator sign-out visible below a wrapping preview banner, including viewport changes. Recover owned stale preview markers after a workstation restart only when every recorded process is absent and all application ports are free.

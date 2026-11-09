@@ -12,6 +12,9 @@
 | --- | --- |
 | [آزمون مشترک وب و پنل،۹نوامبر](joint-web-admin-review-2026-11-09-fa.md) | گردش واقعی محلی، پوشش صفحه‌ها و پایگاه/صف؛ مرز استقرار و دستگاه باز |
 | [docs/local-web-preview-fa.md](local-web-preview-fa.md) | شروع/توقف، دادهٔ محلی، تست و مرز نرخ نمونه؛ ارسال بیرونی خاموش |
+| [docs/customer-first-use-fa.md](customer-first-use-fa.md) | راه کوتاه کارفرما و برگهٔ پذیرش؛ همهٔ تست‌های عمومی هنوز باز |
+| [docs/keyless-delivery-review-2026-11-09-fa.md](keyless-delivery-review-2026-11-09-fa.md) | اصلاح رمز،تست‌های محلی و کار دقیق بعد از خرید سرور |
+| [docs/budget-server-move-fa.md](budget-server-move-fa.md) | سرور کم‌خرج،بستهٔ خصوصی و بازیابی آزموده‌شده؛ نصب تازه باز |
 | [docs/request-pool-release-2.8.19-fa.md](request-pool-release-2.8.19-fa.md) | مرجع کد و تست۲۸اکتبر؛ وضع تازه در سند نجات |
 | [docs/web-handoff-readiness-2026-10-31.md](web-handoff-readiness-2026-10-31.md) | اصلاح وب و تست محلی؛ نصب و رسید واقعی باز |
 | [docs/server-rescue-2026-10-31-fa.md](server-rescue-2026-10-31-fa.md) | شاهد تازهٔ بکاپ و تست؛ حذف قریب سرور |

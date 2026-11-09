@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../services/api';
+import { useAppContext } from '../context/AppContext';
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -14,6 +16,9 @@ interface ChangePasswordModalProps {
 }
 
 export function ChangePasswordModal({ isOpen, onClose, language, isDark }: ChangePasswordModalProps) {
+  const { logout } = useAppContext();
+  const navigate = useNavigate();
+  const saving = useRef(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -26,7 +31,7 @@ export function ChangePasswordModal({ isOpen, onClose, language, isDark }: Chang
     confirm: { fa: 'تکرار رمز عبور جدید', en: 'Confirm New Password' },
     submit: { fa: 'تغییر رمز', en: 'Change Password' },
     cancel: { fa: 'لغو', en: 'Cancel' },
-    success: { fa: 'رمز عبور با موفقیت تغییر کرد', en: 'Password changed successfully' },
+    success: { fa: 'رمز عوض شد. دوباره وارد شوید.', en: 'Password changed. Sign in again.' },
     mismatch: { fa: 'رمزهای عبور مطابقت ندارند', en: 'Passwords do not match' },
     tooShort: { fa: 'رمز جدید: ۱۰ تا ۱۲۸ کاراکتر، حرف کوچک، بزرگ و عدد', en: 'Use 10–128 characters, lower case, upper case and a digit' },
     failed: { fa: 'رمز عبور فعلی نادرست است', en: 'Current password is incorrect' },
@@ -39,13 +44,14 @@ export function ChangePasswordModal({ isOpen, onClose, language, isDark }: Chang
   };
 
   const closeModal = () => {
-    if (isSubmitting) return;
+    if (saving.current) return;
     resetFields();
     onClose();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (saving.current) return;
     if (newPassword.length < 10 || newPassword.length > 128 || !/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
       toast.error(t.tooShort[language]);
       return;
@@ -54,18 +60,22 @@ export function ChangePasswordModal({ isOpen, onClose, language, isDark }: Chang
       toast.error(t.mismatch[language]);
       return;
     }
+    saving.current = true;
     setIsSubmitting(true);
     try {
       await api.auth.changePassword({
         current_password: currentPassword,
         new_password: newPassword,
       });
-      toast.success(t.success[language]);
       resetFields();
       onClose();
+      await logout();
+      navigate('/auth', { replace: true });
+      toast.success(t.success[language]);
     } catch (error: any) {
       toast.error(error?.message || t.failed[language]);
     } finally {
+      saving.current = false;
       setIsSubmitting(false);
     }
   };
