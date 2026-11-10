@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Avoid discovering current-price instrument IDs by scanning compressed history. Use the served instrument registry and share unfinished database snapshots across individual refresh workers and aggregate readers, without retaining completed prices or permission decisions.
+- Fast-path valid direct-source permission checks and history attribution while retaining recursive validation for derived or malformed source trees. Add PostgreSQL/Python differential, query-plan and cancellation/revocation coverage.
+- Disable chart JIT compilation inside read-only transactions while preserving the database's statement and lock timeouts and restoring all local settings on rollback.
+- Rebalance the small-host database/two-API CPU limits to 1.50/0.25/0.25 cores within a two-core total and the unchanged 2.5 GiB memory plan. This does not certify shared-host capacity or authorize bypassing deployment gates.
+
 - End the customer browser session immediately after a successful password change and return to sign-in, matching server-side revocation. Block duplicate password submissions and retain the dialog when the current password is wrong.
 - Add shared real-database browser acceptance scenarios for password rotation across two sessions and alert editing/deletion across two isolated accounts; run them in the existing browser suite and local preview. Add the customer first-use and acceptance guide.
 

@@ -1,5 +1,7 @@
 # Project Status
 
+2026-11-10 pricing performance: direct-source permission/history fast paths, registry-based instrument enumeration, in-flight worker/aggregate snapshot sharing and transaction-local chart JIT correction passed the restored-data small-host rehearsal: 120/120 HTTP 200, zero canonical read/statement-timeout errors and no OOM; p95 2.2982 seconds. Shared-host free memory/disk still fail the reviewed resource gate. Under the owner's conditional instruction these changes remain committed locally, without push, new version or deployment. [Exact source, tests and limits](docs/pricing-history-performance-2026-11-10-fa.md).
+
 2026-11-10 shared-host maintenance: reviewed unused build/package cache removed; containers, images, volumes and checked backup hashes preserved immediately around each deletion. Fresh shared-host resource margins remain below the reviewed target. The restored-data budget rehearsal passed account/admin smoke but failed concurrent pricing reads; no deployment was attempted. [Evidence and remaining gates](docs/shared-host-maintenance-2026-11-10-fa.md).
 
 2026-11-09 keyless handoff work: customer password-change logout corrected and shared real-database browser acceptance coverage added. Local tests and builds passed; public deployment/device delivery remain pending. [Current evidence and exact post-purchase work](docs/keyless-delivery-review-2026-11-09-fa.md).
