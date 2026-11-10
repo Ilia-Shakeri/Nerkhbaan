@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import unittest
@@ -119,6 +120,38 @@ class _OwnedPostgresFixture:
 
 @unittest.skipUnless(TEST_URL, "Requires an explicitly owned test PostgreSQL database")
 class RightsPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
+    def test_direct_sql_shortcut_matches_policy_for_malformed_and_derived_trees(self):
+        import random
+        valid = _summary()
+        derived = {"provider_ids": ["derived:owned"], "primary_provider_id": "derived:owned",
+                   "derived": True, "inputs": [{"source_summary": valid}]}
+        values = [None, True, False, 0, 1, "", "approved", "restricted", "derived:spoof",
+                  [], ["approved"], ["approved", "approved_fx"], ["approved", "restricted"],
+                  [["approved"]], [[]], [None], [1], [{}], {"approved": True},
+                  ["approved"] * 64, ["approved"] * 65]
+        fields = ("provider_ids", "primary_provider_id", "derived", "candidate_provider_id", "previous_provider_id")
+        corpus = [valid, derived, {}, None, [], [valid], {**valid, "inputs": [{"source_summary": {}}]}]
+        for field in fields:
+            corpus.extend({**valid, field: value} for value in values)
+        randomizer = random.Random(610)
+        for _ in range(600):
+            item = dict(randomizer.choice([valid, derived]))
+            for _ in range(randomizer.randrange(1, 4)):
+                item[randomizer.choice(fields)] = randomizer.choice(values)
+            corpus.append(item)
+        self.grants["derived:spoof"] = deepcopy(self.grants["approved"])
+        samples = json.dumps([{"i": i, "summary": value} for i, value in enumerate(corpus)])
+        for action in ("display", "history", "derive"):
+            clause, parameters = rights.sql_filter(action)
+            with self.sessions() as db:
+                rows = db.execute(text(f"""WITH samples AS (
+                    SELECT (value->>'i')::int AS id, value->'summary' AS source_summary
+                    FROM jsonb_array_elements(CAST(:samples AS jsonb)))
+                    SELECT id, ({clause}) AS allowed FROM samples ORDER BY id"""),
+                    {"samples": samples, **parameters}).all()
+            self.assertEqual([bool(row.allowed) for row in rows],
+                             [rights.canonical_allowed(value, action) for value in corpus], action)
+
     owned_table_names = ("instruments", "canonical_quotes", "provider_quotes", "pricing_anomalies", "pricing_verifications")
 
     @classmethod

@@ -312,8 +312,10 @@ def sql_filter(action: str = "history", column: str = "source_summary") -> tuple
         raise ValueError("Unrecognised source permission action")
     if not enforced():
         return "TRUE", {}
-    allowed = json.dumps(allowed_provider_ids(action))
-    derive = json.dumps([name for name in allowed_provider_ids(action) if provider_allowed(name, "derive")])
+    allowed_ids = allowed_provider_ids(action)
+    allowed = json.dumps(allowed_ids)
+    derive = json.dumps([name for name in allowed_ids if provider_allowed(name, "derive")])
+    direct = json.dumps([name for name in allowed_ids if not name.startswith("derived:")])
     def is_derived(value):
         return f"(COALESCE({value}->>'derived','false') = 'true' OR COALESCE({value}->>'primary_provider_id','') LIKE 'derived:%')"
 
@@ -365,7 +367,25 @@ def sql_filter(action: str = "history", column: str = "source_summary") -> tuple
               OR value #>> '{{}}' LIKE 'derived:%'
               OR NOT ({allowed_leaves} ? (value #>> '{{}}'))))
     )"""
-    return clause, {"rights_allowed_sources": allowed, "rights_derived_sources": derive}
+    # A direct tree has only its root. Validate that same root without starting
+    # a recursive executor for every historical tick. All other shapes retain
+    # the complete bounded-tree check above, including malformed direct rows.
+    root_ids = array(column, "provider_ids")
+    fast = f"""jsonb_typeof({column}) = 'object'
+        AND ({column}->'derived' IS NULL OR {column}->'derived' = 'false'::jsonb)
+        AND jsonb_typeof({column}->'provider_ids') = 'array'
+        AND jsonb_array_length({root_ids}) BETWEEN 1 AND 64
+        AND ({column}->'provider_ids') <@ CAST(:rights_direct_sources AS jsonb)
+        AND (COALESCE({column}->'primary_provider_id', 'null'::jsonb) = 'null'::jsonb
+             OR (jsonb_typeof({column}->'primary_provider_id') = 'string'
+                 AND ({column}->'provider_ids') ? ({column}->>'primary_provider_id')))"""
+    for field in ("candidate_provider_id", "previous_provider_id"):
+        fast += f""" AND (COALESCE({column}->'{field}', 'null'::jsonb) = 'null'::jsonb
+            OR (jsonb_typeof({column}->'{field}') = 'string'
+                AND CAST(:rights_direct_sources AS jsonb) ? ({column}->>'{field}')))"""
+    clause = f"(CASE WHEN {fast} THEN TRUE ELSE ({clause}) END)"
+    return clause, {"rights_allowed_sources": allowed, "rights_derived_sources": derive,
+                    "rights_direct_sources": direct}
 
 
 def describe() -> dict:

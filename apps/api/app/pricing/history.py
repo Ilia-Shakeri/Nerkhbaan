@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -221,7 +222,12 @@ def _canonical_history_sql(use_bookends: bool):
     lineage = ""
     attribution = ""
     if rights.enforced():
-        lineage = """, (
+        lineage = """, (CASE
+            WHEN COALESCE(source_summary->>'derived', 'false') <> 'true'
+                 AND COALESCE(source_summary->>'primary_provider_id', '') NOT LIKE 'derived:%'
+            THEN source_summary->'provider_ids' || jsonb_build_array(
+                source_summary->'candidate_provider_id', source_summary->'previous_provider_id')
+            ELSE (
             WITH RECURSIVE attribution_nodes(summary, depth) AS (
                 SELECT source_summary, 0
                 UNION ALL
@@ -245,7 +251,7 @@ def _canonical_history_sql(use_bookends: bool):
             ) AS attribution_source(value)
             WHERE jsonb_typeof(attribution_source.value) = 'string'
               AND attribution_source.value #>> '{}' NOT LIKE 'derived:%'
-        ) || jsonb_build_array(candidate_provider_id) AS rights_source_ids"""
+        ) END) || jsonb_build_array(candidate_provider_id) AS rights_source_ids"""
         attribution = ", jsonb_agg(DISTINCT rights_source_ids) AS rights_source_groups"
     opening = "first(price, canonical_at)" if use_bookends else "(array_agg(price ORDER BY canonical_at ASC))[1]"
     closing = "last(price, canonical_at)" if use_bookends else "(array_agg(price ORDER BY canonical_at DESC))[1]"
@@ -304,6 +310,7 @@ class InternalPriceHistory:
     def __init__(self) -> None:
         self._canonical_reads: dict[tuple[str, str, datetime | None, str | None], asyncio.Task] = {}
         self._canonical_guard = asyncio.Lock()
+        self._latest_reads: dict[tuple[asyncio.AbstractEventLoop, str], asyncio.Task] = {}
 
     async def canonical_history(
         self, instrument_id: str, timeframe: str, *, end: datetime | None = None,
@@ -442,7 +449,26 @@ class InternalPriceHistory:
         return await asyncio.to_thread(self._query_latest_canonical, instrument_id)
 
     async def latest_all(self) -> dict[str, CanonicalQuote]:
-        return await asyncio.to_thread(self._query_latest_all)
+        # Join unfinished reads only. Completed prices and permission decisions
+        # are never cached here; every later read sees new rows and revocations.
+        revision = rights.revision()
+        key = (asyncio.get_running_loop(), revision)
+        task = self._latest_reads.get(key)
+        if task is None or task.done():
+            task = asyncio.create_task(asyncio.to_thread(self._query_latest_all))
+            self._latest_reads[key] = task
+            task.add_done_callback(lambda done: self._latest_read_done(key, done))
+        await asyncio.wait({task})
+        result = task.result()
+        if revision != rights.revision():
+            return {}
+        return deepcopy(result)
+
+    def _latest_read_done(self, key, task: asyncio.Task) -> None:
+        if not task.cancelled():
+            task.exception()
+        if self._latest_reads.get(key) is task:
+            self._latest_reads.pop(key, None)
 
     async def latest_sources(self, instrument_id: str) -> list[dict[str, Any]]:
         return await asyncio.to_thread(self._query_latest_sources, instrument_id)
