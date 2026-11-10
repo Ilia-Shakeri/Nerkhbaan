@@ -16,6 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from app.pricing.history import (
     InternalPriceHistory, _ACCEPTED_STATUSES, _canonical_history_sql,
     _history_supports_bookends,
+    _history_read_plan,
 )
 
 
@@ -145,6 +146,19 @@ class HistoryBackendAggregationTests(unittest.TestCase):
             for _index in range(3):
                 InternalPriceHistory._query_canonical_history("GOLD_18K_TOMAN_GRAM", START, END, "15 minutes")
         self.assertEqual(self.capability_queries, 1)
+
+    def test_chart_planning_is_read_only_without_jit_or_timeout_leaks(self):
+        with self.sessions() as session:
+            before = dict(session.execute(text("SELECT name,setting FROM pg_settings WHERE name IN ('jit','statement_timeout','lock_timeout')")).all())
+            session.rollback()
+            _history_read_plan(session)
+            self.assertEqual(session.scalar(text("SHOW transaction_read_only")), "on")
+            self.assertEqual(session.scalar(text("SHOW jit")), "off")
+            for name in ("statement_timeout", "lock_timeout"):
+                self.assertEqual(session.scalar(text("SHOW " + name)), before[name])
+            session.rollback()
+            after = dict(session.execute(text("SELECT name,setting FROM pg_settings WHERE name IN ('jit','statement_timeout','lock_timeout')")).all())
+            self.assertEqual(after, before)
 
 
 if __name__ == "__main__":

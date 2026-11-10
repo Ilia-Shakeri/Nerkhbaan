@@ -175,6 +175,17 @@ def _latest_read_budget(db) -> None:
         set_config('lock_timeout', :lock_timeout, true), set_config('jit', 'off', true)"""), selected)
 
 
+def _history_read_plan(db) -> None:
+    bind_reader = getattr(db, "get_bind", None)
+    bind = bind_reader() if callable(bind_reader) else None
+    if getattr(getattr(bind, "dialect", None), "name", None) == "postgresql":
+        # Recursive permission expressions inflate estimated plan cost. JIT
+        # compilation then consumes scarce CPU even for an empty chart range.
+        # Keep this transaction local; preserve the operator's timeout limits.
+        db.execute(text("SET TRANSACTION READ ONLY"), {})
+        db.execute(text("SELECT set_config('jit', 'off', true)"), {})
+
+
 def _latest_rows_sql(instrument_id: str | None):
     permitted, parameters = _canonical_permissions("display")
     columns = """id, instrument_id, price, status, primary_quote_id,
@@ -495,6 +506,7 @@ class InternalPriceHistory:
     ) -> list[dict[str, Any]]:
         db = SessionLocal()
         try:
+            _history_read_plan(db)
             query = _canonical_history_sql(_history_supports_bookends(db))
             rows = db.execute(
                 query,
