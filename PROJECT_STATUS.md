@@ -1,5 +1,7 @@
 # Project Status
 
+2026-11-10 shared-host maintenance: reviewed unused build/package cache removed; containers, images, volumes and checked backup hashes preserved immediately around each deletion. Fresh shared-host resource margins remain below the reviewed target. The restored-data budget rehearsal passed account/admin smoke but failed concurrent pricing reads; no deployment was attempted. [Evidence and remaining gates](docs/shared-host-maintenance-2026-11-10-fa.md).
+
 2026-11-09 keyless handoff work: customer password-change logout corrected and shared real-database browser acceptance coverage added. Local tests and builds passed; public deployment/device delivery remain pending. [Current evidence and exact post-purchase work](docs/keyless-delivery-review-2026-11-09-fa.md).
 
 Joint web/administrator review, **2026-11-09**: keyless local account/support flows, every administrator section at phone/desktop widths, and owned PostgreSQL/Redis/Timescale checks are recorded in [the dated review](docs/joint-web-admin-review-2026-11-09-fa.md). Local sign-out layout and restart recovery are corrected. [The delivery roadmap](docs/project-completion-roadmap-fa.md) keeps replacement hosting, valid live prices, web-device and messenger receipt, mail recovery and independent backups as open gates.
