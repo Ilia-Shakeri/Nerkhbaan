@@ -6,6 +6,8 @@ import re
 import time
 import unittest
 import uuid
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
@@ -105,6 +107,46 @@ class LatestQuoteAvailabilityTests(unittest.TestCase):
     def settings(self, session):
         return dict(session.execute(text("""SELECT name, setting FROM pg_settings
             WHERE name IN ('statement_timeout','lock_timeout','jit','transaction_read_only')""")).all())
+
+    def test_queued_replica_reads_fresh_permissions_and_releases_admission(self):
+        self.insert(1)
+        admit = history._latest_read_admission
+        waiting = threading.Event()
+
+        def queued(db):
+            waiting.set()
+            admit(db)
+
+        with self.sessions() as blocker:
+            history._latest_read_budget(blocker)
+            admit(blocker)
+            with patch.object(history, "_latest_read_admission", side_effect=queued), ThreadPoolExecutor(1) as pool:
+                future = pool.submit(history.InternalPriceHistory._query_latest_rows, None)
+                try:
+                    self.assertTrue(waiting.wait(2))
+                    self.assertFalse(future.done())
+                    self.grants.clear()
+                    blocker.rollback()
+                    self.assertEqual(future.result(timeout=4), [])
+                finally:
+                    blocker.rollback()
+        with self.sessions() as probe:
+            history._latest_read_budget(probe)
+            admit(probe)
+
+    def test_busy_admission_is_bounded_and_does_not_leak_a_lock(self):
+        with self.sessions() as blocker:
+            history._latest_read_budget(blocker)
+            history._latest_read_admission(blocker)
+            started = time.monotonic()
+            with patch.object(history, "_LATEST_ADMISSION_TIMEOUT_SECONDS", 0.1):
+                with self.assertRaises(TimeoutError):
+                    history.InternalPriceHistory._query_latest_rows(None)
+            self.assertLess(time.monotonic() - started, 1)
+            blocker.rollback()
+        with self.sessions() as probe:
+            history._latest_read_budget(probe)
+            history._latest_read_admission(probe)
 
     def test_aggregate_uses_registered_instruments_without_discovering_tick_ids(self):
         self.insert(1, instrument="BTC_USD")

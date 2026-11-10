@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -43,6 +44,8 @@ _BOOKEND_CAPABILITIES: WeakKeyDictionary[Engine, bool] = WeakKeyDictionary()
 _BOOKEND_CAPABILITY_LOCK = Lock()
 _LATEST_STATEMENT_TIMEOUT_MS = 1500
 _LATEST_LOCK_TIMEOUT_MS = 250
+_LATEST_ADMISSION_TIMEOUT_SECONDS = 5.0
+_LATEST_ADVISORY_NAMESPACE = 0x4E4B424E
 _BOOKEND_CAPABILITY_SQL = """
     SELECT COUNT(DISTINCT p.proname) = 2
     FROM pg_extension e
@@ -184,6 +187,25 @@ def _history_read_plan(db) -> None:
         # Keep this transaction local; preserve the operator's timeout limits.
         db.execute(text("SET TRANSACTION READ ONLY"), {})
         db.execute(text("SELECT set_config('jit', 'off', true)"), {})
+
+
+def _latest_read_admission(db) -> None:
+    bind_reader = getattr(db, "get_bind", None)
+    bind = bind_reader() if callable(bind_reader) else None
+    if getattr(getattr(bind, "dialect", None), "name", None) != "postgresql":
+        return
+    # Bound concurrent compressed-history scans across replicas. This lock is
+    # database-local and transaction-scoped: session rollback always releases it.
+    # The existing statement/lock budgets still apply to every actual statement.
+    deadline = time.monotonic() + _LATEST_ADMISSION_TIMEOUT_SECONDS
+    while True:
+        if db.execute(text("SELECT pg_try_advisory_xact_lock(:namespace, 1)"),
+                      {"namespace": _LATEST_ADVISORY_NAMESPACE}).scalar_one():
+            return
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Current-price read admission is busy")
+        time.sleep(min(0.025, remaining))
 
 
 def _latest_rows_sql(instrument_id: str | None):
@@ -739,10 +761,12 @@ class InternalPriceHistory:
 
     @staticmethod
     def _query_latest_rows(instrument_id: str | None) -> list[Any]:
-        query, parameters = _latest_rows_sql(instrument_id)
         db = SessionLocal()
         try:
             _latest_read_budget(db)
+            _latest_read_admission(db)
+            # Re-read grants after waiting, rather than queueing an old decision.
+            query, parameters = _latest_rows_sql(instrument_id)
             return db.execute(query, parameters).mappings().all()
         finally:
             db.close()
