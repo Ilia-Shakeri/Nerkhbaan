@@ -120,6 +120,21 @@ class _OwnedPostgresFixture:
 
 @unittest.skipUnless(TEST_URL, "Requires an explicitly owned test PostgreSQL database")
 class RightsPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
+    def test_flat_ticks_do_not_start_a_recursive_permission_walk_per_row(self):
+        clause, parameters = rights.sql_filter("history")
+        query = text(f"""SELECT count(*) FROM (
+            SELECT value AS source_summary FROM jsonb_array_elements(CAST(:ticks AS jsonb))
+        ) AS ticks WHERE {clause}""")
+        arguments = {"ticks": json.dumps([_summary()] * 1000), **parameters}
+        with self.sessions() as db:
+            self.assertEqual(db.execute(query, arguments).scalar_one(), 1000)
+            plan = db.execute(text("EXPLAIN (ANALYZE, FORMAT JSON) " + str(query)), arguments).scalar_one()
+        def walks(node):
+            return (node.get("Actual Loops", 0) if node["Node Type"] == "Recursive Union" else 0) + sum(
+                walks(child) for child in node.get("Plans", [])
+            )
+        self.assertEqual(walks(plan[0]["Plan"]), 0)
+
     def test_direct_sql_shortcut_matches_policy_for_malformed_and_derived_trees(self):
         import random
         valid = _summary()

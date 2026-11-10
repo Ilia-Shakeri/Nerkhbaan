@@ -12,6 +12,33 @@ from app.pricing.history import InternalPriceHistory
 
 
 class LatestSnapshotSharingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_workers_and_public_readers_share_the_unfinished_snapshot(self):
+        history = InternalPriceHistory()
+        started, release = threading.Event(), threading.Event()
+        calls = []
+
+        def query():
+            calls.append(1)
+            started.set()
+            if not release.wait(3):
+                raise RuntimeError("Test release missing")
+            return {"BTC_USD": {"id": 7}, "USDT_USD": {"id": 8}}
+
+        with patch.object(history, "_query_latest_all", side_effect=query):
+            tasks = [asyncio.create_task(history.latest_canonical("BTC_USD")) for _ in range(20)]
+            tasks.append(asyncio.create_task(history.latest_all()))
+            try:
+                self.assertTrue(await asyncio.to_thread(started.wait, 2))
+                release.set()
+                results = await asyncio.gather(*tasks)
+                self.assertEqual(len(calls), 1)
+                self.assertTrue(all(row == {"id": 7} for row in results[:-1]))
+                self.assertEqual(results[-1]["USDT_USD"], {"id": 8})
+                self.assertIsNot(results[0], results[1])
+            finally:
+                release.set()
+                await asyncio.gather(*tasks, return_exceptions=True)
+
     async def test_concurrent_readers_share_work_but_not_results_or_completed_prices(self):
         history = InternalPriceHistory()
         started, release = threading.Event(), threading.Event()

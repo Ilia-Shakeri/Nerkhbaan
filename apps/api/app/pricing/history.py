@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from ..db import SessionLocal
-from .instruments import get_instrument
+from .instruments import INSTRUMENTS, get_instrument
 from .registry import PROVIDERS, RETIRED_PROVIDERS
 from . import rights
 from .models import (
@@ -197,7 +197,10 @@ def _latest_rows_sql(instrument_id: str | None):
             OR COALESCE(source_summary->>'primary_provider_id', '') LIKE 'derived:%'
             OR (source_summary->'provider_ids') <@ CAST(:rights_allowed_sources AS jsonb))"""
     if instrument_id is None:
-        definitions = "SELECT DISTINCT instrument_id FROM canonical_quotes"
+        # The registry defines the served universe. Discovering it from ticks
+        # scans every compressed history chunk on every current-price read.
+        definitions = "SELECT unnest(CAST(:instrument_ids AS text[])) AS instrument_id"
+        parameters["instrument_ids"] = list(INSTRUMENTS)
     else:
         definitions = "SELECT CAST(:instrument_id AS text) AS instrument_id"
         parameters["instrument_id"] = instrument_id
@@ -446,7 +449,10 @@ class InternalPriceHistory:
         return result
 
     async def latest_canonical(self, instrument_id: str) -> CanonicalQuote | None:
-        return await asyncio.to_thread(self._query_latest_canonical, instrument_id)
+        normalized = get_instrument(instrument_id).instrument_id
+        # Refresh workers and public readers share the same unfinished snapshot.
+        # Otherwise a cold Redis starts one compressed-history scan per worker.
+        return (await self.latest_all()).get(normalized)
 
     async def latest_all(self) -> dict[str, CanonicalQuote]:
         # Join unfinished reads only. Completed prices and permission decisions

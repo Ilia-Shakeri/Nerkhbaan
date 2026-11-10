@@ -106,6 +106,24 @@ class LatestQuoteAvailabilityTests(unittest.TestCase):
         return dict(session.execute(text("""SELECT name, setting FROM pg_settings
             WHERE name IN ('statement_timeout','lock_timeout','jit','transaction_read_only')""")).all())
 
+    def test_aggregate_uses_registered_instruments_without_discovering_tick_ids(self):
+        self.insert(1, instrument="BTC_USD")
+        self.insert(2, instrument="USDT_USD")
+        self.insert(3, instrument="unknown-unserved-instrument")
+        rows = history.InternalPriceHistory._query_latest_rows(None)
+        self.assertEqual({row["instrument_id"] for row in rows}, {"BTC_USD", "USDT_USD"})
+        query, parameters = history._latest_rows_sql(None)
+        with self.sessions() as db:
+            plan = db.execute(text("EXPLAIN (FORMAT JSON) " + str(query)), parameters).scalar_one()
+        def nodes(node):
+            yield node
+            for child in node.get("Plans", []):
+                yield from nodes(child)
+        # A full-table aggregate/unique to discover IDs grows with all old ticks.
+        self.assertFalse(any(node["Node Type"] in {"Aggregate", "Unique"}
+                             for node in nodes(plan[0]["Plan"])
+                             if node.get("Parent Relationship") != "SubPlan"))
+
     def test_transaction_budgets_are_local_read_only_and_disable_jit(self):
         with self.sessions() as db:
             before = self.settings(db)

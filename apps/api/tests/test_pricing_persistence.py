@@ -169,12 +169,14 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
             rows = InternalPriceHistory._query_latest_rows(None)
 
         self.assertEqual(rows, [])
-        self.assertEqual(set(session.calls[0][1]), {"history_only_sources"})
+        self.assertEqual(set(session.calls[0][1]), {"history_only_sources", "instrument_ids"})
+        self.assertEqual(set(session.calls[0][1]["instrument_ids"]), set(INSTRUMENTS))
         self.assertTrue(set(RETIRED_PROVIDERS) <= set(session.calls[0][1]["history_only_sources"]))
         self.assertIn("nerkhsanj_silver999_history", session.calls[0][1]["history_only_sources"])
         self.assertIn("wallgold_silver925_daily_history", session.calls[0][1]["history_only_sources"])
         self.assertNotIn("nobitex_orderbook_usdt", session.calls[0][1]["history_only_sources"])
-        self.assertNotIn(":instrument_id", session.calls[0][0])
+        self.assertNotIn(":instrument_id AS", session.calls[0][0])
+        self.assertIn("CAST(:instrument_ids AS text[])", session.calls[0][0])
 
     def test_latest_instrument_keeps_typed_column_comparison(self) -> None:
         session = _HistorySession()
