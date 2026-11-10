@@ -7,7 +7,7 @@ services:
       -c, max_parallel_workers_per_gather=0, -c, timescaledb.max_background_workers=2]
     deploy:
       resources:
-        limits: {cpus: "0.75", memory: 768M}
+        limits: {cpus: "1.00", memory: 768M}
   redis:
     environment: {REDIS_MAXMEMORY: 128mb}
     deploy:
@@ -20,7 +20,7 @@ services:
       DATABASE_MAX_OVERFLOW: "0"
     deploy:
       resources:
-        limits: {cpus: "0.75", memory: 512M}
+        limits: {cpus: "0.50", memory: 512M}
   frontend:
     deploy:
       resources:
