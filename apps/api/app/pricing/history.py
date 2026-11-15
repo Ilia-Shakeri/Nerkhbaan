@@ -248,26 +248,48 @@ def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False):
             FROM canonical_quote_read_index
             WHERE {cheap} AND instrument_id = definitions.instrument_id
             ORDER BY observed_at DESC, canonical_at DESC, id DESC OFFSET 0"""
-        roots = f"""SELECT source.* FROM ({ordered}) AS ordered_roots
+        selected = f"""SELECT source.* FROM ({ordered}) AS ordered_roots
             CROSS JOIN LATERAL (
                 SELECT {columns} FROM canonical_quotes
                 WHERE id = ordered_roots.id AND canonical_at = ordered_roots.canonical_at
                   AND observed_at = ordered_roots.observed_at
                   AND instrument_id = definitions.instrument_id
+                  AND ({cheap}) AND ({permitted})
                 OFFSET 0
-            ) AS source"""
+            ) AS source
+            ORDER BY ordered_roots.observed_at DESC,
+                     ordered_roots.canonical_at DESC, ordered_roots.id DESC LIMIT 1"""
+        # Preserve the native lookup order through the point lookup. Ordering by
+        # source aliases instead forces a full sort/decompression before LIMIT.
+        return text(f"""SELECT selected.* FROM ({definitions}) AS definitions
+            CROSS JOIN LATERAL ({selected}) AS selected
+            ORDER BY selected.instrument_id"""), parameters
     else:
         roots = f"""SELECT {columns} FROM canonical_quotes
             WHERE {cheap} AND instrument_id = definitions.instrument_id
             ORDER BY observed_at DESC, canonical_at DESC, id DESC OFFSET 0"""
-    checked = f"({cheap}) AND ({permitted})" if lookup_index else permitted
     query = f"""SELECT selected.* FROM ({definitions}) AS definitions
         CROSS JOIN LATERAL (
             SELECT {columns} FROM ({roots}) AS roots
-            WHERE {checked}
+            WHERE {permitted}
             ORDER BY observed_at DESC, canonical_at DESC, id DESC LIMIT 1
         ) AS selected ORDER BY selected.instrument_id"""
     return text(query), parameters
+
+
+def _has_lookup_index(db) -> bool:
+    reader = getattr(db, "get_bind", None)
+    bind = reader() if callable(reader) else None
+    if getattr(getattr(bind, "dialect", None), "name", None) != "postgresql":
+        return False
+    # A disposable schema must not borrow a production index through the
+    # search_path fallback. Both relations must belong to the same namespace.
+    return bool(db.execute(text("""SELECT EXISTS (
+        SELECT 1 FROM pg_class lookup JOIN pg_class quotes
+          ON lookup.relnamespace = quotes.relnamespace
+        WHERE lookup.oid = to_regclass('canonical_quote_read_index')
+          AND quotes.oid = to_regclass('canonical_quotes')
+    )"""), {}).scalar_one())
 
 
 def _canonical_history_sql(use_bookends: bool):
@@ -783,14 +805,7 @@ class InternalPriceHistory:
             _latest_read_budget(db)
             _latest_read_admission(db)
             # Re-read grants after waiting, rather than queueing an old decision.
-            # A disposable test schema must never borrow the production index
-            # through search_path fallback. Require the same actual namespace.
-            indexed = bool(db.execute(text("""SELECT EXISTS (
-                SELECT 1 FROM pg_class lookup JOIN pg_class quotes
-                  ON lookup.relnamespace = quotes.relnamespace
-                WHERE lookup.oid = to_regclass('canonical_quote_read_index')
-                  AND quotes.oid = to_regclass('canonical_quotes')
-            )"""), {}).scalar_one())
+            indexed = _has_lookup_index(db)
             query, parameters = _latest_rows_sql(instrument_id, lookup_index=indexed)
             return db.execute(query, parameters).mappings().all()
         finally:
