@@ -92,7 +92,10 @@ class FixtureGuards(unittest.TestCase):
             from app.pricing.history import InternalPriceHistory
             from app.config import settings
             # This synthetic instrument checks SQL/ORM shape, not provider rights.
-            with patch.object(settings, "pricing_rights_enforced", False):
+            from app.pricing import history
+            with patch.object(settings, "pricing_rights_enforced", False), patch.dict(
+                history.INSTRUMENTS, {"FIXTURE_ONLY": None}
+            ):
                 latest = InternalPriceHistory._query_latest_rows(None)
             self.assertEqual(len(latest), 1)
             self.assertEqual(latest[0]["source_summary"]["fixture_role"], "normal")

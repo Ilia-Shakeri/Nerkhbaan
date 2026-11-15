@@ -330,5 +330,51 @@ class LatestQuoteAvailabilityTests(unittest.TestCase):
                 self.assertEqual([row["id"] for row in actual], expected)
 
 
+@unittest.skipUnless(TEST_URL, "Requires an explicitly owned test PostgreSQL database")
+class IndexedLatestQuoteAvailabilityTests(LatestQuoteAvailabilityTests):
+    def setUp(self):
+        super().setUp()
+        with self.engine.begin() as connection:
+            self.assert_owned(connection)
+            connection.execute(text("DELETE FROM canonical_quote_read_index"))
+
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        super().setUpClass()
+        migration = Path(__file__).resolve().parents[1] / "db/migrations/20261115_001_canonical_read_index.sql"
+        with cls.engine.begin() as connection:
+            cls.assert_owned(connection)
+            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'))
+
+    def test_lookup_updates_and_deletes_do_not_reuse_stale_source_metadata(self):
+        self.insert(1)
+        self.insert(2)
+        with self.engine.begin() as connection:
+            self.assert_owned(connection)
+            connection.execute(text("UPDATE canonical_quotes SET source_summary = '{}' WHERE id=2"))
+        self.assertEqual(history.InternalPriceHistory._query_latest_rows(None)[0]["id"], 1)
+        with self.engine.begin() as connection:
+            connection.execute(text("DELETE FROM canonical_quotes WHERE id=1"))
+            self.assertEqual(connection.scalar(text("SELECT count(*) FROM canonical_quote_read_index WHERE id=1")), 0)
+        self.assertEqual(history.InternalPriceHistory._query_latest_rows(None), [])
+
+    def test_orphaned_lookup_never_returns_a_deleted_quote(self):
+        self.insert(1)
+        with self.engine.begin() as connection:
+            self.assert_owned(connection)
+            connection.execute(text("ALTER TABLE canonical_quotes DISABLE TRIGGER canonical_quote_read_index_sync"))
+            connection.execute(text("DELETE FROM canonical_quotes"))
+            connection.execute(text("ALTER TABLE canonical_quotes ENABLE TRIGGER canonical_quote_read_index_sync"))
+        self.assertEqual(history.InternalPriceHistory._query_latest_rows(None), [])
+
+    def test_lookup_cannot_override_source_eligibility(self):
+        self.insert(1, summary={"provider_ids": ["approved"], "historical_backfill": True})
+        with self.engine.begin() as connection:
+            self.assert_owned(connection)
+            connection.execute(text("UPDATE canonical_quote_read_index SET source_summary = jsonb_build_object('provider_ids',jsonb_build_array('approved'))"))
+        self.assertEqual(history.InternalPriceHistory._query_latest_rows(None), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,2 @@
+FROM timescale/timescaledb@sha256:61f891691050da6032023c01ea885730eeeba06b7c17b403e7d0b9c49c37dfe9
+RUN apk upgrade --no-cache

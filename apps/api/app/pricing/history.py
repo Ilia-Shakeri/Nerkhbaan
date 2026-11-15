@@ -208,7 +208,7 @@ def _latest_read_admission(db) -> None:
         time.sleep(min(0.025, remaining))
 
 
-def _latest_rows_sql(instrument_id: str | None):
+def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False):
     permitted, parameters = _canonical_permissions("display")
     columns = """id, instrument_id, price, status, primary_quote_id,
         verification_quote_ids, source_summary, candidate_price,
@@ -240,14 +240,31 @@ def _latest_rows_sql(instrument_id: str | None):
     # OFFSET 0 keeps the permission subplans above the ordered cheap scan.
     # LIMIT follows the complete permission check, so older eligible rows remain
     # reachable and an approved newest row needs no older permission scans.
+    if lookup_index:
+        # The compact index supplies order and cheap exclusions only. Always
+        # re-read the source row and its complete recursive permissions. An
+        # orphaned lookup entry (for example after drop_chunks) returns no row.
+        ordered = f"""SELECT id, canonical_at, observed_at
+            FROM canonical_quote_read_index
+            WHERE {cheap} AND instrument_id = definitions.instrument_id
+            ORDER BY observed_at DESC, canonical_at DESC, id DESC OFFSET 0"""
+        roots = f"""SELECT source.* FROM ({ordered}) AS ordered_roots
+            CROSS JOIN LATERAL (
+                SELECT {columns} FROM canonical_quotes
+                WHERE id = ordered_roots.id AND canonical_at = ordered_roots.canonical_at
+                  AND observed_at = ordered_roots.observed_at
+                  AND instrument_id = definitions.instrument_id
+                OFFSET 0
+            ) AS source"""
+    else:
+        roots = f"""SELECT {columns} FROM canonical_quotes
+            WHERE {cheap} AND instrument_id = definitions.instrument_id
+            ORDER BY observed_at DESC, canonical_at DESC, id DESC OFFSET 0"""
+    checked = f"({cheap}) AND ({permitted})" if lookup_index else permitted
     query = f"""SELECT selected.* FROM ({definitions}) AS definitions
         CROSS JOIN LATERAL (
-            SELECT {columns} FROM (
-                SELECT {columns} FROM canonical_quotes
-                WHERE {cheap} AND instrument_id = definitions.instrument_id
-                ORDER BY observed_at DESC, canonical_at DESC, id DESC OFFSET 0
-            ) AS roots
-            WHERE {permitted}
+            SELECT {columns} FROM ({roots}) AS roots
+            WHERE {checked}
             ORDER BY observed_at DESC, canonical_at DESC, id DESC LIMIT 1
         ) AS selected ORDER BY selected.instrument_id"""
     return text(query), parameters
@@ -766,7 +783,15 @@ class InternalPriceHistory:
             _latest_read_budget(db)
             _latest_read_admission(db)
             # Re-read grants after waiting, rather than queueing an old decision.
-            query, parameters = _latest_rows_sql(instrument_id)
+            # A disposable test schema must never borrow the production index
+            # through search_path fallback. Require the same actual namespace.
+            indexed = bool(db.execute(text("""SELECT EXISTS (
+                SELECT 1 FROM pg_class lookup JOIN pg_class quotes
+                  ON lookup.relnamespace = quotes.relnamespace
+                WHERE lookup.oid = to_regclass('canonical_quote_read_index')
+                  AND quotes.oid = to_regclass('canonical_quotes')
+            )"""), {}).scalar_one())
+            query, parameters = _latest_rows_sql(instrument_id, lookup_index=indexed)
             return db.execute(query, parameters).mappings().all()
         finally:
             db.close()

@@ -614,6 +614,12 @@ jobs:
           - component: single-web
             context: .
             dockerfile: ./nginx/single/Dockerfile
+          - component: initial-postgres
+            context: ./infra/initial-images
+            dockerfile: ./infra/initial-images/postgres.Dockerfile
+          - component: initial-redis
+            context: ./infra/initial-images
+            dockerfile: ./infra/initial-images/redis.Dockerfile
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
