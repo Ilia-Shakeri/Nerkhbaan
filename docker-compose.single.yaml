@@ -1,0 +1,224 @@
+# Separate initial web deployment. One API; upgrades stop only this API first.
+# Existing projects, images, networks and backups are never deployment targets.
+name: nerkhbaan-initial
+x-runtime: &runtime
+  restart: unless-stopped
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  oom_score_adj: 500
+  cpu_shares: 128
+  pids_limit: 96
+  labels:
+    io.nerkhbaan.initial-owner: ${OWNER_ID:?Bind the reviewed deployment owner}
+  logging:
+    driver: local
+    options: {max-size: 2m, max-file: "3"}
+services:
+  postgres:
+    <<: *runtime
+    image: ${POSTGRES_IMAGE:?Use a reviewed fixed PostgreSQL image}
+    pull_policy: never
+    env_file: [{path: ./env/postgres.private.env, format: raw}]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777,nosuid,noexec", "/var/run/postgresql:size=4m,mode=1777,nosuid,noexec"]
+    environment: {NO_TS_TUNE: "true", TIMESCALEDB_TELEMETRY: "off"}
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    command: [postgres, -c, shared_preload_libraries=timescaledb, -c, shared_buffers=64MB,
+      -c, effective_cache_size=256MB, -c, maintenance_work_mem=16MB, -c, work_mem=1MB,
+      -c, max_connections=24, -c, max_worker_processes=4, -c, max_parallel_workers=1,
+      -c, max_wal_size=128MB, -c, min_wal_size=32MB,
+      -c, max_parallel_workers_per_gather=0, -c, timescaledb.max_background_workers=2]
+    shm_size: 64m
+    memswap_limit: 320m
+    networks: [private]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -h 127.0.0.1 -U postgres -d nerkhbaan"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits: {pids: 96, cpus: "2.00", memory: 320M}
+  redis:
+    <<: *runtime
+    image: ${REDIS_IMAGE:?Use a reviewed fixed Redis image}
+    pull_policy: never
+    user: "999:1000"
+    read_only: true
+    tmpfs: ["/tmp:size=4m,mode=1777,nosuid,noexec"]
+    command: [sh, /usr/local/bin/redis-safe-start.sh]
+    environment: {REDIS_MAXMEMORY: 16mb}
+    volumes:
+      - redis_data:/data
+      - ./scripts/redis-safe-start.sh:/usr/local/bin/redis-safe-start.sh:ro
+    memswap_limit: 48m
+    networks: [private]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits: {pids: 96, cpus: "0.10", memory: 48M}
+  migrate:
+    <<: *runtime
+    image: ${API_IMAGE:?Use a reviewed fixed API image}
+    pull_policy: never
+    restart: "no"
+    env_file: [{path: ./env/backend.private.env, format: raw}]
+    environment: {MIGRATIONS_DIR: /app/db/migrations}
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777,nosuid,noexec"]
+    command: [python, -m, app.migrations.runner]
+    memswap_limit: 192m
+    networks: [private]
+    depends_on:
+      postgres: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {pids: 96, cpus: "0.50", memory: 192M}
+  backend:
+    <<: *runtime
+    image: ${API_IMAGE:?Use a reviewed fixed API image}
+    pull_policy: never
+    env_file: [{path: ./env/backend.private.env, format: raw}]
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777,nosuid,noexec"]
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      DATABASE_POOL_SIZE: "4"
+      DATABASE_ASYNC_POOL_SIZE: "2"
+      DATABASE_MAX_OVERFLOW: "0"
+      MALLOC_ARENA_MAX: "2"
+      ADMIN_MFA_REQUIRED: "true"
+      AUTH_COOKIE_SECURE: "true"
+      ADMIN_COOKIE_SECURE: "true"
+      AUTH_COOKIE_DOMAIN: ""
+      ADMIN_COOKIE_DOMAIN: ""
+      PUBLIC_FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:?Set the reviewed HTTPS public origin}
+      ADMIN_FRONTEND_ORIGIN: ${ADMIN_ORIGIN:?Set the reviewed HTTPS administrator origin}
+      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?Set public origin},${ADMIN_ORIGIN:?Set administrator origin}
+      TRUSTED_HOSTS: ${PUBLIC_HOST:?Set public host},${ADMIN_HOST:?Set administrator host},backend,localhost,127.0.0.1
+      FORWARDED_ALLOW_IPS: ${WEB_PRIVATE_IPV4:?Pin the new private proxy address}
+      TRUSTED_PROXY_IPS: ${WEB_PRIVATE_IPV4:?Pin the new private proxy address}
+      ADMIN_TRUSTED_PROXY_IPS: ${WEB_PRIVATE_IPV4:?Pin the new private proxy address}
+    memswap_limit: 192m
+    networks: [private, egress]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD-SHELL, "wget -q -T 5 -O- http://127.0.0.1:8000/api/health/ready >/dev/null"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 1
+      resources:
+        limits: {pids: 96, cpus: "0.50", memory: 192M}
+  web:
+    <<: *runtime
+    image: ${WEB_IMAGE:?Use a reviewed combined web image}
+    pull_policy: never
+    read_only: true
+    tmpfs: ["/tmp:size=16m,mode=1777,nosuid,noexec"]
+    environment:
+      PUBLIC_HOST: ${PUBLIC_HOST:?Set public hostname}
+      ADMIN_HOST: ${ADMIN_HOST:?Set administrator hostname}
+      GATEWAY_CIDR: ${GATEWAY_CIDR:?Pin the existing gateway address}
+    memswap_limit: 24m
+    networks:
+      private:
+        ipv4_address: ${WEB_PRIVATE_IPV4:?Pin the new private proxy address}
+      gateway:
+        aliases: [nerkhbaan-initial-web]
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:8080/healthz | grep -qx ok"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits: {pids: 96, cpus: "0.10", memory: 24M}
+  price-feed-pull:
+    <<: *runtime
+    image: ${FEED_IMAGE:?Use a reviewed fixed feed image}
+    pull_policy: never
+    user: "1000:1000"
+    read_only: true
+    tmpfs: ["/tmp:size=8m,mode=1777,nosuid,noexec"]
+    env_file: [{path: ./env/feed.private.env, format: raw}]
+    environment:
+      PRICE_FEED_INGEST_ENDPOINT: http://backend:8000/api/internal/pricing-worker/ingest
+      PRICE_FEED_POLL_SECONDS: "60"
+      GOMEMLIMIT: 16MiB
+    memswap_limit: 32m
+    networks: [private, egress]
+    depends_on:
+      backend: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {pids: 96, cpus: "0.10", memory: 32M}
+  db-backup:
+    <<: *runtime
+    image: ${POSTGRES_IMAGE:?Use a reviewed fixed PostgreSQL image}
+    pull_policy: never
+    restart: "no"
+    read_only: true
+    tmpfs: ["/tmp:size=8m,mode=1777,nosuid,noexec"]
+    entrypoint: [sh, /usr/local/bin/single-backup.sh]
+    env_file: [{path: ./env/backup.private.env, format: raw}]
+    environment: {PGHOST: postgres, PGDATABASE: nerkhbaan, PGUSER: postgres}
+    volumes:
+      - backups:/backups
+      - ./scripts/single-backup.sh:/usr/local/bin/single-backup.sh:ro
+    memswap_limit: 48m
+    networks: [private]
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, "test -f /backups/last-success && age=$$(($$(date -u +%s)-$$(cat /backups/last-success))) && test $$age -ge 0 && test $$age -lt 90000"]
+      interval: 60s
+      timeout: 3s
+      start_period: 180s
+      retries: 3
+    ulimits:
+      fsize: {soft: 268435456, hard: 268435456}
+    deploy:
+      resources:
+        limits: {pids: 96, cpus: "0.10", memory: 48M}
+volumes:
+  postgres_data:
+    labels: {io.nerkhbaan.initial-owner: "${OWNER_ID:?Bind the reviewed deployment owner}"}
+    driver: local
+    driver_opts: {type: none, o: bind, device: "${DATA_ROOT:?Use the mounted bounded data filesystem}/postgres"}
+  redis_data:
+    labels: {io.nerkhbaan.initial-owner: "${OWNER_ID:?Bind the reviewed deployment owner}"}
+    driver: local
+    driver_opts: {type: none, o: bind, device: "${DATA_ROOT:?Use the mounted bounded data filesystem}/redis"}
+  backups:
+    labels: {io.nerkhbaan.initial-owner: "${OWNER_ID:?Bind the reviewed deployment owner}"}
+    driver: local
+    driver_opts: {type: none, o: bind, device: "${BACKUP_ROOT:?Use the mounted bounded backup filesystem}/archive"}
+networks:
+  private:
+    labels: {io.nerkhbaan.initial-owner: "${OWNER_ID:?Bind the reviewed deployment owner}"}
+    internal: true
+    ipam:
+      config:
+        - subnet: ${PRIVATE_SUBNET:?Select a verified free private subnet}
+  egress:
+    labels: {io.nerkhbaan.initial-owner: "${OWNER_ID:?Bind the reviewed deployment owner}"}
+    ipam:
+      config:
+        - subnet: ${EGRESS_SUBNET:?Select a verified free egress subnet}
+  gateway:
+    external: true
+    name: ${GATEWAY_NETWORK:?Use the reviewed existing gateway network}

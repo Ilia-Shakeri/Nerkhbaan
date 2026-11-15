@@ -1,0 +1,48 @@
+# Fresh dedicated demo host only. Stop its single API before migration/upgrade.
+services:
+  postgres:
+    deploy:
+      resources:
+        limits: {cpus: "1.00"}
+  backend:
+    environment:
+      ADMIN_FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:?Set the reviewed HTTPS origin}
+      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?Set the reviewed HTTPS origin}
+  edge:
+    image: ${WEB_IMAGE:?Use the reviewed combined web image}
+    pull_policy: never
+    restart: unless-stopped
+    user: "101:101"
+    read_only: true
+    entrypoint: [sh, -c, "exec nginx -c /etc/nginx/initial-edge.conf -g 'daemon off;'"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 96
+    oom_score_adj: 500
+    cpu_shares: 128
+    labels:
+      io.nerkhbaan.initial-owner: ${OWNER_ID:?Set the reviewed owner}
+    logging:
+      driver: local
+      options: {max-size: 2m, max-file: "3"}
+    tmpfs: ["/tmp:size=16m,mode=1777,nosuid,noexec"]
+    memswap_limit: 32m
+    ports: ["80:8081", "443:8443"]
+    volumes:
+      - ./nginx/initial-edge.conf:/etc/nginx/initial-edge.conf:ro
+      - ./tls/fullchain.pem:/etc/nginx/tls/fullchain.pem:ro
+      - ./tls/privkey.pem:/etc/nginx/tls/privkey.pem:ro
+      - ./acme:/var/www/acme:ro
+    networks:
+      gateway:
+        ipv4_address: ${GATEWAY_IPV4:?Pin this new deployment's gateway address}
+    healthcheck:
+      test: [CMD-SHELL, "wget -qO- http://127.0.0.1:8081/healthz | grep -qx ok"]
+      interval: 20s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      web: {condition: service_healthy}
+    deploy:
+      resources:
+        limits: {pids: 96, cpus: "0.10", memory: 32M}

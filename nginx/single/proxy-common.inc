@@ -1,0 +1,10 @@
+proxy_pass http://public_api;
+proxy_http_version 1.1;
+proxy_set_header Host $http_host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $remote_addr;
+proxy_set_header X-Forwarded-Proto https;
+proxy_set_header X-Request-ID $request_id;
+proxy_connect_timeout 5s;
+proxy_read_timeout 75s;
+proxy_send_timeout 75s;

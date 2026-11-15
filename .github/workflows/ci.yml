@@ -180,6 +180,11 @@ jobs:
           python ../../scripts/test_deploy_communications_recovery.py
           python ../../scripts/test_notification_delivery_probe.py
           python -m unittest discover -s ../../scripts -p test_operator_access.py -v
+          python -m unittest discover -s ../../scripts -p test_compact_memory_gate.py -v
+          python -m pyflakes ../../scripts/compact_memory_gate.py ../../scripts/test_compact_memory_gate.py
+          python -m pyflakes ../../scripts/check_single_compose.py
+          python -m unittest discover -s ../../scripts -p test_initial_storage.py -v
+          python -m pyflakes ../../scripts/initial_storage.py ../../scripts/test_initial_storage.py
           python -m pyflakes ../../scripts/operator_access.py ../../scripts/test_operator_access.py
           python -m pyflakes ../../scripts/deploy_application.py ../../scripts/test_deploy_application.py ../../scripts/test_deploy_normal_resume.py
           python -m pyflakes ../../scripts/test_deploy_communications.py ../../scripts/deploy_communications_recovery.py ../../scripts/test_deploy_communications_recovery.py
@@ -381,6 +386,8 @@ jobs:
           trap 'rm -f .env' EXIT
           docker compose --profile admin --profile telegram -f docker-compose.yaml config --quiet
           docker compose --profile admin --profile telegram --profile edge --profile monitoring -f docker-compose.prod.yaml config --quiet
+          python3 scripts/check_single_compose.py
+          python3 scripts/check_single_compose.py --initial
 
       - name: Validate monitoring configurations
         run: |
@@ -604,6 +611,9 @@ jobs:
           - component: edge
             context: ./nginx
             dockerfile: ./nginx/Dockerfile
+          - component: single-web
+            context: .
+            dockerfile: ./nginx/single/Dockerfile
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
