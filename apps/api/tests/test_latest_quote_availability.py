@@ -345,7 +345,7 @@ class IndexedLatestQuoteAvailabilityTests(LatestQuoteAvailabilityTests):
         migration = Path(__file__).resolve().parents[1] / "db/migrations/20261115_001_canonical_read_index.sql"
         with cls.engine.begin() as connection:
             cls.assert_owned(connection)
-            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'))
+            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'), execution_options={"no_parameters": True})
 
     def test_lookup_updates_and_deletes_do_not_reuse_stale_source_metadata(self):
         self.insert(1)
@@ -385,7 +385,7 @@ class HeadLatestQuoteAvailabilityTests(IndexedLatestQuoteAvailabilityTests):
         migration = Path(__file__).resolve().parents[1] / "db/migrations/20261121_001_canonical_quote_heads.sql"
         with cls.engine.begin() as connection:
             cls.assert_owned(connection)
-            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'))
+            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'), execution_options={"no_parameters": True})
 
     def setUp(self):
         super().setUp()
@@ -428,7 +428,7 @@ class PermissionIndexedLatestQuoteAvailabilityTests(HeadLatestQuoteAvailabilityT
         migration = Path(__file__).resolve().parents[1] / "db/migrations/20261121_002_canonical_permission_lookup.sql"
         with cls.engine.begin() as connection:
             cls.assert_owned(connection)
-            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'))
+            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'), execution_options={"no_parameters": True})
 
     def test_recursive_projection_retains_explicit_nulls_and_deep_denials(self):
         self.insert(1)
@@ -439,6 +439,30 @@ class PermissionIndexedLatestQuoteAvailabilityTests(HeadLatestQuoteAvailabilityT
             projected=connection.scalar(text("SELECT source_summary->'inputs'->0->'source_summary'->'derived' FROM canonical_quote_read_index WHERE id=2"))
             self.assertIsNone(projected)
             self.assertTrue(connection.scalar(text("SELECT source_summary->'inputs'->0->'source_summary' ? 'derived' FROM canonical_quote_read_index WHERE id=2")))
+
+
+@unittest.skipUnless(TEST_URL, "Requires an explicitly owned test PostgreSQL database")
+class ProviderIndexedLatestQuoteAvailabilityTests(PermissionIndexedLatestQuoteAvailabilityTests):
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        super().setUpClass()
+        migration = Path(__file__).resolve().parents[1] / "db/migrations/20261121_003_canonical_permission_providers.sql"
+        with cls.engine.begin() as connection:
+            cls.assert_owned(connection)
+            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'), execution_options={"no_parameters": True})
+
+    def test_incidental_direct_inputs_do_not_reject_an_approved_direct_quote(self):
+        self.insert(1, summary={"provider_ids":["approved"],"derived":False,
+            "inputs":[{"source_summary":{"provider_ids":["unapproved"]}}]})
+        self.assertEqual([r["id"] for r in history.InternalPriceHistory._query_latest_rows(None)], [1])
+        with self.engine.begin() as connection:
+            self.assertEqual(connection.scalar(text("SELECT permission_provider_ids FROM canonical_quote_read_index WHERE id=1")), ["approved"])
+
+    def test_empty_derived_lineage_cannot_hide_an_older_approved_quote(self):
+        self.insert(1)
+        self.insert(2, summary={"provider_ids":["derived:test"],"primary_provider_id":"derived:test","derived":True,"inputs":[]})
+        self.assertEqual([r["id"] for r in history.InternalPriceHistory._query_latest_rows(None)], [1])
 
 
 if __name__ == "__main__":
