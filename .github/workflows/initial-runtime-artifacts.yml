@@ -84,6 +84,16 @@ jobs:
           trivyignores: .github/security-exceptions/.trivyignore.yaml
           format: json
           output: runtime-scan.json
+      - name: Report blocked runtime findings
+        if: failure()
+        run: |
+          python3 - <<'PYSCAN'
+          import json, pathlib
+          p = pathlib.Path('runtime-scan.json')
+          if p.exists():
+              r = json.loads(p.read_text())
+              print(json.dumps([{'id':v['VulnerabilityID'],'package':v['PkgName'],'installed':v['InstalledVersion'],'fixed':v.get('FixedVersion')} for x in r.get('Results',[]) for v in x.get('Vulnerabilities',[])],indent=2))
+          PYSCAN
       - name: Export scanned image and bind its manifest
         env:
           SOURCE_SHA: ${{ inputs.source_sha || 'cf47048356c2187be31f5efe50082a3b82273de0' }}
