@@ -263,6 +263,8 @@ def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, l
               AND observed_at = ordered_roots.observed_at
               AND instrument_id = definitions.instrument_id"""
         if lookup_heads:
+            # Keep source existence correlated to each small current head.
+            # A pulled-up semi-join otherwise scans compressed history.
             # Evaluate the small current-head table first. Combining this path
             # with the historical fallback in one lateral UNION forces a full
             # history sort before LIMIT on compressed production data.
@@ -282,6 +284,7 @@ def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, l
                       AND original.canonical_at = head.canonical_at
                       AND original.instrument_id = head.instrument_id
                       AND original.observed_at = head.observed_at
+                    OFFSET 0
                   )) AS eligible
                 WHERE ({cheap}) AND ({permitted})
                 ORDER BY instrument_id"""), parameters

@@ -1,0 +1,24 @@
+name: Initial public network probe
+on:
+  push:
+    branches: [codex/finish-project]
+    paths: [.github/workflows/initial-public-network.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  public-network:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Read public pages and complete assets with strict TLS
+        run: python3 scripts/probe_initial_public.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: initial-public-network-proof
+          path: initial-public-network-proof.json
+          if-no-files-found: error

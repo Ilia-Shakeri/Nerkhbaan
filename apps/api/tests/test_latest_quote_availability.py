@@ -452,6 +452,19 @@ class ProviderIndexedLatestQuoteAvailabilityTests(PermissionIndexedLatestQuoteAv
             cls.assert_owned(connection)
             connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'), execution_options={"no_parameters": True})
 
+    def test_head_existence_remains_a_correlated_source_probe(self):
+        self.insert(1)
+        query, parameters = history._latest_rows_sql("BTC_USD", lookup_index=True, lookup_heads=True)
+        with self.sessions() as db:
+            db.execute(text("SET LOCAL jit=off"))
+            plan=db.execute(text("EXPLAIN (ANALYZE, FORMAT JSON) "+str(query)),parameters).scalar_one()[0]["Plan"]
+        def nodes(node):
+            yield node
+            for child in node.get("Plans",[]):
+                yield from nodes(child)
+        self.assertTrue(any(n.get("Parent Relationship")=="SubPlan"
+            and any(c.get("Alias")=="original" for c in nodes(n)) for n in nodes(plan)))
+
     def test_incidental_direct_inputs_do_not_reject_an_approved_direct_quote(self):
         self.insert(1, summary={"provider_ids":["approved"],"derived":False,
             "inputs":[{"source_summary":{"provider_ids":["unapproved"]}}]})
