@@ -57,9 +57,12 @@ def _backlog_counts(connection: Any) -> dict[str, int]:
 
 def _database_health() -> dict[str, Any]:
     try:
+        # Migration verification owns its connection. Finish it before taking
+        # the health connection; nested acquisition can exhaust a small pool
+        # when concurrent probes each hold one connection and request another.
+        migration = migration_state(engine)
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-            migration = migration_state(engine)
             backlog = _backlog_counts(connection)
         return {
             "status": "connected",
