@@ -143,6 +143,7 @@ class Settings(BaseSettings):
     pricing_provider_max_retries: int = 2
     pricing_provider_backoff_base_seconds: Decimal = Decimal("0.5")
     pricing_provider_aggregate_cache_seconds: int = 5
+    pricing_history_snapshot_cache_seconds: int = Field(default=0, ge=0, le=30)
     pricing_provider_max_response_bytes: int = 1_048_576
     pricing_relay_base_url: str | None = None
     pricing_relay_shared_token: str | None = None

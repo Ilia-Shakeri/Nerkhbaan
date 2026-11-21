@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from copy import deepcopy
@@ -15,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from ..db import RequestSessionLocal, SessionLocal
+from ..config import settings
 from .instruments import INSTRUMENTS, get_instrument
 from .registry import PROVIDERS, RETIRED_PROVIDERS
 from . import rights
@@ -482,9 +484,40 @@ def _canonical_history_sql(use_bookends: bool):
 
 class InternalPriceHistory:
     def __init__(self) -> None:
-        self._canonical_reads: dict[tuple[str, str, datetime | None, str | None], asyncio.Task] = {}
+        self._canonical_reads: dict[tuple, asyncio.Task] = {}
         self._canonical_guard = asyncio.Lock()
         self._latest_reads: dict[tuple[asyncio.AbstractEventLoop, str], asyncio.Task] = {}
+        self._history_snapshots: dict[tuple, tuple[float, HistoryResult]] = {}
+
+    @staticmethod
+    def _query_history_generation(instrument_id: str) -> int:
+        db = RequestSessionLocal()
+        try:
+            _latest_read_budget(db)
+            # Missing invalidation state is an error, never permission to serve
+            # a completed snapshot. The feature requires migration 15.
+            value = db.execute(text("""SELECT generation FROM canonical_history_versions
+                WHERE instrument_id = :instrument"""), {"instrument": instrument_id}).scalar_one_or_none()
+            return int(value or 0)
+        finally:
+            db.close()
+
+    async def _read_versioned_history(self, normalized, timeframe, requested_end, key, generation):
+        result = await self._read_canonical_history(normalized, timeframe, end=requested_end)
+        if generation is not None and generation == await asyncio.to_thread(
+            self._query_history_generation, normalized
+        ) and key[3] == (rights.revision() if rights.enforced() else None):
+            # Keep the original range_end: this is an explicit historical
+            # snapshot, never a new timestamp attached to an old chart.
+            if len(result.points) <= 2000 and len(json.dumps(result.to_dict()).encode()) <= 256 * 1024:
+                now = time.monotonic()
+                self._history_snapshots = {k: v for k, v in self._history_snapshots.items() if v[0] > now}
+                if len(self._history_snapshots) >= 8:
+                    del self._history_snapshots[next(iter(self._history_snapshots))]
+                self._history_snapshots[key] = (
+                    now + settings.pricing_history_snapshot_cache_seconds, deepcopy(result)
+                )
+        return result
 
     async def canonical_history(
         self, instrument_id: str, timeframe: str, *, end: datetime | None = None,
@@ -494,11 +527,21 @@ class InternalPriceHistory:
             raise ValueError("Unsupported timeframe")
         requested_end = ensure_utc(end) if end is not None else None
         revision = rights.revision() if rights.enforced() else None
-        key = (normalized, timeframe, requested_end, revision)
+        generation = None
+        if (requested_end is None and timeframe in {"30d", "1y"}
+                and settings.pricing_history_snapshot_cache_seconds and rights.enforced()):
+            generation = await asyncio.to_thread(self._query_history_generation, normalized)
+        key = (normalized, timeframe, requested_end, revision, generation)
         async with self._canonical_guard:
+            snapshot = self._history_snapshots.get(key) if generation is not None else None
+            if snapshot is not None and snapshot[0] > time.monotonic():
+                if revision is None or revision == rights.revision():
+                    return deepcopy(snapshot[1])
             task = self._canonical_reads.get(key)
             if task is None or task.done():
-                task = asyncio.create_task(self._read_canonical_history(normalized, timeframe, end=requested_end))
+                task = asyncio.create_task(self._read_versioned_history(
+                    normalized, timeframe, requested_end, key, generation
+                ))
                 self._canonical_reads[key] = task
                 task.add_done_callback(lambda done: self._canonical_read_done(key, done))
         await asyncio.wait({task})

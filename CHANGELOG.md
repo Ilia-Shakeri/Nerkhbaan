@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Add an opt-in, bounded 30-second snapshot for 30-day/year charts on the initial single-host plan. Transactional per-instrument generations invalidate snapshots after source insert, edit, deletion, instrument moves and truncation; permission changes, expiry and failed generation reads never reuse a saved chart. Keep the original chart range timestamp and leave current prices uncached. Migration 15 is required before enabling the setting.
+- Route readiness and current-quote reads through the existing reserved request connections, preserving the total database connection budget. Retain failed live pressure receipts separately from local and CI results.
 - Avoid discovering current-price instrument IDs by scanning compressed history. Use the served instrument registry and share unfinished database snapshots across individual refresh workers and aggregate readers, without retaining completed prices or permission decisions.
 - Fast-path valid direct-source permission checks and history attribution while retaining recursive validation for derived or malformed source trees. Add PostgreSQL/Python differential, query-plan and cancellation/revocation coverage.
 - Disable chart JIT compilation inside read-only transactions while preserving the database's statement and lock timeouts and restoring all local settings on rollback.

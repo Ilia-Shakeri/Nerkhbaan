@@ -9,6 +9,7 @@ services:
     environment:
       ADMIN_FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:?Set the reviewed HTTPS origin}
       ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:?Set the reviewed HTTPS origin}
+      PRICING_HISTORY_SNAPSHOT_CACHE_SECONDS: "30"
   edge:
     image: ${WEB_IMAGE:?Use the reviewed combined web image}
     pull_policy: never
