@@ -392,6 +392,20 @@ class HeadLatestQuoteAvailabilityTests(IndexedLatestQuoteAvailabilityTests):
         with self.engine.begin() as connection:
             connection.execute(text("DELETE FROM canonical_quote_heads"))
 
+    def test_eligible_head_does_not_open_historical_fallback(self):
+        from sqlalchemy import event
+        self.insert(1)
+        statements = []
+        def record(connection, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+        event.listen(self.engine, "before_cursor_execute", record)
+        try:
+            rows = history.InternalPriceHistory._query_latest_rows("BTC_USD")
+        finally:
+            event.remove(self.engine, "before_cursor_execute", record)
+        self.assertEqual([row["id"] for row in rows], [1])
+        self.assertFalse(any("FROM canonical_quote_read_index" in query for query in statements))
+
     def test_updated_payload_and_deleted_source_cannot_return_old_head(self):
         self.insert(1)
         with self.engine.begin() as connection:

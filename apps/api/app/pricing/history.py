@@ -252,27 +252,30 @@ def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, l
             WHERE id = ordered_roots.id AND canonical_at = ordered_roots.canonical_at
               AND observed_at = ordered_roots.observed_at
               AND instrument_id = definitions.instrument_id"""
-        head_join = ""
         if lookup_heads:
-            head_join = """LEFT JOIN canonical_quote_heads AS head
-                ON head.instrument_id = definitions.instrument_id
-               AND head.quote_id = ordered_roots.id
-               AND head.canonical_at = ordered_roots.canonical_at
-               AND head.observed_at = ordered_roots.observed_at"""
-            # Existence reads only identity columns from compressed storage.
-            # Source and head changes share a transaction/MVCC snapshot. A
-            # dropped chunk cannot leave an orphaned head visible to users.
-            point_read = f"""SELECT {columns}
-                FROM jsonb_populate_record(NULL::canonical_quotes, head.payload)
-                WHERE head.quote_id IS NOT NULL AND EXISTS (
-                    SELECT 1 FROM canonical_quotes
-                    WHERE id = ordered_roots.id AND canonical_at = ordered_roots.canonical_at
-                      AND instrument_id = definitions.instrument_id
-                      AND observed_at = ordered_roots.observed_at
-                )
-                UNION ALL {point_read} AND head.quote_id IS NULL"""
+            # Evaluate the small current-head table first. Combining this path
+            # with the historical fallback in one lateral UNION forces a full
+            # history sort before LIMIT on compressed production data.
+            return text(f"""SELECT * FROM (SELECT source.* FROM canonical_quote_heads AS head
+                CROSS JOIN LATERAL (
+                    SELECT {columns}
+                    FROM jsonb_populate_record(NULL::canonical_quotes, head.payload)
+                ) AS source
+                WHERE source.instrument_id = head.instrument_id
+                  AND source.id = head.quote_id
+                  AND source.canonical_at = head.canonical_at
+                  AND source.observed_at = head.observed_at
+                  AND source.instrument_id IN ({definitions})
+                  AND EXISTS (
+                    SELECT 1 FROM canonical_quotes AS original
+                    WHERE original.id = head.quote_id
+                      AND original.canonical_at = head.canonical_at
+                      AND original.instrument_id = head.instrument_id
+                      AND original.observed_at = head.observed_at
+                  )) AS eligible
+                WHERE ({cheap}) AND ({permitted})
+                ORDER BY instrument_id"""), parameters
         selected = f"""SELECT source.* FROM ({ordered}) AS ordered_roots
-            {head_join}
             CROSS JOIN LATERAL (
                 SELECT * FROM ({point_read}) AS complete_source
                 WHERE ({cheap}) AND ({permitted})
@@ -836,10 +839,22 @@ class InternalPriceHistory:
             _latest_read_admission(db)
             # Re-read grants after waiting, rather than queueing an old decision.
             indexed = _has_lookup_index(db)
+            heads = indexed and _has_quote_heads(db)
             query, parameters = _latest_rows_sql(
-                instrument_id, lookup_index=indexed, lookup_heads=indexed and _has_quote_heads(db)
+                instrument_id, lookup_index=indexed, lookup_heads=heads
             )
-            return db.execute(query, parameters).mappings().all()
+            rows = list(db.execute(query, parameters).mappings().all())
+            if not heads:
+                return rows
+            found = {row["instrument_id"] for row in rows}
+            missing = [name for name in ([instrument_id] if instrument_id else INSTRUMENTS)
+                       if name not in found]
+            if missing:
+                query, parameters = _latest_rows_sql(instrument_id, lookup_index=True)
+                if instrument_id is None:
+                    parameters["instrument_ids"] = missing
+                rows.extend(db.execute(query, parameters).mappings().all())
+            return sorted(rows, key=lambda row: row["instrument_id"])
         finally:
             db.close()
 
