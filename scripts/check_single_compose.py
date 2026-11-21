@@ -26,7 +26,7 @@ def validate(plan: dict) -> dict:
         if (service.get("ports") or service.get("privileged") or not service.get("read_only")
                 or service.get("network_mode") or service.get("pid")
                 or "ALL" not in service.get("cap_drop", [])
-                or not any(str(v).startswith("no-new-privileges:") for v in service["security_opt"])
+                or "no-new-privileges:true" not in service["security_opt"]
                 or service.get("oom_score_adj") != 500 or service.get("pids_limit") != 96):
             raise ValueError("Unexpected host access: " + name)
         if set(service.get("cap_add", [])) - {"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"}:
@@ -99,9 +99,17 @@ def main() -> None:
         plan = json.loads(output)
         if args.initial:
             edge = plan["services"].pop("edge")
+            postgres = plan["services"]["postgres"]
+            if (int(postgres["memswap_limit"]) != 512 * 1024**2
+                    or int(postgres["deploy"]["resources"]["limits"]["memory"]) != 512 * 1024**2):
+                raise ValueError("Unexpected dedicated database budget")
+            postgres["memswap_limit"] = 320 * 1024**2
+            postgres["deploy"]["resources"]["limits"]["memory"] = 320 * 1024**2
             if (edge["image"] != plan["services"]["web"]["image"]
                     or not edge["read_only"] or edge.get("cap_add")
                     or edge["cap_drop"] != ["ALL"]
+                    or "no-new-privileges:true" not in edge["security_opt"]
+                    or set(edge["networks"]) != {"gateway"}
                     or int(edge["memswap_limit"]) != 32 * 1024**2
                     or int(edge["deploy"]["resources"]["limits"]["memory"]) != 32 * 1024**2
                     or {(p["published"], p["target"]) for p in edge["ports"]} != {("80", 8081), ("443", 8443)}):
@@ -111,7 +119,7 @@ def main() -> None:
                 raise ValueError("Path-based panel must use the public origin")
         result = validate(plan)
         if args.initial:
-            result.update(services=8, steady_limit_mib=696, public_ports=2)
+            result.update(services=8, steady_limit_mib=888, public_ports=2)
         print(json.dumps(result, sort_keys=True))
 
 

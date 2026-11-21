@@ -1,9 +1,10 @@
 # Fresh dedicated demo host only. Stop its single API before migration/upgrade.
 services:
   postgres:
+    memswap_limit: 512m
     deploy:
       resources:
-        limits: {cpus: "1.00"}
+        limits: {cpus: "1.00", memory: 512M}
   backend:
     environment:
       ADMIN_FRONTEND_ORIGIN: ${PUBLIC_ORIGIN:?Set the reviewed HTTPS origin}
