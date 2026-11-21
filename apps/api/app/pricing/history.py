@@ -246,22 +246,46 @@ def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, l
         # orphaned lookup entry (for example after drop_chunks) returns no row.
         lookup_cheap = cheap
         if lookup_leaves and rights.enforced():
+            # This constant superset can use the provider-array index. The
+            # row-dependent action check and full source checks still follow.
+            parameters["rights_necessary_provider_ids"] = list(rights.allowed_provider_ids("display"))
             lookup_cheap += """ AND cardinality(permission_provider_ids)>0
+                AND permission_provider_ids <@ CAST(:rights_necessary_provider_ids AS text[])
                 AND permission_provider_ids <@ CASE
                   WHEN COALESCE(source_summary->>'derived','false')='true'
                     OR source_summary->>'primary_provider_id' LIKE 'derived:%'
                   THEN ARRAY(SELECT jsonb_array_elements_text(CAST(:rights_derived_sources AS jsonb)))
                   ELSE ARRAY(SELECT jsonb_array_elements_text(CAST(:rights_allowed_sources AS jsonb)))
                 END"""
-        ordered = f"""SELECT id, canonical_at, observed_at
+        ordered_columns = "id, canonical_at, observed_at"
+        permission_gate = ""
+        if lookup_permissions:
+            if rights.enforced():
+                lookup_cheap += """ AND (candidate_provider_id IS NULL OR candidate_provider_id = ANY(:rights_candidate_ids))
+                    AND (candidate_price IS NULL OR candidate_provider_id = ANY(:rights_candidate_ids))
+                    AND (status <> 'derived_fallback' OR source_summary->>'derived' = 'true'
+                         OR source_summary->>'primary_provider_id' LIKE 'derived:%')"""
+            ordered_columns += ", source_summary, candidate_price, candidate_provider_id, status"
+            # Sort only cheap candidates. Recursive permission work must follow
+            # that order and stop at the first valid source, rather than run on
+            # every historical row before the sort.
+            permission_gate = f"""CROSS JOIN LATERAL (
+                SELECT 1 FROM (
+                    SELECT ordered_roots.source_summary, ordered_roots.candidate_price,
+                        ordered_roots.candidate_provider_id, ordered_roots.status OFFSET 0
+                ) AS permission_snapshot
+                WHERE {permitted} OFFSET 0
+            ) AS permission_check"""
+        ordered = f"""SELECT {ordered_columns}
             FROM canonical_quote_read_index
-            WHERE {lookup_cheap} AND {permitted if lookup_permissions else "TRUE"}
+            WHERE {lookup_cheap}
               AND instrument_id = definitions.instrument_id
             ORDER BY observed_at DESC, canonical_at DESC, id DESC OFFSET 0"""
         point_read = f"""SELECT {columns} FROM canonical_quotes
             WHERE id = ordered_roots.id AND canonical_at = ordered_roots.canonical_at
               AND observed_at = ordered_roots.observed_at
-              AND instrument_id = definitions.instrument_id"""
+              AND instrument_id = definitions.instrument_id
+            LIMIT 1 OFFSET 0"""
         if lookup_heads:
             # Keep source existence correlated to each small current head.
             # A pulled-up semi-join otherwise scans compressed history.
@@ -289,6 +313,7 @@ def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, l
                 WHERE ({cheap}) AND ({permitted})
                 ORDER BY instrument_id"""), parameters
         selected = f"""SELECT source.* FROM ({ordered}) AS ordered_roots
+            {permission_gate}
             CROSS JOIN LATERAL (
                 SELECT * FROM ({point_read}) AS complete_source
                 WHERE ({cheap}) AND ({permitted})

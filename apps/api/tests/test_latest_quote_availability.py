@@ -465,6 +465,43 @@ class ProviderIndexedLatestQuoteAvailabilityTests(PermissionIndexedLatestQuoteAv
         self.assertTrue(any(n.get("Parent Relationship")=="SubPlan"
             and any(c.get("Alias")=="original" for c in nodes(n)) for n in nodes(plan)))
 
+    def test_derive_only_grant_cannot_publish_a_fallback(self):
+        self.grants["derive_only"] = {**deepcopy(self.grants["approved"]), "permissions": ["derive"]}
+        self.insert(1)
+        self.insert(2, status="derived_fallback", summary={
+            "provider_ids": ["derived:test"], "primary_provider_id": "derived:test", "derived": True,
+            "inputs": [{"source_summary": {"provider_ids": ["derive_only"], "derived": False}}],
+        })
+        self.insert(3, summary={"provider_ids": ["unapproved"], "derived": False})
+        self.assertEqual([r["id"] for r in history.InternalPriceHistory._query_latest_rows(None)], [1])
+
+    def test_fallback_can_index_large_denied_provider_history(self):
+        self.insert(1)
+        with self.engine.begin() as connection:
+            self.assert_owned(connection)
+            connection.execute(text("""INSERT INTO canonical_quotes
+                (id,instrument_id,price,status,source_summary,observed_at,canonical_at)
+                SELECT n,'BTC_USD',100,'live',
+                    jsonb_build_object('provider_ids',jsonb_build_array('unapproved'),'derived',false),
+                    now() + n * interval '1 second', now() + n * interval '1 second'
+                FROM generate_series(2,2001) n"""))
+            connection.execute(text("ANALYZE canonical_quote_read_index"))
+        query, parameters = history._latest_rows_sql("BTC_USD", lookup_index=True,
+            lookup_permissions=True, lookup_leaves=True)
+        with self.sessions() as db:
+            db.execute(text("SET LOCAL jit=off"))
+            plan = db.execute(text("EXPLAIN (ANALYZE, FORMAT JSON) " + str(query)), parameters).scalar_one()[0]["Plan"]
+            self.assertEqual([r["id"] for r in db.execute(query, parameters).mappings()], [1])
+        def nodes(node):
+            yield node
+            for child in node.get("Plans", []):
+                yield from nodes(child)
+        self.assertTrue(any(n.get("Index Name") == "ix_canonical_permission_providers" for n in nodes(plan)))
+        lookups = [n for n in nodes(plan) if n.get("Relation Name") == "canonical_quote_read_index"]
+        self.assertTrue(lookups)
+        self.assertFalse(any(child["Node Type"] == "Recursive Union"
+                             for lookup in lookups for child in nodes(lookup)))
+
     def test_incidental_direct_inputs_do_not_reject_an_approved_direct_quote(self):
         self.insert(1, summary={"provider_ids":["approved"],"derived":False,
             "inputs":[{"source_summary":{"provider_ids":["unapproved"]}}]})
