@@ -34,7 +34,7 @@ COPY apps/admin-web ./apps/admin-web
 ENV VITE_ADMIN_BASE_PATH=/admin/
 RUN npm run build --workspace=nerkhbaan-admin-web
 
-FROM nginx:1.30.6-alpine3.24
+FROM nginx:1.30.7-alpine3.24
 RUN apk upgrade --no-cache
 COPY --from=public_builder /app/apps/web/dist /usr/share/nginx/html/public
 COPY --from=admin_builder /app/apps/admin-web/dist /usr/share/nginx/html/public/admin
