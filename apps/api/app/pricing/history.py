@@ -208,7 +208,7 @@ def _latest_read_admission(db) -> None:
         time.sleep(min(0.025, remaining))
 
 
-def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, lookup_heads: bool = False):
+def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, lookup_heads: bool = False, lookup_permissions: bool = False):
     permitted, parameters = _canonical_permissions("display")
     columns = """id, instrument_id, price, status, primary_quote_id,
         verification_quote_ids, source_summary, candidate_price,
@@ -246,7 +246,8 @@ def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, l
         # orphaned lookup entry (for example after drop_chunks) returns no row.
         ordered = f"""SELECT id, canonical_at, observed_at
             FROM canonical_quote_read_index
-            WHERE {cheap} AND instrument_id = definitions.instrument_id
+            WHERE {cheap} AND {permitted if lookup_permissions else "TRUE"}
+              AND instrument_id = definitions.instrument_id
             ORDER BY observed_at DESC, canonical_at DESC, id DESC OFFSET 0"""
         point_read = f"""SELECT {columns} FROM canonical_quotes
             WHERE id = ordered_roots.id AND canonical_at = ordered_roots.canonical_at
@@ -313,6 +314,14 @@ def _has_lookup_index(db) -> bool:
           ON lookup.relnamespace = quotes.relnamespace
         WHERE lookup.oid = to_regclass('canonical_quote_read_index')
           AND quotes.oid = to_regclass('canonical_quotes')
+    )"""), {}).scalar_one())
+
+
+def _has_permission_index(db) -> bool:
+    return bool(db.execute(text("""SELECT EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = to_regclass('canonical_quote_read_index')
+          AND attname = 'candidate_price' AND NOT attisdropped
     )"""), {}).scalar_one())
 
 
@@ -840,8 +849,9 @@ class InternalPriceHistory:
             # Re-read grants after waiting, rather than queueing an old decision.
             indexed = _has_lookup_index(db)
             heads = indexed and _has_quote_heads(db)
+            permissions = indexed and _has_permission_index(db)
             query, parameters = _latest_rows_sql(
-                instrument_id, lookup_index=indexed, lookup_heads=heads
+                instrument_id, lookup_index=indexed, lookup_heads=heads, lookup_permissions=permissions
             )
             rows = list(db.execute(query, parameters).mappings().all())
             if not heads:
@@ -850,7 +860,7 @@ class InternalPriceHistory:
             missing = [name for name in ([instrument_id] if instrument_id else INSTRUMENTS)
                        if name not in found]
             if missing:
-                query, parameters = _latest_rows_sql(instrument_id, lookup_index=True)
+                query, parameters = _latest_rows_sql(instrument_id, lookup_index=True, lookup_permissions=permissions)
                 if instrument_id is None:
                     parameters["instrument_ids"] = missing
                 rows.extend(db.execute(query, parameters).mappings().all())

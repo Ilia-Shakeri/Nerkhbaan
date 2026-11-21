@@ -419,5 +419,27 @@ class HeadLatestQuoteAvailabilityTests(IndexedLatestQuoteAvailabilityTests):
         self.assertEqual(history.InternalPriceHistory._query_latest_rows(None), [])
 
 
+@unittest.skipUnless(TEST_URL, "Requires an explicitly owned test PostgreSQL database")
+class PermissionIndexedLatestQuoteAvailabilityTests(HeadLatestQuoteAvailabilityTests):
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        super().setUpClass()
+        migration = Path(__file__).resolve().parents[1] / "db/migrations/20261121_002_canonical_permission_lookup.sql"
+        with cls.engine.begin() as connection:
+            cls.assert_owned(connection)
+            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'))
+
+    def test_recursive_projection_retains_explicit_nulls_and_deep_denials(self):
+        self.insert(1)
+        self.insert(2, summary={"provider_ids":["derived:test"],"primary_provider_id":"derived:test","derived":True,
+            "inputs":[{"source_summary":{"provider_ids":["approved"],"derived":None}}]})
+        self.assertEqual([r["id"] for r in history.InternalPriceHistory._query_latest_rows(None)], [1])
+        with self.engine.begin() as connection:
+            projected=connection.scalar(text("SELECT source_summary->'inputs'->0->'source_summary'->'derived' FROM canonical_quote_read_index WHERE id=2"))
+            self.assertIsNone(projected)
+            self.assertTrue(connection.scalar(text("SELECT source_summary->'inputs'->0->'source_summary' ? 'derived' FROM canonical_quote_read_index WHERE id=2")))
+
+
 if __name__ == "__main__":
     unittest.main()
