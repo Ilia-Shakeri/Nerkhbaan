@@ -234,6 +234,7 @@ class RightsPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
         self.grants = {name: deepcopy(grant) for name in ("approved", "approved_fx")}
         self.enterContext(patch.object(rights, "grants", side_effect=lambda: self.grants))
         self.enterContext(patch("app.pricing.history.SessionLocal", self.sessions))
+        self.enterContext(patch("app.pricing.history.RequestSessionLocal", self.sessions))
         with self.engine.begin() as connection:
             for table in ("pricing_verifications", "pricing_anomalies", "canonical_quotes", "provider_quotes", "instruments"):
                 connection.execute(text(f"DELETE FROM {table}"))

@@ -14,7 +14,7 @@ from weakref import WeakKeyDictionary
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
-from ..db import SessionLocal
+from ..db import RequestSessionLocal, SessionLocal
 from .instruments import INSTRUMENTS, get_instrument
 from .registry import PROVIDERS, RETIRED_PROVIDERS
 from . import rights
@@ -899,7 +899,8 @@ class InternalPriceHistory:
 
     @staticmethod
     def _query_latest_rows(instrument_id: str | None) -> list[Any]:
-        db = SessionLocal()
+        # Current quotes share the request reserve, not the history work queue.
+        db = RequestSessionLocal()
         try:
             _latest_read_budget(db)
             _latest_read_admission(db)

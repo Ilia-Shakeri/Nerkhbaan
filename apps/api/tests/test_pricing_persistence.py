@@ -165,7 +165,7 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
     def test_latest_all_uses_no_untyped_null_parameter(self) -> None:
         session = _HistorySession()
 
-        with patch("app.pricing.history.SessionLocal", return_value=session):
+        with patch("app.pricing.history.RequestSessionLocal", return_value=session):
             rows = InternalPriceHistory._query_latest_rows(None)
 
         self.assertEqual(rows, [])
@@ -181,7 +181,7 @@ class InternalPriceHistoryQueryTests(unittest.TestCase):
     def test_latest_instrument_keeps_typed_column_comparison(self) -> None:
         session = _HistorySession()
 
-        with patch("app.pricing.history.SessionLocal", return_value=session):
+        with patch("app.pricing.history.RequestSessionLocal", return_value=session):
             rows = InternalPriceHistory._query_latest_rows("BTC_USD")
 
         self.assertEqual(rows, [])

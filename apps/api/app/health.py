@@ -7,7 +7,8 @@ from typing import Any
 from sqlalchemy import text
 
 from .config import settings
-from .db import engine
+# Readiness must remain responsive while background history reads are queued.
+from .db import request_engine as engine
 from .migrations.state import migration_state
 from .observability import set_queue_depths
 from .pricing.cache import PricingRedisStore

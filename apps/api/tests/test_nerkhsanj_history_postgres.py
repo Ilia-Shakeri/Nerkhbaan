@@ -95,6 +95,7 @@ class NerkhsanjHistoryPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
         self.enterContext(patch.object(settings, "pricing_rights_enforced", True))
         self.enterContext(patch.object(settings, "pricing_rights_manifest_path", None))
         self.enterContext(patch("app.pricing.history.SessionLocal", self.sessions))
+        self.enterContext(patch("app.pricing.history.RequestSessionLocal", self.sessions))
         self.enterContext(patch("app.pricing.persistence.SessionLocal", self.sessions))
         self.enterContext(patch("app.pricing.backfill.SessionLocal", self.sessions))
         self.provider = PROVIDERS["nerkhsanj_silver999_history"]

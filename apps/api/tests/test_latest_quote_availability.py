@@ -88,6 +88,7 @@ class LatestQuoteAvailabilityTests(unittest.TestCase):
         self.grants = {"approved": deepcopy(grant)}
         self.enterContext(patch.object(rights, "grants", side_effect=lambda: self.grants))
         self.enterContext(patch.object(history, "SessionLocal", self.sessions))
+        self.enterContext(patch.object(history, "RequestSessionLocal", self.sessions))
 
     def insert(self, identifier, *, instrument="BTC_USD", summary=None, candidate=None, status="live", age=0, price=None):
         import json
@@ -223,7 +224,7 @@ class LatestQuoteAvailabilityTests(unittest.TestCase):
             original()
         session.close = close
         started = time.monotonic()
-        with patch.object(history, "SessionLocal", return_value=session), patch.object(
+        with patch.object(history, "RequestSessionLocal", return_value=session), patch.object(
                 history, "_latest_rows_sql", return_value=(text("SELECT pg_sleep(10)"), {})):
             with self.assertRaises(DBAPIError) as caught:
                 history.InternalPriceHistory._query_latest_rows(None)
@@ -481,6 +482,27 @@ class ProviderIndexedLatestQuoteAvailabilityTests(PermissionIndexedLatestQuoteAv
         probes = [query for query in statements if "FROM canonical_quote_read_index" in query]
         self.assertTrue(probes)
         self.assertFalse(any("FROM canonical_quotes" in query for query in probes))
+
+    def test_current_quote_uses_reserved_capacity_during_history_reads(self):
+        self.insert(1)
+        reserved = create_engine(self.admin.url, hide_parameters=True, pool_size=1, max_overflow=0,
+            connect_args={"options": f"-csearch_path={self.schema},public"}, pool_timeout=0.1)
+        blockers = [self.sessions(), self.sessions()]
+        try:
+            for session in blockers:
+                session.connection()
+            with patch.object(history, "RequestSessionLocal", sessionmaker(bind=reserved)):
+                with ThreadPoolExecutor(1) as pool:
+                    future = pool.submit(history.InternalPriceHistory._query_latest_rows, "BTC_USD")
+                    try:
+                        self.assertEqual([row["id"] for row in future.result(timeout=2)], [1])
+                    finally:
+                        for session in blockers:
+                            session.close()
+        finally:
+            for session in blockers:
+                session.close()
+            reserved.dispose()
 
     def test_derive_only_grant_cannot_publish_a_fallback(self):
         self.grants["derive_only"] = {**deepcopy(self.grants["approved"]), "permissions": ["derive"]}
