@@ -388,6 +388,8 @@ jobs:
           docker compose --profile admin --profile telegram --profile edge --profile monitoring -f docker-compose.prod.yaml config --quiet
           python3 scripts/check_single_compose.py
           python3 scripts/check_single_compose.py --initial
+          python3 scripts/check_single_compose.py --initial --coexist
+          python3 scripts/check_single_compose.py --initial --coexist --public-edge
 
       - name: Validate monitoring configurations
         run: |
