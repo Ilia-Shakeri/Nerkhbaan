@@ -1,4 +1,4 @@
-# Fresh dedicated demo host only. Stop its single API before migration/upgrade.
+# Reviewed initial host only. Stop its single API before migration/upgrade.
 services:
   postgres:
     memswap_limit: 512m
@@ -28,12 +28,12 @@ services:
       options: {max-size: 2m, max-file: "3"}
     tmpfs: ["/tmp:size=16m,mode=1777,nosuid,noexec"]
     memswap_limit: 32m
-    ports: ["80:8081", "443:8443"]
+    ports: ["${INITIAL_HTTP_BIND:-80}:8081", "${INITIAL_TLS_BIND:-443}:8443"]
     volumes:
       - ./nginx/initial-edge.conf:/etc/nginx/initial-edge.conf:ro
       - ./tls/fullchain.pem:/etc/nginx/tls/fullchain.pem:ro
       - ./tls/privkey.pem:/etc/nginx/tls/privkey.pem:ro
-      - ./acme:/var/www/acme:ro
+      - ${ACME_WEBROOT:-./acme}:/var/www/acme:ro
     networks:
       gateway:
         ipv4_address: ${GATEWAY_IPV4:?Pin this new deployment's gateway address}

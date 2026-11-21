@@ -68,12 +68,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--wsl", action="store_true")
     parser.add_argument("--initial", action="store_true")
+    parser.add_argument("--coexist", action="store_true")
+    parser.add_argument("--public-edge", action="store_true")
     args = parser.parse_args()
+    if args.coexist and not args.initial:
+        parser.error("--coexist requires --initial")
+    if args.public_edge and not (args.initial and args.coexist):
+        parser.error("--public-edge requires --initial --coexist")
     root = Path(__file__).resolve().parents[1]
     # Inside WSL use its own temporary filesystem and the same source checkout.
     if args.wsl:
         source = subprocess.check_output(["wsl", "-e", "wslpath", "-a", str(Path(__file__).resolve())], text=True).strip()
-        subprocess.run(["wsl", "-e", "python3", source, *(["--initial"] if args.initial else [])], check=True)
+        subprocess.run(["wsl", "-e", "python3", source, *(["--initial"] if args.initial else []), *(["--coexist"] if args.coexist else []), *(["--public-edge"] if args.public_edge else [])], check=True)
         return
     values = {"OWNER_ID": "0" * 32, "POSTGRES_IMAGE": "postgres:test", "API_IMAGE": "api:test",
               "REDIS_IMAGE": "redis:test", "WEB_IMAGE": "web:test", "FEED_IMAGE": "feed:test",
@@ -83,6 +89,11 @@ def main() -> None:
               "PRIVATE_SUBNET": "10.203.87.0/24", "EGRESS_SUBNET": "10.203.88.0/24",
               "DATA_ROOT": "/unused-initial-data", "BACKUP_ROOT": "/unused-initial-backup",
               "GATEWAY_NETWORK": "unused-initial-gateway"}
+    values["INITIAL_HTTP_BIND"] = "127.0.0.1:18081" if args.coexist else "80"
+    values["INITIAL_TLS_BIND"] = "127.0.0.1:18443" if args.coexist else "443"
+    if args.public_edge:
+        values["INITIAL_TLS_BIND"] = "0.0.0.0:443"
+        values["ACME_WEBROOT"] = "/var/www/letsencrypt"
     values["GATEWAY_IPV4"] = "10.203.89.2"
     with tempfile.TemporaryDirectory(prefix="nerkhbaan-single-compose-") as work:
         directory = Path(work)
@@ -99,6 +110,15 @@ def main() -> None:
         plan = json.loads(output)
         if args.initial:
             edge = plan["services"].pop("edge")
+            expected_ports = ({("18081", 8081), ("443", 8443)} if args.public_edge
+                              else {("18081", 8081), ("18443", 8443)} if args.coexist
+                              else {("80", 8081), ("443", 8443)})
+            if args.public_edge:
+                expected_bindings = {8081: "127.0.0.1", 8443: "0.0.0.0"}
+                if any(p.get("host_ip") != expected_bindings[p["target"]] for p in edge["ports"]):
+                    raise ValueError("Unexpected public gateway binding")
+                if not any(v.get("source") == "/var/www/letsencrypt" and v.get("target") == "/var/www/acme" and v.get("read_only") for v in edge["volumes"]):
+                    raise ValueError("Shared certificate challenge root missing")
             postgres = plan["services"]["postgres"]
             if (int(postgres["memswap_limit"]) != 512 * 1024**2
                     or int(postgres["deploy"]["resources"]["limits"]["memory"]) != 512 * 1024**2):
@@ -112,14 +132,15 @@ def main() -> None:
                     or set(edge["networks"]) != {"gateway"}
                     or int(edge["memswap_limit"]) != 32 * 1024**2
                     or int(edge["deploy"]["resources"]["limits"]["memory"]) != 32 * 1024**2
-                    or {(p["published"], p["target"]) for p in edge["ports"]} != {("80", 8081), ("443", 8443)}):
+                    or {(p["published"], p["target"]) for p in edge["ports"]} != expected_ports
+                    or (args.coexist and not args.public_edge and any(p.get("host_ip") != "127.0.0.1" for p in edge["ports"]))):
                 raise ValueError("Unexpected initial TLS gateway")
             env = plan["services"]["backend"]["environment"]
             if env["ADMIN_FRONTEND_ORIGIN"] != env["PUBLIC_FRONTEND_ORIGIN"]:
                 raise ValueError("Path-based panel must use the public origin")
         result = validate(plan)
         if args.initial:
-            result.update(services=8, steady_limit_mib=888, public_ports=2)
+            result.update(services=8, steady_limit_mib=888, public_ports=1 if args.public_edge else 0 if args.coexist else 2)
         print(json.dumps(result, sort_keys=True))
 
 

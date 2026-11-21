@@ -1,0 +1,17 @@
+# Host keeps ACME and the former demo URL. The owned container serves public 443.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name nerkhbaan.ir;
+    location ^~ /.well-known/acme-challenge/ { root /var/www/letsencrypt; default_type text/plain; }
+    location / { return 308 https://nerkhbaan.ir$request_uri; }
+}
+server {
+    listen 8443 ssl;
+    listen [::]:8443 ssl;
+    server_name nerkhbaan.ir;
+    ssl_certificate /opt/nerkhbaan/tls/fullchain.pem;
+    ssl_certificate_key /opt/nerkhbaan/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    location / { return 308 https://nerkhbaan.ir$request_uri; }
+}
