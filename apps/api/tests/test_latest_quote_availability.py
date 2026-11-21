@@ -106,7 +106,7 @@ class LatestQuoteAvailabilityTests(unittest.TestCase):
 
     def settings(self, session):
         return dict(session.execute(text("""SELECT name, setting FROM pg_settings
-            WHERE name IN ('statement_timeout','lock_timeout','jit','transaction_read_only')""")).all())
+            WHERE name IN ('statement_timeout','lock_timeout','jit','transaction_read_only','plan_cache_mode')""")).all())
 
     def test_queued_replica_reads_fresh_permissions_and_releases_admission(self):
         self.insert(1)
@@ -176,6 +176,7 @@ class LatestQuoteAvailabilityTests(unittest.TestCase):
             self.assertEqual(during["lock_timeout"], str(min(int(before["lock_timeout"]) or 250, 250)))
             self.assertEqual(during["jit"], "off")
             self.assertEqual(during["transaction_read_only"], "on")
+            self.assertEqual(during["plan_cache_mode"], "force_custom_plan")
         with self.sessions() as db:
             self.assertEqual(self.settings(db), before)
 

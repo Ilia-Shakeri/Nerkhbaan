@@ -174,8 +174,11 @@ def _latest_read_budget(db) -> None:
     budgets = {"statement_timeout": _LATEST_STATEMENT_TIMEOUT_MS, "lock_timeout": _LATEST_LOCK_TIMEOUT_MS}
     selected = {name: str(min(value, configured[name]) if configured[name] > 0 else value) + "ms"
                 for name, value in budgets.items()}
+    # Prepared generic plans misestimate sparse missing instruments. Choose a
+    # value-specific plan only here; closing the transaction restores the pool.
     db.execute(text("""SELECT set_config('statement_timeout', :statement_timeout, true),
-        set_config('lock_timeout', :lock_timeout, true), set_config('jit', 'off', true)"""), selected)
+        set_config('lock_timeout', :lock_timeout, true), set_config('jit', 'off', true),
+        set_config('plan_cache_mode', 'force_custom_plan', true)"""), selected)
 
 
 def _history_read_plan(db) -> None:
