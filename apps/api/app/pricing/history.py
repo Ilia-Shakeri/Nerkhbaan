@@ -208,7 +208,7 @@ def _latest_read_admission(db) -> None:
         time.sleep(min(0.025, remaining))
 
 
-def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False):
+def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, lookup_heads: bool = False):
     permitted, parameters = _canonical_permissions("display")
     columns = """id, instrument_id, price, status, primary_quote_id,
         verification_quote_ids, source_summary, candidate_price,
@@ -248,13 +248,34 @@ def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False):
             FROM canonical_quote_read_index
             WHERE {cheap} AND instrument_id = definitions.instrument_id
             ORDER BY observed_at DESC, canonical_at DESC, id DESC OFFSET 0"""
+        point_read = f"""SELECT {columns} FROM canonical_quotes
+            WHERE id = ordered_roots.id AND canonical_at = ordered_roots.canonical_at
+              AND observed_at = ordered_roots.observed_at
+              AND instrument_id = definitions.instrument_id"""
+        head_join = ""
+        if lookup_heads:
+            head_join = """LEFT JOIN canonical_quote_heads AS head
+                ON head.instrument_id = definitions.instrument_id
+               AND head.quote_id = ordered_roots.id
+               AND head.canonical_at = ordered_roots.canonical_at
+               AND head.observed_at = ordered_roots.observed_at"""
+            # Existence reads only identity columns from compressed storage.
+            # Source and head changes share a transaction/MVCC snapshot. A
+            # dropped chunk cannot leave an orphaned head visible to users.
+            point_read = f"""SELECT {columns}
+                FROM jsonb_populate_record(NULL::canonical_quotes, head.payload)
+                WHERE head.quote_id IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM canonical_quotes
+                    WHERE id = ordered_roots.id AND canonical_at = ordered_roots.canonical_at
+                      AND instrument_id = definitions.instrument_id
+                      AND observed_at = ordered_roots.observed_at
+                )
+                UNION ALL {point_read} AND head.quote_id IS NULL"""
         selected = f"""SELECT source.* FROM ({ordered}) AS ordered_roots
+            {head_join}
             CROSS JOIN LATERAL (
-                SELECT {columns} FROM canonical_quotes
-                WHERE id = ordered_roots.id AND canonical_at = ordered_roots.canonical_at
-                  AND observed_at = ordered_roots.observed_at
-                  AND instrument_id = definitions.instrument_id
-                  AND ({cheap}) AND ({permitted})
+                SELECT * FROM ({point_read}) AS complete_source
+                WHERE ({cheap}) AND ({permitted})
                 OFFSET 0
             ) AS source
             ORDER BY ordered_roots.observed_at DESC,
@@ -288,6 +309,15 @@ def _has_lookup_index(db) -> bool:
         SELECT 1 FROM pg_class lookup JOIN pg_class quotes
           ON lookup.relnamespace = quotes.relnamespace
         WHERE lookup.oid = to_regclass('canonical_quote_read_index')
+          AND quotes.oid = to_regclass('canonical_quotes')
+    )"""), {}).scalar_one())
+
+
+def _has_quote_heads(db) -> bool:
+    return bool(db.execute(text("""SELECT EXISTS (
+        SELECT 1 FROM pg_class heads JOIN pg_class quotes
+          ON heads.relnamespace = quotes.relnamespace
+        WHERE heads.oid = to_regclass('canonical_quote_heads')
           AND quotes.oid = to_regclass('canonical_quotes')
     )"""), {}).scalar_one())
 
@@ -806,7 +836,9 @@ class InternalPriceHistory:
             _latest_read_admission(db)
             # Re-read grants after waiting, rather than queueing an old decision.
             indexed = _has_lookup_index(db)
-            query, parameters = _latest_rows_sql(instrument_id, lookup_index=indexed)
+            query, parameters = _latest_rows_sql(
+                instrument_id, lookup_index=indexed, lookup_heads=indexed and _has_quote_heads(db)
+            )
             return db.execute(query, parameters).mappings().all()
         finally:
             db.close()

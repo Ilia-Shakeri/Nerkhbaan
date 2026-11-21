@@ -376,5 +376,34 @@ class IndexedLatestQuoteAvailabilityTests(LatestQuoteAvailabilityTests):
         self.assertEqual(history.InternalPriceHistory._query_latest_rows(None), [])
 
 
+@unittest.skipUnless(TEST_URL, "Requires an explicitly owned test PostgreSQL database")
+class HeadLatestQuoteAvailabilityTests(IndexedLatestQuoteAvailabilityTests):
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        super().setUpClass()
+        migration = Path(__file__).resolve().parents[1] / "db/migrations/20261121_001_canonical_quote_heads.sql"
+        with cls.engine.begin() as connection:
+            cls.assert_owned(connection)
+            connection.exec_driver_sql(migration.read_text().replace("public.", f'"{cls.schema}".'))
+
+    def setUp(self):
+        super().setUp()
+        with self.engine.begin() as connection:
+            connection.execute(text("DELETE FROM canonical_quote_heads"))
+
+    def test_updated_payload_and_deleted_source_cannot_return_old_head(self):
+        self.insert(1)
+        with self.engine.begin() as connection:
+            connection.execute(text("UPDATE canonical_quotes SET price=4321 WHERE id=1"))
+        self.assertEqual(history.InternalPriceHistory._query_latest_rows(None)[0]["price"], 4321)
+        with self.engine.begin() as connection:
+            connection.execute(text("ALTER TABLE canonical_quotes DISABLE TRIGGER canonical_quote_head_sync"))
+            connection.execute(text("DELETE FROM canonical_quotes"))
+            connection.execute(text("ALTER TABLE canonical_quotes ENABLE TRIGGER canonical_quote_head_sync"))
+            self.assertEqual(connection.scalar(text("SELECT count(*) FROM canonical_quote_heads")), 1)
+        self.assertEqual(history.InternalPriceHistory._query_latest_rows(None), [])
+
+
 if __name__ == "__main__":
     unittest.main()
