@@ -211,7 +211,7 @@ def _latest_read_admission(db) -> None:
         time.sleep(min(0.025, remaining))
 
 
-def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, lookup_heads: bool = False, lookup_permissions: bool = False, lookup_leaves: bool = False):
+def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, lookup_heads: bool = False, lookup_permissions: bool = False, lookup_leaves: bool = False, lookup_probe: bool = False):
     permitted, parameters = _canonical_permissions("display")
     columns = """id, instrument_id, price, status, primary_quote_id,
         verification_quote_ids, source_summary, candidate_price,
@@ -315,6 +315,15 @@ def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, l
                   )) AS eligible
                 WHERE ({cheap}) AND ({permitted})
                 ORDER BY instrument_id"""), parameters
+        if lookup_probe:
+            # An empty compact candidate set needs no compressed-source plan.
+            # This admits instruments only; the source query still decides
+            # whether any price is authoritative and eligible.
+            return text(f"""SELECT definitions.instrument_id FROM ({definitions}) AS definitions
+                CROSS JOIN LATERAL (
+                    SELECT 1 FROM ({ordered}) AS ordered_roots
+                    {permission_gate} LIMIT 1
+                ) AS admitted ORDER BY definitions.instrument_id"""), parameters
         selected = f"""SELECT source.* FROM ({ordered}) AS ordered_roots
             {permission_gate}
             CROSS JOIN LATERAL (
@@ -908,6 +917,12 @@ class InternalPriceHistory:
             found = {row["instrument_id"] for row in rows}
             missing = [name for name in ([instrument_id] if instrument_id else INSTRUMENTS)
                        if name not in found]
+            if missing and permissions and leaves:
+                probe, probe_parameters = _latest_rows_sql(instrument_id, lookup_index=True,
+                    lookup_permissions=True, lookup_leaves=True, lookup_probe=True)
+                if instrument_id is None:
+                    probe_parameters["instrument_ids"] = missing
+                missing = [row["instrument_id"] for row in db.execute(probe, probe_parameters).mappings()]
             if missing:
                 query, parameters = _latest_rows_sql(instrument_id, lookup_index=True, lookup_permissions=permissions, lookup_leaves=leaves)
                 if instrument_id is None:

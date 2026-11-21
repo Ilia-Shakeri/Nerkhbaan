@@ -466,6 +466,22 @@ class ProviderIndexedLatestQuoteAvailabilityTests(PermissionIndexedLatestQuoteAv
         self.assertTrue(any(n.get("Parent Relationship")=="SubPlan"
             and any(c.get("Alias")=="original" for c in nodes(n)) for n in nodes(plan)))
 
+    def test_empty_eligible_lookup_does_not_plan_compressed_source_fallback(self):
+        from sqlalchemy import event
+        self.insert(1, summary={"provider_ids": ["unapproved"], "derived": False})
+        statements = []
+        def record(connection, cursor, statement, parameters, context, executemany):
+            statements.append(statement)
+        event.listen(self.engine, "before_cursor_execute", record)
+        try:
+            rows = history.InternalPriceHistory._query_latest_rows("BTC_USD")
+        finally:
+            event.remove(self.engine, "before_cursor_execute", record)
+        self.assertEqual(rows, [])
+        probes = [query for query in statements if "FROM canonical_quote_read_index" in query]
+        self.assertTrue(probes)
+        self.assertFalse(any("FROM canonical_quotes" in query for query in probes))
+
     def test_derive_only_grant_cannot_publish_a_fallback(self):
         self.grants["derive_only"] = {**deepcopy(self.grants["approved"]), "permissions": ["derive"]}
         self.insert(1)
