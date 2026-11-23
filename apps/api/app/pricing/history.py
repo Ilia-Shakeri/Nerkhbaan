@@ -213,6 +213,25 @@ def _latest_read_admission(db) -> None:
         time.sleep(min(0.025, remaining))
 
 
+def _execute_latest_rows(db, query, parameters, *, heads: bool):
+    bind = db.get_bind() if heads else None
+    if heads and getattr(getattr(bind, "dialect", None), "driver", None) == "psycopg":
+        connection = db.connection().connection.driver_connection
+        threshold = connection.prepare_threshold
+        if threshold is not None:
+            try:
+                # Only the bounded aggregate head/point query reuses a generic plan.
+                # Sparse probes and fallback scans retain their value-specific plan.
+                connection.prepare_threshold = 0
+                db.execute(text("SELECT set_config('plan_cache_mode', 'force_generic_plan', true)"), {})
+                rows = list(db.execute(query, parameters).mappings().all())
+            finally:
+                connection.prepare_threshold = threshold
+            db.execute(text("SELECT set_config('plan_cache_mode', 'force_custom_plan', true)"), {})
+            return rows
+    return list(db.execute(query, parameters).mappings().all())
+
+
 def _latest_rows_sql(instrument_id: str | None, *, lookup_index: bool = False, lookup_heads: bool = False, lookup_permissions: bool = False, lookup_leaves: bool = False, lookup_probe: bool = False):
     permitted, parameters = _canonical_permissions("display")
     columns = """id, instrument_id, price, status, primary_quote_id,
@@ -485,9 +504,20 @@ def _canonical_history_sql(use_bookends: bool):
 class InternalPriceHistory:
     def __init__(self) -> None:
         self._canonical_reads: dict[tuple, asyncio.Task] = {}
+        self._canonical_generations: dict[tuple, int | None] = {}
         self._canonical_guard = asyncio.Lock()
         self._latest_reads: dict[tuple[asyncio.AbstractEventLoop, str], asyncio.Task] = {}
-        self._history_snapshots: dict[tuple, tuple[float, HistoryResult]] = {}
+        self._history_snapshots: dict[tuple, tuple[float, HistoryResult, str]] = {}
+
+    def _remember_history_snapshot(self, key, snapshot) -> None:
+        now = time.monotonic()
+        self._history_snapshots = {k: v for k, v in self._history_snapshots.items() if v[0] > now}
+        if snapshot[0] <= now:
+            return
+        self._history_snapshots.pop(key, None)
+        if len(self._history_snapshots) >= 8:
+            del self._history_snapshots[min(self._history_snapshots, key=lambda k: self._history_snapshots[k][0])]
+        self._history_snapshots[key] = snapshot
 
     @staticmethod
     def _query_history_generation(instrument_id: str) -> int:
@@ -495,28 +525,73 @@ class InternalPriceHistory:
         try:
             _latest_read_budget(db)
             # Missing invalidation state is an error, never permission to serve
-            # a completed snapshot. The feature requires migration 15.
+            # a completed snapshot. The feature requires migrations 15 and 16.
             value = db.execute(text("""SELECT generation FROM canonical_history_versions
                 WHERE instrument_id = :instrument"""), {"instrument": instrument_id}).scalar_one_or_none()
             return int(value or 0)
         finally:
             db.close()
 
+    @staticmethod
+    def _query_history_fingerprint(instrument_id: str, start: datetime, end: datetime) -> tuple[int, str]:
+        db = RequestSessionLocal()
+        try:
+            _latest_read_budget(db)
+            # Full hours use transactional revision rows, not a historical scan.
+            # Exact xmin values cover edits in the two partial boundary hours.
+            # A separate reset epoch also invalidates orphan lookup rows on TRUNCATE.
+            row = db.execute(text("""WITH bounds AS (
+                SELECT CASE WHEN :start = date_bin(INTERVAL '1 hour', CAST(:start AS timestamptz),
+                    TIMESTAMPTZ '2000-01-01 00:00:00+00') THEN CAST(:start AS timestamptz)
+                    ELSE date_bin(INTERVAL '1 hour', CAST(:start AS timestamptz),
+                        TIMESTAMPTZ '2000-01-01 00:00:00+00') + INTERVAL '1 hour' END AS first_full,
+                    date_bin(INTERVAL '1 hour', CAST(:end AS timestamptz),
+                        TIMESTAMPTZ '2000-01-01 00:00:00+00') AS last_full
+                ) SELECT
+                COALESCE((SELECT generation FROM canonical_history_versions
+                    WHERE instrument_id=:instrument),0) AS generation,
+                md5(COALESCE((SELECT string_agg(extract(epoch FROM bucket)::text||':'||generation::text,
+                    ',' ORDER BY bucket) FROM canonical_history_bucket_versions, bounds
+                    WHERE instrument_id=:instrument AND bucket >= first_full AND bucket < last_full),'')
+                    || '|' || COALESCE((SELECT string_agg(id::text||':'||extract(epoch FROM canonical_at)::text
+                        ||':'||row_version, ',' ORDER BY id, canonical_at) FROM (
+                            SELECT id, canonical_at, xmin::text AS row_version
+                            FROM canonical_quote_read_index, bounds
+                            WHERE instrument_id=:instrument AND canonical_at BETWEEN :start AND :end
+                              AND canonical_at < first_full
+                            UNION ALL
+                            SELECT id, canonical_at, xmin::text AS row_version
+                            FROM canonical_quote_read_index, bounds
+                            WHERE instrument_id=:instrument AND canonical_at BETWEEN :start AND :end
+                              AND canonical_at >= GREATEST(first_full, last_full)
+                        ) AS boundaries),'')
+                    || '|' || COALESCE((SELECT reset_generation::text FROM canonical_history_versions
+                        WHERE instrument_id=:instrument),'0')) AS fingerprint"""),
+                {"instrument": instrument_id, "start": start, "end": end}).mappings().one()
+            return int(row["generation"]), row["fingerprint"]
+        finally:
+            db.close()
+
     async def _read_versioned_history(self, normalized, timeframe, requested_end, key, generation):
-        result = await self._read_canonical_history(normalized, timeframe, end=requested_end)
-        if generation is not None and generation == await asyncio.to_thread(
-            self._query_history_generation, normalized
-        ) and key[3] == (rights.revision() if rights.enforced() else None):
+        before = None
+        actual_end = requested_end
+        if generation is not None:
+            actual_end = requested_end or utc_now()
+            before = await asyncio.to_thread(self._query_history_fingerprint, normalized,
+                actual_end - TIMEFRAMES[timeframe].duration, actual_end)
+        result = await self._read_canonical_history(normalized, timeframe, end=actual_end)
+        after = await asyncio.to_thread(self._query_history_fingerprint, normalized,
+            result.range_start, result.range_end) if generation is not None else None
+        if before is not None and after is not None and before[1] == after[1] and key[3] == (
+            rights.revision() if rights.enforced() else None
+        ):
             # Keep the original range_end: this is an explicit historical
             # snapshot, never a new timestamp attached to an old chart.
             if len(result.points) <= 2000 and len(json.dumps(result.to_dict()).encode()) <= 256 * 1024:
                 now = time.monotonic()
-                self._history_snapshots = {k: v for k, v in self._history_snapshots.items() if v[0] > now}
-                if len(self._history_snapshots) >= 8:
-                    del self._history_snapshots[next(iter(self._history_snapshots))]
-                self._history_snapshots[key] = (
-                    now + settings.pricing_history_snapshot_cache_seconds, deepcopy(result)
-                )
+                self._remember_history_snapshot(key + (after[0],), (
+                    now + settings.pricing_history_snapshot_cache_seconds, deepcopy(result), after[1]
+                ))
         return result
 
     async def canonical_history(
@@ -527,25 +602,43 @@ class InternalPriceHistory:
             raise ValueError("Unsupported timeframe")
         requested_end = ensure_utc(end) if end is not None else None
         revision = rights.revision() if rights.enforced() else None
-        generation = None
-        if (requested_end is None and timeframe in {"30d", "1y"}
-                and settings.pricing_history_snapshot_cache_seconds and rights.enforced()):
-            generation = await asyncio.to_thread(self._query_history_generation, normalized)
-        key = (normalized, timeframe, requested_end, revision, generation)
-        async with self._canonical_guard:
-            snapshot = self._history_snapshots.get(key) if generation is not None else None
-            if snapshot is not None and snapshot[0] > time.monotonic():
-                if revision is None or revision == rights.revision():
-                    return deepcopy(snapshot[1])
-            task = self._canonical_reads.get(key)
-            if task is None or task.done():
-                task = asyncio.create_task(self._read_versioned_history(
-                    normalized, timeframe, requested_end, key, generation
-                ))
-                self._canonical_reads[key] = task
-                task.add_done_callback(lambda done: self._canonical_read_done(key, done))
-        await asyncio.wait({task})
-        result = task.result()
+        key = (normalized, timeframe, requested_end, revision)
+        for attempt in range(2):
+            generation = None
+            if (requested_end is None and timeframe in {"30d", "1y"}
+                    and settings.pricing_history_snapshot_cache_seconds and rights.enforced()):
+                generation = await asyncio.to_thread(self._query_history_generation, normalized)
+            async with self._canonical_guard:
+                snapshot = self._history_snapshots.get(key + (generation,)) if generation is not None else None
+                if snapshot is None and generation is not None:
+                    for previous_key, previous in sorted(self._history_snapshots.items(),
+                            key=lambda item: item[1][0], reverse=True):
+                        if previous_key[:4] == key and previous[0] > time.monotonic():
+                            current = await asyncio.to_thread(self._query_history_fingerprint, normalized,
+                                previous[1].range_start, previous[1].range_end)
+                            if current[1] == previous[2]:
+                                # A new tick beyond range_end leaves this exact
+                                # chart unchanged. Rebase without extending its TTL.
+                                self._history_snapshots.pop(previous_key, None)
+                                self._remember_history_snapshot(key + (current[0],), previous)
+                                snapshot = previous
+                            break
+                if snapshot is not None and snapshot[0] > time.monotonic():
+                    if revision is None or revision == rights.revision():
+                        return deepcopy(snapshot[1])
+                task = self._canonical_reads.get(key)
+                if task is None or task.done():
+                    task = asyncio.create_task(self._read_versioned_history(
+                        normalized, timeframe, requested_end, key, generation
+                    ))
+                    self._canonical_reads[key] = task
+                    self._canonical_generations[key] = generation
+                    task.add_done_callback(lambda done: self._canonical_read_done(key, done))
+                started_generation = self._canonical_generations[key]
+            await asyncio.wait({task})
+            result = task.result()
+            if generation == started_generation or attempt:
+                break
         if revision is not None and revision != rights.revision():
             # Aggregated values cannot be separated once a source loses permission.
             return HistoryResult(result.instrument_id, result.timeframe, "partial", result.range_start, result.range_end, [])
@@ -556,6 +649,7 @@ class InternalPriceHistory:
             task.exception()
         if self._canonical_reads.get(key) is task:
             del self._canonical_reads[key]
+            self._canonical_generations.pop(key, None)
 
     async def _read_canonical_history(
         self,
@@ -955,7 +1049,7 @@ class InternalPriceHistory:
             query, parameters = _latest_rows_sql(
                 instrument_id, lookup_index=indexed, lookup_heads=heads, lookup_permissions=permissions, lookup_leaves=leaves
             )
-            rows = list(db.execute(query, parameters).mappings().all())
+            rows = _execute_latest_rows(db, query, parameters, heads=heads and instrument_id is None)
             if not heads:
                 return rows
             found = {row["instrument_id"] for row in rows}

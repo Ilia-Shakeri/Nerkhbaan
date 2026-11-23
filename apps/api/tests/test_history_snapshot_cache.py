@@ -7,6 +7,7 @@ import unittest
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from threading import Event
 from unittest.mock import patch
 
 os.environ.setdefault("JWT_SECRET_KEY", "history-cache-tests-only-0000000000000000000000")
@@ -23,7 +24,8 @@ from tests.test_latest_quote_availability import TABLE_SQL
 
 @unittest.skipUnless(fixtures.TEST_URL, "Requires an explicitly owned test database")
 class SnapshotCachePostgresTests(fixtures._OwnedPostgresFixture, unittest.TestCase):
-    owned_table_names = ("canonical_quotes", "canonical_history_versions")
+    owned_table_names = ("canonical_quotes", "canonical_quote_read_index", "canonical_history_versions",
+                         "canonical_history_bucket_versions")
 
     @classmethod
     def setUpClass(cls):
@@ -41,8 +43,10 @@ class SnapshotCachePostgresTests(fixtures._OwnedPostgresFixture, unittest.TestCa
         with cls.engine.begin() as db:
             assert db.scalar(text("SELECT current_schema()")) == cls.schema
             db.execute(text(TABLE_SQL))
-            migration = Path(__file__).resolve().parents[1] / "db/migrations/20261121_004_history_versions.sql"
-            db.connection.driver_connection.execute(migration.read_text().replace("public.", f'"{cls.schema}".'))
+            migrations = Path(__file__).resolve().parents[1] / "db/migrations"
+            for name in ("20261115_001_canonical_read_index.sql", "20261121_004_history_versions.sql",
+                         "20261121_005_history_bucket_versions.sql"):
+                db.connection.driver_connection.execute((migrations / name).read_text().replace("public.", f'"{cls.schema}".'))
         cls._install_ownership_guard()
 
     @classmethod
@@ -57,6 +61,7 @@ class SnapshotCachePostgresTests(fixtures._OwnedPostgresFixture, unittest.TestCa
     def setUp(self):
         with self.engine.begin() as db:
             db.execute(text("TRUNCATE canonical_quotes"))
+            db.execute(text("TRUNCATE canonical_quote_read_index"))
         self.enterContext(patch.object(settings, "pricing_history_snapshot_cache_seconds", 30))
         self.enterContext(patch.object(settings, "pricing_rights_enforced", True))
         self.enterContext(patch.object(history, "SessionLocal", self.sessions))
@@ -95,6 +100,32 @@ class SnapshotCachePostgresTests(fixtures._OwnedPostgresFixture, unittest.TestCa
             db.execute(text("DELETE FROM canonical_quotes WHERE id=1"))
         self.assertEqual(self.read().points, [])
 
+    def test_correction_in_a_complete_old_hour_invalidates_the_saved_chart(self):
+        with self.engine.begin() as db:
+            db.execute(text("UPDATE canonical_quotes SET canonical_at=now()-interval '2 days'"))
+        self.assertEqual(self.read().points[0]["close"], 100)
+        with self.engine.begin() as db:
+            db.execute(text("UPDATE canonical_quotes SET price=400"))
+        self.assertEqual(self.read().points[0]["close"], 400)
+        with self.engine.begin() as db:
+            db.execute(text("UPDATE canonical_quotes SET canonical_at=now()+interval '1 minute'"))
+        self.assertEqual(self.read().points, [])
+
+    def test_bucket_and_boundary_fingerprint_do_not_depend_on_session_timezone(self):
+        with self.engine.begin() as db:
+            db.execute(text("SET LOCAL TIME ZONE 'Asia/Tehran'"))
+            db.execute(text("UPDATE canonical_quotes SET canonical_at=now()-interval '2 days'"))
+        now = datetime.now(UTC)
+        results = []
+        for zone in ("UTC", "Asia/Tehran"):
+            def session():
+                db = self.sessions()
+                db.execute(text("SET LOCAL TIME ZONE '" + zone + "'"))
+                return db
+            with patch.object(history, "RequestSessionLocal", side_effect=session):
+                results.append(self.reader._query_history_fingerprint("BTC_USD", now-timedelta(days=365), now))
+        self.assertEqual(results[0], results[1])
+
     def test_insert_and_instrument_move_invalidate_both_instrument_generations(self):
         self.assertTrue(self.read().points)
         old = self.reader._query_history_generation("BTC_USD")
@@ -115,6 +146,74 @@ class SnapshotCachePostgresTests(fixtures._OwnedPostgresFixture, unittest.TestCa
                 self.reader, "_query_history_generation", side_effect=AssertionError("Legacy cache forbidden")):
             self.assertTrue(self.read().points)
             self.assertEqual(self.reader._history_snapshots, {})
+
+    def test_future_insert_reuses_original_range_without_extending_snapshot_lifetime(self):
+        with patch.object(self.reader, "_query_canonical_history", wraps=self.reader._query_canonical_history) as query:
+            first = self.read()
+            deadline = next(iter(self.reader._history_snapshots.values()))[0]
+            with self.engine.begin() as db:
+                db.execute(text("""INSERT INTO canonical_quotes
+                    (id,instrument_id,price,status,source_summary,observed_at,canonical_at)
+                    SELECT 2,instrument_id,500,status,source_summary,now(),now()
+                    FROM canonical_quotes WHERE id=1"""))
+            second = self.read()
+            self.assertEqual(query.call_count, 1)
+            self.assertEqual(second.range_end, first.range_end)
+            self.assertEqual(second.points, first.points)
+            self.assertEqual(next(iter(self.reader._history_snapshots.values()))[0], deadline)
+
+    def test_future_insert_during_cold_read_does_not_duplicate_the_expensive_query(self):
+        self._concurrent_change(in_range=False)
+
+    def test_many_instruments_keep_a_bounded_snapshot_set(self):
+        for instrument in history.INSTRUMENTS:
+            asyncio.run(self.reader.canonical_history(instrument, "1y"))
+            self.assertLessEqual(len(self.reader._history_snapshots), 8)
+
+    def test_new_caller_after_in_range_edit_does_not_join_an_obsolete_result(self):
+        self._concurrent_change(in_range=True)
+
+    def _concurrent_change(self, *, in_range):
+        started, release, newer = Event(), Event(), Event()
+        self.addCleanup(release.set)
+        original = self.reader._query_canonical_history
+        version_reader = self.reader._query_history_generation
+        version = version_reader("BTC_USD")
+        calls = []
+        def read(*args):
+            result = original(*args)
+            calls.append(True)
+            if len(calls) == 1:
+                started.set()
+                if not release.wait(5):
+                    raise TimeoutError("Missing fixture release")
+            return result
+        def generation(instrument):
+            result = version_reader(instrument)
+            if result > version:
+                newer.set()
+            return result
+        async def scenario():
+            first = asyncio.create_task(self.reader.canonical_history("BTC_USD", "1y"))
+            self.assertTrue(await asyncio.to_thread(started.wait, 5))
+            with self.engine.begin() as db:
+                if in_range:
+                    db.execute(text("UPDATE canonical_quotes SET price=200 WHERE id=1"))
+                else:
+                    db.execute(text("""INSERT INTO canonical_quotes
+                        (id,instrument_id,price,status,source_summary,observed_at,canonical_at)
+                        SELECT 2,instrument_id,500,status,source_summary,now(),now()
+                        FROM canonical_quotes WHERE id=1"""))
+            second = asyncio.create_task(self.reader.canonical_history("BTC_USD", "1y"))
+            self.assertTrue(await asyncio.to_thread(newer.wait, 5))
+            release.set()
+            return await asyncio.gather(first, second)
+        with patch.object(self.reader, "_query_canonical_history", side_effect=read), patch.object(
+                self.reader, "_query_history_generation", side_effect=generation):
+            first, second = asyncio.run(scenario())
+        self.assertEqual(first.points[0]["close"], 100)
+        self.assertEqual(second.points[0]["close"], 200 if in_range else 100)
+        self.assertEqual(len(calls), 2 if in_range else 1)
 
     def test_truncate_invalidates_and_rollback_does_not_publish_a_new_version(self):
         self.assertTrue(self.read().points)

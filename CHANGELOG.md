@@ -2,7 +2,10 @@
 
 ## [Unreleased]
 
-- Add an opt-in, bounded 30-second snapshot for 30-day/year charts on the initial single-host plan. Transactional per-instrument generations invalidate snapshots after source insert, edit, deletion, instrument moves and truncation; permission changes, expiry and failed generation reads never reuse a saved chart. Keep the original chart range timestamp and leave current prices uncached. Migration 15 is required before enabling the setting.
+- Keep dated chart snapshots valid across new ticks beyond their recorded range. Coalesce cold reads across generation changes and validate whole hours with compact transactional counters; inspect only partial boundary hours. Preserve original timestamps, short expiry, strict source permissions and immediate correction/deletion invalidation.
+- Prepare only bounded aggregate head reads immediately and reuse their generic plan; retain custom plans for sparse probes, fallback and individual reads. Restore the client preparation threshold on errors and keep transaction-local planning/time limits.
+
+- Add an opt-in, bounded 30-second snapshot for 30-day/year charts on the initial single-host plan. Transactional per-instrument/hour generations invalidate snapshots after any in-range source insert, edit, deletion, instrument move or truncation; permission changes, expiry and failed generation reads never reuse a saved chart. Keep the original chart range timestamp and leave current prices uncached. Migrations 15 and 16 are required before enabling the setting.
 - Route readiness and current-quote reads through the existing reserved request connections, preserving the total database connection budget. Retain failed live pressure receipts separately from local and CI results.
 - Avoid discovering current-price instrument IDs by scanning compressed history. Use the served instrument registry and share unfinished database snapshots across individual refresh workers and aggregate readers, without retaining completed prices or permission decisions.
 - Fast-path valid direct-source permission checks and history attribution while retaining recursive validation for derived or malformed source trees. Add PostgreSQL/Python differential, query-plan and cancellation/revocation coverage.

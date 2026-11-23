@@ -394,6 +394,30 @@ class HeadLatestQuoteAvailabilityTests(IndexedLatestQuoteAvailabilityTests):
         with self.engine.begin() as connection:
             connection.execute(text("DELETE FROM canonical_quote_heads"))
 
+    def test_head_plan_reuses_preparation_and_restores_client_defaults_after_failure(self):
+        self.insert(1)
+        query, parameters = history._latest_rows_sql(None, lookup_index=True, lookup_heads=True)
+        with self.sessions() as db:
+            driver = db.connection().connection.driver_connection
+            original_threshold = driver.prepare_threshold
+            history._latest_read_budget(db)
+            def generic_count():
+                return db.execute(text("""SELECT COALESCE(sum(generic_plans),0)
+                    FROM pg_prepared_statements WHERE statement LIKE :marker
+                    AND cardinality(parameter_types)>3"""),
+                    {"marker": "%canonical_quote_heads%"}).scalar_one()
+            before = generic_count()
+            for _ in range(2):
+                rows = history._execute_latest_rows(db, query, parameters, heads=True)
+                self.assertEqual([row["id"] for row in rows], [1])
+                self.assertEqual(driver.prepare_threshold, original_threshold)
+                self.assertEqual(self.settings(db)["plan_cache_mode"], "force_custom_plan")
+            self.assertGreaterEqual(generic_count()-before, 2)
+            db.execute(text("SET LOCAL statement_timeout='20ms'"))
+            with self.assertRaises(DBAPIError):
+                history._execute_latest_rows(db, text("SELECT pg_sleep(1)"), {}, heads=True)
+            self.assertEqual(driver.prepare_threshold, original_threshold)
+
     def test_eligible_head_does_not_open_historical_fallback(self):
         from sqlalchemy import event
         self.insert(1)
