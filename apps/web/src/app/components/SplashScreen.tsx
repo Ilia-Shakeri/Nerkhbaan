@@ -70,7 +70,7 @@ export function SplashScreen({ onComplete, language, theme }: SplashScreenProps)
           <motion.img
             src={logo}
             alt="Nerkhbaan"
-            className="h-32 w-32 object-contain"
+            className="brand-logo h-32 w-32 object-contain"
             style={{ filter: 'drop-shadow(0 8px 28px rgba(212,175,55,0.34))' }}
             initial={{ scale: 0.72, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}

@@ -1,3 +1,4 @@
+import { BrandMark } from "./BrandMark";
 import { createRoot } from "react-dom/client";
 import { CommunicationsPage } from "./CommunicationsPage";
 import { createCommunicationsPreviewClient } from "./communications-preview-client";
@@ -12,7 +13,7 @@ function Preview() {
     <div className="app-shell communications-preview-shell" dir="ltr">
       <aside className="sidebar" dir="rtl">
         <div className="sidebar-brand">
-          <div className="brand-seal small"><span>N</span></div>
+          <div className="brand-seal small"><BrandMark /></div>
           <div><strong>نرخ‌بان</strong><small>پنل مدیریت</small></div>
         </div>
         <p className="preview-nav-label">فضای مدیریت</p>

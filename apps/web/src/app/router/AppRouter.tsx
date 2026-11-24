@@ -5,6 +5,8 @@ import { ForgotPasswordView } from '../views/ForgotPasswordView';
 import { ProtectedRoute } from './ProtectedRoute';
 import { RequiredPasswordView } from '../views/RequiredPasswordView';
 
+export const PUBLIC_ROUTE_PATHS = ['/auth', '/forgot-password', '/privacy', '/terms', '/cookies', '/refunds', '/business'];
+
 const AlertsView = lazy(() => import('../views/AlertsView').then((module) => ({ default: module.AlertsView })));
 const DesktopLayout = lazy(() => import('../layouts/DesktopLayout').then((module) => ({ default: module.DesktopLayout })));
 const DashboardView = lazy(() => import('../views/DashboardView').then((module) => ({ default: module.DashboardView })));

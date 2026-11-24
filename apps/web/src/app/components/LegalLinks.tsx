@@ -23,7 +23,7 @@ export function LegalLinks({ variant = 'compact' }: { variant?: 'compact' | 'foo
     <footer className={`mt-auto border-t ${theme === 'dark' ? 'border-[#D4AF37]/15 bg-[#090909] text-[#CDBB8C]' : 'border-[#D4AF37]/25 bg-[#FFF3D8] text-[#6E5317]'}`}>
       <div className="mx-auto flex w-full max-w-7xl flex-col items-center gap-4 px-4 py-7 text-center text-sm sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
-          <img src={logo} alt="" aria-hidden="true" className="h-10 w-10 object-contain" />
+          <img src={logo} alt="" aria-hidden="true" className="brand-logo h-10 w-10 object-contain" />
           <div className="text-start">
             <p className={`font-bold ${theme === 'dark' ? 'text-[#F1E4BD]' : 'text-[#4F3A0E]'}`}>{language === 'fa' ? 'نرخ‌بان' : 'Nerkhbaan'}</p>
             <p className="text-xs">{language === 'fa' ? 'داده بازار با منبع و زمان روشن' : 'Market data with clear source and time'}</p>

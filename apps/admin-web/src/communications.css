@@ -156,3 +156,5 @@
   .comms-field input, .comms-field select { min-height: 44px; font-size: 16px; }
   .comms-button, .comms-tabs button { min-height: 44px; }
 }
+
+.comms .comms-button, .comms .comms-tabs button { min-height: 44px; min-width: 44px; }

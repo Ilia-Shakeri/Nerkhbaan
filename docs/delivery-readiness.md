@@ -1,5 +1,7 @@
 # Delivery Readiness — 2.8.19
 
+Current initial-host status, 2026-11-21: website and administrator console are served at HTTPS on the new VPS behind Arvan. See the [current source, pressure, backup and acceptance record](new-vps-coexist-2026-11-21-fa.md). The dated releases below are historical; they do not certify current device or external-service delivery.
+
 Source **2.8.19**, tag `v2.8.19`, commit `7978e8938d17c4749ba7c43044a5e3e22bcf0ad2`, is published. Source CI, fixed runtime images/scans and the isolated full-background-pool authentication/pricing canary passed on **2026-10-28**. This is source and isolated-test evidence, not a production acceptance receipt. [Exact tests and release record](request-pool-release-2.8.19-fa.md).
 
 **Production observation, 2026-10-31:** access returned after the owner renewed the VPS through today; the owner says it will then be deleted. Both API replicas match the 2.8.19 image and report healthy. The recovered guard receipt passed on October 28; the last observed accepted pointer remains 2.8.15. A fresh browser check passed registration, desktop login and logout, but timed out at email login in a narrow viewport; full application acceptance remains open. [Dated rescue and test record](server-rescue-2026-10-31-fa.md).
@@ -25,7 +27,7 @@ SMS and call adapters, policy, consent, credentials, pagination and test control
 have local unit, PostgreSQL and browser coverage. See the
 [operator guide](admin-guide.md#راهنمای-اتصال-پیامک-و-تماس). Real SMS receipt and an
 answered call are separate gates after the operator connects an account/PBX.
-The requested scope no longer includes email alarms; account mail is retained.
+Email alarms and account recovery mail remain required follow-up scope; configured service and actual receipt are still required.
 
 Initial candidate `72f0111aa6ddf845334fee4714418a564b9b7379` passed functional,
 browser, real Timescale/Redis/migration and desktop checks in

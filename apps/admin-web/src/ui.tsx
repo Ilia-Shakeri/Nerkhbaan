@@ -101,8 +101,8 @@ export function DataTable({
 }) {
   if (!rows.length) return <EmptyState />;
   return (
-    <div className="table-wrap">
-      <table>
+    <div className="table-wrap" role="region" tabIndex={0} aria-label={`Data table: ${columns.map(column => column.label).join(', ')}. Scroll for more columns.`}>
+      <table style={{ minWidth: `${Math.max(30, columns.length * 7)}rem` }}>
         <thead>
           <tr>
             {columns.map((column) => (

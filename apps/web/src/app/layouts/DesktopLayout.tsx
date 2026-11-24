@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LegalLinks } from '../components/LegalLinks';
 import {
   Settings,
@@ -45,6 +45,7 @@ const NAV_ITEMS = [
 ];
 
 export function DesktopLayout() {
+  const reduceMotion = useReducedMotion();
   const { language, theme, logout, toggleTheme, toggleLanguage, isAuthenticated, currencyMode, setCurrencyMode } = useAppContext();
   const isDark = theme === 'dark';
 
@@ -212,14 +213,14 @@ export function DesktopLayout() {
           </button>
         ) : (
           <NavLink to="/" onClick={() => setIsSidebarOpen(false)} className="transition-opacity hover:opacity-80">
-            <img src={logo} alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'} className="h-16 w-16 object-contain" />
+            <img src={logo} alt={language === 'fa' ? 'لوگو نرخ‌بان' : 'Nerkhbaan logo'} className="brand-logo h-16 w-16 object-contain" />
           </NavLink>
         )}
         {canCollapse && !collapsed && (
           <button
             type="button"
             onClick={() => setIsSidebarCollapsed((prev) => !prev)}
-            className={`absolute bottom-1 end-1 flex h-11 w-11 items-center justify-center rounded-xl border opacity-0 shadow-lg backdrop-blur transition-[opacity,background-color,color] group-hover:opacity-100 group-focus-within:opacity-100 ${
+            className={`absolute bottom-1 end-1 flex h-11 w-11 items-center justify-center rounded-xl border sidebar-collapse shadow-lg backdrop-blur transition-[opacity,background-color,color] ${
               isDark
                 ? 'border-white/10 bg-[#171717]/95 text-[#D4AF37] hover:bg-[#222222]'
                 : 'border-black/10 bg-[#FFF3D8]/95 text-[#8A6B20] hover:bg-[#F2E4BC]'
@@ -341,7 +342,7 @@ export function DesktopLayout() {
       <motion.aside
         initial={false}
         animate={{ width: isSidebarCollapsed ? 80 : 256 }}
-        transition={{ type: 'spring', bounce: 0, duration: 0.34 }}
+        transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.34 }}
         className={`hidden overflow-hidden flex-col border-e border-[#D4AF37]/15 lg:flex ${
           isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
         }`}
@@ -371,7 +372,7 @@ export function DesktopLayout() {
             initial={{ x: language === 'fa' ? '100%' : '-100%' }}
             animate={{ x: 0 }}
             exit={{ x: language === 'fa' ? '100%' : '-100%' }}
-            transition={{ type: 'spring', bounce: 0, duration: 0.34 }}
+            transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.34 }}
             className={`fixed bottom-0 top-0 z-50 flex w-72 flex-col ${
               isDark ? 'bg-[#0B0B0B]' : 'bg-[#FFF3D8]'
             } lg:hidden ${
@@ -424,7 +425,7 @@ export function DesktopLayout() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             {/* Currency Toggle */}
-            <div className={`relative flex h-9 items-center gap-0.5 rounded-full p-1 ${
+            <div className={`relative flex min-h-[3.25rem] items-center gap-0.5 rounded-full p-1 ${
               isDark
                 ? 'bg-[#141414] border border-[#D4AF37]/20'
                 : 'bg-[#F5E9CB] border border-[#D4AF37]/30'
@@ -434,7 +435,7 @@ export function DesktopLayout() {
                   key={mode}
                   type="button"
                   onClick={() => setCurrencyMode(mode)}
-                  className={`relative rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-colors duration-150 ${
+                  className={`relative min-h-11 min-w-11 rounded-full px-3 py-1 text-xs font-semibold tracking-wide transition-colors duration-150 ${
                     currencyMode === mode
                       ? 'text-[#0A0A0A]'
                       : isDark ? 'text-[#9C8A5D] hover:text-[#CFBE91]' : 'text-[#A07830] hover:text-[#6E5317]'

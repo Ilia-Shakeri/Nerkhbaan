@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { Mail, ArrowRight, ArrowLeft, KeyRound, CheckCircle2 } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
@@ -22,6 +22,8 @@ export function ForgotPasswordView() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const errorRef = useRef<HTMLDivElement>(null);
+  const cardMounted = useRef(false);
+  useEffect(() => { cardMounted.current = true; }, []);
 
   const t = {
     // Replaced the simple tagline with a descriptive footer message
@@ -93,25 +95,24 @@ export function ForgotPasswordView() {
 
   const flipVariants = {
     initial: { rotateY: isRtl ? -90 : 90, opacity: 0 },
-    animate: { rotateY: 0, opacity: 1, transition: { duration: 0.4, ease: "easeOut" } },
-    exit: { rotateY: isRtl ? 90 : -90, opacity: 0, transition: { duration: 0.3, ease: "easeIn" } }
+    animate: { rotateY: 0, opacity: 1, transition: { type: "spring", bounce: 0, duration: 0.2 } },
+    exit: { rotateY: isRtl ? 90 : -90, opacity: 0, transition: { duration: 0.12 } },
   };
 
   return (
     <div className={`flex min-h-dvh flex-col items-center justify-center overflow-x-hidden overflow-y-auto p-6 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`} style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="w-full max-w-md perspective-1000">
         <div className="mb-6 flex justify-start">
-            <Link to="/auth" className={`flex items-center gap-2 text-sm font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
+            <Link to="/auth" className={`inline-flex min-h-11 items-center gap-2 text-sm font-bold transition-opacity hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
                 {isRtl ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
                 {t.backToLogin[language]}
             </Link>
         </div>
 
-        <AnimatePresence mode="wait">
           <motion.div
             key={step}
             variants={flipVariants}
-            initial="initial"
+            initial={cardMounted.current ? 'initial' : false}
             animate="animate"
             exit="exit"
             className={`relative overflow-hidden rounded-[2rem] border p-8 shadow-2xl backdrop-blur-xl ${
@@ -121,7 +122,7 @@ export function ForgotPasswordView() {
             <div className="mb-8 flex flex-col items-center justify-center text-center">
               {/* Increased size to h-28 w-28 and added z-10 to stay above the title */}
               <div className="relative z-10 mb-0 flex items-center justify-center">
-                <img src={`${import.meta.env.BASE_URL}icons/logo.png`} alt="Nerkhbaan Logo" className="h-28 w-28 object-contain drop-shadow-2xl" />
+                <img src={`${import.meta.env.BASE_URL}icons/logo.png`} alt="Nerkhbaan Logo" className="brand-logo h-28 w-28 object-contain drop-shadow-2xl" />
               </div>
               
               {/* Replaced IranNastaliq with the unified Noto Nastaliq font, negative top margin (-mt-3) brings it close */}
@@ -255,7 +256,6 @@ export function ForgotPasswordView() {
                 </div>
             )}
           </motion.div>
-        </AnimatePresence>
         
         {/* Global Professional Footer */}
         <p className={`mt-4 text-sm ${isDark ? 'text-[#E8D9AE]' : 'text-[#3B2E13]'}`}>{language === 'fa' ? 'ایمیل فقط برای بازیابی درخواستی شما پردازش می‌شود؛ اجازه بازاریابی نیست.' : 'Your email is processed for the recovery you request, not marketing.'}</p>

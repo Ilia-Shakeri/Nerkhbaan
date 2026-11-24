@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { User, Mail, Lock, CheckCircle2, XCircle, Sun, Moon, Languages } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
 import { Input } from '@nerkhbaan/ui/app/components/ui/input';
@@ -33,6 +33,9 @@ export function AuthView() {
   const [dataConsent, setDataConsent] = useState(false);
   const [formError, setFormError] = useState('');
   const errorRef = useRef<HTMLDivElement>(null);
+  const shouldReduceMotion = useReducedMotion();
+  const cardMounted = useRef(false);
+  useEffect(() => { cardMounted.current = true; }, []);
 
   // Password live validation checks
   const hasLength = password.length >= 10 && password.length <= 128;
@@ -139,8 +142,8 @@ export function AuthView() {
   // 3D Flip Animation configuration
   const flipVariants = {
     initial: { rotateY: isRtl ? -90 : 90, opacity: 0 },
-    animate: { rotateY: 0, opacity: 1, transition: { duration: 0.4, ease: "easeOut" } },
-    exit: { rotateY: isRtl ? 90 : -90, opacity: 0, transition: { duration: 0.3, ease: "easeIn" } }
+    animate: { rotateY: 0, opacity: 1, transition: { type: "spring", bounce: 0, duration: 0.2 } },
+    exit: { rotateY: isRtl ? 90 : -90, opacity: 0, transition: { duration: 0.12 } },
   };
 
   return (
@@ -165,14 +168,13 @@ export function AuthView() {
 
       <div className="my-auto w-full max-w-md perspective-1000">
         <LocalPreviewNotice />
-        <AnimatePresence mode="wait">
           <motion.div
             key={isLogin ? 'login' : 'signup'}
             variants={flipVariants}
-            initial="initial"
+            initial={cardMounted.current ? 'initial' : false}
             animate="animate"
             exit="exit"
-            className={`relative overflow-hidden rounded-[2rem] border shadow-2xl backdrop-blur-xl transition-all duration-300 ${
+            className={`relative overflow-hidden rounded-[2rem] border shadow-2xl backdrop-blur-xl transition-[background-color,border-color,box-shadow] duration-150 ${
               isLogin ? 'p-6' : 'px-6 py-4'
             } ${
               isDark ? 'border-white/10 bg-[#0E0E0E]/80 shadow-black/50' : 'border-black/5 bg-white/80 shadow-[#D4AF37]/10'
@@ -184,7 +186,7 @@ export function AuthView() {
                 <img 
                   src={`${import.meta.env.BASE_URL}icons/logo.png`}
                   alt="Nerkhbaan Logo" 
-                  className={`auth-brand-logo object-contain drop-shadow-2xl transition-all duration-300 ${isLogin ? 'h-28 w-28' : 'h-16 w-16'}`} 
+                  className={`auth-brand-logo object-contain drop-shadow-2xl transition-all duration-300 ${isLogin ? 'h-28 w-28' : 'h-16 w-16'}`}
                 />
               </div>
               <h1
@@ -271,7 +273,7 @@ export function AuthView() {
 
               {isLogin && (
                 <div className="flex w-full mt-2 justify-start">
-                  <Link to="/forgot-password" className={`text-sm font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
+                  <Link to="/forgot-password" className={`inline-flex min-h-11 items-center text-sm font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
                     {t.forgotPass[language]}
                   </Link>
                 </div>
@@ -279,7 +281,7 @@ export function AuthView() {
 
               {/* Password Validation Matrix - Renders only during registration flow */}
               {!isLogin && password.length > 0 && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="rounded-xl bg-black/5 p-3 dark:bg-white/5">
+                <motion.div initial={shouldReduceMotion ? false : { opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} transition={{ duration: shouldReduceMotion ? 0 : 0.18 }} className="rounded-xl bg-black/5 p-3 dark:bg-white/5">
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className={`flex items-center gap-1.5 transition-colors ${hasLength ? "text-emerald-500 font-bold" : isDark ? "text-gray-400" : "text-gray-500"}`}>
                       {hasLength ? <CheckCircle2 size={14} /> : <XCircle size={14} />} <span>{t.pwdLength[language]}</span>
@@ -349,7 +351,7 @@ export function AuthView() {
                       setAcceptedTerms(false);
                       setDataConsent(false);
                     }}
-                    className={`font-bold transition-all hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}
+                    className={`min-h-11 px-2 font-bold transition-opacity hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}
                   >
                     {isLogin ? t.signup[language] : t.login[language]}
                   </button>
@@ -357,7 +359,6 @@ export function AuthView() {
               )}
             </form>
           </motion.div>
-        </AnimatePresence>
 
         {/* Global Professional Footer - Rendered strictly on the Login state */}
         {isLogin && (

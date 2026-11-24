@@ -13,7 +13,7 @@ const sections = [
   ['audit', 'Audit', '/audit'],
 ];
 
-for (const width of [1280, 390]) {
+for (const width of [1280, 390, 320]) {
   test(`all local administrator sections load real data at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     const credentials = JSON.parse(readFileSync(path.resolve('.local-preview/admin-login.private.json'), 'utf8'));

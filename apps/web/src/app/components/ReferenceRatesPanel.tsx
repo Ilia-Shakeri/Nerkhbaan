@@ -37,7 +37,8 @@ export function ReferenceRatesPanel() {
       if (!currentRightsRevision() && Date.now() - mounted < 1000) { schedule(100); return; }
       const remaining = MINUTE - (Date.now() - (lastRequest.current[timeframe] ?? 0));
       if (remaining > 0) { schedule(remaining); return; }
-      lastRequest.current[timeframe] = Date.now();
+      const startedAt = Date.now();
+      lastRequest.current[timeframe] = startedAt;
       controller = new AbortController();
       const request = controller;
       const generation = logoutGeneration();
@@ -50,6 +51,11 @@ export function ReferenceRatesPanel() {
           setData(reply); setFailed(false); setNow(Date.now());
         } catch {
           if (active && !request.signal.aborted && !logoutIsPending()) { setData(null); setFailed(true); }
+        } finally {
+          // A cancelled read has no result to reuse when this period becomes visible again.
+          if (request.signal.aborted && lastRequest.current[timeframe] === startedAt) {
+            delete lastRequest.current[timeframe];
+          }
         }
       })();
       pending.current = work;
@@ -59,6 +65,7 @@ export function ReferenceRatesPanel() {
     };
     const reset = (event?: Event) => {
       cache.current = {};
+      lastRequest.current = {};
       setData(null); setFailed(false);
       const origin = (event as CustomEvent<{ origin?: string }> | undefined)?.detail?.origin;
       if (logoutIsPending() || origin === 'socket') controller?.abort();

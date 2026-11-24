@@ -1,5 +1,5 @@
-import { BrowserRouter, HashRouter, useNavigate } from "react-router-dom";
-import { AppRouter } from "@/app/router/AppRouter";
+import { BrowserRouter, HashRouter, useLocation, useNavigate } from "react-router-dom";
+import { AppRouter, PUBLIC_ROUTE_PATHS } from "@/app/router/AppRouter";
 import { AppProvider, useAppContext } from "@/app/context/AppContext";
 import { Toaster } from "sonner";
 import { useCallback, useEffect, useState, useRef } from "react";
@@ -12,16 +12,17 @@ import { motion, AnimatePresence, MotionConfig } from "motion/react";
 function AuthEventsBridge() {
   const { logout } = useAppContext();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
 
   useEffect(() => {
     const onUnauthorized = () => {
-  logout();
-  navigate(logoutAuthPath(), { replace: true });
+      void logout();
+      if (!PUBLIC_ROUTE_PATHS.includes(pathname)) navigate(logoutAuthPath(), { replace: true });
 };
 
     window.addEventListener("auth-expired", onUnauthorized);
     return () => window.removeEventListener("auth-expired", onUnauthorized);
-  }, [logout, navigate]);
+  }, [logout, navigate, pathname]);
 
   return null;
 }
@@ -32,6 +33,20 @@ function AppContent() {
     return !prefersLessMotion && !sessionStorage.getItem('splash-shown');
   });
   const { language, theme } = useAppContext();
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const titles: Record<string, [string, string]> = {
+      '/': ['داشبورد قیمت‌ها', 'Price dashboard'], '/auth': ['ورود', 'Sign in'],
+      '/forgot-password': ['بازیابی رمز', 'Password recovery'], '/alerts': ['هشدارها', 'Alerts'],
+      '/settings': ['تنظیمات', 'Settings'], '/support': ['پشتیبانی', 'Support'],
+      '/contact': ['تماس', 'Contact'], '/advanced-report': ['گزارش پیشرفته', 'Advanced report'],
+      '/analysis': ['تحلیل هوشمند', 'Smart Analysis'], '/assistant': ['دستیار هوشمند', 'Smart Assistant'],
+      '/privacy': ['حریم خصوصی', 'Privacy'], '/terms': ['شرایط استفاده', 'Terms'],
+      '/cookies': ['کوکی‌ها', 'Cookies'], '/refunds': ['لغو و بازپرداخت', 'Refunds'],
+      '/business': ['اطلاعات کسب‌وکار', 'Business details'], '/change-password': ['تغییر رمز', 'Change password'],
+    };
+    document.title = `${titles[pathname]?.[language === 'fa' ? 0 : 1] ?? 'Nerkhbaan'} · ${language === 'fa' ? 'نرخ‌بان' : 'Nerkhbaan'}`;
+  }, [pathname, language]);
 
   const [showOfflineBanner, setShowOfflineBanner] = useState(() => !navigator.onLine);
   const [updateReady, setUpdateReady] = useState(false);

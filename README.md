@@ -1,6 +1,8 @@
 # Nerkhbaan
 
-Joint web/administrator verification and initial delivery gates, **2026-11-09**: [dated local test report](docs/joint-web-admin-review-2026-11-09-fa.md) · [current Persian roadmap](docs/project-completion-roadmap-fa.md). These are local/source checks; replacement hosting and actual device/message receipt remain open.
+**Initial web demo, 2026-11-21:** [website](https://nerkhbaan.ir/) · [administrator console](https://nerkhbaan.ir/admin/). The new VPS, restored data and CDN/TLS are present. [Current exact source, scans, live pressure and backup record](docs/new-vps-coexist-2026-11-21-fa.md) · [remaining delivery gates](docs/project-completion-roadmap-fa.md). Actual device notifications and configured external channels have separate acceptance gates.
+
+Joint web/administrator verification and initial delivery gates, **2026-11-09**: [dated local test report](docs/joint-web-admin-review-2026-11-09-fa.md) · [current Persian roadmap](docs/project-completion-roadmap-fa.md). This dated report covers local/source checks; the current hosting status is linked above, while actual device/message receipt remains open.
 
 **Keyless local web review:** `npm.cmd run preview:local`, then open [the local website](http://127.0.0.1:43188). Local accounts and saved alerts use a separate persistent database; charts are explicitly synthetic and external delivery is disabled. [Persian start/stop and test guide](docs/local-web-preview-fa.md). This Unreleased work does not change the published 2.8.19 tag or establish production/device acceptance.
 

@@ -160,9 +160,9 @@ export function ChartAnalysisView() {
                   </div>
                   <div
                     className={`text-xs mt-1 ${
-                      asset.change_percent === null || asset.change_percent === undefined
-                        ? isDark ? 'text-white/40' : 'text-black/40'
-                        : asset.trend === 'up'
+                      asset.change_percent === null || asset.change_percent === undefined || asset.change_percent === 0
+                        ? isDark ? 'text-gray-400' : 'text-gray-600'
+                        : asset.change_percent > 0
                           ? 'text-emerald-500'
                           : 'text-red-500'
                     }`}

@@ -265,10 +265,12 @@ export function AlertsView() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-
+      <h1 className={`text-3xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
+        {language === 'fa' ? 'هشدارها' : 'Alerts'}
+      </h1>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:max-w-xs">
-          <Search className={`absolute start-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#9C8A5D]' : 'text-[#A8883A]'}`} size={16} />
+          <Search className={`absolute start-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-[#9C8A5D]' : 'text-[#765C1F]'}`} size={16} />
           <Input
             name="alert-search"
             type="search"
@@ -276,7 +278,7 @@ export function AlertsView() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t.search[language]}
-            className={`ps-9 rounded-xl ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA] placeholder:text-[#5A4E35]' : 'border-black/10 bg-white text-[#3B2E13] placeholder:text-[#A8883A]'}`}
+            className={`ps-9 rounded-xl ${isDark ? 'border-white/10 bg-[#111111] text-[#E2D3AA] placeholder:text-[#B7A57B]' : 'border-black/10 bg-white text-[#3B2E13] placeholder:text-[#765C1F]'}`}
           />
         </div>
         <Button
@@ -305,7 +307,7 @@ export function AlertsView() {
         >
           <BellOff size={40} className={isDark ? 'text-[#4A3913]' : 'text-[#D4AF37]'} />
           <p className={`font-semibold ${isDark ? 'text-[#A89668]' : 'text-[#7A5E24]'}`}>{t.noAlerts[language]}</p>
-          <p className={`text-sm ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.createFirst[language]}</p>
+          <p className={`text-sm ${isDark ? 'text-[#B7A57B]' : 'text-[#765C1F]'}`}>{t.createFirst[language]}</p>
         </motion.div>
       ) : (
         <div className="grid gap-3">

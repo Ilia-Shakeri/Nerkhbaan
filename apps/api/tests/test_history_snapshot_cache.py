@@ -77,7 +77,7 @@ class SnapshotCachePostgresTests(fixtures._OwnedPostgresFixture, unittest.TestCa
                 (id,instrument_id,price,status,source_summary,observed_at,canonical_at)
                 VALUES(1,'BTC_USD',100,'live',
                     jsonb_build_object('provider_ids',jsonb_build_array('approved'),
-                        'derived',false),now(),now())"""))
+                        'derived',false),now()-interval '1 minute',now()-interval '1 minute')"""))
 
     def read(self):
         return asyncio.run(self.reader.canonical_history("BTC_USD", "1y"))

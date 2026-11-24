@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { BrandMark } from "./BrandMark";
 
 import { adminApi } from "./api";
 import {
@@ -160,7 +161,7 @@ function Login({
     <main className="auth-shell">
       <section className="auth-brand">
         <div className="brand-seal">
-          <span>N</span>
+          <BrandMark />
         </div>
         <p className="eyebrow">NERKHBAAN CONTROL PLANE</p>
         <h1>
@@ -262,7 +263,7 @@ function PasswordGate({
     <main className="auth-shell single">
       <form className="auth-card wide" onSubmit={submit}>
         <div className="brand-seal small">
-          <span>N</span>
+          <BrandMark />
         </div>
         <p className="eyebrow">FIRST ACCESS POLICY</p>
         <h2>Change bootstrap password</h2>
@@ -317,6 +318,9 @@ export default function App() {
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [checking, setChecking] = useState(true);
   const [section, setSection] = useState<Section>(sectionFromHash);
+  useEffect(() => {
+    document.title = `${profile ? navigation.find(item => item.id === section)?.label ?? 'Administration' : 'Sign in'} · Nerkhbaan`;
+  }, [section, profile]);
   const [danger, setDanger] = useState<DangerousAction | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [logoutError, setLogoutError] = useState("");
@@ -407,7 +411,7 @@ export default function App() {
     return (
       <div className="boot-screen">
         <div className="brand-seal">
-          <span>N</span>
+          <BrandMark />
         </div>
         <span className="spinner" />
         Opening secure console…
@@ -459,17 +463,21 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#admin-main" onClick={event => {
+        event.preventDefault();
+        document.getElementById('admin-main')?.focus();
+      }}>Skip to main content</a>
       <aside className="sidebar">
         <div className="sidebar-brand">
           <div className="brand-seal small">
-            <span>N</span>
+            <BrandMark />
           </div>
           <div>
             <strong>نرخ‌بان</strong>
             <small>پنل مدیریت</small>
           </div>
         </div>
-        <nav>
+        <nav aria-label="Administrator navigation">
           {allowedNavigation.map((item) => (
             <button
               key={item.id}
@@ -478,8 +486,8 @@ export default function App() {
               aria-current={section === item.id ? "page" : undefined}
               title={item.label}
             >
-              <span>{item.symbol}</span>
-              {item.label}
+              <span aria-hidden="true">{item.symbol}</span>
+              <span className="nav-label">{item.label}</span>
             </button>
           ))}
         </nav>
@@ -501,7 +509,7 @@ export default function App() {
           </button>
         </div>
       </aside>
-      <main className="workspace">
+      <main className="workspace" id="admin-main" tabIndex={-1}>
         <header className="workspace-header" dir={section === "communications" ? "rtl" : undefined}>
           <div>
             <p className="eyebrow">{section === "communications" ? "مدیریت هشدار و تماس" : `CONTROL PLANE / ${section.toUpperCase()}`}</p>

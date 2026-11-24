@@ -22,6 +22,8 @@ export function AssistantView() {
   const [processingConsent, setProcessingConsent] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionsLoadError, setSessionsLoadError] = useState(false);
+  const [sessionsReload, setSessionsReload] = useState(0);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [messageLoadError, setMessageLoadError] = useState(false);
   const [reloadMessages, setReloadMessages] = useState(0);
@@ -52,21 +54,24 @@ export function AssistantView() {
   const refreshSessions = async () => {
     const data = await api.insights.listSessions();
     setSessions(data);
+    setSessionsLoadError(false);
     return data;
   };
 
   useEffect(() => {
     let active = true;
+    setIsLoading(true);
+    setSessionsLoadError(false);
     api.insights.listSessions()
       .then((data) => {
         if (!active) return;
         setSessions(data);
         if (data[0]) setActiveSessionId(data[0].id);
       })
-      .catch((error) => { if (active) toast.error(error instanceof Error ? error.message : t.sendFail[language]); })
+      .catch(() => { if (active) setSessionsLoadError(true); })
       .finally(() => { if (active) setIsLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [sessionsReload]);
 
   useEffect(() => {
     let active = true;
@@ -171,6 +176,15 @@ export function AssistantView() {
             {isLoading ? (
               <div className="flex h-full items-center justify-center">
                 <Loader2 className="animate-spin text-[#D4AF37]" size={22} />
+              </div>
+            ) : sessionsLoadError ? (
+              <div className="space-y-3 p-4 text-center" role="alert">
+                <p className={`text-sm ${isDark ? 'text-[#E2D3AA]' : 'text-[#6E5317]'}`}>
+                  {language === 'fa' ? 'فهرست گفتگوها دریافت نشد؛ خالی بودن آن تأیید نشده است.' : 'Chat list could not load. Saved chats may still exist.'}
+                </p>
+                <Button variant="outline" onClick={() => setSessionsReload(value => value + 1)}>
+                  {language === 'fa' ? 'تلاش دوبارهٔ فهرست گفتگو' : 'Retry chat list'}
+                </Button>
               </div>
             ) : sessions.length === 0 ? (
               <div className={`p-4 text-center text-sm ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{t.noSessions[language]}</div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Modal } from '@nerkhbaan/ui/app/components/ui/Modal';
+import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { User, Calendar, Mail, Hash, AtSign, Loader2 } from 'lucide-react';
 import { api, type UserProfile } from '../services/api';
 
@@ -14,6 +15,7 @@ export function UserInfoModal({ isOpen, onClose, language }: UserInfoModalProps)
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [retry, setRetry] = useState(0);
 
   const t = {
     title: { fa: 'اطلاعات کاربری', en: 'User Info' },
@@ -44,7 +46,7 @@ export function UserInfoModal({ isOpen, onClose, language }: UserInfoModalProps)
     return () => {
       cancelled = true;
     };
-  }, [isOpen]);
+  }, [isOpen, retry]);
 
   const memberSince = profile
     ? new Date(profile.created_at).toLocaleDateString(language === 'fa' ? 'fa-IR' : 'en-US', {
@@ -68,11 +70,16 @@ export function UserInfoModal({ isOpen, onClose, language }: UserInfoModalProps)
     <Modal isOpen={isOpen} onClose={onClose} title={t.title[language]} closeLabel={language === 'fa' ? 'بستن اطلاعات کاربری' : 'Close user information'}>
       <div className="space-y-4">
         {isLoading ? (
-          <div className="flex justify-center py-8">
+          <div className="flex justify-center py-8" role="status" aria-label={language === 'fa' ? 'دریافت اطلاعات کاربری' : 'Loading user information'}>
             <Loader2 size={24} className="animate-spin text-[#D4AF37]" />
           </div>
         ) : hasError ? (
-          <p className="py-6 text-center text-sm text-red-500" role="alert">{t.loadFail[language]}</p>
+          <div className="space-y-3 py-6 text-center" role="alert">
+            <p className="text-sm text-red-700 dark:text-red-300">{t.loadFail[language]}</p>
+            <Button variant="outline" onClick={() => setRetry(value => value + 1)}>
+              {language === 'fa' ? 'تلاش دوباره' : 'Retry user information'}
+            </Button>
+          </div>
         ) : (
           rows.map(({ icon: Icon, label, value }) => (
             <div

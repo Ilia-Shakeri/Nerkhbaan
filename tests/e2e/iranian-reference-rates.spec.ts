@@ -113,14 +113,35 @@ test('changed permissions remove reference values and reject an old in-flight HT
   state.gate = new Promise(resolve => { release = resolve; });
   await panel.getByLabel('History period', { exact: true }).selectOption('1y');
   await expect.poll(() => state.requests.length).toBe(2);
+  let releaseFresh!: () => void;
+  state.gate = new Promise(resolve => { releaseFresh = resolve; });
   state.revision = 'reference-withdrawn'; state.available = false;
   await page.evaluate(async () => { const client = await import('/src/app/services/api.ts'); await client.getPrices(); });
   await expect(panel.locator('[data-reference-card]')).toHaveCount(0);
   release();
   await expect.poll(() => state.lateDone).toBe(true);
+  await expect.poll(() => state.requests.length).toBe(3);
+  // Keep the fresh response separate: an old reply must not restore the cards.
   await expect(panel.locator('[data-reference-card]')).toHaveCount(0);
   await expect(panel).not.toContainText('0.9987');
   await expect(panel.getByRole('link', { name: 'نرخ‌سنج' })).toHaveCount(0);
+  releaseFresh();
+  await expect(panel.locator('[data-reference-card]')).toHaveCount(3);
+  await expect(panel).not.toContainText('0.9987');
+  await expect(panel.locator('[data-reference-inputs]')).toHaveCount(0);
+});
+
+test('a new rights revision reloads references without keeping the previous polling delay', async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto('/');
+  const panel = page.locator('[data-reference-panel]');
+  await panel.scrollIntoViewIfNeeded();
+  await expect(panel.locator('[data-reference-card]')).toHaveCount(3);
+  expect(state.requests).toEqual(['30d']);
+  state.revision = 'reference-new-permission';
+  await page.evaluate(async () => { const client = await import('/src/app/services/api.ts'); await client.getPrices(); });
+  await expect.poll(() => state.requests.length, { timeout: 6000 }).toBe(2);
+  await expect(panel.locator('[data-reference-card]')).toHaveCount(3);
 });
 
 test('reference polling pauses out of view and never overlaps a slow response', async ({ page }) => {

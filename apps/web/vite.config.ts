@@ -28,10 +28,10 @@ export default defineConfig({
       filename: "sw.ts",
       registerType: "prompt",
       injectRegister: false,
-      includeAssets: ["icons/icon-192.png", "icons/icon-512.png"],
+      includeAssets: ["icons/icon-192.png", "icons/icon-512.png", "icons/favicon.svg", "icons/favicon-96x96.png", "icons/favicon.ico", "icons/apple-touch-icon.png"],
       manifest: {
-        name: "Nerkhbaan",
-        short_name: "Nerkhbaan",
+        name: "نرخبان | Nerkhbaan",
+        short_name: "نرخبان",
         description: "Live gold, silver, currency and crypto prices.",
         theme_color: "#051024",
         background_color: "#020817",
@@ -44,13 +44,13 @@ export default defineConfig({
             src: "/icons/icon-192.png",
             sizes: "192x192",
             type: "image/png",
-            purpose: "any maskable"
+            purpose: "any"
           },
           {
             src: "/icons/icon-512.png",
             sizes: "512x512",
             type: "image/png",
-            purpose: "any maskable"
+            purpose: "any"
           }
         ]
       },

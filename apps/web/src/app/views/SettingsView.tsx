@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Activity, Bell, CheckCircle2, Languages, LifeBuoy, Mail, Moon, Repeat, Send, ShieldCheck, Smartphone, Sun, VolumeX } from 'lucide-react';
 import { Card } from '@nerkhbaan/ui/app/components/ui/card';
 import { Switch } from '@nerkhbaan/ui/app/components/ui/switch';
@@ -36,6 +36,7 @@ const emptyPrefs: NotificationPreferences = {
 };
 
 export function SettingsView() {
+  const reduceMotion = useReducedMotion();
   const navigate = useNavigate();
   const { language, theme, toggleTheme, toggleLanguage } = useAppContext();
   const isDark = theme === 'dark';
@@ -284,7 +285,7 @@ export function SettingsView() {
   const otpFields = (channel: 'sms' | 'email') => (
     <AnimatePresence>
       {otpPanel === channel && (
-        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }} className="overflow-hidden">
+        <motion.div initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.28 }} className="overflow-hidden">
           <div className="grid gap-3 px-5 pb-5 sm:grid-cols-[1fr_140px]">
             <Input name={`${channel}-destination`} type={channel === 'sms' ? 'tel' : 'email'} inputMode={channel === 'sms' ? 'tel' : 'email'} autoComplete={channel === 'sms' ? 'tel' : 'email'} aria-label={channel === 'sms' ? t.sms[language] : t.email[language]} dir="ltr" value={otpDestination} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setOtpDestination(event.target.value)} placeholder={channel === 'sms' ? t.phonePlaceholder[language] : t.emailPlaceholder[language]} />
             <Button type="button" disabled={isSaving || !otpDestination.trim()} onClick={() => sendOtp(channel)} className="bg-[#D4AF37] text-black">{t.sendCode[language]}</Button>
@@ -359,20 +360,20 @@ export function SettingsView() {
           </div>
           <div>
             <div className={rowCls}>
-              <div className="flex min-w-0 flex-1 items-center gap-4"><div className={iconWrap('bg-sky-500/10 text-sky-400')}><Send size={20} /></div><div className="min-w-0 flex-1"><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.telegram[language]}</span><p className={`mt-1 text-xs ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{prefs.telegram_verified ? t.verified[language] : telegramLink || telegramCodeSent ? t.pending[language] : prefs.telegram_deeplink_available ? t.telegramLinkHelp[language] : t.telegramHelp[language]}</p></div></div>
+              <div className="flex min-w-0 flex-1 items-center gap-4"><div className={iconWrap('bg-sky-500/10 text-sky-400')}><Send size={20} /></div><div className="min-w-0 flex-1"><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.telegram[language]}</span><p className={`mt-1 text-xs ${isDark ? 'text-[#B7A57B]' : 'text-[#8A6A25]'}`}>{prefs.telegram_verified ? t.verified[language] : telegramLink || telegramCodeSent ? t.pending[language] : prefs.telegram_deeplink_available ? t.telegramLinkHelp[language] : t.telegramHelp[language]}</p></div></div>
               <Switch disabled={!prefs.telegram_available || isSaving} checked={(prefs.telegram_enabled && prefs.telegram_verified) || Boolean(telegramLink)} onCheckedChange={enableTelegram} aria-label={t.telegram[language]} />
             </div>
             <AnimatePresence>
               {telegramLink && !prefs.telegram_verified && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }} className="overflow-hidden">
+                <motion.div initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.28 }} className="overflow-hidden">
                   <div className="flex flex-col gap-3 px-5 pb-5 sm:flex-row sm:items-center sm:justify-between" aria-live="polite">
-                    <p className={`text-sm ${isDark ? 'text-[#8C7A52]' : 'text-[#8A6A25]'}`}>{t.telegramLinkHelp[language]}</p>
+                    <p className={`text-sm ${isDark ? 'text-[#B7A57B]' : 'text-[#8A6A25]'}`}>{t.telegramLinkHelp[language]}</p>
                     <Button onClick={openTelegramLink} className="shrink-0 bg-[#D4AF37] text-black">{t.openTelegram[language]}</Button>
                   </div>
                 </motion.div>
               )}
               {!prefs.telegram_deeplink_available && (!prefs.telegram_enabled && (telegramId || telegramCodeSent)) && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', bounce: 0, duration: 0.28 }} className="overflow-hidden">
+                <motion.div initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={reduceMotion ? { duration: 0 } : { type: 'spring', bounce: 0, duration: 0.28 }} className="overflow-hidden">
                   <div className="grid gap-3 px-5 pb-5 sm:grid-cols-[1fr_140px]">
                     <Input name="telegram-id" autoComplete="off" aria-label={t.telegram[language]} disabled={!prefs.telegram_available || telegramCodeSent} dir="ltr" value={telegramId} onChange={(event: React.ChangeEvent<HTMLInputElement>) => setTelegramId(event.target.value)} placeholder={t.telegramPlaceholder[language]} />
                     <Button disabled={isSaving || !prefs.telegram_available || telegramCodeSent || !telegramId.trim()} onClick={() => enableTelegram(true)} className="bg-[#D4AF37] text-black">{t.sendCode[language]}</Button>
@@ -394,11 +395,11 @@ export function SettingsView() {
         <h2 className={headingCls}><Activity className="text-[#D4AF37]" size={22} />{t.behavior[language]}</h2>
         <Card className={cardCls}>
           <div className={rowCls}>
-            <div className="flex items-center gap-4"><div className={iconWrap('bg-slate-500/10 text-slate-400')}><VolumeX size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.silent[language]}</span><div className={`text-sm ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.silentSub[language]}</div></div></div>
+            <div className="flex items-center gap-4"><div className={iconWrap('bg-slate-500/10 text-slate-400')}><VolumeX size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.silent[language]}</span><div className={`text-sm ${isDark ? 'text-[#B7A57B]' : 'text-[#765C1F]'}`}>{t.silentSub[language]}</div></div></div>
             <Switch disabled={isSaving} checked={prefs.silent_mode} onCheckedChange={(value: boolean) => saveBasic('silent_mode', value)} aria-label={t.silent[language]} />
           </div>
           <div className={rowCls}>
-            <div className="flex items-center gap-4"><div className={iconWrap('bg-orange-500/10 text-orange-400')}><Repeat size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.aggressiveTl[language]}</span><div className={`text-sm ${isDark ? 'text-[#5A4E35]' : 'text-[#A8883A]'}`}>{t.aggressiveSub[language]}</div></div></div>
+            <div className="flex items-center gap-4"><div className={iconWrap('bg-orange-500/10 text-orange-400')}><Repeat size={20} /></div><div><span className={`font-semibold ${isDark ? 'text-[#E2D3AA]' : 'text-[#3B2E13]'}`}>{t.aggressiveTl[language]}</span><div className={`text-sm ${isDark ? 'text-[#B7A57B]' : 'text-[#765C1F]'}`}>{t.aggressiveSub[language]}</div></div></div>
             <Switch disabled={isSaving} checked={prefs.aggressive_alerts} onCheckedChange={(value: boolean) => saveBasic('aggressive_alerts', value)} aria-label={t.aggressiveTl[language]} />
           </div>
         </Card>

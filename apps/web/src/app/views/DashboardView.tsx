@@ -1,8 +1,8 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellPlus, ArrowUpRight, ArrowDownRight, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
+import { BellPlus, ArrowUpRight, ArrowDownRight, ArrowUpToLine, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
 import bitcoinIcon from '../../assets/crypto/btc.svg';
 import tetherIcon from '../../assets/crypto/usdt.svg';
 
@@ -535,11 +535,13 @@ function SourceCredits({ items, language, kind = 'price' }: { items: SourceAttri
 }
 
 export function DashboardView() {
+  const reduceMotion = useReducedMotion();
   const { language, theme, currencyMode } = useAppContext();
   const isDark = theme === 'dark';
   const queryClient = useQueryClient();
 
   const [assetOrder, setAssetOrder] = useState<AssetId[]>(getInitialAssetOrder);
+  const [orderAnnouncement, setOrderAnnouncement] = useState('');
   const [timeframeByAsset, setTimeframeByAsset] = useState<Record<AssetId, PriceTimeframe>>(DEFAULT_TIMEFRAMES);
   const [socketStatus, setSocketStatus] = useState<'connecting' | 'live' | 'fallback'>('connecting');
   const [draggedAssetId, setDraggedAssetId] = useState<AssetId | null>(null);
@@ -890,6 +892,8 @@ export function DashboardView() {
 
   return (
     <div className="flex flex-col gap-4">
+      <h1 className="sr-only">{language === 'fa' ? 'داشبورد قیمت‌ها' : 'Price dashboard'}</h1>
+      <p className="sr-only" role="status" aria-live="polite">{orderAnnouncement}</p>
 
       {loadError && (
         <div className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-xs font-medium ${isDark ? 'border-red-500/20 bg-red-500/5 text-red-400' : 'border-red-300 bg-red-50 text-red-700'}`}>
@@ -926,6 +930,9 @@ export function DashboardView() {
         return (
           <motion.div
             key={asset.id}
+            data-market-card={asset.id}
+            tabIndex={-1}
+            className="rounded-[2.5rem] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D4AF37]"
             layoutId={asset.id}
             draggable={dragReadyAssetId === asset.id}
             title={language === 'fa' ? 'برای جابه‌جایی کارت را نگه دارید و بکشید' : 'Hold, then drag to reorder'}
@@ -1027,6 +1034,17 @@ export function DashboardView() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                  <Button
+                    type="button" variant="outline" size="icon" disabled={idx === 0}
+                    className="h-11 w-11 shrink-0 rounded-xl"
+                    aria-label={language === 'fa' ? `انتقال ${asset.label.fa} به ابتدا` : `Move ${asset.label.en} to first`}
+                    title={language === 'fa' ? 'انتقال کارت به ابتدا' : 'Move card to first'}
+                    onClick={() => {
+                      setAssetOrder(previous => [asset.id, ...previous.filter(id => id !== asset.id)]);
+                      setOrderAnnouncement(language === 'fa' ? `${asset.label.fa} به ابتدا منتقل شد` : `${asset.label.en} moved to first`);
+                      requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-market-card="${asset.id}"]`)?.focus());
+                    }}
+                  ><ArrowUpToLine size={18} /></Button>
                   <div className={`flex items-center gap-1 rounded-2xl px-3 py-1.5 text-xs font-semibold backdrop-blur-md ${
                     !hasChange(asset.changePercent)
                       ? isDark ? 'bg-white/5 text-[#CDBB8C]' : 'bg-black/5 text-[#7A5E24]'
@@ -1095,7 +1113,7 @@ export function DashboardView() {
                   <button
                     type="button"
                     onClick={() => void toggleSourcePanel(asset.id)}
-                    className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 font-bold transition ${
+                    className={`inline-flex min-h-11 items-center gap-1 rounded-lg border px-2.5 py-1.5 font-bold transition ${
                       isAnomaly
                         ? 'border-orange-400/50 bg-orange-500/10 text-orange-400'
                         : isDark ? 'border-white/10 text-[#D4AF37] hover:bg-white/5' : 'border-black/10 text-[#8A6A23] hover:bg-black/5'
@@ -1130,7 +1148,8 @@ export function DashboardView() {
                   {expandedSources[asset.id] && (
                     <motion.div
                       id={`sources-${asset.id}`}
-                      initial={{ opacity: 0, height: 0 }}
+                      initial={reduceMotion ? false : { opacity: 0, height: 0 }}
+                      transition={reduceMotion ? { duration: 0 } : { duration: 0.18 }}
                       animate={{ opacity: 1, height: 'auto' }}
                       exit={{ opacity: 0, height: 0 }}
                       className={`mb-4 overflow-hidden rounded-xl border ${isDark ? 'border-white/5 bg-black/20' : 'border-black/5 bg-white/60'}`}
@@ -1189,7 +1208,7 @@ export function DashboardView() {
                           ...current,
                           [asset.id]: value,
                         }))}
-                        className={`min-w-10 rounded-lg px-2 py-1.5 text-xs font-bold transition sm:min-w-12 ${
+                        className={`min-h-11 min-w-11 rounded-lg px-2 py-1.5 text-xs font-bold transition sm:min-w-12 ${
                           assetTimeframe === value
                             ? 'bg-[#D4AF37] text-black shadow-sm'
                             : isDark ? 'text-[#A89668] hover:text-white' : 'text-[#7A5E24] hover:text-[#3B2E13]'

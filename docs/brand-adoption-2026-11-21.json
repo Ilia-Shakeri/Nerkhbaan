@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-21",
+  "basis": "Owner supplied favicon.zip and requested replacing project branding with the selected candlestick mark.",
+  "archive_sha256": "96ae299d9807c56e23fbee457f08f08b31f0454104fbf426e65bac83f115f8a3",
+  "wordmark_source": "Selected project wordmark, created and reviewed in the same design session.",
+  "historical_license_record": "brand-license-record-2026-10-24.json applies to the previous artwork hashes.",
+  "files": {
+    "apps/web/public/icons/favicon.svg": "bd2c7bfd6b2956f8f563acaefafc5c5fe3d5c781c24f75c8bab2d62bd1aee60c",
+    "apps/web/public/icons/favicon-96x96.png": "1f7adb87815f3df8792859f5abf2b36aac3d56d1ce22079148e3d4723531bb4e",
+    "apps/web/public/icons/favicon.ico": "4f55910caa6031857a0f80fbefe20d6f32d7d35eea0011829ff6dd65b5c61b88",
+    "apps/web/public/icons/apple-touch-icon.png": "c6c47bf960f0e2786af7c77a38eee556d6aebf9660ef704275783970fa8ad188",
+    "apps/web/public/icons/web-app-manifest-192x192.png": "6396cff879628ec68cf91cad777ddadbbe00e5ab4a3eb7f4c9c1f753d292a4bc",
+    "apps/web/public/icons/web-app-manifest-512x512.png": "9d69918d3149f7f2dc53e091d92b61b25acacc509dcc283104621381e4867e96",
+    "apps/admin-web/public/icons/favicon.svg": "bd2c7bfd6b2956f8f563acaefafc5c5fe3d5c781c24f75c8bab2d62bd1aee60c",
+    "apps/admin-web/public/icons/favicon-96x96.png": "1f7adb87815f3df8792859f5abf2b36aac3d56d1ce22079148e3d4723531bb4e",
+    "apps/admin-web/public/icons/favicon.ico": "4f55910caa6031857a0f80fbefe20d6f32d7d35eea0011829ff6dd65b5c61b88",
+    "apps/admin-web/public/icons/apple-touch-icon.png": "c6c47bf960f0e2786af7c77a38eee556d6aebf9660ef704275783970fa8ad188",
+    "apps/web/public/favicon.ico": "4f55910caa6031857a0f80fbefe20d6f32d7d35eea0011829ff6dd65b5c61b88",
+    "apps/admin-web/public/favicon.ico": "4f55910caa6031857a0f80fbefe20d6f32d7d35eea0011829ff6dd65b5c61b88",
+    "apps/admin-web/src/assets/logo.png": "9d69918d3149f7f2dc53e091d92b61b25acacc509dcc283104621381e4867e96",
+    "apps/web/public/icons/icon-192.png": "6396cff879628ec68cf91cad777ddadbbe00e5ab4a3eb7f4c9c1f753d292a4bc",
+    "apps/web/public/icons/icon-512.png": "9d69918d3149f7f2dc53e091d92b61b25acacc509dcc283104621381e4867e96",
+    "apps/web/public/icons/logo.png": "9d69918d3149f7f2dc53e091d92b61b25acacc509dcc283104621381e4867e96",
+    "apps/web/public/icons/logo.ico": "4f55910caa6031857a0f80fbefe20d6f32d7d35eea0011829ff6dd65b5c61b88",
+    "apps/web/src/logo/logo.png": "9d69918d3149f7f2dc53e091d92b61b25acacc509dcc283104621381e4867e96",
+    "apps/web/src/logo/main-logo.png": "4ebc5dfe0abe6585c459427aa22c6c83a98669b917fff728e1af40fe9890a3e5",
+    "apps/desktop/src/logo/logo.png": "9d69918d3149f7f2dc53e091d92b61b25acacc509dcc283104621381e4867e96",
+    "apps/desktop/src/logo/main-logo.png": "4ebc5dfe0abe6585c459427aa22c6c83a98669b917fff728e1af40fe9890a3e5"
+  }
+}

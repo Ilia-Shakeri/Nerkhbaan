@@ -61,7 +61,7 @@ test('local accounts, alerts and in-app notices work without external delivery',
   await expect(page.getByRole('switch', { name: 'Account web notifications', exact: true })).toBeDisabled();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: '.local-preview/review-phone.png', fullPage: true });
-  for (const width of [390, 1280]) {
+  for (const width of [320, 390, 1280]) {
     await page.setViewportSize({ width, height: 844 });
     for (const [url, title] of [
       ['/support', 'Support'], ['/contact', 'Contact Us'],

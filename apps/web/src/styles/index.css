@@ -50,6 +50,12 @@
     font-display: swap;
   }
 
+  .brand-logo {
+    background: #fff8e8;
+    border-radius: 0.75rem;
+    padding: 0.25rem;
+  }
+
   .auth-brand-logo {
     height: 5.5rem;
     width: 5.5rem;
@@ -189,4 +195,20 @@
   [role="dialog"] {
     border-color: currentColor !important;
   }
+}
+
+
+.sidebar-collapse { opacity: 1; }
+.app-button:active:not(:disabled), .sidebar-collapse:active { transition-duration: 0ms; }
+:where(button, a, summary) { touch-action: manipulation; }
+@media (hover: hover) and (pointer: fine) {
+  .sidebar-collapse { opacity: 0; }
+  .group:hover > .sidebar-collapse, .group:focus-within > .sidebar-collapse { opacity: 1; }
+}
+@media (max-width: 767px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: max(1rem, 16px) !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  [class*="backdrop-blur"] { background-color: #fff8e8 !important; }
+  .dark [class*="backdrop-blur"] { background-color: #121212 !important; }
 }
