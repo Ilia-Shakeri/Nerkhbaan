@@ -367,11 +367,10 @@ def sql_filter(action: str = "history", column: str = "source_summary") -> tuple
               OR value #>> '{{}}' LIKE 'derived:%'
               OR NOT ({allowed_leaves} ? (value #>> '{{}}'))))
     )"""
-    # A direct tree has only its root. Validate that same root without starting
-    # a recursive executor for every historical tick. All other shapes retain
-    # the complete bounded-tree check above, including malformed direct rows.
+    # Direct quotes have only one permission node. Validate that node even
+    # when its provider is denied or its metadata is malformed.
     root_ids = array(column, "provider_ids")
-    fast = f"""jsonb_typeof({column}) = 'object'
+    direct_clause = f"""jsonb_typeof({column}) = 'object'
         AND ({column}->'derived' IS NULL OR {column}->'derived' = 'false'::jsonb)
         AND jsonb_typeof({column}->'provider_ids') = 'array'
         AND jsonb_array_length({root_ids}) BETWEEN 1 AND 64
@@ -380,10 +379,10 @@ def sql_filter(action: str = "history", column: str = "source_summary") -> tuple
              OR (jsonb_typeof({column}->'primary_provider_id') = 'string'
                  AND ({column}->'provider_ids') ? ({column}->>'primary_provider_id')))"""
     for field in ("candidate_provider_id", "previous_provider_id"):
-        fast += f""" AND (COALESCE({column}->'{field}', 'null'::jsonb) = 'null'::jsonb
+        direct_clause += f""" AND (COALESCE({column}->'{field}', 'null'::jsonb) = 'null'::jsonb
             OR (jsonb_typeof({column}->'{field}') = 'string'
                 AND CAST(:rights_direct_sources AS jsonb) ? ({column}->>'{field}')))"""
-    clause = f"(CASE WHEN {fast} THEN TRUE ELSE ({clause}) END)"
+    clause = f"(CASE WHEN {is_derived(column)} THEN ({clause}) ELSE COALESCE(({direct_clause}), FALSE) END)"
     return clause, {"rights_allowed_sources": allowed, "rights_derived_sources": derive,
                     "rights_direct_sources": direct}
 

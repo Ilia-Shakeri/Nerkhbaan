@@ -128,18 +128,8 @@ def _close_alert(db, job, status: str, code: str):
 
 
 async def read_fresh_prices() -> dict:
-    from ..pricing.compatibility import LegacyPricingAdapter, legacy_pricing_adapter
-    from ..pricing.instruments import get_instrument
-    from ..pricing.service import instrument_pricing_service
-    prices = await legacy_pricing_adapter.get_prices()
-    snapshots = await instrument_pricing_service.get_all_canonical()
-    assets = list(prices.get("assets", []))
-    for instrument_id, quote in snapshots.items():
-        currency = get_instrument(instrument_id).quote_currency.value.lower()
-        assets.append({"asset": instrument_id, f"price_{currency}": float(quote.price),
-                       f"{currency}_status": quote.effective_status().value,
-                       **LegacyPricingAdapter._quote_policy_fields(currency, quote)})
-    return {**prices, "assets": assets}
+    from ..pricing.compatibility import legacy_pricing_adapter
+    return await legacy_pricing_adapter.get_alert_prices()
 
 
 async def dispatch_alert_job(engine, job_id: int, expected_attempt: int | None = None) -> dict:

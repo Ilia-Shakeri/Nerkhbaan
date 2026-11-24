@@ -84,6 +84,18 @@ class PublicPriceSnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(after["price_usd"], 64100)
         self.assertEqual(self.service.get_all_canonical.await_count, 2)
 
+    async def test_alerts_use_one_current_read_without_fetching_history(self):
+        self.now += timedelta(seconds=2)
+        prices = await self.adapter.get_alert_prices()
+        btc = self.btc(prices)
+        instrument = next(asset for asset in prices["assets"] if asset["asset"] == "BTC_USD")
+        self.assertEqual(instrument["price_usd"], btc["price_usd"])
+        self.assertEqual(instrument["usd_status"], btc["usd_status"])
+        self.assertFalse(instrument["usd_live_eligible"])
+        self.assertEqual(btc["history"], [])
+        self.service.get_all_canonical.assert_awaited_once()
+        self.service.store.recent_canonical.assert_not_awaited()
+
     async def test_200_concurrent_gets_share_only_unfinished_reads(self):
         started, release = asyncio.Event(), asyncio.Event()
         async def slow_read():

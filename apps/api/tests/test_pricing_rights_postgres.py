@@ -125,7 +125,9 @@ class RightsPostgresTests(_OwnedPostgresFixture, unittest.TestCase):
         query = text(f"""SELECT count(*) FROM (
             SELECT value AS source_summary FROM jsonb_array_elements(CAST(:ticks AS jsonb))
         ) AS ticks WHERE {clause}""")
-        arguments = {"ticks": json.dumps([_summary()] * 1000), **parameters}
+        denied = {"provider_ids": ["restricted"], "primary_provider_id": "restricted", "derived": False}
+        malformed = {**_summary(), "candidate_provider_id": []}
+        arguments = {"ticks": json.dumps([_summary(), denied, malformed] * 1000), **parameters}
         with self.sessions() as db:
             self.assertEqual(db.execute(query, arguments).scalar_one(), 1000)
             plan = db.execute(text("EXPLAIN (ANALYZE, FORMAT JSON) " + str(query)), arguments).scalar_one()

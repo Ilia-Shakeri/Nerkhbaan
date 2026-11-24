@@ -11,8 +11,7 @@ from sqlalchemy import delete, select
 from ..db import SessionLocal
 from ..config import settings
 from ..models import AssistantChatMessage, AssistantChatSession
-from ..pricing.compatibility import legacy_pricing_adapter, LegacyPricingAdapter
-from ..pricing.instruments import get_instrument
+from ..pricing.compatibility import legacy_pricing_adapter
 from ..pricing.service import instrument_pricing_service
 from ..observability import background_failures_total
 from .alert_engine import AlertEngine
@@ -148,20 +147,7 @@ class BackgroundRunner:
         while self._running:
             try:
                 if self._pricing_available:
-                    prices = await legacy_pricing_adapter.get_prices()
-                    # Explicit instruments share the same eligibility fields as
-                    # legacy assets, without converting currency, weight or purity.
-                    snapshots = await instrument_pricing_service.get_all_canonical()
-                    assets = list(prices.get("assets", []))
-                    for instrument_id, quote in snapshots.items():
-                        currency = get_instrument(instrument_id).quote_currency.value.lower()
-                        assets.append({
-                            "asset": instrument_id,
-                            f"price_{currency}": float(quote.price),
-                            f"{currency}_status": quote.effective_status().value,
-                            **LegacyPricingAdapter._quote_policy_fields(currency, quote),
-                        })
-                    prices = {**prices, "assets": assets}
+                    prices = await legacy_pricing_adapter.get_alert_prices()
                     await self.alert_engine.evaluate_alerts(prices)
             except Exception as exc:
                 background_failures_total.labels(loop="alert_evaluation").inc()

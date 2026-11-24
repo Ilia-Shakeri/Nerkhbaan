@@ -8,7 +8,7 @@ from typing import Any
 from ..config import settings
 
 from .history import TIMEFRAMES
-from .instruments import LEGACY_ASSET_MAPPING
+from .instruments import LEGACY_ASSET_MAPPING, get_instrument
 from .models import CanonicalQuote, CanonicalStatus
 from .service import InstrumentPricingService, instrument_pricing_service
 from .quote_visibility import allowed_current_quote
@@ -51,6 +51,22 @@ class LegacyPricingAdapter:
         await asyncio.wait({task})
         snapshots, histories = task.result()
         return await self._build_prices(snapshots, histories)
+
+    async def get_alert_prices(self) -> dict[str, Any]:
+        """Read the same current quotes for legacy and explicit instrument alerts."""
+        snapshots = await self.service.get_all_canonical()
+        prices = await self._build_prices(snapshots, {asset: [] for asset in _LABELS})
+        for instrument_id, quote in snapshots.items():
+            if rights.enforced() and not allowed_current_quote(quote):
+                continue
+            currency = get_instrument(instrument_id).quote_currency.value.lower()
+            prices["assets"].append({
+                "asset": instrument_id,
+                f"price_{currency}": float(quote.price),
+                f"{currency}_status": quote.effective_status().value,
+                **self._quote_policy_fields(currency, quote),
+            })
+        return prices
 
     def _price_inputs_done(self, task: asyncio.Task) -> None:
         if not task.cancelled():
@@ -248,8 +264,6 @@ class LegacyPricingAdapter:
 
     @staticmethod
     def _unit_descriptor(instrument_id: str) -> dict[str, Any]:
-        from .instruments import get_instrument
-
         definition = get_instrument(instrument_id)
         return {
             "instrument_id": definition.instrument_id,
