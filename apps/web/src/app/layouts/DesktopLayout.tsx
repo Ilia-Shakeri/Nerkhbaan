@@ -1,5 +1,5 @@
 import { PageBackButton } from '../components/PageBackButton';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import { LegalLinks } from '../components/LegalLinks';
@@ -52,6 +52,29 @@ export function DesktopLayout() {
 
   const navigate = useNavigate();
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationsPanelRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!isNotificationsOpen) return;
+    const panel = notificationsPanelRef.current;
+    if (!panel) return;
+    const parent = panel.offsetParent as HTMLElement | null;
+    const fit = () => {
+      const top = (parent?.getBoundingClientRect().top ?? 0) + panel.offsetTop;
+      const viewport = window.visualViewport;
+      const bottom = viewport ? viewport.height + viewport.offsetTop : window.innerHeight;
+      panel.style.maxHeight = `min(32rem, ${Math.max(44, bottom - top - 12)}px)`;
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    if (parent) observer.observe(parent);
+    window.addEventListener('resize', fit);
+    window.visualViewport?.addEventListener('resize', fit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', fit);
+      window.visualViewport?.removeEventListener('resize', fit);
+    };
+  }, [isNotificationsOpen, language]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -425,7 +448,7 @@ export function DesktopLayout() {
              </button>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 sm:gap-3">
             {/* Currency Toggle */}
             <div className={`relative flex min-h-[3.25rem] items-center gap-0.5 rounded-full p-1 ${
               isDark
@@ -459,7 +482,7 @@ export function DesktopLayout() {
             </div>
 
             {/* Notification Bell */}
-            <div className="relative">
+            <div className="static lg:relative">
               <button
                 onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
                 className={`relative flex h-11 w-11 items-center justify-center rounded-xl transition-colors active:scale-95 ${
@@ -490,9 +513,10 @@ export function DesktopLayout() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ type: 'spring', bounce: 0, duration: 0.28 }}
-                      className={`absolute end-0 top-12 z-20 w-80 rounded-2xl border border-[#D4AF37]/20 p-2 shadow-xl ${
+                      className={`absolute inset-x-3 top-full z-20 max-h-[min(65dvh,32rem)] overflow-y-auto overscroll-contain rounded-2xl border border-[#D4AF37]/20 p-2 shadow-xl lg:inset-x-auto lg:end-0 lg:top-12 lg:w-80 ${
                         isDark ? 'bg-[#0E0E0E]' : 'bg-[#FFF9EA]'
                       }`}
+                      ref={notificationsPanelRef}
                       id="notifications-panel"
                       role="region"
                       aria-label={language === 'fa' ? 'فهرست اعلان‌ها' : 'Notification list'}
@@ -539,7 +563,7 @@ export function DesktopLayout() {
                             }}
                             className={`relative flex cursor-pointer flex-col gap-1 rounded-xl p-3 text-sm transition-colors ${
                               isDark ? 'hover:bg-[#171717]' : 'hover:bg-[#F2E4BC]'
-                            } w-full text-start`}
+                            } w-full min-w-0 break-words [overflow-wrap:anywhere] text-start`}
                           >
                             {!notif.read_at && (
                               <span className="absolute start-1.5 top-3.5 h-1.5 w-1.5 rounded-full bg-[#EF4444]" />
