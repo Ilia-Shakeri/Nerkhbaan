@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 import json
 import math
@@ -24,12 +24,14 @@ async def measure(
     base_url: str, requests: int, concurrency: int, *,
     duration_seconds: float = 0, requests_per_second: float = 0,
     paths: tuple[str, ...] = ("/api/prices",), maximum_p95_ms: float = 1000,
+    history_maximum_p95_ms: float | None = None,
     transport=None,
 ) -> dict:
     latencies: list[float] = []
     failures: Counter = Counter()
     statuses: Counter = Counter()
-    path_counts: Counter = Counter()
+    path_latencies: dict[str, list[float]] = defaultdict(list)
+    path_failures: Counter = Counter()
     started_count = 0
     started = 0.0
     deadline = 0.0
@@ -72,9 +74,11 @@ async def measure(
                         raise ValueError("invalid history contract")
                 except Exception as exc:
                     failures[type(exc).__name__] += 1
+                    path_failures[path] += 1
                 finally:
-                    latencies.append(time.perf_counter() - request_started)
-                    path_counts[path] += 1
+                    latency = time.perf_counter() - request_started
+                    latencies.append(latency)
+                    path_latencies[path].append(latency)
 
         started = time.perf_counter()
         deadline = started + duration_seconds
@@ -85,6 +89,18 @@ async def measure(
     p95_ms = percentile(latencies, 0.95) * 1000
     achieved_rate = len(latencies) / max(elapsed, 0.001)
     rate_passed = not requests_per_second or achieved_rate >= requests_per_second * 0.95
+    route_results = {}
+    for path in paths:
+        samples = path_latencies[path]
+        limit = maximum_p95_ms
+        if history_maximum_p95_ms is not None and path.split("?", 1)[0].endswith("/history"):
+            limit = history_maximum_p95_ms
+        route_p95 = percentile(samples, 0.95) * 1000
+        route_results[path] = {
+            "requests": len(samples), "failures": path_failures[path],
+            "p95_ms": round(route_p95, 3), "maximum_p95_ms": limit,
+            "passed": bool(samples) and not path_failures[path] and route_p95 <= limit,
+        }
     return {
         "checked_at": datetime.now(UTC).isoformat(), "requests": len(latencies),
         "concurrency": concurrency, "elapsed_seconds": round(elapsed, 3),
@@ -93,11 +109,13 @@ async def measure(
         "requests_per_second": round(achieved_rate, 3),
         "minimum_rate_fraction": 0.95, "rate_passed": rate_passed,
         "failures": sum(failures.values()), "failure_types": dict(failures),
-        "http_statuses": dict(statuses), "path_counts": dict(path_counts),
+        "http_statuses": dict(statuses),
+        "path_counts": {path: len(samples) for path, samples in path_latencies.items()},
+        "routes": route_results,
         "p50_ms": round(statistics.median(latencies) * 1000, 3) if latencies else 0,
         "p95_ms": round(p95_ms, 3), "p99_ms": round(percentile(latencies, 0.99) * 1000, 3),
         "maximum_p95_ms": maximum_p95_ms,
-        "passed": bool(latencies) and not failures and rate_passed and p95_ms <= maximum_p95_ms,
+        "passed": bool(latencies) and rate_passed and all(route["passed"] for route in route_results.values()),
     }
 
 
@@ -115,6 +133,7 @@ def main() -> int:
     parser.add_argument("--duration-seconds", type=float, default=0)
     parser.add_argument("--rps", type=float, default=0)
     parser.add_argument("--maximum-p95-ms", type=float, default=1000)
+    parser.add_argument("--history-maximum-p95-ms", type=float)
     parser.add_argument("--paths", default="/api/prices")
     parser.add_argument("--report", type=Path)
     args = parser.parse_args()
@@ -122,12 +141,17 @@ def main() -> int:
         parser.error("requests and concurrency must be positive; concurrency cannot exceed requests")
     if any(not math.isfinite(v) for v in (args.duration_seconds, args.rps, args.maximum_p95_ms)) or args.duration_seconds < 0 or args.rps < 0 or args.maximum_p95_ms <= 0:
         parser.error("duration/rate must be finite and nonnegative; latency budget must be positive")
+    if args.history_maximum_p95_ms is not None and (
+        not math.isfinite(args.history_maximum_p95_ms) or args.history_maximum_p95_ms <= 0
+    ):
+        parser.error("history latency budget must be finite and positive")
     paths = tuple(path.strip() for path in args.paths.split(",") if path.strip())
     if not paths or any(not path.startswith("/api/") or path.startswith("//") for path in paths):
         parser.error("paths must be relative API paths")
     result = asyncio.run(measure(args.base_url.rstrip("/"), args.requests, args.concurrency,
                                 duration_seconds=args.duration_seconds, requests_per_second=args.rps,
-                                paths=paths, maximum_p95_ms=args.maximum_p95_ms))
+                                paths=paths, maximum_p95_ms=args.maximum_p95_ms,
+                                history_maximum_p95_ms=args.history_maximum_p95_ms))
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         temporary = args.report.with_suffix(args.report.suffix + ".tmp")

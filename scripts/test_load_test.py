@@ -48,6 +48,26 @@ class LoadHarnessTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(percentile(list(range(1, 11)), 0.95), 10)
         self.assertEqual(percentile([], 0.95), 0)
 
+    async def test_mixed_routes_keep_separate_latency_budgets(self):
+        async def response(request):
+            if request.url.path.endswith("/ready"):
+                return httpx.Response(200, json={"ready": True})
+            if request.url.path.endswith("/history"):
+                await asyncio.sleep(0.10)
+                return httpx.Response(200, json={"points": [{"timestamp": "2026-11-24"}]})
+            return httpx.Response(200, json={"assets": []})
+
+        history = "/api/prices/btc/history?timeframe=1y"
+        options = dict(paths=("/api/prices", history), maximum_p95_ms=50,
+                       transport=httpx.MockTransport(response))
+        rejected = await measure("http://fixture", 4, 2, **options)
+        self.assertTrue(rejected["routes"]["/api/prices"]["passed"])
+        self.assertFalse(rejected["routes"][history]["passed"])
+        self.assertFalse(rejected["passed"])
+        accepted = await measure("http://fixture", 4, 2, history_maximum_p95_ms=1000, **options)
+        self.assertTrue(accepted["passed"])
+        self.assertEqual(accepted["routes"][history]["requests"], 2)
+
     async def test_slow_target_cannot_pass_requested_rate(self):
         async def response(request):
             if request.url.path.endswith("ready"):
