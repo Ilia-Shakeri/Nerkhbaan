@@ -51,9 +51,9 @@
   }
 
   .brand-logo {
-    background: #fff8e8;
-    border-radius: 0.75rem;
-    padding: 0.25rem;
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
   }
 
   .auth-brand-logo {
@@ -212,3 +212,25 @@
   [class*="backdrop-blur"] { background-color: #fff8e8 !important; }
   .dark [class*="backdrop-blur"] { background-color: #121212 !important; }
 }
+
+:root { color-scheme: light; --control-bg: #fffaf0; --control-ink: #4f3a0e; --control-line: #b9984b66; --control-selected: #d4af3726; }
+:root.dark { color-scheme: dark; --control-bg: #15120d; --control-ink: #eee2bf; --control-line: #d4af374d; --control-selected: #d4af3729; }
+.brand-logo, .auth-brand-logo { background: transparent !important; border: 0; box-shadow: none; }
+.asset-icon { object-fit: contain; flex-shrink: 0; }
+
+/* Consistent native controls, with themed pickers where supported. */
+select { color: var(--control-ink); background-color: var(--control-bg); border-color: var(--control-line); border-radius: .65rem; min-height: 2.75rem; max-width: 100%; }
+select option, select optgroup { color: var(--control-ink); background-color: var(--control-bg); }
+select:focus-visible { outline: 2px solid #D4AF37; outline-offset: 2px; }
+@supports (appearance: base-select) {
+  select, select::picker(select) { appearance: base-select; }
+  select { align-items: center; gap: .75rem; }
+  select::picker(select) { color: var(--control-ink); background: var(--control-bg); border: 1px solid var(--control-line); border-radius: .75rem; padding: .375rem; margin-block: .35rem; max-height: min(22rem, 60dvh); box-shadow: 0 12px 32px #0004; }
+  select::picker-icon { color: #B58B29; }
+  select option { min-height: 2.75rem; padding: .65rem .8rem; border-radius: .5rem; line-height: 1.5; overflow-wrap: anywhere; }
+  select option:hover, select option:checked { background: var(--control-selected); }
+}
+.page-back-button { display: inline-grid; flex: 0 0 44px; place-items: center; width: 44px; height: 44px; padding: 0; border: 1px solid var(--control-line); border-radius: 50%; background: var(--control-bg); color: var(--control-ink); box-shadow: 0 3px 14px #0002; cursor: pointer; touch-action: manipulation; }
+.page-back-button:focus-visible { outline: 2px solid #D4AF37; outline-offset: 3px; }
+.page-back-button:active { transform: scale(.95); }
+[dir="rtl"] .page-back-button svg { transform: scaleX(-1); }

@@ -278,8 +278,8 @@ export const api = {
       const { data } = await apiInstance.post<AlertResponse>('alerts', payload);
       return data;
     },
-    async list(): Promise<AlertResponse[]> {
-      const { data } = await apiInstance.get<AlertResponse[]>('alerts');
+    async list(signal?: AbortSignal): Promise<AlertResponse[]> {
+      const { data } = await apiInstance.get<AlertResponse[]>('alerts', { signal });
       return data;
     },
     async update(alertId: number, payload: AlertUpdate): Promise<AlertResponse> {

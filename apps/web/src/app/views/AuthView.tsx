@@ -10,6 +10,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { LegalLinks } from '../components/LegalLinks';
 import { POLICY_VERSION } from '../legal/policies';
 import { getLogoutStatus, subscribeLogoutStatus } from '../services/logout-state';
+import { PageBackButton } from '../components/PageBackButton';
 import { LocalPreviewNotice } from '../components/LocalPreviewNotice';
 
 export function AuthView() {
@@ -156,7 +157,8 @@ export function AuthView() {
     >
       
       {/* Header Controls */}
-      <div className="fixed left-4 top-4 z-20 flex items-center gap-3" style={{ top: 'max(1rem, env(safe-area-inset-top))' }}>
+      <div className="mb-4 flex w-full flex-wrap items-center gap-3">
+        <PageBackButton />
         <button type="button" onClick={toggleLanguage} aria-label={language === 'fa' ? 'تغییر زبان به انگلیسی' : 'Switch language to Persian'} className={`flex h-11 items-center justify-center rounded-2xl px-4 text-xs font-bold shadow-sm transition-transform active:scale-95 ${isDark ? 'bg-white/5 text-[#E8D9AE] hover:bg-white/10' : 'bg-black/5 text-[#6B4E16] hover:bg-black/10'}`}>
           <Languages size={16} className="me-2" />
           {language === 'fa' ? 'English' : 'فارسی'}

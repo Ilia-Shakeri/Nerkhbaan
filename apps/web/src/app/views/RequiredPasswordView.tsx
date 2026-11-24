@@ -1,3 +1,4 @@
+import { PageBackButton } from '../components/PageBackButton';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Lock } from 'lucide-react';
@@ -43,6 +44,7 @@ export function RequiredPasswordView() {
   return (
     <main className="flex min-h-dvh items-center justify-center overflow-y-auto bg-[#060606] p-6">
       <Card className="w-full max-w-md space-y-5 border-[#D4AF37]/30 p-6">
+        <PageBackButton />
         <div className="flex items-center gap-3">
           <Lock className="text-[#D4AF37]" />
           <div>

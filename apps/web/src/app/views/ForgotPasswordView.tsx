@@ -1,3 +1,4 @@
+import { PageBackButton } from '../components/PageBackButton';
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Mail, ArrowRight, ArrowLeft, KeyRound, CheckCircle2 } from 'lucide-react';
@@ -103,10 +104,7 @@ export function ForgotPasswordView() {
     <div className={`flex min-h-dvh flex-col items-center justify-center overflow-x-hidden overflow-y-auto p-6 transition-colors duration-500 ${isDark ? 'bg-[#060606]' : 'bg-[#FAF3E2]'}`} style={{ paddingTop: 'max(1.5rem, env(safe-area-inset-top))', paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
       <div className="w-full max-w-md perspective-1000">
         <div className="mb-6 flex justify-start">
-            <Link to="/auth" className={`inline-flex min-h-11 items-center gap-2 text-sm font-bold transition-opacity hover:opacity-80 hover:scale-[1.01] ${isDark ? 'text-[#D4AF37] hover:text-[#F3E2AB]' : 'text-[#8A6A23] hover:text-[#5E4714]'}`}>
-                {isRtl ? <ArrowRight size={16} /> : <ArrowLeft size={16} />}
-                {t.backToLogin[language]}
-            </Link>
+          <PageBackButton />
         </div>
 
           <motion.div

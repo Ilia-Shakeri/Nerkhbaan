@@ -1,3 +1,4 @@
+import { PageBackButton } from './PageBackButton';
 import { BrandMark } from "./BrandMark";
 import { createRoot } from "react-dom/client";
 import { CommunicationsPage } from "./CommunicationsPage";
@@ -48,5 +49,5 @@ function Preview() {
 }
 
 const root = createRoot(document.getElementById("root")!);
-if (import.meta.env.DEV) root.render(<Preview />);
-else root.render(<main dir="rtl">این صفحه فقط در محیط توسعه در دسترس است.</main>);
+if (import.meta.env.DEV) root.render(<><Preview /><PageBackButton /></>);
+else root.render(<><main dir="rtl">این صفحه فقط در محیط توسعه در دسترس است.</main><PageBackButton /></>);

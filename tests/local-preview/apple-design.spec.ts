@@ -58,11 +58,12 @@ test('card ordering works with a keyboard and is saved after reload', async ({ p
   await customer(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(web);
-  const move = page.getByRole('button', { name: 'Move Silver to first', exact: true });
-  await move.focus(); await page.keyboard.press('Enter');
+  const move = page.locator('[data-market-card="silver"]');
+  await move.focus(); await page.keyboard.press('Alt+ArrowUp');
+  await expect(page.getByRole('button', { name: 'Move Silver to first' })).toHaveCount(0);
   await expect(page.locator('[data-market-card]').first()).toHaveAttribute('data-market-card', 'silver');
   await expect(page.locator('[data-market-card="silver"]')).toBeFocused();
-  await expect(page.getByRole('status').filter({ hasText: 'Silver moved to first' })).toHaveText('Silver moved to first');
+  await expect(page.getByRole('status').filter({ hasText: 'Card order changed' })).toHaveText('Card order changed');
   await page.reload();
   await expect(page.locator('[data-market-card]').first()).toHaveAttribute('data-market-card', 'silver');
 });
@@ -169,4 +170,89 @@ test('analysis keeps flat and missing changes neutral and respects the numeric d
     const value = page.getByRole('button', { name, exact: true }).locator('div').last();
     await expect(value).toHaveClass(new RegExp(color));
   }
+});
+
+
+test('pickers match light and dark themes and back returns within the website', async ({ page }) => {
+  await customer(page); await page.setViewportSize({ width: 390, height: 844 });
+  for (const [theme, color] of [['dark', 'rgb(21, 18, 13)'], ['light', 'rgb(255, 250, 240)']]) {
+    await page.goto(web); await page.evaluate(theme => localStorage.setItem('theme', theme), theme);
+    await page.goto(web + '/alerts');
+    await page.getByRole('button', { name: 'New Alert', exact: true }).click();
+    const select = page.getByRole('dialog').getByLabel('Asset', { exact: true });
+    await expect(select).toHaveCSS('background-color', color);
+    await expect(select.locator('option').last()).toHaveCSS('background-color', color);
+    await select.click();
+    expect(await select.evaluate(e => getComputedStyle(e, '::picker(select)').backgroundColor)).toBe(color);
+    await page.screenshot({ path: test.info().outputPath(`picker-${theme}.png`) });
+    await page.keyboard.press('Escape'); await select.selectOption('silver');
+    await expect(select).toHaveValue('silver'); await page.keyboard.press('Escape');
+  }
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await expect(page).toHaveURL(web + '/');
+});
+
+test('all four card marks load without logo frames or the two removed controls', async ({ page }) => {
+  await customer(page); await page.goto(web);
+  await expect(page.locator('[data-market-card]')).toHaveCount(4);
+  await expect(page.getByRole('button', { name: /^Move .+ to first$/ })).toHaveCount(0);
+  for (const card of await page.locator('[data-market-card]').all()) {
+    const icon = card.locator('.asset-icon'); await expect(icon).toBeVisible();
+    expect(await icon.evaluate((e: HTMLImageElement) => e.complete && e.naturalWidth > 0)).toBe(true);
+  }
+  for (const logo of await page.locator('img.brand-logo').all()) await expect(logo).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await page.goto(web + '/support');
+  await expect(page.getByRole('button', { name: 'Refresh support', exact: true })).toHaveCount(0);
+});
+
+test('alerts update from the server without a refresh and preserve the open draft', async ({ page }) => {
+  await page.clock.install(); await customer(page); await page.goto(web + '/alerts');
+  await expect(page.getByText('No alerts yet', { exact: true })).toBeVisible();
+  const reply = await page.request.post(api + '/api/alerts', { headers: { Origin: web }, data: {
+    asset: 'gold', target_price: 2501, currency_mode: 'usd', condition: 'above', price_source_mode: 'ordinary', notify_app: true, notify_email: false,
+  } });
+  expect(reply.status()).toBe(201); const alert = await reply.json();
+  await page.clock.fastForward(15_050);
+  await expect(page.getByRole('button', { name: 'Edit Alert', exact: true }).first()).toBeVisible();
+  await page.getByRole('button', { name: 'New Alert', exact: true }).click();
+  const target = page.getByRole('dialog').getByLabel('Target', { exact: true });
+  await target.fill('7777'); await target.blur(); await page.clock.fastForward(31_000);
+  await expect(target).toHaveValue('7777');
+  await page.keyboard.press('Escape');
+  expect((await page.request.delete(api + '/api/alerts/' + alert.id, { headers: { Origin: web } })).ok()).toBe(true);
+});
+
+test('administrator reads refresh quietly, pause during editing and back follows panel history', async ({ page }) => {
+  await page.clock.install(); await administrator(page); let reads = 0;
+  page.on('request', r => { if (new URL(r.url()).pathname === '/api/admin/users' && r.method() === 'GET') reads++; });
+  await page.goto(admin + '/#/users'); await expect(page.getByRole('heading', { name: 'Users', exact: true }).first()).toBeVisible();
+  await expect.poll(() => reads).toBeGreaterThan(0); const first = reads;
+  await page.clock.fastForward(30_050); await expect.poll(() => reads).toBeGreaterThan(first);
+  for (const mark of await page.locator('.brand-seal').all()) await expect(mark).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const value = page.getByRole('checkbox', { name: 'Enabled', exact: true }); await expect(value).toBeVisible();
+  const changed = !(await value.isChecked()); await value.setChecked(changed); await value.blur(); await page.clock.fastForward(61_000); await expect(value).toBeChecked({ checked: changed });
+  await page.getByRole('button', { name: 'Back', exact: true }).click();
+  await expect(page).toHaveURL(/#\/users$/);
+});
+
+
+test('back stays in the header without covering content at narrow widths or large text', async ({ page }) => {
+  await customer(page);
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(web + '/assistant');
+    await page.evaluate(() => document.documentElement.style.fontSize = '200%');
+    const back = page.getByRole('button', { name: 'Back', exact: true });
+    await expect(back).toBeVisible();
+    const b = (await back.boundingBox())!;
+    expect(b.width).toBe(44); expect(b.height).toBe(44);
+    expect(await back.evaluate(e => !!e.closest('header'))).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await administrator(page); await page.goto(admin + '/#/communications');
+  await page.evaluate(() => document.documentElement.style.fontSize = '200%');
+  const back = page.getByRole('button', { name: 'Back', exact: true });
+  expect(await back.evaluate(e => !!e.closest('header'))).toBe(true);
+  expect((await back.boundingBox())!.width).toBe(44);
 });

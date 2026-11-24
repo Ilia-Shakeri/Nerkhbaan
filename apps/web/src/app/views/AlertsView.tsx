@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { BellRing, BellOff, Trash2, Pencil, Search, Plus, ArrowUpRight, ArrowDownRight, Loader2 } from 'lucide-react';
@@ -90,20 +90,34 @@ export function AlertsView() {
     cancel:     { fa: 'انصراف',                 en: 'Cancel'             },
   };
 
-  const loadAlerts = async () => {
-    setIsLoading(true);
-    setLoadError(false);
+  const readGeneration = useRef(0);
+  const activeRead = useRef<AbortController | null>(null);
+  const mounted = useRef(true);
+  const pauseLive = useRef(false);
+  const deleting = useRef(false);
+  pauseLive.current = isModalOpen || isSaving;
+  const cancelRead = () => { readGeneration.current++; activeRead.current?.abort(); activeRead.current = null; };
+  const loadAlerts = useCallback(async (quiet = false) => {
+    if (quiet && activeRead.current) return;
+    const generation = ++readGeneration.current;
+    activeRead.current?.abort(); const controller = new AbortController(); activeRead.current = controller;
+    if (!quiet) setIsLoading(true);
     try {
-      const data = await api.alerts.list();
-      setAlerts(data);
+      const data = await api.alerts.list(controller.signal);
+      if (mounted.current && generation === readGeneration.current && !controller.signal.aborted) { setAlerts(data); setLoadError(false); }
     } catch {
-      setLoadError(true);
+      if (mounted.current && generation === readGeneration.current && !controller.signal.aborted) setLoadError(true);
     } finally {
-      setIsLoading(false);
+      if (mounted.current && generation === readGeneration.current) { setIsLoading(false); activeRead.current = null; }
     }
-  };
-
-  useEffect(() => { loadAlerts(); }, []);
+  }, []);
+  useEffect(() => {
+    mounted.current = true; void loadAlerts();
+    const refresh = () => { if (document.visibilityState === 'visible' && !pauseLive.current && !deleting.current) void loadAlerts(true); };
+    const timer = window.setInterval(refresh, 15_000);
+    window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh);
+    return () => { mounted.current = false; readGeneration.current++; activeRead.current?.abort(); activeRead.current = null; window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
+  }, [loadAlerts]);
 
   useEffect(() => {
     if (!isModalOpen) return;
@@ -146,17 +160,19 @@ export function AlertsView() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm(t.deleteConfirm[language])) return;
+    if (deleting.current || !window.confirm(t.deleteConfirm[language])) return;
+    deleting.current = true; cancelRead(); setIsLoading(false);
     try {
       await api.alerts.remove(id);
       setAlerts((prev) => prev.filter((a) => a.id !== id));
       toast.success(t.deleteOk[language]);
     } catch {
       toast.error(t.deleteFail[language]);
-    }
+    } finally { deleting.current = false; }
   };
 
   const openCreate = () => {
+    cancelRead(); setIsLoading(false);
     setEditingId(null);
     setFormAsset('gold');
     setFormCondition('above');
@@ -176,6 +192,7 @@ export function AlertsView() {
   };
 
   const openEdit = (alert: AlertResponse) => {
+    cancelRead(); setIsLoading(false);
     setEditingId(alert.id);
     setFormAsset(alert.asset);
     setFormCondition(alert.condition);
@@ -203,7 +220,7 @@ export function AlertsView() {
       toast.error(language === 'fa' ? 'برای پیامک یا تماس، شمارهٔ هشدار باید تأیید و فعال و سرویس آماده باشد. شرایط تماس بحرانی را هم بررسی کنید.' : 'SMS and calls require an active verified alert number and an available service. Check the critical-call policy too.');
       return;
     }
-    saving.current = true;
+    saving.current = true; cancelRead(); setIsLoading(false);
     setIsSaving(true);
     try {
       if (editingId !== null) {

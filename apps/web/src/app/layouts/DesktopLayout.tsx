@@ -1,3 +1,4 @@
+import { PageBackButton } from '../components/PageBackButton';
 import React, { useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
@@ -402,14 +403,15 @@ export function DesktopLayout() {
         <LocalPreviewNotice />
         {/* Topbar */}
         <header
-          className={`relative z-10 flex min-h-16 shrink-0 items-center justify-between border-b border-[#D4AF37]/12 px-4 backdrop-blur-md transition-colors duration-200 sm:px-6 ${
+          className={`relative z-10 flex min-h-16 shrink-0 flex-wrap gap-y-2 items-center justify-between border-b border-[#D4AF37]/12 px-4 backdrop-blur-md transition-colors duration-200 sm:px-6 ${
             isDark ? 'bg-[#0B0B0B]/95' : 'bg-[#FFF3D8]/95'
           }`}
           style={{ paddingTop: 'env(safe-area-inset-top)' }}
         >
-          <div className="hidden lg:block" aria-hidden="true" />
+          <div className="hidden lg:block"><PageBackButton /></div>
 
-          <div className="flex items-center gap-4 lg:hidden">
+          <div className="flex items-center gap-1 lg:hidden">
+             <PageBackButton />
              <button 
                 ref={mobileMenuButtonRef}
                 type="button"

@@ -20,6 +20,7 @@ async function customer(context: BrowserContext, suffix: string) {
 }
 
 test('customer and administrator share support state and enforce account boundaries', async ({ page, browser }) => {
+  await page.clock.install();
   const owner = await customer(page.context(), 'owner');
   const other = await browser.newContext({ serviceWorkers: 'block' });
   const adminContext = await browser.newContext({ serviceWorkers: 'block' });
@@ -66,7 +67,8 @@ test('customer and administrator share support state and enforce account boundar
     const internal = `Internal only ${ticket.id}`;
     const note = await panel.request.post(`${api}/admin/support/tickets/${ticket.id}/internal-notes`, { headers, data: { content: internal } });
     expect(note.status()).toBe(201);
-    await page.getByRole('button', { name: 'Refresh support', exact: true }).click();
+    await page.bringToFront();
+    await page.clock.fastForward(15_100);
     await expect(page.getByText(reply, { exact: true }).first()).toBeVisible();
     const messages = await page.request.get(`${api}/support/ticket/${ticket.id}/messages`);
     expect(await messages.text()).not.toContain(internal);

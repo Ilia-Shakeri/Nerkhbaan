@@ -2,9 +2,8 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { ColorType, CrosshairMode, LineSeries, createChart, type IChartApi, type ISeriesApi, type LineData, type Time, type UTCTimestamp } from 'lightweight-charts';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { BellPlus, ArrowUpRight, ArrowDownRight, ArrowUpToLine, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
-import bitcoinIcon from '../../assets/crypto/btc.svg';
-import tetherIcon from '../../assets/crypto/usdt.svg';
+import { BellPlus, Webhook, Mail, Smartphone, AlertTriangle, Maximize2, ChevronDown, Database, RefreshCw } from 'lucide-react';
+import { AssetIcon } from '../components/AssetIcon';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@nerkhbaan/ui/app/components/ui/card';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
@@ -121,10 +120,6 @@ const ASSET_LABELS: Record<AssetId, { fa: string; en: string }> = {
   usdt: { fa: 'تتر', en: 'Tether' },
   btc: { fa: 'بیت کوین', en: 'Bitcoin' }
 };
-
-/** Narrow an optional change percentage to a usable number. */
-const hasChange = (value: number | null | undefined): value is number =>
-  typeof value === 'number' && Number.isFinite(value);
 
 const getInitialAssetOrder = (): AssetId[] => {
   if (typeof window === 'undefined') {
@@ -504,25 +499,6 @@ function FinancialChart({
         </tbody>
       </table>
     </div>
-  );
-}
-
-function AssetIcon({ id, className = '' }: { id: AssetId; className?: string }) {
-  if (id === 'btc' || id === 'usdt') {
-    return <img src={id === 'btc' ? bitcoinIcon : tetherIcon} alt="" aria-hidden="true" className={`rounded-full ${className}`} />;
-  }
-  return (
-    <span
-      className={`inline-flex items-center justify-center rounded-full border font-black shadow-inner ${
-        id === 'gold'
-          ? 'border-[#8D6811]/35 bg-[#F2CE63] text-[#5B4008]'
-          : 'border-[#68717F]/35 bg-[#DCE2EA] text-[#3F4753]'
-      } ${className}`}
-      aria-hidden="true"
-      dir="ltr"
-    >
-      {id === 'gold' ? 'Au' : 'Ag'}
-    </span>
   );
 }
 
@@ -931,8 +907,16 @@ export function DashboardView() {
           <motion.div
             key={asset.id}
             data-market-card={asset.id}
-            tabIndex={-1}
-            className="rounded-[2.5rem] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D4AF37]"
+            tabIndex={0}
+            aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+            onKeyDown={event => {
+              if (!event.altKey || !['ArrowUp', 'ArrowDown'].includes(event.key)) return;
+              const target = assetOrder[idx + (event.key === 'ArrowUp' ? -1 : 1)];
+              if (!target) return;
+              event.preventDefault(); reorderAssets(asset.id, target);
+              setOrderAnnouncement(language === 'fa' ? 'ترتیب کارت‌ها عوض شد' : 'Card order changed');
+            }}
+            className="rounded-3xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D4AF37]"
             layoutId={asset.id}
             draggable={dragReadyAssetId === asset.id}
             title={language === 'fa' ? 'برای جابه‌جایی کارت را نگه دارید و بکشید' : 'Hold, then drag to reorder'}
@@ -989,7 +973,7 @@ export function DashboardView() {
             }}
           >
             <Card
-              className={`relative overflow-hidden rounded-[2.5rem] transition-[border-color,box-shadow,transform] duration-200 ${
+              className={`relative overflow-hidden rounded-3xl transition-[border-color,box-shadow,transform] duration-200 ${
                 isDark
                   ? 'border-white/5 bg-[#0E0E0E]/92 shadow-xl'
                   : 'border-black/5 bg-white/92 shadow-xl'
@@ -1001,15 +985,15 @@ export function DashboardView() {
                     : 'cursor-grab'
               } hover:shadow-[0_8px_32px_rgba(212,175,55,0.15)]`}
             >
-              <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-start gap-2">
-                  <div>
-                    <CardTitle className={`flex items-center gap-2 text-lg font-semibold ${isDark ? 'text-[#E8D9AE]' : 'text-[#6A4D16]'}`}>
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl text-[#111111]" style={{ backgroundColor: chartColor }}>
-                        <AssetIcon id={asset.id} className="h-7 w-7 text-xs" />
+              <CardHeader className="flex flex-row items-start justify-between gap-3">
+                <div className="flex min-w-0 items-start gap-2">
+                  <div className="min-w-0">
+                    <CardTitle className={`grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 text-lg font-semibold ${isDark ? 'text-[#E8D9AE]' : 'text-[#6A4D16]'}`}>
+                      <div className="row-span-2 flex h-10 w-10 items-center justify-center">
+                        <AssetIcon id={asset.id} className="h-10 w-10" />
                       </div>
-                      {asset.label[language]}
-                      <span className="ms-2 text-xs font-normal" dir="ltr">{asset.unit}</span>
+                      <span>{asset.label[language]}</span>
+                      <span className="break-all text-xs font-normal" dir="ltr">{asset.unit}</span>
                     </CardTitle>
 
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -1034,31 +1018,6 @@ export function DashboardView() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <Button
-                    type="button" variant="outline" size="icon" disabled={idx === 0}
-                    className="h-11 w-11 shrink-0 rounded-xl"
-                    aria-label={language === 'fa' ? `انتقال ${asset.label.fa} به ابتدا` : `Move ${asset.label.en} to first`}
-                    title={language === 'fa' ? 'انتقال کارت به ابتدا' : 'Move card to first'}
-                    onClick={() => {
-                      setAssetOrder(previous => [asset.id, ...previous.filter(id => id !== asset.id)]);
-                      setOrderAnnouncement(language === 'fa' ? `${asset.label.fa} به ابتدا منتقل شد` : `${asset.label.en} moved to first`);
-                      requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-market-card="${asset.id}"]`)?.focus());
-                    }}
-                  ><ArrowUpToLine size={18} /></Button>
-                  <div className={`flex items-center gap-1 rounded-2xl px-3 py-1.5 text-xs font-semibold backdrop-blur-md ${
-                    !hasChange(asset.changePercent)
-                      ? isDark ? 'bg-white/5 text-[#CDBB8C]' : 'bg-black/5 text-[#7A5E24]'
-                      : asset.isUp
-                        ? isDark ? 'bg-emerald-500/20 text-emerald-400' : 'bg-emerald-100 text-emerald-700'
-                        : isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-100 text-red-700'
-                  }`}>
-                    {hasChange(asset.changePercent) && (asset.isUp ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />)}
-                    <span dir="ltr">
-                      {/* An unknown change is shown as unknown. Rendering it as
-                          0% claimed the price had not moved. */}
-                      {hasChange(asset.changePercent) ? `${Math.abs(asset.changePercent).toFixed(2)}%` : '—'}
-                    </span>
-                  </div>
                   <Button
                     onClick={() => {
                       setSelectedAssetForAlert(asset.id);
@@ -1280,7 +1239,7 @@ export function DashboardView() {
             </label>
             <div className={`flex items-center gap-3 rounded-[1.5rem] border p-3 ${isDark ? 'border-[#D4AF37]/20 bg-[#111111]' : 'border-[#D4AF37]/35 bg-[#FFF0CC]'}`}>
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#D4AF37] text-[#0A0A0A]">
-                <AssetIcon id={selectedAssetForAlert} className="h-7 w-7 text-xs" />
+                <AssetIcon id={selectedAssetForAlert} className="h-10 w-10" />
               </div>
               <span className={`font-bold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
                 {ASSET_LABELS[selectedAssetForAlert][language]}

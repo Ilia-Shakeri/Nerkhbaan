@@ -30,7 +30,10 @@ export function Modal({ isOpen, onClose, title, children, size = 'default', clos
     focusable()[0]?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === 'Escape') {
+        const select = event.target instanceof Element ? event.target.closest('select') : null;
+        if (select && typeof CSS !== 'undefined' && CSS.supports('selector(select:open)') && select.matches(':open')) return;
         event.preventDefault();
         onCloseRef.current();
         return;

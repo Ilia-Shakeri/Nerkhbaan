@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PageBackButton } from './PageBackButton';
 import { BrandMark } from "./BrandMark";
 
 import { adminApi } from "./api";
@@ -176,6 +177,7 @@ function Login({
         <div className="auth-grid" aria-hidden="true" />
       </section>
       <form className="auth-card" onSubmit={submit}>
+        <PageBackButton />
         <div className="auth-card-top">
           <span className="pulse-dot" /> Secure administrator session
         </div>
@@ -262,6 +264,7 @@ function PasswordGate({
   return (
     <main className="auth-shell single">
       <form className="auth-card wide" onSubmit={submit}>
+        <PageBackButton />
         <div className="brand-seal small">
           <BrandMark />
         </div>
@@ -511,6 +514,7 @@ export default function App() {
       </aside>
       <main className="workspace" id="admin-main" tabIndex={-1}>
         <header className="workspace-header" dir={section === "communications" ? "rtl" : undefined}>
+          <PageBackButton />
           <div>
             <p className="eyebrow">{section === "communications" ? "مدیریت هشدار و تماس" : `CONTROL PLANE / ${section.toUpperCase()}`}</p>
             <h1>{navigation.find((item) => item.id === section)?.label}</h1>

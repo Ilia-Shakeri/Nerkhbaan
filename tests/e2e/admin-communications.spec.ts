@@ -200,7 +200,7 @@ test("unsaved provider changes prevent a real test and test submission occurs on
   await expect(testButton).toBeEnabled();
   await page.getByLabel("خط ارسال پیامک", { exact: false }).fill("10004347");
   await expect(testButton).toBeDisabled();
-  await page.getByRole("button", { name: "بازخوانی وضعیت", exact: true }).click();
+  await page.getByRole("button", { name: "لغو تغییرات", exact: true }).click();
   await expect(testButton).toBeEnabled();
   await testButton.click();
   await approve(page, "SEND TEST");
@@ -222,7 +222,7 @@ test("a version conflict blocks resubmission until explicit reload", async ({ pa
   await expect(page.getByRole("button", { name: "ذخیرهٔ اتصال" })).toBeDisabled();
   expect(state.writes.filter((entry) => entry.path === "/communications/channels/sms")).toHaveLength(1);
   state.recover();
-  await page.getByRole("button", { name: "بازخوانی وضعیت", exact: true }).click();
+  await page.getByRole("button", { name: "تلاش دوباره", exact: true }).click();
   await expect(page.getByRole("button", { name: "ذخیرهٔ اتصال" })).toBeEnabled();
 });
 
@@ -279,4 +279,32 @@ test("history failure retries independently into an explicit empty page", async 
   await expect(pager.getByRole('button', { name: 'بعدی', exact: true })).toBeDisabled();
   expect(attempts).toBe(beforeRetry + 1);
   expect(state.writes).toEqual([]);
+});
+
+
+test('background reads preserve unsaved channel settings and credentials after blur', async ({ page }) => {
+  await page.clock.install(); const panel = await realPanel(page);
+  const sender = page.getByLabel('خط ارسال پیامک', { exact: true });
+  await sender.fill('10009999');
+  const secret = page.getByLabel('کلید دسترسی', { exact: true }); await secret.fill('local-test-secret'); await secret.blur();
+  await page.clock.fastForward(91_000);
+  await expect(sender).toHaveValue('10009999'); await expect(secret).toHaveValue('local-test-secret');
+  expect(panel.writes).toHaveLength(0);
+  await expect(page.getByRole('button', { name: 'بازخوانی وضعیت', exact: true })).toHaveCount(0);
+});
+
+
+test('a late quiet settings read cannot erase a draft started while it was pending', async ({ page }) => {
+  await page.clock.install(); const panel = await realPanel(page);
+  let started = false; let release = () => {};
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/api/admin/communications', async route => {
+    started = true; await pending; await route.fulfill({ json: snapshot() });
+  });
+  await page.clock.fastForward(30_050); await expect.poll(() => started).toBe(true);
+  const sender = page.getByLabel('خط ارسال پیامک', { exact: true }); await sender.fill('10008888');
+  const secret = page.getByLabel('کلید دسترسی', { exact: true }); await secret.fill('local-late-read-secret'); await secret.blur();
+  const response = page.waitForResponse(r => new URL(r.url()).pathname === '/api/admin/communications');
+  release(); await response; await page.waitForTimeout(100);
+  await expect(sender).toHaveValue('10008888'); await expect(secret).toHaveValue('local-late-read-secret'); expect(panel.writes).toHaveLength(0);
 });

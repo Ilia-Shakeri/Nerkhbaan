@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Languages, Mail, ShieldCheck } from 'lucide-react';
+import { PageBackButton } from '../components/PageBackButton';
+import { useEffect, useRef } from 'react';
+import { Languages, Mail, ShieldCheck } from 'lucide-react';
 import { Button } from '@nerkhbaan/ui/app/components/ui/button';
 import { useAppContext } from '../context/AppContext';
 import { LegalLinks } from '../components/LegalLinks';
@@ -10,7 +11,6 @@ export function LegalView({ kind }: { kind: PolicyKind }) {
   const { language, toggleLanguage, theme } = useAppContext();
   const heading = useRef<HTMLHeadingElement>(null);
   const isDark = theme === 'dark';
-  const BackIcon = language === 'fa' ? ArrowRight : ArrowLeft;
 
   useEffect(() => {
     heading.current?.focus();
@@ -21,7 +21,7 @@ export function LegalView({ kind }: { kind: PolicyKind }) {
     <div className={`flex min-h-dvh flex-col ${isDark ? 'bg-[#080808] text-[#E8D9AE]' : 'bg-[#FFF8E8] text-[#3B2E13]'}`}>
       <header className={`sticky top-0 z-10 border-b backdrop-blur-xl ${isDark ? 'border-white/10 bg-[#080808]/90' : 'border-[#D4AF37]/20 bg-[#FFF8E8]/90'}`}>
         <div className="mx-auto flex min-h-16 max-w-5xl items-center justify-between gap-3 px-4 sm:px-6">
-          <Button asChild variant="ghost" className="gap-2"><Link to="/"><BackIcon size={17} />{language === 'fa' ? 'بازگشت به نرخ‌بان' : 'Back to Nerkhbaan'}</Link></Button>
+          <PageBackButton />
           <Button type="button" variant="outline" onClick={toggleLanguage} className="gap-2"><Languages size={17} />{language === 'fa' ? 'English' : 'فارسی'}</Button>
         </div>
       </header>

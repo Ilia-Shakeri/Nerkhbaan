@@ -90,14 +90,6 @@ export function DashboardPage({ refreshKey }: PageProps) {
       <div className="split-grid">
         <Panel
           title="Service plane"
-          action={
-            <button
-              className="button ghost small"
-              onClick={() => void resource.reload()}
-            >
-              Refresh
-            </button>
-          }
         >
           <dl className="detail-list">
             <div>
@@ -1884,7 +1876,7 @@ export function PricingPage(props: PageProps) {
                         className="button secondary"
                         disabled={operation.busy}
                       >
-                        Queue budget-controlled refresh
+                        Queue budget-controlled source check
                       </button>
                     </form>
                   )}
@@ -2155,13 +2147,6 @@ export function JobsPage(props: PageProps) {
             ))}
           </select>
         </label>
-        <button
-          className="button ghost"
-          disabled={jobs.loading}
-          onClick={() => void jobs.reload()}
-        >
-          Refresh jobs
-        </button>
       </Filters>
       <PageState loading={jobs.loading} error={jobs.error} />
       <ActionError error={operation.error} reloadRequired={operation.reloadRequired} />
@@ -2345,6 +2330,7 @@ export function DlqPage(props: PageProps) {
 }
 
 export function SettingsPage(props: PageProps) {
+  const editing = useRef(false);
   const resource = useResource<JsonRecord>(
     `/settings?refresh=${props.refreshKey}`,
     {
@@ -2354,14 +2340,16 @@ export function SettingsPage(props: PageProps) {
       instrument_scopes: [],
       provider_scopes: [],
       telegram_scopes: [],
-    },
+    }, true, () => editing.current,
   );
   const [key, setKey] = useState("comparison_visible");
   const [scope, setScope] = useState("global");
-  const [value, setValue] = useState<string | boolean>("");
+  const [value, setStoredValue] = useState<string | boolean>("");
+  const setValue = (next: string | boolean) => { editing.current = true; setStoredValue(next); };
+  useEffect(() => { editing.current = false; }, [key, scope, props.refreshKey]);
   const effective = useResource<JsonRecord>(
     `/settings/effective?${query({ scope_id: scope, refresh: props.refreshKey })}`,
-    { items: [] },
+    { items: [] }, true, () => editing.current,
   );
   const operation = useOperation();
   const booleanKey = [
@@ -2378,7 +2366,7 @@ export function SettingsPage(props: PageProps) {
   );
   useEffect(() => {
     const resolved = stored?.value ?? current?.effective_value;
-    setValue(
+    setStoredValue(
       booleanKey
         ? resolved === true
         : resolved === null || resolved === undefined
@@ -2935,14 +2923,6 @@ export function BackupsPage(props: PageProps) {
       <PageState loading={resource.loading} error={resource.error} />
       <Panel
         title="Backup and restore evidence"
-        action={
-          <button
-            className="button ghost"
-            onClick={() => void resource.reload()}
-          >
-            Refresh
-          </button>
-        }
       >
         <RecordDetails value={resource.data} />
         <p className="muted">

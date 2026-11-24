@@ -128,44 +128,56 @@ export function DataTable({
   );
 }
 
-export function useResource<T>(path: string, initial: T, enabled = true) {
+export function useResource<T>(path: string, initial: T, enabled = true, pauseLive?: () => boolean) {
+  const pauseRef = useRef(pauseLive);
+  pauseRef.current = pauseLive;
   const [data, setData] = useState<T>(initial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const generation = useRef(0);
   const alive = useRef(true);
   const activeRequest = useRef<AbortController | null>(null);
-  const reload = useCallback(async () => {
+  const pending = useRef(false);
+  const reload = useCallback(async (quiet = false) => {
+    if (quiet && pending.current) return;
     const requestId = ++generation.current;
     activeRequest.current?.abort();
-    activeRequest.current = null;
+    activeRequest.current = null; pending.current = false;
     if (!enabled) {
       setLoading(false);
       setError("");
       return;
     }
-    setLoading(true);
+    if (!quiet) setLoading(true);
     setError("");
     const controller = new AbortController();
-    activeRequest.current = controller;
+    activeRequest.current = controller; pending.current = true;
     try {
       const result = await adminApi.get<T>(path, controller.signal);
-      if (alive.current && generation.current === requestId) setData(result);
+      if (alive.current && generation.current === requestId && (!quiet || !pauseRef.current?.())) setData(result);
     } catch (reason) {
       if (!controller.signal.aborted && alive.current && generation.current === requestId)
         setError(humanError(reason));
     } finally {
-      if (alive.current && generation.current === requestId) setLoading(false);
+      if (alive.current && generation.current === requestId) { setLoading(false); pending.current = false; }
     }
   }, [path, enabled]);
   useEffect(() => {
     alive.current = true;
     void reload();
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || pauseRef.current?.() || document.querySelector('[role="dialog"], input:focus, select:focus, textarea:focus')) return;
+      void reload(true);
+    };
+    const browser = typeof window !== "undefined" && typeof document !== "undefined";
+    const timer = browser ? window.setInterval(refresh, 30_000) : null;
+    if (browser) { window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh); }
     return () => {
+      if (browser) { if (timer !== null) window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); }
       alive.current = false;
       generation.current++;
       activeRequest.current?.abort();
-      activeRequest.current = null;
+      activeRequest.current = null; pending.current = false;
     };
   }, [reload]);
   return { data, setData, loading, error, reload };

@@ -138,17 +138,19 @@ export function CommunicationsPage({ permissions, refreshKey, client, demo = fal
   const writing = useRef(false);
   const uncertainWrite = useRef(false);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (quiet = false) => {
+    if (quiet && activeRead.current) return false;
     const current = ++generation.current;
     activeRead.current?.abort();
     if (!canRead) { setLoading(false); return false; }
     const controller = new AbortController();
     activeRead.current = controller;
-    setLoading(true); setReadError("");
+    if (!quiet) setLoading(true); setReadError("");
     const [state] = await Promise.allSettled([
       client.get<CommunicationsSnapshot>(BASE, controller.signal),
     ]);
     if (!alive.current || controller.signal.aborted || current !== generation.current) return false;
+    if (quiet && pauseLive.current) { activeRead.current = null; return false; }
     let loaded = false;
     if (state.status === "fulfilled") {
       const next = state.value;
@@ -160,18 +162,19 @@ export function CommunicationsPage({ permissions, refreshKey, client, demo = fal
       setSelectedRecipient((value) => next.test_recipients.some((item) => String(item.id) === value) ? value : "");
       loaded = true;
     } else setReadError(safeError(state.reason));
-    setLoading(false);
+    setLoading(false); activeRead.current = null;
     return loaded;
   }, [client, canRead]);
 
-  const loadHistory = useCallback(async (offset = historyOffsetRef.current) => {
+  const loadHistory = useCallback(async (offset = historyOffsetRef.current, quiet = false) => {
+    if (quiet && activeHistoryRead.current) return;
     const current = ++historyGeneration.current;
     activeHistoryRead.current?.abort();
     if (!alive.current) return;
     if (!canReadHistory || !canRead) { setEvents([]); setHistoryTotal(0); setHistoryLoading(false); return; }
     const controller = new AbortController();
     activeHistoryRead.current = controller;
-    setHistoryLoading(true); setHistoryError("");
+    if (!quiet) setHistoryLoading(true); setHistoryError("");
     try {
       const result = await client.get<{ items: DeliveryEvent[]; total: number }>(`${BASE}/deliveries?limit=${HISTORY_PAGE_SIZE}&offset=${offset}`, controller.signal);
       if (!alive.current || controller.signal.aborted || current !== historyGeneration.current) return;
@@ -181,7 +184,7 @@ export function CommunicationsPage({ permissions, refreshKey, client, demo = fal
     } catch (reason) {
       if (alive.current && !controller.signal.aborted && current === historyGeneration.current) setHistoryError(safeError(reason));
     } finally {
-      if (alive.current && !controller.signal.aborted && current === historyGeneration.current) setHistoryLoading(false);
+      if (alive.current && !controller.signal.aborted && current === historyGeneration.current) { setHistoryLoading(false); activeHistoryRead.current = null; }
     }
   }, [client, canRead, canReadHistory]);
 
@@ -194,6 +197,20 @@ export function CommunicationsPage({ permissions, refreshKey, client, demo = fal
     return () => { historyGeneration.current++; activeHistoryRead.current?.abort(); };
   }, [loadHistory, historyOffset, refreshKey]);
   useEffect(() => { setFieldErrors({}); setError(""); }, [channel, tab]);
+  const hasUnsavedChanges = Object.values(secrets).some(values => Object.values(values).some(Boolean))
+    || Boolean(snapshot && (JSON.stringify(drafts) !== JSON.stringify(snapshot.channels) || JSON.stringify(policy) !== JSON.stringify(snapshot.call_policy)));
+  const pauseLive = useRef(true);
+  pauseLive.current = busy || loading || Boolean(approval) || writeNeedsReload || Boolean(recipientLabel || recipientPhone) || consent || hasUnsavedChanges;
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible' || pauseLive.current || writing.current || uncertainWrite.current || document.querySelector('.comms input:focus, .comms select:focus, .comms textarea:focus')) return;
+      void reload(true); void loadHistory(historyOffsetRef.current, true);
+    };
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh); document.addEventListener('visibilitychange', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh); };
+  }, [reload, loadHistory]);
+
 
   const run = async (operation: () => Promise<void>, success: string) => {
     if (writing.current || uncertainWrite.current || readError || loading) return false;
@@ -320,8 +337,14 @@ export function CommunicationsPage({ permissions, refreshKey, client, demo = fal
   const field = (key: string, label: string, value: number, min: number, max: number, update: (value: number) => void) => <label className="comms-field" htmlFor={`${prefix}-${key}`}><span>{label}</span><input id={`${prefix}-${key}`} type="number" inputMode="numeric" min={min} max={max} step={1} required value={Number.isNaN(value) ? "" : value} onChange={(event) => update(event.target.value === "" ? NaN : Number(event.target.value))} aria-invalid={Boolean(fieldErrors[key])} aria-describedby={fieldErrors[key] ? `${prefix}-${key}-error` : undefined} /><FieldError id={`${prefix}-${key}-error`} text={fieldErrors[key]} /></label>;
 
   return <section className="comms" dir="rtl" lang="fa" aria-label="مدیریت پیامک و تماس">
-    <header className="comms-heading"><div><span className="comms-eyebrow">ارتباط در لحظه‌های مهم</span><h2>پیامک و تماس</h2><p>مسیر ارتباط را آماده کنید؛ تماس را به شرایط ضروری محدود کنید.</p></div><button className="comms-button comms-button-secondary" type="button" disabled={busy || loading} onClick={() => { void reload(); void loadHistory(); }}>بازخوانی وضعیت</button></header>
+    <header className="comms-heading"><div><span className="comms-eyebrow">ارتباط در لحظه‌های مهم</span><h2>پیامک و تماس</h2><p>مسیر ارتباط را آماده کنید؛ تماس را به شرایط ضروری محدود کنید.</p></div><span className="comms-eyebrow" role="status">{hasUnsavedChanges ? 'تغییرات ذخیره نشده' : 'به‌روزرسانی خودکار'}</span></header>
     {demo && <div className="comms-demo" role="status"><span className="comms-dot" /><strong>حالت نمایشی</strong><span>تغییرات فقط در حافظهٔ این صفحه‌اند. ارسال واقعی خاموش است.</span></div>}
+    {hasUnsavedChanges && !writeNeedsReload && <button className="comms-button comms-button-secondary" type="button" disabled={busy || loading} onClick={() => {
+      if (!snapshot) return;
+      setDrafts({ sms: { ...snapshot.channels.sms, config: { ...snapshot.channels.sms.config } }, voip: { ...snapshot.channels.voip, config: { ...snapshot.channels.voip.config } } });
+      setPolicy(copyPolicy(snapshot.call_policy)); setSecrets({ sms: {}, voip: {} }); setFieldErrors({});
+    }}>لغو تغییرات</button>}
+    {(readError || writeNeedsReload || historyError) && <button className="comms-button comms-button-secondary" type="button" disabled={busy || loading} onClick={() => { void reload(); void loadHistory(); }}>تلاش دوباره</button>}
     {readError && <div className="comms-message comms-message-error" role="alert">{readError}</div>}
     {error && <div className="comms-message comms-message-error" role="alert">{error}</div>}
     {notice && <div className="comms-message comms-message-success" role="status" aria-live="polite">{notice}</div>}

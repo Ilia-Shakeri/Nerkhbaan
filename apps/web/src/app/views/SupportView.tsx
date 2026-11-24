@@ -68,7 +68,6 @@ export function SupportView() {
     messageLoadFail: { fa: 'پیام‌های تیکت بارگذاری نشد', en: 'Ticket messages could not be loaded' },
     retryTickets: { fa: 'دریافت دوباره تیکت‌ها', en: 'Retry tickets' },
     retryMessages: { fa: 'دریافت دوباره پیام‌ها', en: 'Retry messages' },
-    refresh: { fa: 'تازه‌سازی', en: 'Refresh support' },
   };
 
   useEffect(() => {
@@ -231,9 +230,6 @@ export function SupportView() {
     <div className="h-full flex flex-col space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>{t.title[language]}</h1>
-        <Button variant="outline" onClick={() => refreshSupport()} disabled={isSending || isCreating || isLoadingTickets || isLoadingMessages}>
-          {t.refresh[language]}
-        </Button>
         <Button
           onClick={() => setShowNewTicketForm(!showNewTicketForm)}
           aria-expanded={showNewTicketForm}

@@ -1,3 +1,4 @@
+import { AssetIcon } from '../components/AssetIcon';
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { Sparkles, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
@@ -155,7 +156,7 @@ export function ChartAnalysisView() {
                       : isDark ? 'bg-[#141414] hover:bg-[#1A1A1A]' : 'bg-white hover:bg-gray-50'
                   }`}
                 >
-                  <div className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}>
+                  <div className={`flex items-center gap-3 font-semibold text-sm ${isDark ? 'text-white' : 'text-[#3B2E13]'}`}><AssetIcon id={asset.asset} className="h-9 w-9 shrink-0" />
                     {language === 'fa' ? asset.label_fa : asset.label_en}
                   </div>
                   <div
