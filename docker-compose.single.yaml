@@ -48,7 +48,7 @@ services:
     read_only: true
     tmpfs: ["/tmp:size=4m,mode=1777,nosuid,noexec"]
     command: [sh, /usr/local/bin/redis-safe-start.sh]
-    environment: {REDIS_MAXMEMORY: 16mb}
+    environment: {REDIS_MAXMEMORY: 24mb}
     volumes:
       - redis_data:/data
       - ./scripts/redis-safe-start.sh:/usr/local/bin/redis-safe-start.sh:ro

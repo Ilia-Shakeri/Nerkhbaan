@@ -4,10 +4,23 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+
+
+def validate_redis_headroom(service: dict) -> None:
+    """Keep space for client buffers, allocator overhead and persistence."""
+    value = str(service.get("environment", {}).get("REDIS_MAXMEMORY", ""))
+    match = re.fullmatch(r"([1-9][0-9]*)mb", value.lower())
+    if match is None:
+        raise ValueError("Explicit bounded Redis data memory is required")
+    data_bytes = int(match.group(1)) * 1024**2
+    container_bytes = int(service["deploy"]["resources"]["limits"]["memory"])
+    if data_bytes > container_bytes // 2:
+        raise ValueError("Redis must retain at least half its memory for runtime overhead")
 
 
 def validate(plan: dict) -> dict:
@@ -37,6 +50,7 @@ def validate(plan: dict) -> dict:
             raise ValueError("Initial plan requires one instance: " + name)
         if service["logging"] != {"driver": "local", "options": {"max-file": "3", "max-size": "2m"}}:
             raise ValueError("Logs must remain bounded: " + name)
+    validate_redis_headroom(services["redis"])
     env = services["backend"]["environment"]
     for name in ("AUTH_COOKIE_SECURE", "ADMIN_COOKIE_SECURE", "ADMIN_MFA_REQUIRED"):
         if env[name] != "true":

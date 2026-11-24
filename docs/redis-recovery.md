@@ -112,3 +112,8 @@ docker compose -f docker-compose.prod.yaml logs -f redis --tail 80
 
 Use the reviewed application deployment inputs above for each release. Keep the checkout,
 runtime override and image manifest fixed during the run and retain the private receipt.
+
+
+## Initial-delivery capacity, 2026-11-24
+
+The single-instance plan uses `REDIS_MAXMEMORY=24mb` within the unchanged 48 MiB container cap. Its former 16 MiB data cap rejected security-rate writes while the process was healthy, causing sign-in HTTP 503. No eviction policy was relaxed and no data was flushed. A stopped-volume backup, the same fixed image and data volume, a Redis-only recreation, and successful public administrator sign-in/out were verified. `check_single_compose.py` now requires at least half the container budget for runtime overhead. See [the dated deployment receipt](ui-deployment-2026-11-24-fa.md) for the incident and backup boundaries. The generic 384mb startup default above applies to other plans, not this bounded initial plan.
